@@ -57,15 +57,17 @@ function DiscoveryResult({
 
   return (
     <div className="relative mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4 dark:border-primary/30 dark:bg-primary/10">
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-4">
         <div className="flex-1">
-          <p className="mb-2 text-sm font-medium text-primary">🔍 Auto-Discovery Result</p>
-          <p className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary/80">
+            Auto-Discovery Result
+          </p>
+          <p className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-foreground">
             {text}
           </p>
         </div>
         <Button size="sm" onClick={handleApply} disabled={applied}>
-          <Sparkles className="mr-2 h-4 w-4" />
+          <Sparkles className="mr-2 h-3.5 w-3.5" />
           Apply
         </Button>
       </div>
@@ -295,123 +297,140 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
               {!discoveryResult && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-medium">Auto-Discovery</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Get started using 1-click discovery of your target's usage details.{' '}
-                    <a
-                      href="https://promptfoo.dev/docs/red-team/discovery"
-                      target="_blank"
-                      className="underline"
+                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+                  {/* Subtle decorative element */}
+                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+
+                  <div className="relative space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Sparkles className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
+                        <p className="text-xs text-muted-foreground">
+                          1-click detection of your target's capabilities
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      Automatically analyze your target to discover its purpose, tools, and
+                      limitations.{' '}
+                      <a
+                        href="https://promptfoo.dev/docs/red-team/discovery"
+                        target="_blank"
+                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
+                      >
+                        Learn more
+                      </a>
+                    </p>
+
+                    <Button
+                      disabled={
+                        !hasTargetConfigured ||
+                        apiHealthStatus !== 'connected' ||
+                        !!discoveryError ||
+                        !!discoveryResult ||
+                        isDiscovering
+                      }
+                      onClick={handleTargetPurposeDiscovery}
+                      className="w-[150px]"
                     >
-                      Learn more
-                    </a>
-                  </p>
-                  <Button
-                    disabled={
-                      !hasTargetConfigured ||
-                      apiHealthStatus !== 'connected' ||
-                      !!discoveryError ||
-                      !!discoveryResult ||
-                      isDiscovering
-                    }
-                    onClick={handleTargetPurposeDiscovery}
-                    className="w-[150px]"
-                  >
-                    {isDiscovering ? 'Discovering...' : 'Discover'}
-                  </Button>
-                  {isDiscovering && showSlowDiscoveryMessage && (
-                    <Alert variant="info">
-                      <Info className="h-4 w-4" />
-                      <AlertDescription>
-                        Discovery is taking a little while. This is normal for complex applications.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {!hasTargetConfigured && (
-                    <Alert variant="warning">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        You must configure a target to run auto-discovery.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                        connection.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {discoveryError && (
-                    <>
+                      {isDiscovering ? 'Discovering...' : 'Discover'}
+                    </Button>
+
+                    {isDiscovering && showSlowDiscoveryMessage && (
+                      <Alert variant="info">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                          Discovery is taking a little while. This is normal for complex
+                          applications.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {!hasTargetConfigured && (
+                      <Alert variant="warning">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          You must configure a target to run auto-discovery.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                       <Alert variant="destructive">
                         <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>{discoveryError}</AlertDescription>
+                        <AlertDescription>
+                          Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                          connection.
+                        </AlertDescription>
                       </Alert>
-                      <div className="rounded-lg border border-border bg-muted/30 p-4">
-                        <p className="mb-4 text-sm italic text-muted-foreground">
-                          💡 To re-attempt discovery from your terminal:
-                        </p>
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            <strong>1.</strong> Save Config and export it as YAML
+                    )}
+                    {discoveryError && (
+                      <>
+                        <Alert variant="destructive">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>{discoveryError}</AlertDescription>
+                        </Alert>
+                        <div className="rounded-lg border border-border bg-background/80 p-4">
+                          <p className="mb-3 text-[13px] text-muted-foreground">
+                            To re-attempt discovery from your terminal:
                           </p>
-                          <p className="text-sm text-muted-foreground">
-                            <strong>2.</strong> Run the following command:
-                          </p>
-                          <Code>promptfoo redteam discover -c redteam-config.yaml</Code>
+                          <div className="space-y-1.5 text-[13px] text-muted-foreground">
+                            <p>
+                              <span className="font-medium text-foreground">1.</span> Save Config
+                              and export as YAML
+                            </p>
+                            <p>
+                              <span className="font-medium text-foreground">2.</span> Run the
+                              command:
+                            </p>
+                          </div>
+                          <Code className="mt-2">
+                            promptfoo redteam discover -c redteam-config.yaml
+                          </Code>
                         </div>
-                      </div>
-                    </>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Main Purpose - Standalone Section */}
               <div className="space-y-6">
-                <h2 className="text-xl font-medium">Application Details</h2>
-                <p className="mb-6">
-                  <strong>
-                    This is the most critical step for generating effective red team attacks.
-                  </strong>{' '}
-                  The quality and specificity of your responses directly determines how targeted and
-                  realistic the generated attacks will be. Detailed information leads to{' '}
-                  <strong>significantly</strong> better security testing and{' '}
-                  <strong>more accurate</strong> grading of attack effectiveness.
-                </p>
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight">Application Details</h2>
+                  <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
+                    This is the most critical step for generating effective red team attacks. The
+                    quality and specificity of your responses directly determines how targeted and
+                    realistic the generated attacks will be.
+                  </p>
+                </div>
 
                 <div>
-                  <h3 className="mb-2 text-lg font-medium">
-                    What is the main purpose of your application?{' '}
-                    <span className="text-destructive">*</span>
-                  </h3>
-                  <div>
-                    <p className="mb-4 text-sm text-muted-foreground">
-                      Describe the primary objective and goals of your application. This
-                      foundational information provides essential context for generating all types
-                      of targeted security attacks and red team tests.
-                    </p>
+                  <label className="mb-1.5 block text-base font-medium">
+                    What is the main purpose of your application?
+                    <span className="ml-1 text-destructive/80">*</span>
+                  </label>
+                  <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+                    Describe the primary objective and goals of your application. This foundational
+                    information provides essential context for generating targeted security tests.
+                  </p>
 
-                    {discoveryResult && discoveryResult.purpose && (
-                      <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
-                    )}
+                  {discoveryResult && discoveryResult.purpose && (
+                    <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
+                  )}
 
-                    <Textarea
-                      value={config.applicationDefinition?.purpose ?? ''}
-                      onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                      placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
-                      rows={3}
-                      className="min-h-[72px] resize-y"
-                    />
-                  </div>
+                  <Textarea
+                    value={config.applicationDefinition?.purpose ?? ''}
+                    onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+                    placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
+                    rows={3}
+                    className="min-h-[72px] resize-y"
+                  />
                 </div>
-                <p className="text-sm italic text-muted-foreground">
-                  Only the main purpose is required. All other fields are optional, but providing
-                  more details will result in significantly more targeted and effective security
-                  tests.
+                <p className="text-xs text-muted-foreground/80">
+                  Only the purpose is required. Additional details improve test targeting.
                 </p>
               </div>
 
@@ -423,13 +442,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   className="rounded-t-lg border border-border"
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium">
-                        Core Application Details (
-                        {getCompletionPercentage('Core Application Details')})
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">
+                        Core Application Details
                       </h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Core Application Details')}
+                      </span>
                       {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircle className="h-5 w-5 text-emerald-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
@@ -442,15 +463,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What key features does your application provide?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          List the main capabilities and functionalities available to users. This
-                          helps generate feature-specific attacks including tool discovery, debug
-                          access, hijacking attempts, and tests for excessive agency
-                          vulnerabilities.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What key features does your application provide?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          List the main capabilities and functionalities available to users.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.features ?? ''}
@@ -462,14 +482,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What industry or domain does your application operate in?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          This helps generate industry-specific attacks and compliance tests,
-                          including specialized advice vulnerabilities, unsupervised contract
-                          issues, and intellectual property violations.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What industry or domain does your application operate in?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Helps generate industry-specific attacks and compliance tests.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.industry ?? ''}
@@ -481,16 +501,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          Is there anything specific the attacker should know about this system or
-                          its rules?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Describe any constraints, guardrails, special behavior, or requirements
-                          that attackers should consider when generating attack prompts. This can
-                          include information about what the system will or won't respond to, topics
-                          it restricts, input formats, or any other domain-specific rules.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          Any constraints or rules attackers should know about?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe guardrails, restricted topics, input formats, or domain-specific
+                          rules.
                         </p>
 
                         {discoveryResult && discoveryResult.limitations && (
@@ -521,12 +540,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   className="border-x border-b border-border"
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium">
-                        Access & Permissions ({getCompletionPercentage('Access & Permissions')})
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">
+                        Access & Permissions
                       </h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Access & Permissions')}
+                      </span>
                       {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircle className="h-5 w-5 text-emerald-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
@@ -539,15 +561,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What systems, data, or resources does your application have access to?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Describe what your application can legitimately access and use. This
-                          information helps test for RBAC enforcement issues, unauthorized data
-                          access, privilege escalation, malicious resource fetching, and RAG
-                          poisoning vulnerabilities.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What systems or resources does your application have access to?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe what your application can legitimately access and use.
                         </p>
 
                         {discoveryResult && toolsAsJSDocs && (
@@ -566,64 +587,61 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What systems, data, or resources should your application NOT have access
-                          to? <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Specify what your application should be restricted from accessing. This
-                          helps generate tests for RBAC enforcement failures, unauthorized data
-                          access attempts, privilege escalation, cross-session leaks, and RAG
-                          document exfiltration vulnerabilities.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What should your application NOT have access to?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Specify restricted systems, data, or resources.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.doesNotHaveAccessTo ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('doesNotHaveAccessTo', e.target.value)
                           }
-                          placeholder="e.g. Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions."
+                          placeholder="e.g. Other patients' records, financial systems, admin backends..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What types of users interact with your application?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Describe the different user roles and their authorization levels. This
-                          enables testing for RBAC enforcement issues, privilege escalation
-                          attempts, unauthorized data access, and social engineering attacks
-                          targeting PII exposure.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What types of users interact with your application?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe user roles and their authorization levels.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.userTypes ?? ''}
                           onChange={(e) => updateApplicationDefinition('userTypes', e.target.value)}
-                          placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators, Unauthenticated Users..."
+                          placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What security and compliance requirements apply to your application?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          List important security, privacy, and regulatory requirements. This helps
-                          generate tests for privacy violations, direct PII exposure, RBAC
-                          enforcement gaps, specialized advice compliance, and unsupervised contract
-                          vulnerabilities.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What security and compliance requirements apply?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          List security, privacy, and regulatory requirements.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.securityRequirements ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('securityRequirements', e.target.value)
                           }
-                          placeholder="e.g. HIPAA compliance, patient confidentiality, authentication checks, audit logging..."
+                          placeholder="e.g. HIPAA compliance, patient confidentiality, audit logging..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
@@ -639,12 +657,13 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   className="border-x border-b border-border"
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium">
-                        Data & Content ({getCompletionPercentage('Data & Content')})
-                      </h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">Data & Content</h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Data & Content')}
+                      </span>
                       {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircle className="h-5 w-5 text-emerald-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
@@ -657,97 +676,86 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What types of sensitive data does your application handle?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Understanding data sensitivity helps generate targeted privacy and data
-                          protection attacks, including tests for direct PII exposure, PII leakage
-                          in APIs/databases/sessions, social engineering attacks, and privacy
-                          violations.{' '}
-                          <strong>
-                            This information also helps grade whether attacks successfully identify
-                            and extract the types of sensitive data your system actually handles.
-                          </strong>
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What types of sensitive data does your application handle?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Helps generate targeted privacy and data protection attacks. Also used to
+                          grade attack effectiveness.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.sensitiveDataTypes ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('sensitiveDataTypes', e.target.value)
                           }
-                          placeholder="e.g. Personal health information, financial records, social security numbers, payment data, biometric data..."
+                          placeholder="e.g. Personal health information, financial records, SSNs, payment data..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What are some example identifiers, names, or data points your application
-                          uses? <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Provide realistic examples of the types of data and identifiers in your
-                          system. This enables testing for direct PII exposure, PII leakage in
-                          APIs/databases/sessions, divergent repetition attacks, and cross-session
-                          data leaks.{' '}
-                          <strong>
-                            Specific data formats and ID patterns are especially important for
-                            accurately grading whether attacks successfully extract real-looking
-                            data from your system.
-                          </strong>
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          Example identifiers or data points your application uses?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Realistic examples help test for PII exposure. Specific formats improve
+                          grading accuracy.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.exampleIdentifiers ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('exampleIdentifiers', e.target.value)
                           }
-                          placeholder="e.g. Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456)..."
+                          placeholder="e.g. Patient IDs (MRN2023001), Emails (user@example.com), Prescription IDs (RX123456)..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What are the most critical or dangerous actions your application can
-                          perform? <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Identify high-risk operations that should be heavily protected from
-                          misuse. This helps generate tests for privilege escalation, shell
-                          injection, SQL injection, malicious code execution, debug access
-                          vulnerabilities, and system prompt override attacks.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What critical or dangerous actions can your application perform?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          High-risk operations that should be protected from misuse.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.criticalActions ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('criticalActions', e.target.value)
                           }
-                          placeholder="e.g. Prescribing medication, financial transactions, data deletion, system configuration changes..."
+                          placeholder="e.g. Prescribing medication, financial transactions, data deletion..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
                       </div>
 
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          What content or topics should your application never discuss or promote?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          Define content boundaries to test for harmful or inappropriate responses.
-                          This enables testing for hate speech, self-harm content, sexual content,
-                          harassment and bullying, illegal activities, violent crime promotion, and
-                          profanity vulnerabilities.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          What topics should your application never discuss?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Content boundaries to test for harmful or inappropriate responses.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.forbiddenTopics ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('forbiddenTopics', e.target.value)
                           }
-                          placeholder="e.g. Self-harm, illegal drugs, violence, competitor products, political opinions, medical diagnosis..."
+                          placeholder="e.g. Self-harm, illegal drugs, violence, competitor products..."
                           rows={2}
                           className="min-h-[56px] resize-y"
                         />
@@ -763,12 +771,13 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   className="rounded-b-lg border-x border-b border-border"
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium">
-                        Business Context ({getCompletionPercentage('Business Context')})
-                      </h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">Business Context</h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Business Context')}
+                      </span>
                       {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircle className="h-5 w-5 text-emerald-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
@@ -781,14 +790,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <h4 className="mb-2 font-medium">
-                          Who are your main competitors that shouldn't be endorsed or promoted?{' '}
-                          <span className="text-sm text-muted-foreground">(optional)</span>
-                        </h4>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                          List companies or products that your application should remain neutral
-                          about. This helps test for competitor endorsement vulnerabilities, brand
-                          bias issues, and inappropriate imitation behaviors.
+                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                          Competitors that shouldn't be endorsed or promoted?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
+                          </span>
+                        </label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Companies or products your application should remain neutral about.
                         </p>
                         <Textarea
                           value={config.applicationDefinition?.competitors ?? ''}
@@ -806,18 +815,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               </div>
 
               {/* Red Team User - Standalone Section */}
-              <div className="mt-8">
-                <h3 className="mb-4 text-lg font-medium">Red Team User</h3>
+              <div className="mt-8 space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight">Red Team User</h2>
                 <div>
-                  <h4 className="mb-2 font-medium">
-                    Who typically uses this system?{' '}
-                    <span className="text-sm text-muted-foreground">(optional)</span>
-                  </h4>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    Describe the legitimate users who normally interact with this system and their
-                    typical roles or characteristics. The red team will simulate these user personas
-                    when testing for vulnerabilities like social engineering, PII extraction,
-                    unauthorized access, and privilege escalation.
+                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                    Who typically uses this system?
+                    <span className="text-xs font-normal text-muted-foreground/70">optional</span>
+                  </label>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                    The red team will simulate these user personas when testing for vulnerabilities.
                   </p>
 
                   {discoveryResult && discoveryResult.user && (
@@ -827,7 +833,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <Textarea
                     value={config.applicationDefinition?.redteamUser ?? ''}
                     onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
-                    placeholder="e.g. An engineer at Acme Inc, a healthcare provider accessing patient records, a financial analyst reviewing reports..."
+                    placeholder="e.g. An engineer at Acme Inc, a healthcare provider, a financial analyst..."
                     rows={2}
                     className="min-h-[56px] resize-y"
                   />
@@ -835,24 +841,23 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               </div>
 
               {/* Test Generation Instructions - Standalone Section */}
-              <div className="mt-8">
-                <h3 className="mb-4 text-lg font-medium">Test Generation Instructions</h3>
+              <div className="mt-8 space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Test Generation Instructions
+                </h2>
                 <div>
-                  <h4 className="mb-2 font-medium">
-                    Additional instructions for test generation{' '}
-                    <span className="text-sm text-muted-foreground">(optional)</span>
-                  </h4>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    Provide specific guidance on how red team attacks should be generated for your
-                    application. These instructions will be included in all test generation prompts
-                    to ensure attacks are contextually relevant and follow your desired approach.
-                    This is particularly useful for domain-specific applications or when you want to
-                    focus on particular attack patterns.
+                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                    Additional instructions for test generation
+                    <span className="text-xs font-normal text-muted-foreground/70">optional</span>
+                  </label>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                    Guidance on how red team attacks should be generated. Useful for domain-specific
+                    applications.
                   </p>
                   <Textarea
                     value={config.testGenerationInstructions ?? ''}
                     onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
-                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
+                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology..."
                     rows={3}
                     className="min-h-[72px] resize-y"
                   />
