@@ -166,10 +166,9 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 
 Create a URL that can be shared online.
 
-| Option        | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `--show-auth` | Include auth info in the shared URL             |
-| `-y, --yes`   | Skip confirmation before creating shareable URL |
+| Option        | Description                         |
+| ------------- | ----------------------------------- |
+| `--show-auth` | Include auth info in the shared URL |
 
 ## `promptfoo cache`
 
@@ -330,6 +329,33 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
+| Option     | Description                                                                          |
+| ---------- | ------------------------------------------------------------------------------------ |
+| `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
+| `--force`  | Replace an existing eval with the same ID                                            |
+
+When importing an eval, the following data is preserved from the export:
+
+- **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
+- **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
+- **Author** - The original author is always preserved (even with `--new-id` or `--force`)
+- **Config, results, and all test data** - Fully preserved
+
+If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
+
+Example:
+
+```sh
+# Import an eval, preserving the original ID
+promptfoo import my-eval.json
+
+# Import even if an eval with this ID exists (creates duplicate with new ID)
+promptfoo import --new-id my-eval.json
+
+# Replace an existing eval with updated data
+promptfoo import --force my-eval.json
+```
+
 ## `promptfoo export`
 
 Export eval records or logs.
@@ -402,9 +428,9 @@ Login to the promptfoo cloud.
 
 | Option                | Description                                                                |
 | --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to login to                                            |
+| `-o, --org <orgId>`   | The organization ID to log in to                                           |
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Login using an API key                                                     |
+| `-k, --api-key <key>` | Log in using an API key                                                    |
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 

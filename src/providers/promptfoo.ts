@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -9,6 +8,9 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { fetchWithRetries } from '../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
@@ -18,8 +20,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -214,7 +214,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {

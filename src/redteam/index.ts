@@ -306,9 +306,22 @@ async function applyStrategies(
     }
 
     const targetPlugins = strategy.config?.plugins;
-    const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
-    );
+    const applicableTestCases = testCases.filter((t) => {
+      // Check plugin matching first
+      if (!pluginMatchesStrategyTargets(t, strategy.id, targetPlugins)) {
+        return false;
+      }
+
+      // Skip retry tests - they shouldn't be transformed by strategies
+      if (t.metadata?.retry === true) {
+        logger.debug(
+          `Skipping ${strategy.id} for retry test (plugin: ${t.metadata?.pluginId}) - retry tests are not transformed`,
+        );
+        return false;
+      }
+
+      return true;
+    });
 
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       applicableTestCases,
@@ -327,7 +340,10 @@ async function applyStrategies(
           ...t,
           metadata: {
             ...(t?.metadata || {}),
-            strategyId: t?.metadata?.strategyId || strategy.id,
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
             ...(t?.metadata?.pluginConfig && {
               pluginConfig: t.metadata.pluginConfig,
@@ -549,7 +565,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
-  targetLabels,
+  targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
@@ -1067,7 +1083,7 @@ export async function synthesize({
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetLabels,
+      targetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(

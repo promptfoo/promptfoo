@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
-  clearCometApiModelsCache,
   CometApiImageProvider,
+  clearCometApiModelsCache,
   createCometApiProvider,
   fetchCometApiModels,
 } from '../../src/providers/cometapi';

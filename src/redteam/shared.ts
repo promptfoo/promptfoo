@@ -103,9 +103,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
+  // Exclude 'description' from options to avoid conflict with Commander's description method
+  const { description: _description, ...evalOptions } = options;
   const evalResult = await doEval(
     {
-      ...options,
+      ...evalOptions,
       config: [redteamPath],
       output: options.output ? [options.output] : undefined,
       cache: true,

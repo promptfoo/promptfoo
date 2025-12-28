@@ -1,13 +1,14 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 import { ResponsesProcessor } from '../responses/index';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { calculateXAICost, GROK_4_MODELS } from './chat';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -16,7 +17,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 /**
  * xAI Agent Tools - Server-side tools for autonomous agent workflows

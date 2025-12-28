@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsHistoryProvider } from '../../../../src/providers/elevenlabs/history';
+
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies

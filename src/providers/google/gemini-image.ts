@@ -9,8 +9,8 @@ import {
   resolveProjectId,
 } from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GeminiImageOptions {

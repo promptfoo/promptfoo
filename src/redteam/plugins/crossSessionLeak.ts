@@ -5,7 +5,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
-import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,

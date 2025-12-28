@@ -1,5 +1,5 @@
-import { PythonWorker } from './worker';
 import logger from '../logger';
+import { PythonWorker } from './worker';
 
 interface QueuedRequest {
   functionName: string;
