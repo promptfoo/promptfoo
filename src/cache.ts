@@ -11,6 +11,9 @@ import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
 import type { Cache } from 'cache-manager';
+import type { CacheOptions } from './types/cache';
+
+export type { CacheOptions };
 
 let cacheInstance: Cache | undefined;
 
@@ -119,17 +122,6 @@ export type FetchWithCacheResult<T> = {
   headers?: Record<string, string>;
   latencyMs?: number;
   deleteFromCache?: () => Promise<void>;
-};
-
-/**
- * Options for cache behavior in fetchWithCache.
- * Supports per-repeat caching when evaluations use repeat > 1.
- */
-export type CacheOptions = {
-  /** Whether to bypass cache read (still writes to cache) */
-  bust?: boolean;
-  /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
-  repeatIndex?: number;
 };
 
 export async function fetchWithCache<T = any>(

@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
 
-import type { CacheOptions } from '../cache';
+import type { CacheOptions } from '../types/cache';
 import type { ApiProvider, CallApiContextParams } from '../types/index';
 
 /**
