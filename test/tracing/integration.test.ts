@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { runDbMigrations } from '../../src/migrate';
+
 import type { EvaluateTestSuite } from '../../src/types/index';
 
 // Mock the trace store to avoid database dependency in tests
