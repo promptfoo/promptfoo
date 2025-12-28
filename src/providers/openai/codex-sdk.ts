@@ -8,13 +8,13 @@ import { getEnvString } from '../../envars';
 import { importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 /**
  * OpenAI Codex SDK Provider
@@ -48,7 +48,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
 /**
  * Reasoning effort levels
  */
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
@@ -98,7 +98,6 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum reasoning for the most complex tasks
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -348,7 +347,31 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
   }
 
+  private buildThreadOptions(config: OpenAICodexSDKConfig): Record<string, any> {
+    return {
+      workingDirectory: config.working_dir,
+      skipGitRepoCheck: config.skip_git_repo_check ?? false,
+      ...(config.model ? { model: config.model } : {}),
+      ...(config.additional_directories?.length
+        ? { additionalDirectories: config.additional_directories }
+        : {}),
+      ...(config.sandbox_mode ? { sandboxMode: config.sandbox_mode } : {}),
+      ...(config.model_reasoning_effort
+        ? { modelReasoningEffort: config.model_reasoning_effort }
+        : {}),
+      ...(config.network_access_enabled !== undefined
+        ? { networkAccessEnabled: config.network_access_enabled }
+        : {}),
+      ...(config.web_search_enabled !== undefined
+        ? { webSearchEnabled: config.web_search_enabled }
+        : {}),
+      ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
+    };
+  }
+
   private async getOrCreateThread(config: OpenAICodexSDKConfig, cacheKey?: string): Promise<any> {
+    const threadOptions = this.buildThreadOptions(config);
+
     // Resume specific thread
     if (config.thread_id) {
       const cached = this.threads.get(config.thread_id);
@@ -356,7 +379,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return cached;
       }
 
-      const thread = this.codexInstance!.resumeThread(config.thread_id);
+      const thread = this.codexInstance!.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
         this.threads.set(config.thread_id, thread);
       }
@@ -380,26 +403,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Create new thread with all SDK options
-    const thread = this.codexInstance!.startThread({
-      workingDirectory: config.working_dir,
-      skipGitRepoCheck: config.skip_git_repo_check ?? false,
-      ...(config.model ? { model: config.model } : {}),
-      ...(config.additional_directories?.length
-        ? { additionalDirectories: config.additional_directories }
-        : {}),
-      ...(config.sandbox_mode ? { sandboxMode: config.sandbox_mode } : {}),
-      ...(config.model_reasoning_effort
-        ? { modelReasoningEffort: config.model_reasoning_effort }
-        : {}),
-      ...(config.network_access_enabled !== undefined
-        ? { networkAccessEnabled: config.network_access_enabled }
-        : {}),
-      ...(config.web_search_enabled !== undefined
-        ? { webSearchEnabled: config.web_search_enabled }
-        : {}),
-      ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
-    });
+    // Create new thread
+    const thread = this.codexInstance!.startThread(threadOptions);
 
     if (config.persist_threads && cacheKey) {
       this.threads.set(cacheKey, thread);
@@ -518,6 +523,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const runOptions: any = {};
     if (config.output_schema) {
       runOptions.outputSchema = config.output_schema;
+    }
+    if (callOptions?.abortSignal) {
+      runOptions.signal = callOptions.abortSignal;
     }
 
     // Execute turn

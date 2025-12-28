@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import TableSettingsModal from './TableSettingsModal';
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
+import TableSettingsModal from './TableSettingsModal';
 
 vi.mock('./hooks/useSettingsState', () => ({
   useSettingsState: vi.fn(),
@@ -68,16 +69,9 @@ describe('TableSettingsModal', () => {
     expect(mockResetToDefaults).toHaveBeenCalled();
   });
 
-  it.each([
-    { hasChanges: true, expectedButtonText: 'Save Changes' },
-    { hasChanges: false, expectedButtonText: 'Done' },
-  ])('should display "$expectedButtonText" when hasChanges is $hasChanges', ({
-    hasChanges,
-    expectedButtonText,
-  }) => {
-    mockSettingsState(hasChanges);
+  it('should display "Done" button', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-    expect(screen.getByRole('button', { name: expectedButtonText })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
   it('should call useSettingsState with the correct initial open state', () => {
@@ -85,16 +79,9 @@ describe('TableSettingsModal', () => {
     expect(useSettingsState).toHaveBeenCalledWith(true);
   });
 
-  it.each([
-    { hasChanges: true, buttonText: 'Save Changes' },
-    { hasChanges: false, buttonText: 'Done' },
-  ])('should call onClose when the main action button ($buttonText) is clicked', ({
-    hasChanges,
-    buttonText,
-  }) => {
-    mockSettingsState(hasChanges);
+  it('should call onClose when the Done button is clicked', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-    const mainActionButton = screen.getByRole('button', { name: buttonText });
+    const mainActionButton = screen.getByRole('button', { name: 'Done' });
     fireEvent.click(mainActionButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });

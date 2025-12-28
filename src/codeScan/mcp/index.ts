@@ -5,10 +5,11 @@
  */
 
 import type { ChildProcess } from 'child_process';
-import type { Socket } from 'socket.io-client';
+
 import logger from '../../logger';
 import { startFilesystemMcpServer } from './filesystem';
 import { SocketIoMcpBridge } from './transport';
+import type { Socket } from 'socket.io-client';
 
 /**
  * Result of MCP bridge setup

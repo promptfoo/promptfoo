@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  EcommerceComplianceBypassPlugin,
   EcommerceComplianceBypassGrader,
+  EcommerceComplianceBypassPlugin,
 } from '../../../src/redteam/plugins/ecommerce/ecommerceComplianceBypass';
 
 import type { ApiProvider } from '../../../src/types/index';

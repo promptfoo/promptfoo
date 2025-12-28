@@ -1,4 +1,4 @@
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

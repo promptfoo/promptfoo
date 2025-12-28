@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
-import { printBorder, setupEnv } from '../util/index';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
+import { printBorder, setupEnv } from '../util/index';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';
 

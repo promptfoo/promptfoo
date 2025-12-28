@@ -191,17 +191,6 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/mischievous-user/',
   },
   {
-    category: 'Multi-turn',
-    strategy: 'simba',
-    displayName: 'Simba',
-    description: 'Autonomous red team agent',
-    longDescription:
-      'Autonomous multi-phase agent that conducts reconnaissance, probing, and targeted attacks with adaptive learning to systematically discover vulnerabilities',
-    cost: 'High',
-    asrIncrease: '70-90%',
-    link: '/docs/red-team/strategies/simba/',
-  },
-  {
     category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',

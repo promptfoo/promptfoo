@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDb,
   DrizzleLogWriter,

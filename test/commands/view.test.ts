@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
 import { startServer } from '../../src/server/server';
-import { setupEnv } from '../../src/util/index';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
+import { setupEnv } from '../../src/util/index';
 import { BrowserBehavior } from '../../src/util/server';
 
 vi.mock('../../src/util/config/manage', () => ({

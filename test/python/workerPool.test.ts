@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
-const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 5000;
+// Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)
+const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 
 // Skip on Windows CI due to aggressive file security policies blocking temp file IPC
 // Works fine on local Windows and all other platforms

@@ -2,8 +2,8 @@
  * ElevenLabs Audio Isolation Types
  */
 
-import type { ElevenLabsBaseConfig } from '../types';
 import type { OutputFormat } from '../tts/types';
+import type { ElevenLabsBaseConfig } from '../types';
 
 /**
  * Configuration for audio isolation provider

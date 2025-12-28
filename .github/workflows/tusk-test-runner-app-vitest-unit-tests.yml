@@ -99,7 +99,7 @@ jobs:
             npx tsc --build --noEmit --incremental
 
           # The script to run Vitest tests for individual files
-          testScript: 'npx vitest run {{file}} --reporter=basic'
+          testScript: 'npx vitest run {{file}} --reporter=default'
 
           coverageScript: |
             npx vitest run {{testFilePaths}} \

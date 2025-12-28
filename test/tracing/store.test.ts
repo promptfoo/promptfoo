@@ -1,14 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock crypto module BEFORE importing TraceStore using vi.hoisted
-const mockRandomUUID = vi.hoisted(() => vi.fn(() => 'test-uuid'));
-
-vi.mock('crypto', async () => {
-  const actual = await vi.importActual<typeof import('crypto')>('crypto');
-  return {
-    ...actual,
-    randomUUID: mockRandomUUID,
-  };
+// Mock crypto.randomUUID using vi.stubGlobal
+const mockRandomUUID = vi.fn(() => 'test-uuid');
+vi.stubGlobal('crypto', {
+  ...crypto,
+  randomUUID: mockRandomUUID,
 });
 
 // Mock logger

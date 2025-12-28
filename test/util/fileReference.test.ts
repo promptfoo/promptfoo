@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';

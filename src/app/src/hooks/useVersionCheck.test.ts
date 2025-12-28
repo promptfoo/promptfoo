@@ -1,6 +1,6 @@
-import { renderHook, waitFor, act } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi } from '@app/utils/api';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({

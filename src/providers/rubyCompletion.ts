@@ -4,9 +4,9 @@ import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 
 import type {

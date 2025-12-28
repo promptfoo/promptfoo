@@ -26,14 +26,14 @@ The `promptfooconfig.oauth.yaml` file demonstrates OAuth 2.0 client credentials 
 targets:
   - id: http
     config:
-      url: https://example-app-staging-58786025894.us-central1.run.app/minnow/chat?auth_type=bearer
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=bearer
       method: POST
       auth:
         type: oauth
         grantType: client_credentials
         clientId: '{{env.PROMPTFOO_TARGET_CLIENT_ID}}'
         clientSecret: '{{env.PROMPTFOO_TARGET_CLIENT_SECRET}}'
-        tokenUrl: https://example-app-staging-58786025894.us-central1.run.app/oauth/token
+        tokenUrl: https://example-app.promptfoo.app/oauth/token
         scopes: []
 ```
 
@@ -45,7 +45,7 @@ The `promptfooconfig.api_key.yaml` file demonstrates API key authentication:
 targets:
   - id: http
     config:
-      url: https://example-app-staging-58786025894.us-central1.run.app/minnow/chat?auth_type=api_key
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=api_key
       method: POST
       auth:
         type: api_key
@@ -62,7 +62,7 @@ The `promptfooconfig.digital_signature.yaml` file demonstrates digital signature
 targets:
   - id: http
     config:
-      url: https://example-app-staging-58786025894.us-central1.run.app/minnow/chat?auth_type=digital_signature
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=digital_signature
       method: POST
       headers:
         'timestamp': '{{signatureTimestamp}}'

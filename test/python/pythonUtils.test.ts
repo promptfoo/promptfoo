@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
@@ -67,6 +68,54 @@ describe('Python Utils', () => {
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
+  });
+
+  describe('getConfiguredPythonPath', () => {
+    it('should return explicit config path when provided', () => {
+      const result = pythonUtils.getConfiguredPythonPath('/custom/python/path');
+      expect(result).toBe('/custom/python/path');
+    });
+
+    it('should return PROMPTFOO_PYTHON when config path is not provided', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python/path');
+
+      const result = pythonUtils.getConfiguredPythonPath(undefined);
+
+      expect(result).toBe('/env/python/path');
+      expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_PYTHON');
+    });
+
+    it('should prioritize config path over PROMPTFOO_PYTHON', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python/path');
+
+      const result = pythonUtils.getConfiguredPythonPath('/config/python/path');
+
+      expect(result).toBe('/config/python/path');
+    });
+
+    it('should return undefined when neither config nor env var is set', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+
+      const result = pythonUtils.getConfiguredPythonPath(undefined);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined when config is empty string and env var is not set', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+
+      const result = pythonUtils.getConfiguredPythonPath('');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return PROMPTFOO_PYTHON when config is empty string', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python');
+
+      const result = pythonUtils.getConfiguredPythonPath('');
+
+      expect(result).toBe('/env/python');
+    });
   });
 
   describe('getSysExecutable', () => {

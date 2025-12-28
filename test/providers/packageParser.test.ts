@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import {
   isPackagePath,

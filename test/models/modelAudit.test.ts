@@ -1,5 +1,6 @@
-import { vi, describe, it, expect } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ModelAudit from '../../src/models/modelAudit';
+
 import type { ModelAuditScanResults } from '../../src/types/modelAudit';
 
 // Mock the database

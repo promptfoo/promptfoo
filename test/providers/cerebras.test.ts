@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadApiProvider } from '../../src/providers/index';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
+import { loadApiProvider } from '../../src/providers/index';
 import type { z } from 'zod';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { ApiProvider } from '../../src/types/index';
 import type { ProviderEnvOverridesSchema } from '../../src/types/env';
+import type { ApiProvider } from '../../src/types/index';
 
 type ProviderEnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
 

@@ -1,5 +1,5 @@
-import { vi, describe, it, expect } from 'vitest';
 import dedent from 'dedent';
+import { describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 

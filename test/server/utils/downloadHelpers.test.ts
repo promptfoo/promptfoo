@@ -1,6 +1,6 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Response } from 'express';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
+import type { Response } from 'express';
 
 describe('downloadHelpers', () => {
   describe('setDownloadHeaders', () => {

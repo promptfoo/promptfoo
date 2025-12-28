@@ -1,5 +1,6 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();

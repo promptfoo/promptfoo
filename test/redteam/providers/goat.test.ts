@@ -1,8 +1,8 @@
-import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import type { Mock } from 'vitest';
+
 import type {
   ApiProvider,
   AtomicTestCase,

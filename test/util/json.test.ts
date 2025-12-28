@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import dedent from 'dedent';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,

@@ -4,6 +4,7 @@
  */
 
 import logger from '../../logger';
+
 import type { SocketAuthCredentials } from '../../types/codeScan';
 
 // Import promptfoo's cloud config for auth (using ESM dynamic import)

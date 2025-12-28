@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 // Mock dependencies
@@ -28,6 +29,9 @@ vi.mock('../../../src/redteam/providers/shared', () => ({
     getProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  externalizeResponseForRedteamHistory: vi
+    .fn()
+    .mockImplementation(async (response: unknown) => response),
   createIterationContext: vi.fn().mockResolvedValue({ vars: {} }),
 }));
 
@@ -53,13 +57,13 @@ describe('RedteamIterativeImageProvider', () => {
     // Setup mock redteam provider (also serves as vision provider)
     mockRedteamProvider = {
       id: () => 'mock-redteam-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn() as any,
     };
 
     // Setup mock target provider
     mockTargetProvider = {
       id: () => 'mock-target-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn() as any,
     };
 
     // Default redteam provider setup
@@ -67,7 +71,7 @@ describe('RedteamIterativeImageProvider', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should have correct ID', () => {

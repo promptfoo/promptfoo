@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { Command } from 'commander';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively, isMainModule } from '../src/main';
 import { setupEnv } from '../src/util/index';

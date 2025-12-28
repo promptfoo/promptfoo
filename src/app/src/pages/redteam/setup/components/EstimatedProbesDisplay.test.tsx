@@ -1,8 +1,9 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
+
 import type { Config } from '../types';
 
 // Mock the utils module
@@ -12,6 +13,7 @@ vi.mock('./strategies/utils', () => ({
 
 // Import the mocked function for use in tests
 import { getEstimatedProbes } from './strategies/utils';
+
 const mockGetEstimatedProbes = vi.mocked(getEstimatedProbes);
 
 // Helper function to render with theme

@@ -1,10 +1,10 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
-import { NovaSonicProvider, categorizeError } from '../../../src/providers/bedrock/nova-sonic';
+import { categorizeError, NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {

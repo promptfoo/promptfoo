@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { RedteamGraderBase, type RedteamGradingContext } from './base';
 
 import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';

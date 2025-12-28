@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { resolveConfigs } from '../../src/util/config/load';

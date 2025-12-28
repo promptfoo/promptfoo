@@ -1,6 +1,7 @@
-import * as path from 'path';
-import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
+
 import { getDirectory } from './esm';
 
 /**

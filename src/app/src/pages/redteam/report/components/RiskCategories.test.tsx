@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import RiskCategories from './RiskCategories';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import RiskCategories from './RiskCategories';
 
 const mockRiskCardProps: any[] = [];
 vi.mock('./RiskCard', () => ({

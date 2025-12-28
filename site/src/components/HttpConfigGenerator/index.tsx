@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { Editor } from '@monaco-editor/react';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -53,7 +54,6 @@ Content-Type: application/json
     setLoading(true);
     setError('');
     try {
-      // biome-ignore lint/style/noRestrictedGlobals: Site documentation file, fetch is acceptable here
       const res = await fetch('https://api.promptfoo.app/api/v1/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

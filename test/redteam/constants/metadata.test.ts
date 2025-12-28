@@ -16,7 +16,6 @@ import {
   strategyDisplayNames,
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
-
 import {
   ADDITIONAL_PLUGINS,
   BASE_PLUGINS,
@@ -26,6 +25,7 @@ import {
   MEDICAL_PLUGINS,
   PII_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
+
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
 

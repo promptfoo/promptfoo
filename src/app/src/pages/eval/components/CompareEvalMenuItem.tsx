@@ -12,13 +12,15 @@ import type { ResultLightweightWithLabel } from '@promptfoo/types';
 interface CompareEvalMenuItemProps {
   initialEvals: ResultLightweightWithLabel[];
   onComparisonEvalSelected: (evalId: string) => void;
+  onMenuClose?: () => void;
 }
 
-function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemProps) {
+function CompareEvalMenuItem({ onComparisonEvalSelected, onMenuClose }: CompareEvalMenuItemProps) {
   const { evalId: currentEvalId } = useTableStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleOpenDialog = () => {
+    onMenuClose?.();
     setDialogOpen(true);
   };
 
@@ -57,7 +59,6 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
         onEvalSelected={(evalId) => {
           handleEvalSelected(evalId);
         }}
-        title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
         focusedEvalId={currentEvalId ?? undefined}
         filterByDatasetId

@@ -13,6 +13,7 @@ import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
@@ -27,7 +28,6 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types/index';
-import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],

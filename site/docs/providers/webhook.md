@@ -1,9 +1,9 @@
 ---
-sidebar_label: Generic webhook
+sidebar_label: Generic Webhook
 description: Configure webhook integrations to trigger custom LLM flows and prompt chains with HTTP POST requests, enabling seamless API-based testing and evaluation
 ---
 
-# Generic webhook
+# Generic Webhook
 
 The webhook provider can be useful for triggering more complex flows or prompt chains end to end in your app.
 

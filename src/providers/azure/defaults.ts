@@ -418,6 +418,14 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
+    id: 'gpt-image-1.5',
+    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+  },
+  {
+    id: 'gpt-image-1.5-2025-12-16',
+    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+  },
+  {
     id: 'dall-e-3',
     cost: { input: 40 / 1000000, output: 40 / 1000000 },
   },

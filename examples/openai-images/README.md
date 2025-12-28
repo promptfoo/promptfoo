@@ -6,7 +6,7 @@ You can run this example with:
 npx promptfoo@latest init --example openai-images
 ```
 
-A simple example showing how to evaluate OpenAI's image generation models (GPT Image 1, GPT Image 1 Mini, DALL-E 3, DALL-E 2) with promptfoo.
+A simple example showing how to evaluate OpenAI's image generation models (GPT Image 1.5, GPT Image 1, GPT Image 1 Mini, DALL-E 3, DALL-E 2) with promptfoo.
 
 ## Quick Start
 
@@ -26,16 +26,32 @@ promptfoo view
 
 ## What's in this Example
 
-- Compares GPT Image 1, GPT Image 1 Mini, DALL-E 3 and DALL-E 2 outputs
+- Compares GPT Image 1.5, GPT Image 1, GPT Image 1 Mini, DALL-E 3 and DALL-E 2 outputs
 - Tests artistic style prompts across different models
 - Configures different image sizes and quality settings
 - Tests with different subjects
 
 ## Supported Models
 
-### GPT Image 1 (Recommended)
+### GPT Image 1.5 (Recommended)
 
-OpenAI's latest and most capable image generation model with superior instruction following and text rendering.
+OpenAI's state-of-the-art image generation model with superior instruction following, prompt adherence, and photorealistic quality. Uses token-based pricing.
+
+```yaml
+providers:
+  - id: openai:image:gpt-image-1.5
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, auto
+      quality: low # low, medium, high, auto
+      background: transparent # transparent, opaque, auto
+      output_format: png # png, jpeg, webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto, low
+```
+
+### GPT Image 1
+
+High-quality image generation model with superior instruction following and text rendering.
 
 ```yaml
 providers:
@@ -94,6 +110,9 @@ providers:
 
 | Model            | Quality  | Size      | Price per image |
 | ---------------- | -------- | --------- | --------------- |
+| GPT Image 1.5    | Low      | 1024x1024 | ~$0.064         |
+| GPT Image 1.5    | Medium   | 1024x1024 | ~$0.128         |
+| GPT Image 1.5    | High     | 1024x1024 | ~$0.192         |
 | GPT Image 1      | Low      | 1024x1024 | $0.011          |
 | GPT Image 1      | Medium   | 1024x1024 | $0.042          |
 | GPT Image 1      | High     | 1024x1024 | $0.167          |
@@ -103,6 +122,8 @@ providers:
 | DALL-E 3         | Standard | 1024x1024 | $0.04           |
 | DALL-E 3         | HD       | 1024x1024 | $0.08           |
 | DALL-E 2         | -        | 1024x1024 | $0.02           |
+
+**Note:** GPT Image 1.5 uses token-based pricing ($32/1M output image tokens). Prices shown are estimates.
 
 ## Documentation
 

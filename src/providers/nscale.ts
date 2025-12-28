@@ -1,11 +1,11 @@
 import { getEnvString } from '../envars';
+import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { createNscaleImageProvider } from './nscale/image';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints

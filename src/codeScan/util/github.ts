@@ -10,6 +10,7 @@ import {
   formatSeverity,
   getSeverityRank,
 } from '../../types/codeScan';
+
 import type { ParsedGitHubPR } from '../../types/codeScan';
 
 /**

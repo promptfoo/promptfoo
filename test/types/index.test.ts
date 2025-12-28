@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   AssertionSchema,

@@ -1,29 +1,20 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { type Plugin as PluginType, Severity } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 import SeverityCard from './SeverityCard';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface OverviewProps {
   categoryStats: Record<PluginType, TestResultStats>;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
-  setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 
-const Overview = ({
-  categoryStats,
-  plugins,
-  vulnerabilitiesDataGridRef,
-  setVulnerabilitiesDataGridFilterModel,
-}: OverviewProps) => {
-  const { pluginPassRateThreshold } = useReportStore();
+const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: OverviewProps) => {
+  const { pluginPassRateThreshold, severityFilter, setSeverityFilter } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
@@ -50,33 +41,32 @@ const Overview = ({
     {} as Record<Severity, number>,
   );
 
-  const handleNavigateToVulnerabilities = ({ severity }: { severity: Severity }) => {
-    setVulnerabilitiesDataGridFilterModel({
-      items: [
-        {
-          field: 'severity',
-          operator: 'is',
-          value: severity,
-        },
-      ],
-      logicOperator: GridLogicOperator.Or,
-    });
-    vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleNavigateToVulnerabilities = (severity: Severity) => {
+    // Toggle filter: if clicking the same severity, clear the filter
+    if (severityFilter === severity) {
+      setSeverityFilter(null);
+    } else {
+      setSeverityFilter(severity);
+      // Only scroll when applying a filter, not when clearing
+      vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
-    <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
+    <div className="flex flex-col gap-4 sm:flex-row">
       {Object.values(Severity).map((severity) => (
-        <Box key={severity} flex={1}>
+        <div key={severity} className="flex-1">
           <SeverityCard
             severity={severity}
             issueCount={severityCounts[severity]}
             navigateOnClick
-            navigateToIssues={handleNavigateToVulnerabilities}
+            navigateToIssues={() => handleNavigateToVulnerabilities(severity)}
+            isActive={severityFilter === severity}
+            hasActiveFilter={severityFilter !== null}
           />
-        </Box>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 };
 

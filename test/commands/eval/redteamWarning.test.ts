@@ -71,6 +71,7 @@ vi.mock('../../../src/models/eval', () => {
         addResult: vi.fn().mockResolvedValue({}),
         addPrompts: vi.fn().mockResolvedValue({}),
         clearResults: vi.fn().mockReturnValue(undefined),
+        setDurationMs: vi.fn(),
 
         getTable: vi.fn().mockResolvedValue({
           head: {

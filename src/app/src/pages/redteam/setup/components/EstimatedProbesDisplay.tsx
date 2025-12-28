@@ -1,13 +1,14 @@
 import { useMemo } from 'react';
+
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
-import type { SxProps, Theme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { getEstimatedProbes } from './strategies/utils';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 import type { Config } from '../types';
-import { getEstimatedProbes } from './strategies/utils';
 
 interface EstimatedProbesDisplayProps {
   config: Config;

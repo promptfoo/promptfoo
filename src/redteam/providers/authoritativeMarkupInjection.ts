@@ -2,6 +2,12 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -9,11 +15,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;

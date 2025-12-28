@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
-import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 
+import { getProxyForUrl } from 'proxy-from-env';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -13,6 +13,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+
 import type { FetchOptions } from './types';
 
 /**

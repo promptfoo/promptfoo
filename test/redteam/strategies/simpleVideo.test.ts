@@ -3,10 +3,10 @@
  *
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,

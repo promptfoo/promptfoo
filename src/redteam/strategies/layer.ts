@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import logger from '../../logger';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { pluginMatchesStrategyTargets } from './util';
@@ -83,7 +82,7 @@ export async function addLayerTestCases(
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
-      const scanId = uuidv4();
+      const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,

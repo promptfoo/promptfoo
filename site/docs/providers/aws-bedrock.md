@@ -1288,6 +1288,7 @@ providers:
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
       temperature: 0.0
       max_tokens: 1000
+      numberOfResults: 5 # Optional: number of chunks to retrieve (AWS default when not specified)
 ```
 
 The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
@@ -1303,6 +1304,7 @@ Configuration options include:
 - `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
 - `temperature`: Controls randomness in response generation (default: 0.0)
 - `max_tokens`: Maximum number of tokens in the generated response
+- `numberOfResults`: Number of chunks to retrieve from the knowledge base (optional, uses AWS default when not specified)
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
@@ -1316,13 +1318,13 @@ prompts:
   - 'Tell me about quantum computing.'
 
 providers:
-  # Knowledge Base provider
   - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     config:
       region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
       temperature: 0.0
       max_tokens: 1000
+      numberOfResults: 10
 
   # Regular Claude model for comparison
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0

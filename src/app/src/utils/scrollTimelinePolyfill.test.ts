@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach, afterAll, MockInstance } from 'vitest';
-import { supportsScrollTimeline, loadScrollTimelinePolyfill } from './scrollTimelinePolyfill';
+import { afterAll, afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { loadScrollTimelinePolyfill, supportsScrollTimeline } from './scrollTimelinePolyfill';
 
 vi.mock('../polyfills/scroll-timeline.js', () => ({
   default: {},

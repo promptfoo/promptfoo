@@ -789,7 +789,7 @@ assert:
   # Ensure exactly 2-4 retrieval operations
   - type: trace-span-count
     value:
-      pattern: '*retriev*'
+      pattern: '*retrieve*'
       min: 2
       max: 4
 ```

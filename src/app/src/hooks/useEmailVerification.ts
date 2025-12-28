@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { UserEmailStatus, EmailValidationStatus } from '../../../types/email';
 import { callApi } from '@app/utils/api';
+import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
 
 interface EmailStatus {
   hasEmail: boolean;

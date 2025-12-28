@@ -4,20 +4,20 @@
  * Main entry point for the promptfoo code-scan GitHub Action
  */
 
+import * as fs from 'fs';
+
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import * as fs from 'fs';
-import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
 import { prepareComments } from '../../src/codeScan/util/github';
 import {
-  type Comment,
-  type ScanResponse,
   CodeScanSeverity,
   FileChangeStatus,
   formatSeverity,
+  type ScanResponse,
 } from '../../src/types/codeScan';
+import { generateConfigFile } from './config';
+import { getGitHubContext, getPRFiles } from './github';
 
 async function run(): Promise<void> {
   try {

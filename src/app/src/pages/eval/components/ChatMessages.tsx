@@ -1,14 +1,13 @@
 import { useMemo } from 'react';
 
-import invariant from 'tiny-invariant';
-
+import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import Box from '@mui/material/Box';
 import { grey, red } from '@mui/material/colors';
 import Paper from '@mui/material/Paper';
-import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
 import { keyframes, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
+import invariant from 'tiny-invariant';
 
 const bounce = keyframes`
   0%, 100% {
@@ -26,8 +25,8 @@ interface BaseMessage {
 export interface LoadedMessage extends BaseMessage {
   content: string;
   contentType?: 'text' | 'image' | 'audio' | 'video';
-  audio?: { data?: string; format?: string };
-  image?: { data?: string; format?: string };
+  audio?: { data?: string; format?: string; blobRef?: { uri: string } };
+  image?: { data?: string; format?: string; blobRef?: { uri: string } };
   loading?: false;
 }
 
@@ -50,6 +49,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   const bubbleProps = {
     p: 1.5,
     maxWidth: '70%',
+    overflow: 'hidden',
     background: isUser ? red[500] : isDark ? grey[800] : grey[200],
     borderRadius: isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
     alignSelf,
@@ -70,16 +70,26 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
     switch (contentType) {
       case 'audio': {
+        const audioSource = resolveAudioSource(message.audio, message.content);
+        if (!audioSource) {
+          return null;
+        }
+
         return (
           <Box>
             <audio controls style={{ width: '500px' }} data-testid="audio">
-              <source src={`data:audio/mp3;base64,${message?.content}`} type="audio/mp3" />
+              <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
               Your browser does not support the audio element.
             </audio>
           </Box>
         );
       }
       case 'image': {
+        const imageSrc = resolveImageSource(message.image || message.content);
+        if (!imageSrc) {
+          return null;
+        }
+
         return (
           <Box
             role="img"
@@ -88,7 +98,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
               width: '100%',
               minWidth: '500px',
               minHeight: '300px',
-              backgroundImage: `url(data:image/png;base64,${message.content})`,
+              backgroundImage: `url(${imageSrc})`,
               backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'start',
@@ -114,8 +124,10 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         );
       }
       case 'text': {
-        const hasAudio = message.audio?.data;
-        const hasImage = message.image?.data;
+        const audioSource = resolveAudioSource(message.audio);
+        const imageSrc = resolveImageSource(message.image);
+        const hasAudio = Boolean(audioSource);
+        const hasImage = Boolean(imageSrc);
 
         // If we have audio or image data, render them alongside the transcript
         if (hasAudio || hasImage) {
@@ -128,10 +140,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
                     style={{ width: '100%', maxWidth: '400px', height: '36px' }}
                     data-testid="audio-with-transcript"
                   >
-                    <source
-                      src={`data:audio/${message.audio?.format || 'mp3'};base64,${message.audio?.data}`}
-                      type={`audio/${message.audio?.format || 'mp3'}`}
-                    />
+                    <source src={audioSource?.src} type={audioSource?.type || 'audio/mpeg'} />
                     Your browser does not support the audio element.
                   </audio>
                 </Box>
@@ -139,7 +148,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
               {hasImage && (
                 <Box sx={{ mb: 1 }}>
                   <img
-                    src={`data:image/${message.image?.format || 'png'};base64,${message.image?.data}`}
+                    src={imageSrc}
                     alt="Input"
                     style={{
                       maxWidth: '100%',
@@ -154,6 +163,8 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
                 sx={{
                   fontSize: '14px',
                   whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
                   color: textColor,
                   textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
                   fontWeight: isUser ? 500 : 400,
@@ -172,6 +183,8 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
             sx={{
               fontSize: '14px',
               whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
               color: textColor,
               textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
               fontWeight: isUser ? 500 : 400,
@@ -192,24 +205,26 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   return (
     <Box sx={{ display: 'flex', justifyContent: alignSelf }} data-testid={`chat-message-${index}`}>
       {message.loading ? (
-        <Skeleton
-          variant="rectangular"
-          width="100%" // Force max-width
-          height={100}
+        <Paper
+          elevation={1}
           sx={{
             ...bubbleProps,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            py: 1.5,
+            px: 2.5,
+            maxWidth: 'none',
           }}
+          data-testid="loading-indicator"
         >
-          <Box sx={{ display: 'flex', gap: 1, visibility: 'visible !important' }}>
+          <Box sx={{ display: 'flex', gap: 0.75 }}>
             {[0, 1, 2].map((i) => (
               <Box
                 key={i}
                 sx={{
-                  width: 8,
-                  height: 8,
+                  width: 6,
+                  height: 6,
                   bgcolor: 'white',
                   borderRadius: '50%',
                   animation: `${bounce} 1.4s infinite ease-in-out both`,
@@ -218,7 +233,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
               />
             ))}
           </Box>
-        </Skeleton>
+        </Paper>
       ) : (
         <Paper elevation={1} sx={bubbleProps} role="alert">
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>

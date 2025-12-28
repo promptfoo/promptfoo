@@ -5,8 +5,8 @@ import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util/index';
 import { getConfigFromCloud } from '../../util/cloud';
+import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
@@ -49,6 +49,7 @@ export function redteamRunCommand(program: Command) {
       'Only run tests with these providers (regex match)',
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option('-d, --description <text>', 'Custom description/name for this scan run')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});
@@ -67,6 +68,12 @@ export function redteamRunCommand(program: Command) {
         ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
         }
+
+        // Override description if provided via CLI flag
+        if (opts.description) {
+          configObj.description = opts.description;
+        }
+
         opts.liveRedteamConfig = configObj;
         opts.config = undefined;
 

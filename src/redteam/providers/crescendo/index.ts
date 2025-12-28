@@ -1,6 +1,4 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -9,18 +7,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -35,11 +21,10 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { getGoalRubric } from '../prompts';
-import type { Message } from '../shared';
 import {
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
@@ -54,6 +39,21 @@ import {
   resolveTracingOptions,
 } from '../tracingOptions';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../../types/index';
+import type { BaseRedteamMetadata } from '../../types';
+import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -121,7 +121,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -156,8 +156,8 @@ export class CrescendoProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -900,7 +900,12 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(

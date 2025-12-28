@@ -491,16 +491,126 @@ tests:
       subject: 'sunset over mountains'
 ```
 
+### Voice Agent API
+
+The xAI Voice Agent API enables real-time voice conversations with Grok models via WebSocket. Use the `xai:voice:<model>` provider format.
+
+```yaml
+providers:
+  - xai:voice:grok-3
+```
+
+#### Configuration
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:voice:grok-3
+    config:
+      voice: 'Ara' # Ara, Rex, Sal, Eve, or Leo
+      instructions: 'You are a helpful voice assistant.'
+      modalities: ['text', 'audio']
+      websocketTimeout: 60000 # Connection timeout in ms
+      tools:
+        - type: web_search
+        - type: x_search
+```
+
+#### Available Voices
+
+| Voice | Description  |
+| ----- | ------------ |
+| Ara   | Female voice |
+| Rex   | Male voice   |
+| Sal   | Male voice   |
+| Eve   | Female voice |
+| Leo   | Male voice   |
+
+#### Built-in Tools
+
+The Voice API includes server-side tools that execute automatically:
+
+| Tool          | Description                            |
+| ------------- | -------------------------------------- |
+| `web_search`  | Search the web for information         |
+| `x_search`    | Search posts on X (Twitter)            |
+| `file_search` | Search uploaded files in vector stores |
+
+```yaml
+tools:
+  - type: web_search
+  - type: x_search
+    allowed_x_handles:
+      - elonmusk
+      - xai
+  - type: file_search
+    vector_store_ids:
+      - vs-123
+    max_num_results: 10
+```
+
+#### Audio Configuration
+
+Configure input/output audio formats:
+
+```yaml
+config:
+  audio:
+    input:
+      format:
+        type: audio/pcm
+        rate: 24000
+    output:
+      format:
+        type: audio/pcm
+        rate: 24000
+```
+
+Supported formats: `audio/pcm`, `audio/pcmu`, `audio/pcma`
+Supported sample rates: 8000, 16000, 22050, 24000, 32000, 44100, 48000 Hz
+
+#### Complete Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - file://input.json
+
+providers:
+  - id: xai:voice:grok-3
+    config:
+      voice: 'Ara'
+      instructions: 'You are a helpful voice assistant.'
+      modalities: ['text', 'audio']
+      tools:
+        - type: web_search
+
+tests:
+  - vars:
+      question: 'What are the latest AI developments?'
+    assert:
+      - type: llm-rubric
+        value: Provides information about recent AI news
+```
+
+#### Pricing
+
+The Voice Agent API is billed at **$0.05 per minute** of connection time.
+
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
 ## Examples
 
 For examples demonstrating text generation, image creation, and web search, see the [xai example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai).
 
-You can run this example with:
-
 ```bash
 npx promptfoo@latest init --example xai
+```
+
+For real-time voice conversations with Grok, see the [xai-voice example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai-voice).
+
+```bash
+npx promptfoo@latest init --example xai-voice
 ```
 
 ## See Also

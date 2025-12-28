@@ -4,6 +4,7 @@ import LocalPharmacyOutlined from '@mui/icons-material/LocalPharmacyOutlined';
 import SecurityOutlined from '@mui/icons-material/SecurityOutlined';
 import ShoppingCartOutlined from '@mui/icons-material/ShoppingCartOutlined';
 import type { Plugin } from '@promptfoo/redteam/constants';
+
 import type { VerticalSuite } from './VerticalSuiteCard';
 
 export const VERTICAL_SUITES: VerticalSuite[] = [

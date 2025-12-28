@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { strategies } from './data/strategies';
 
 type GroupedStrategies = Record<string, typeof strategies>;

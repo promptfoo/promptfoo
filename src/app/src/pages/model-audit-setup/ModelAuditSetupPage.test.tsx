@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -127,11 +128,13 @@ describe('ModelAuditSetupPage', () => {
 
   const renderComponent = () => {
     return render(
-      <MemoryRouter>
-        <ThemeProvider theme={theme}>
-          <ModelAuditSetupPage />
-        </ThemeProvider>
-      </MemoryRouter>,
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAuditSetupPage />
+          </ThemeProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 

@@ -21,14 +21,14 @@
   background-color: var(--ifm-color-primary);
 }
 
-/* Style for the archive page indicator */
-.blogPostGridTitle[data-is-archive='true'] {
+/* Style for paginated pages (page 2+) */
+.blogPostGridTitle[data-is-paginated='true'] {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.blogPostGridTitle[data-is-archive='true']::after {
+.blogPostGridTitle[data-is-paginated='true']::after {
   width: 40px;
 }
 
@@ -51,19 +51,32 @@
 
 .blogPostGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.75rem;
 }
 
 /* Responsive breakpoints */
-@media (max-width: 996px) {
+
+/* Tablet landscape */
+@media (max-width: 1100px) {
+  .blogPostGridContainer {
+    margin-top: 3rem;
+  }
+
   .blogPostGrid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.75rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
   }
 
   .blogPostGridTitle {
-    font-size: 1.8rem;
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .blogPostGridTitle::after {
+    width: 50px;
+    height: 2px;
+    bottom: -8px;
   }
 
   .pageNumber {
@@ -73,22 +86,79 @@
   }
 }
 
-@media (max-width: 768px) {
-  .blogPostGrid {
-    gap: 1.5rem;
-  }
-
+/* Tablet portrait */
+@media (max-width: 900px) {
   .blogPostGridContainer {
-    margin-top: 3rem;
+    margin-top: 2.5rem;
   }
 
   .blogPostGridTitle {
     font-size: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .blogPostGrid {
+    gap: 1.25rem;
   }
 
   .pageNumber {
     font-size: 1rem;
     min-width: 1.5rem;
     height: 1.5rem;
+    padding: 0 0.4rem;
+    margin-left: 0.4rem;
+  }
+}
+
+/* Small tablet / large phone - keep 2 columns */
+@media (max-width: 700px) {
+  .blogPostGridContainer {
+    margin-top: 2rem;
+  }
+
+  .blogPostGrid {
+    gap: 1rem;
+  }
+
+  .blogPostGridTitle {
+    font-size: 1.35rem;
+    margin-bottom: 1rem;
+  }
+
+  .blogPostGridTitle::after {
+    width: 40px;
+    bottom: -6px;
+  }
+
+  .pageNumber {
+    font-size: 0.9rem;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.35rem;
+    margin-left: 0.35rem;
+    border-radius: 6px;
+  }
+}
+
+/* Mobile - single column for phones and small tablets */
+@media (max-width: 600px) {
+  .blogPostGrid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 400px) {
+  .blogPostGridContainer {
+    margin-top: 1.5rem;
+  }
+
+  .blogPostGridTitle {
+    font-size: 1.25rem;
+  }
+
+  .blogPostGrid {
+    gap: 0.875rem;
   }
 }

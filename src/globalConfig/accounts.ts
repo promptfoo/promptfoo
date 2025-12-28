@@ -1,30 +1,28 @@
-import { randomUUID } from 'crypto';
-
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { z } from 'zod';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
+import {
+  BAD_EMAIL_RESULT,
+  BadEmailResult,
+  EMAIL_OK_STATUS,
+  EmailOkStatus,
+  EmailValidationStatus,
+  NO_EMAIL_STATUS,
+  UserEmailStatus,
+} from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
 import { CloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
-import {
-  EmailValidationStatus,
-  UserEmailStatus,
-  NO_EMAIL_STATUS,
-  BadEmailResult,
-  EmailOkStatus,
-  EMAIL_OK_STATUS,
-  BAD_EMAIL_RESULT,
-} from '../types/email';
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
-    const newId = randomUUID();
+    const newId = crypto.randomUUID();
     globalConfig = { ...globalConfig, id: newId };
     writeGlobalConfig(globalConfig);
     return newId;

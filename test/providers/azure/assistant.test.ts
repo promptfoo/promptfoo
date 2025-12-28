@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { fetchWithCache } from '../../../src/cache';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
 import { sleep } from '../../../src/util/time';
@@ -23,7 +22,9 @@ describe('Azure Assistant Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.spyOn(AzureAssistantProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({});
+    vi.spyOn(AzureAssistantProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
 
     provider = new AzureAssistantProvider('test-deployment', {
       config: {
@@ -31,6 +32,9 @@ describe('Azure Assistant Provider', () => {
         apiHost: 'test.azure.com',
       },
     });
+
+    // Set authHeaders on the instance (simulating what initialize() does)
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
 
     // Set up test spies on provider's private methods
     vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
@@ -75,16 +79,53 @@ describe('Azure Assistant Provider', () => {
   });
 
   describe('callApi', () => {
-    it('should throw an error if API key is not set', async () => {
-      vi.spyOn(provider as any, 'getApiKey').mockReturnValue(null);
+    it('should throw an error if authentication is not set', async () => {
+      // Mock authHeaders to be empty (no api-key and no Authorization)
+      Object.defineProperty(provider, 'authHeaders', {
+        get: () => ({}),
+        configurable: true,
+      });
 
-      await expect(provider.callApi('test prompt')).rejects.toThrow('Azure API key must be set');
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Azure API authentication failed',
+      );
     });
 
     it('should throw an error if API host is not set', async () => {
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue(null);
 
       await expect(provider.callApi('test prompt')).rejects.toThrow('Azure API host must be set');
+    });
+
+    it('should accept Entra ID authentication with Authorization header', async () => {
+      // Set authHeaders to use Authorization (Entra ID) instead of api-key
+      (provider as any).authHeaders = { Authorization: 'Bearer test-entra-token' };
+
+      // Mock processCompletedRun to return a successful result
+      vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
+        output: 'Hello from Entra ID!',
+      });
+
+      // Mock the API call sequence for a successful completion
+      const mockThreadResponse = { id: 'thread-123', object: 'thread', created_at: Date.now() };
+      const mockRunResponse = {
+        id: 'run-123',
+        object: 'run',
+        created_at: Date.now(),
+        status: 'completed',
+      };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockThreadResponse) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce(mockRunResponse) // Run creation
+        .mockResolvedValueOnce(mockRunResponse); // Run polling
+
+      const result = await provider.callApi('Hello');
+
+      // Verify the call succeeded (no error about missing API key)
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('Hello from Entra ID!');
     });
 
     it('should create a thread, add a message, and run an assistant', async () => {
@@ -276,6 +317,9 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
+
       // Set up private methods mocking
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
@@ -375,6 +419,9 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
+
       // Set up private methods mocking
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
@@ -443,6 +490,9 @@ describe('Azure Assistant Provider', () => {
           functionToolCallbacks: functionCallbacks as any,
         },
       });
+
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
@@ -517,6 +567,9 @@ describe('Azure Assistant Provider', () => {
           functionToolCallbacks: functionCallbacks,
         },
       });
+
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
@@ -1261,6 +1314,9 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
+
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
         'Content-Type': 'application/json',
@@ -1370,6 +1426,9 @@ describe('Azure Assistant Provider', () => {
           },
         },
       });
+
+      // Set authHeaders on the instance
+      (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
       vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({

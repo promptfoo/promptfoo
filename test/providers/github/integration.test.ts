@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadApiProvider } from '../../../src/providers/index';
+
 import type { ApiProvider } from '../../../src/types/providers';
 
 describe('GitHub Models Provider Integration', () => {

@@ -15,6 +15,7 @@ jobs:
     name: calibreapp/image-actions
     permissions: write-all
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v5

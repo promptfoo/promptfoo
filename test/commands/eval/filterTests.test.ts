@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';

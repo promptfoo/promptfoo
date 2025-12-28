@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 
 vi.mock('../../../src/cache', async (importOriginal) => {

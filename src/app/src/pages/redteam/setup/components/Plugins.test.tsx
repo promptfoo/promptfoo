@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');

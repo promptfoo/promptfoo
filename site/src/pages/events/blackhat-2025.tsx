@@ -1,5 +1,6 @@
-import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect } from 'react';
+
+import Cal, { getCalApi } from '@calcom/embed-react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -53,10 +54,13 @@ export default function BlackHat2025(): React.ReactElement {
           property="og:description"
           content="Visit booth #4712 at Black Hat USA 2025. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning. Schedule your meeting Aug 5-7 in Las Vegas."
         />
-        <meta property="og:image" content="/img/events/blackhat-2025.png" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/blackhat-2025.jpg"
+        />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="/events/blackhat-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/blackhat-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
 
@@ -66,14 +70,17 @@ export default function BlackHat2025(): React.ReactElement {
           name="twitter:description"
           content="Visit booth #4712. Live demos of AI vulnerability testing & automated red teaming. Aug 5-7, Las Vegas."
         />
-        <meta name="twitter:image" content="/img/events/blackhat-2025.png" />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/blackhat-2025.jpg"
+        />
         <meta name="twitter:site" content="@promptfoo" />
 
         <meta
           name="keywords"
           content="Black Hat USA 2025, AI security, LLM security, prompt injection, jailbreaking, red teaming, AI vulnerability testing, OWASP LLM Top 10"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/blackhat-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/blackhat-2025" />
       </Head>
       <main className={styles.blackhatPage}>
         {/* Hero Section */}
@@ -195,6 +202,24 @@ export default function BlackHat2025(): React.ReactElement {
                     </Link>
                   </span>
                 </div>
+                <div className={styles.detail}>
+                  <svg
+                    className={styles.icon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                    />
+                  </svg>
+                  <span style={{ fontWeight: 'bold', color: '#ff6b6b' }}>
+                    AI Stage Talk: Aug 6, 1:30 PM
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -218,9 +243,9 @@ export default function BlackHat2025(): React.ReactElement {
                       <h3>Real-Time Attack Demonstrations</h3>
                       <p>
                         Watch our security researchers perform demonstrations of prompt injection,
-                        jailbreaking, and data exfiltration attacks. See how Promptfoo automatically
-                        detects and prevents these threats across GPT-4, Claude, Llama, and other
-                        popular models.
+                        jailbreaking, and data exfiltration attacks. See how Promptfoo helps you
+                        detect these threats early, reproduce them in testing, and track fixes over
+                        time.
                       </p>
                       <div className={styles.demoTag}>LIVE DEMO</div>
                     </div>
@@ -236,9 +261,10 @@ export default function BlackHat2025(): React.ReactElement {
                     <div className={styles.demoContent}>
                       <h3>AI-Powered Red Team Automation</h3>
                       <p>
-                        Our ML models generate thousands of application-specific attack variations
-                        to uncover vulnerabilities that static scanners miss. Experience how
-                        continuous red teaming adapts to your unique architecture and use cases.
+                        LLM-powered red teaming can generate thousands of application-specific
+                        attack variations to uncover vulnerabilities that static scanners miss.
+                        Experience how continuous testing adapts to your unique architecture and use
+                        cases.
                       </p>
                       <div className={styles.demoTag}>INTERACTIVE</div>
                     </div>
@@ -312,19 +338,19 @@ export default function BlackHat2025(): React.ReactElement {
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>{`${SITE_CONSTANTS.USER_COUNT_DISPLAY}+`}</div>
-                <div className={styles.statLabel}>Open Source Users</div>
+                <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>44</div>
+                <div className={styles.statNumber}>80+</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>16M+</div>
-                <div className={styles.statLabel}>Security Probes Run</div>
+                <div className={styles.statNumber}>#4712</div>
+                <div className={styles.statLabel}>AI Zone Pavilion</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>37</div>
-                <div className={styles.statLabel}>Average Issues Found Per Scan</div>
+                <div className={styles.statNumber}>Aug 6–7</div>
+                <div className={styles.statLabel}>Business Hall</div>
               </div>
             </div>
           </div>

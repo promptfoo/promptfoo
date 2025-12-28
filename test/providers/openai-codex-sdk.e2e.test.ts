@@ -4,9 +4,10 @@
  * Run with: OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
  */
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Check if SDK is available before unmocking
 let hasSdk = false;

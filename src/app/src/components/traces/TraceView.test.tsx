@@ -1,6 +1,5 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import TraceView, { type Trace } from './TraceView';
 
 vi.mock('./TraceTimeline', () => ({

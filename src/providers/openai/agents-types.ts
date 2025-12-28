@@ -1,4 +1,5 @@
 import type { Agent } from '@openai/agents';
+
 import type { OpenAiSharedOptions } from './types';
 
 /**

@@ -12,7 +12,7 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 
 ## October 2025 Release Highlights {#october-2025}
 
-This month we shipped **jailbreak:meta and Simba red team strategies**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
+This month we shipped **jailbreak:meta red team strategy**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
 
 ### Evals {#october-2025-evals}
 
@@ -77,14 +77,6 @@ Access from any vulnerability report by clicking "View Remediation Report".
 ##### jailbreak:meta
 
 **[jailbreak:meta](/docs/red-team/strategies/meta/)** uses multiple AI agents to generate attacks. This single-shot strategy is up to 50% more effective than some multi-turn attacks.
-
-##### Simba
-
-**[Simba](/docs/red-team/strategies/simba/)** is a multi-turn attack strategy for agent systems:
-
-- **Reconnaissance phase** - Discovers target capabilities, then escalates attacks
-- **Goal-directed attacks** - Target specific objectives like accessing confidential information or achieving admin privileges
-- **Tool interaction** - Tests systems with multiple tools or external system access
 
 #### Scan Template Enhancements
 
@@ -324,7 +316,7 @@ This month we focused on expanding **provider support**, enhancing **evaluation 
 
 - **[LiteLLM Embeddings](/docs/providers/litellm/#embedding-configuration)** - Similarity testing and semantic search
 - **[Google Vision](/docs/providers/google/#chat-and-multimodal-models)** - Image understanding for multimodal evaluations
-- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#jks-java-keystore-certificates) and [PFX](/docs/providers/http/#pfx-personal-information-exchange-certificates) client certificates.
+- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#using-jks-java-keystore-certificates) and [PFX](/docs/providers/http/#using-pfxpkcs12-certificates) client certificates.
 - **[Browser Provider](/docs/providers/browser/)** - Connect to existing Chrome browser sessions via Chrome DevTools Protocol (CDP) for testing OAuth-authenticated applications
 
 #### Assertion Improvements {#july-2025-assertions}

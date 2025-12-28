@@ -6,6 +6,10 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
+const { mockSetSearchParams } = vi.hoisted(() => ({
+  mockSetSearchParams: vi.fn(),
+}));
+
 vi.mock('@app/utils/api');
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -40,12 +44,13 @@ vi.mock('socket.io-client', () => ({
     disconnect: vi.fn(),
   })),
 }));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
     useNavigate: () => vi.fn(),
-    useSearchParams: () => [new URLSearchParams()],
+    useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
     useParams: () => ({}),
   };
 });
@@ -363,5 +368,103 @@ describe('Eval', () => {
     const resultsView = container.querySelector('[data-testid="results-view"]');
     expect(resultsView).toBeInTheDocument();
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
+  });
+
+  it('should call setSearchParams with { replace: true } when clearing filters', async () => {
+    let subscriptionCallback: ((filters: any) => void) | null = null;
+
+    // Mock subscribe to capture the callback and trigger it
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn(); // unsubscribe function
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0, // Filters cleared
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    mockSetSearchParams.mockClear();
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // Trigger the subscription callback manually
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters);
+      });
+    }
+
+    // Should call setSearchParams with replace: true when clearing filters
+    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+  });
+
+  it('should call setSearchParams with { replace: true } when applying filters', async () => {
+    let subscriptionCallback: ((filters: any) => void) | null = null;
+
+    // Mock subscribe to capture the callback and trigger it
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn(); // unsubscribe function
+    });
+
+    const mockFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text' as const,
+          operator: 'contains' as const,
+          value: 'test',
+          field: 'text',
+          logicOperator: 'and' as const,
+          sortIndex: 0,
+        },
+      },
+      appliedCount: 1,
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    mockSetSearchParams.mockClear();
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // Trigger the subscription callback manually
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters);
+      });
+    }
+
+    // Should call setSearchParams with replace: true when applying filters
+    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
   });
 });

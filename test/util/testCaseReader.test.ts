@@ -1,18 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
+import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
-import { importModule } from '../../src/esm';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,

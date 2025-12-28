@@ -7,6 +7,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { transform } from '../util/transform';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -16,7 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 
 /**

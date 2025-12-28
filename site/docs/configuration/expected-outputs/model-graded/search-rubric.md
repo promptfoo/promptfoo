@@ -205,7 +205,7 @@ assert:
 1. **Write clear rubrics**: Be specific about what information you expect
 2. **Use thresholds appropriately**: Higher thresholds for factual accuracy, lower for general correctness
 3. **Include acceptable ranges**: For volatile data like prices, specify acceptable accuracy (e.g., "within 5%")
-4. **Enable caching**: Use `promptfoo eval --cache` during development to avoid repeated searches
+4. **Use caching**: Caching is enabled by default; use `promptfoo eval --no-cache` to force fresh searches
 5. **Test variable substitution**: Ensure your rubrics work with different variable values
 
 ## Expected Behavior
@@ -280,7 +280,7 @@ Web search adds cost on top of model tokens.
 
 **Cost reduction strategies:**
 
-- Use `promptfoo eval --cache` during development
+- Caching is enabled by default to reduce API calls
 - Reserve `search-rubric` for tests that truly need real-time verification
 - Use `llm-rubric` for static fact-checking that doesn't require current data
 - Consider Perplexity's `sonar` model for built-in search without per-call fees

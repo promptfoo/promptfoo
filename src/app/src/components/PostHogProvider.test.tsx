@@ -1,8 +1,9 @@
 import { useContext } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import posthog from 'posthog-js';
+
 import { useUserStore } from '@app/stores/userStore';
+import { render, screen, waitFor } from '@testing-library/react';
+import posthog from 'posthog-js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostHogContext } from './PostHogContext';
 
 vi.mock('posthog-js', () => {

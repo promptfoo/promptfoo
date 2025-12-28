@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// Import Swiper React components
-import { Swiper, SwiperSlide } from 'swiper/react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
@@ -10,8 +9,11 @@ import ReportIcon from '@mui/icons-material/Report';
 import SecurityIcon from '@mui/icons-material/Security';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+// Import Swiper React components
+import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
+
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';

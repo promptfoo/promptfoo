@@ -1,23 +1,22 @@
+import fs from 'fs';
+
+import { Command } from 'commander';
 import {
-  Mocked,
-  MockedFunction,
-  MockInstance,
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
+  Mocked,
+  MockedFunction,
+  MockInstance,
   vi,
 } from 'vitest';
-
-import fs from 'fs';
-
-import { Command } from 'commander';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util/index';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { writeOutput } from '../../src/util/index';
 
 vi.mock('../../src/telemetry', () => ({
   default: {

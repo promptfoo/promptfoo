@@ -130,7 +130,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `additional_directories` | string[] | Additional directories the agent can access    | None                  |
 | `model`                  | string   | Model to use                                   | Codex Max (default)   |
 | `sandbox_mode`           | string   | Sandbox access level (see below)               | `workspace-write`     |
-| `model_reasoning_effort` | string   | Reasoning intensity: low, medium, high, xhigh  | SDK default           |
+| `model_reasoning_effort` | string   | Reasoning intensity: low, medium, high         | SDK default           |
 | `network_access_enabled` | boolean  | Allow network requests                         | false                 |
 | `web_search_enabled`     | boolean  | Allow web search                               | false                 |
 | `approval_policy`        | string   | When to require approval (see below)           | SDK default           |
@@ -361,7 +361,6 @@ Available levels:
 - `low` - Light reasoning, faster responses
 - `medium` - Balanced (default)
 - `high` - Thorough reasoning for complex tasks
-- `xhigh` - Maximum reasoning for the most complex tasks
 
 ## Additional Directories
 

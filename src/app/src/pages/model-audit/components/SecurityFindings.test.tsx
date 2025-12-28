@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SecurityFindings from './SecurityFindings';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {
   const mockOnSeverityChange = vi.fn();
@@ -51,7 +51,8 @@ describe('SecurityFindings', () => {
       },
     });
 
-    it('should render the issue details Paper with a background color of theme.palette.grey[800]', () => {
+    it('should render the issue details Paper with a background color of theme.palette.grey[800]', async () => {
+      const user = userEvent.setup();
       render(
         <ThemeProvider theme={darkTheme}>
           <SecurityFindings
@@ -64,13 +65,17 @@ describe('SecurityFindings', () => {
         </ThemeProvider>,
       );
 
+      // Expand the file group to see the issue details
+      const showButton = screen.getByText('Show 1 issue');
+      await user.click(showButton);
+
       const detailsContent = screen.getByText((content) =>
         content.includes('"code": "os.system(\\"rm -rf /\\")"'),
       );
       expect(detailsContent).toBeInTheDocument();
 
-      // Details are now displayed in an Alert component, not a Paper
-      const detailsAlert = detailsContent.closest('.MuiAlert-root');
+      // Details are now displayed in an Alert component
+      const detailsAlert = detailsContent.closest('[role="alert"]');
       expect(detailsAlert).toBeInTheDocument();
     });
 
@@ -175,7 +180,8 @@ describe('SecurityFindings', () => {
     expect(successMessage).toBeInTheDocument();
   });
 
-  it('should only display issues matching the selected severity when a severity is chosen from the filter dropdown', () => {
+  it('should only display issues matching the selected severity when a severity is chosen from the filter dropdown', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [
         { severity: 'error', message: 'Error issue' },
@@ -193,6 +199,10 @@ describe('SecurityFindings', () => {
         onToggleRawOutput={mockOnToggleRawOutput}
       />,
     );
+
+    // Expand the file group to see the filtered issues
+    const showButton = screen.getByText('Show 1 issue');
+    await user.click(showButton);
 
     const warningIssueElement = screen.getByText('Warning issue');
     expect(warningIssueElement).toBeInTheDocument();
@@ -232,7 +242,7 @@ describe('SecurityFindings', () => {
     expect(noIssuesMessage).toBeInTheDocument();
   });
 
-  it('should render a Paper for a file section with a border color of error.main and border width of 2 when the file contains at least one critical issue', () => {
+  it('should render a border for a file section when the file contains at least one critical issue', () => {
     const mockScanResults: ScanResult = createMockScanResults({
       issues: [
         {
@@ -257,13 +267,14 @@ describe('SecurityFindings', () => {
     );
 
     const fileNameElement = screen.getByText('file1.py');
-    const paperElement = fileNameElement.closest('.MuiPaper-root');
+    // The file group is now a div with rounded-xl border
+    const fileGroupElement = fileNameElement.closest('.rounded-xl');
 
-    expect(paperElement).toHaveStyle('border-color: rgb(211, 47, 47)');
-    expect(paperElement).toHaveStyle('border-width: 2px');
+    expect(fileGroupElement).toBeInTheDocument();
+    expect(fileGroupElement).toHaveClass('border-red-300', 'dark:border-red-800');
   });
 
-  it("should display an expand/collapse trigger in the grouped-by-file view with the label 'Show {N} Issues' (or 'Hide {N} Issues') and toggle the visibility of the issues list when clicked", async () => {
+  it("should display an expand/collapse trigger in the grouped-by-file view with the label 'Show {N} issues' (or 'Hide {N} issues') and toggle the visibility of the issues list when clicked", async () => {
     const user = userEvent.setup();
     const mockScanResults: ScanResult = {
       path: 'mock/path',
@@ -288,17 +299,17 @@ describe('SecurityFindings', () => {
       </ThemeProvider>,
     );
 
-    const showIssuesButton = await screen.findByText('Show 2 Issues');
+    const showIssuesButton = await screen.findByText('Show 2 issues');
     expect(showIssuesButton).toBeInTheDocument();
 
     await user.click(showIssuesButton);
 
-    const hideIssuesButton = await screen.findByText('Hide 2 Issues');
+    const hideIssuesButton = await screen.findByText('Hide 2 issues');
     expect(hideIssuesButton).toBeInTheDocument();
 
     await user.click(hideIssuesButton);
 
-    const showIssuesButtonAgain = await screen.findByText('Show 2 Issues');
+    const showIssuesButtonAgain = await screen.findByText('Show 2 issues');
     expect(showIssuesButtonAgain).toBeInTheDocument();
   });
 
@@ -336,7 +347,8 @@ describe('SecurityFindings', () => {
   });
 
   describe('when handling unknown severity values', () => {
-    it('should render the issue with the default InfoIcon and label when the severity is unknown', () => {
+    it('should render the issue with the default InfoIcon and label when the severity is unknown', async () => {
+      const user = userEvent.setup();
       const mockScanResults = createMockScanResults({
         issues: [{ severity: 'info', message: 'Unknown severity issue' }],
       });
@@ -351,12 +363,14 @@ describe('SecurityFindings', () => {
         />,
       );
 
+      // Expand the file group to see the issue
+      const showButton = screen.getByText('Show 1 issue');
+      await user.click(showButton);
+
       const issueElement = screen.getByText('Unknown severity issue');
       expect(issueElement).toBeInTheDocument();
 
-      const infoIcon = screen.getByTestId('InfoIcon');
-      expect(infoIcon).toBeInTheDocument();
-
+      // Verify the severity badge is displayed
       const severityBadge = screen.getByText('info');
       expect(severityBadge).toBeInTheDocument();
     });

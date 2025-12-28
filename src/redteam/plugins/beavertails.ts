@@ -1,7 +1,9 @@
 import dedent from 'dedent';
-
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
+import { isBasicRefusal } from '../util';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+
 import type {
   ApiProvider,
   Assertion,
@@ -11,8 +13,6 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types/index';
-import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 

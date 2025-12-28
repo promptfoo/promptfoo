@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,

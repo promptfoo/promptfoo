@@ -1,4 +1,4 @@
-import { Mock, Mocked, MockedClass, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, Mocked, MockedClass, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -29,11 +29,9 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     },
   };
 });
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    v4: vi.fn(() => 'test-uuid-1234'),
-  };
+vi.stubGlobal('crypto', {
+  ...crypto,
+  randomUUID: vi.fn(() => 'test-uuid-1234'),
 });
 
 describe('Provider Test Functions', () => {

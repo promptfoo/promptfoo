@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { writePromptfooConfig } from '../../../src/util/config/writer';

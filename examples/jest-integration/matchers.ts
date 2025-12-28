@@ -1,4 +1,5 @@
 import matchers from '../../dist/src/assertions';
+
 import type { GradingConfig } from '../../dist/src/types';
 
 declare global {

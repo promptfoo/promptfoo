@@ -1,9 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import EnhancedRangeSlider from './EnhancedRangeSlider';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { tokens } from '../tokens';
+import EnhancedRangeSlider from './EnhancedRangeSlider';
 
 const theme = createTheme();
 

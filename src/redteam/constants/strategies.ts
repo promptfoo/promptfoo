@@ -22,7 +22,6 @@ export const MULTI_TURN_STRATEGIES = [
   'jailbreak:hydra',
   'custom',
   'mischievous-user',
-  'simba',
 ] as const;
 
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
@@ -53,7 +52,6 @@ export const AGENTIC_STRATEGIES = [
   'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
-  'simba',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -101,7 +99,6 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
-  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -136,7 +133,6 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
-  'simba',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

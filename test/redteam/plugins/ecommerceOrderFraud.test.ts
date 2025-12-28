@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  EcommerceOrderFraudPlugin,
   EcommerceOrderFraudGrader,
+  EcommerceOrderFraudPlugin,
 } from '../../../src/redteam/plugins/ecommerce/ecommerceOrderFraud';
 
 import type { ApiProvider } from '../../../src/types/index';

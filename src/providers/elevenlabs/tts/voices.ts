@@ -2,8 +2,8 @@
  * Voice management utilities for ElevenLabs TTS
  */
 
-import { ElevenLabsClient } from '../client';
 import logger from '../../../logger';
+import { ElevenLabsClient } from '../client';
 
 /**
  * Popular pre-made voices

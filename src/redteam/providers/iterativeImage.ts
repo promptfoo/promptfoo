@@ -10,6 +10,7 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -308,12 +309,17 @@ async function runRedteamConversation({
         [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
       );
 
-      const targetResponse = await getTargetResponse(
+      let targetResponse = await getTargetResponse(
         targetProvider,
         targetPrompt,
         iterationContext,
         options,
       );
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      });
       lastResponse = targetResponse;
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);

@@ -8,15 +8,15 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
-
-import type { Command } from 'commander';
-import type { EvaluateOptions } from '../types/index';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
-  accumulateResponseTokenUsage,
   accumulateAssertionTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import type { Command } from 'commander';
+
+import type { EvaluateOptions } from '../types/index';
 
 interface RetryCommandOptions {
   config?: string;

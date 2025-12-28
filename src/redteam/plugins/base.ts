@@ -1,7 +1,14 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
@@ -13,13 +20,6 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.

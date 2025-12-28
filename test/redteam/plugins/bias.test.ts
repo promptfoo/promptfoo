@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins/index';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider, CallApiFunction, PluginActionParams } from '../../../src/types/index';

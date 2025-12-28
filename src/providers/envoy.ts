@@ -1,7 +1,7 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 
 /**
  * Creates an Envoy AI Gateway provider using OpenAI-compatible endpoints

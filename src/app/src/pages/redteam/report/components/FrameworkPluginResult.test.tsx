@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkPluginResult from './FrameworkPluginResult';
-import { createAppTheme } from '@app/components/PageShell';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -23,9 +22,16 @@ vi.mock('./FrameworkComplianceUtils', async () => {
   };
 });
 
-describe('FrameworkPluginResult', () => {
-  const theme = createAppTheme(false);
+// Helper to render with TooltipProvider and MemoryRouter
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <TooltipProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </TooltipProvider>,
+  );
+};
 
+describe('FrameworkPluginResult', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -38,13 +44,7 @@ describe('FrameworkPluginResult', () => {
       type: 'failed' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(props.plugin);
     await userEvent.click(pluginElement);
@@ -72,13 +72,7 @@ describe('FrameworkPluginResult', () => {
       type: 'failed' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(props.plugin);
     await userEvent.click(pluginElement);
@@ -114,13 +108,7 @@ describe('FrameworkPluginResult', () => {
       type: 'failed' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(pluginIdWithSpecialChars);
     await userEvent.click(pluginElement);
@@ -148,13 +136,7 @@ describe('FrameworkPluginResult', () => {
       type: 'untested' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(props.plugin);
     await userEvent.click(pluginElement);
@@ -170,13 +152,7 @@ describe('FrameworkPluginResult', () => {
       type: 'passed' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(props.plugin);
     await userEvent.click(pluginElement);
@@ -204,13 +180,7 @@ describe('FrameworkPluginResult', () => {
       type: 'failed' as const,
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <FrameworkPluginResult {...props} />
-        </MemoryRouter>
-      </ThemeProvider>,
-    );
+    renderWithProviders(<FrameworkPluginResult {...props} />);
 
     const pluginElement = screen.getByText(props.plugin);
     await userEvent.click(pluginElement);

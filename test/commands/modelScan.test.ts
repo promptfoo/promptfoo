@@ -1,7 +1,7 @@
-import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
 

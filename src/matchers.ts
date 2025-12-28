@@ -1,10 +1,12 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -21,20 +23,18 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts/index';
-import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
-import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -100,7 +100,7 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
  */
-function callProviderWithContext(
+export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
@@ -737,6 +737,9 @@ export async function matchesLlmRubric(
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+    },
+    metadata: {
+      renderedGradingPrompt: prompt,
     },
   };
 }
@@ -1754,6 +1757,7 @@ export async function matchesSearchRubric(
   vars?: Record<string, string | object>,
   assertion?: Assertion,
   _provider?: ApiProvider,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -1798,7 +1802,13 @@ export async function matchesSearchRubric(
   });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    searchProvider,
+    prompt,
+    'search-rubric',
+    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    providerCallContext,
+  );
 
   if (resp.error || !resp.output) {
     return {

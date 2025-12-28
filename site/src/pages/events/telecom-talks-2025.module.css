@@ -1,0 +1,662 @@
+/* Telecom Talks 2025 - Network/Signal Theme */
+/* Color Palette: Electric cyan (#00D4FF), deep navy (#0A1628), signal green (#00FF88) */
+
+.telecomPage {
+  background: #0a1628;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Hero Banner */
+.heroBanner {
+  position: relative;
+  height: 400px;
+  overflow: hidden;
+}
+
+.bannerImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.bannerOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(10, 22, 40, 0.4) 0%, rgba(10, 22, 40, 0.7) 100%);
+}
+
+.bannerContent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 3rem;
+  background: linear-gradient(0deg, rgba(10, 22, 40, 0.95) 0%, transparent 100%);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #67e8f9;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.badgeIcon {
+  font-size: 1rem;
+}
+
+.heroTitle {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.highlight {
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero Content Section */
+.heroContent {
+  padding: 3rem 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.7;
+}
+
+.eventDetails {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke-width: 2;
+  color: #00d4ff;
+}
+
+.heroCtas {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.primaryCta {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #00d4ff 0%, #00b4d8 100%);
+  color: #0a1628;
+  font-weight: 700;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.primaryCta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
+  color: #0a1628;
+}
+
+.secondaryCta {
+  padding: 0.875rem 2rem;
+  background: transparent;
+  color: #67e8f9;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  transition: all 0.3s ease;
+}
+
+.secondaryCta:hover {
+  background: rgba(0, 212, 255, 0.1);
+  color: white;
+}
+
+/* Terminal Section */
+.terminalSection {
+  padding: 4rem 0;
+}
+
+.terminal {
+  background: rgba(10, 22, 40, 0.9);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.terminalHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(0, 212, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.terminalDots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminalDots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.4);
+}
+
+.terminalDots span:first-child {
+  background: #ff5f57;
+}
+
+.terminalDots span:nth-child(2) {
+  background: #ffbd2e;
+}
+
+.terminalDots span:last-child {
+  background: #28ca41;
+}
+
+.terminalTitle {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.terminalBody {
+  padding: 1.5rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.logLine {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.timestamp {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.logSuccess {
+  color: #00ff88;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logInfo {
+  color: #00d4ff;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logWarning {
+  color: #fbbf24;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logText {
+  color: #cbd5e1;
+}
+
+/* Sections */
+.sessionSection,
+.challengesSection,
+.discussionsSection,
+.statsSection,
+.ctaSection {
+  padding: 4rem 0;
+}
+
+.sessionSection {
+  background: rgba(0, 212, 255, 0.02);
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.sectionSubtitle {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Session Card */
+.sessionCard {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 16px;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.sessionCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #00d4ff 0%, #00ff88 50%, #00d4ff 100%);
+}
+
+.sessionMeta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.sessionBadge {
+  display: inline-block;
+  padding: 0.375rem 1rem;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  color: #0a1628;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sessionTime {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.sessionTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 0.75rem;
+}
+
+.sessionDescription {
+  font-size: 1rem;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin-bottom: 1.5rem;
+  max-width: 700px;
+}
+
+.sessionSpeakers {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.speaker {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.speakerAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  color: #0a1628;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.speakerName {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.speakerCompany {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.speakerDivider {
+  font-size: 1.5rem;
+  color: #00d4ff;
+  font-weight: 300;
+}
+
+/* Challenges Grid */
+.challengesSection {
+  background: rgba(0, 212, 255, 0.02);
+}
+
+.challengesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+.challengeCard {
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.challengeCard:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.challengeIcon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.challengeCard h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
+}
+
+.challengeCard p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Discussions List */
+.discussionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.discussionItem {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.discussionItem:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+}
+
+.discussionNumber {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #00d4ff;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.discussionContent h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 0.5rem 0;
+}
+
+.discussionContent p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Stats Section */
+.statsSection {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border-top: 1px solid rgba(0, 212, 255, 0.15);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.15);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2rem;
+  text-align: center;
+}
+
+.stat {
+  padding: 1.5rem;
+}
+
+.statNumber {
+  font-size: 2.5rem;
+  font-weight: 800;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.statLabel {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* CTA Section */
+.ctaContent {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.08) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 16px;
+  padding: 3rem 2rem;
+}
+
+.ctaTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.ctaText {
+  font-size: 1rem;
+  color: #94a3b8;
+  margin-bottom: 1.5rem;
+  line-height: 1.7;
+}
+
+.ctaButtons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Footer Navigation */
+.footerNav {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid rgba(0, 212, 255, 0.1);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: #00d4ff;
+}
+
+.backIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .heroBanner {
+    height: 300px;
+  }
+
+  .bannerContent {
+    padding: 2rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1.1rem;
+  }
+
+  .eventDetails {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .heroCtas {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .primaryCta,
+  .secondaryCta {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+  }
+
+  .terminalBody {
+    padding: 1rem;
+    font-size: 0.75rem;
+  }
+
+  .logLine {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .sessionCard {
+    padding: 1.5rem;
+  }
+
+  .sessionTitle {
+    font-size: 1.25rem;
+  }
+
+  .sessionSpeakers {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .speakerDivider {
+    display: none;
+  }
+
+  .discussionItem {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .ctaContent {
+    padding: 2rem 1.5rem;
+  }
+
+  .ctaButtons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .terminalSection,
+  .sessionSection,
+  .challengesSection,
+  .discussionsSection,
+  .statsSection,
+  .ctaSection {
+    padding: 3rem 0;
+  }
+}

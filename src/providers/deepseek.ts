@@ -1,6 +1,6 @@
 import logger from '../logger';
-import { calculateCost } from './shared';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { calculateCost } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';

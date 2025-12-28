@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import SettingsSection from './SettingsSection';
+
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { cleanup, render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import SettingsSection from './SettingsSection';
 
 const theme = createTheme();
 const renderWithTheme = (component: React.ReactElement) => {

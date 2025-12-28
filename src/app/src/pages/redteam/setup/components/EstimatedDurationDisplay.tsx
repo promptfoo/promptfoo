@@ -1,10 +1,11 @@
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { Config } from '../types';
 import { getEstimatedDuration } from './strategies/utils';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+
+import type { Config } from '../types';
 
 interface EstimatedDurationDisplayProps {
   config: Config;

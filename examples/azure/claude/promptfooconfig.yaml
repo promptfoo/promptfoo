@@ -5,6 +5,14 @@ prompts:
   - 'Explain {{concept}} in simple terms, suitable for a beginner.'
 
 providers:
+  - id: azure:chat:claude-opus-4-5-20251101
+    label: claude-opus-4-5
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-11-15-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
   - id: azure:chat:claude-sonnet-4-5-20250929
     label: claude-sonnet-4-5
     config:

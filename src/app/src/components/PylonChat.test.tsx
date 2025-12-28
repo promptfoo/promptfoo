@@ -1,9 +1,10 @@
-import { render, act } from '@testing-library/react';
+import { useEffect, useState } from 'react';
 import type { ContextType } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { useState, useEffect } from 'react';
-import PylonChat from './PylonChat';
+
 import { UserContext } from '@app/contexts/UserContextDef';
+import { act, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import PylonChat from './PylonChat';
 
 declare global {
   interface Window {

@@ -409,4 +409,28 @@ describe('handleLlmRubric', () => {
       undefined,
     );
   });
+
+  it('should pass through renderedGradingPrompt metadata from matchesLlmRubric', async () => {
+    const params = {
+      ...defaultParams,
+      renderedValue: 'test rubric',
+    };
+
+    const expectedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+      metadata: {
+        renderedGradingPrompt: '[{"role":"system","content":"grading instructions"}]',
+      },
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result.metadata?.renderedGradingPrompt).toBe(
+      '[{"role":"system","content":"grading instructions"}]',
+    );
+  });
 });

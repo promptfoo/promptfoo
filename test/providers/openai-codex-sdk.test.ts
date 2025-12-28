@@ -1,6 +1,6 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -373,7 +373,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123');
+        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: undefined,
+        });
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
@@ -459,7 +462,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             sandboxMode: 'read-only',
           }),
@@ -479,7 +482,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             networkAccessEnabled: true,
             webSearchEnabled: true,
@@ -499,7 +502,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             modelReasoningEffort: 'high',
           }),
@@ -518,7 +521,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             approvalPolicy: 'never',
           }),

@@ -1,4 +1,5 @@
 import path from 'path';
+
 import chalk from 'chalk';
 import {
   afterEach,
@@ -6,9 +7,9 @@ import {
   describe,
   expect,
   it,
-  vi,
   type Mock,
   type MockInstance,
+  vi,
 } from 'vitest';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';

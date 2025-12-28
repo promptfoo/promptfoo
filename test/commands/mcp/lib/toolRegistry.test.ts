@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  toolRegistry,
   initializeToolRegistry,
   TOOL_DEFINITIONS,
+  toolRegistry,
 } from '../../../../src/commands/mcp/lib/toolRegistry';
 
 describe('ToolRegistry', () => {

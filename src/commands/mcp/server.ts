@@ -25,6 +25,8 @@ export async function createMcpServer() {
   const server = new McpServer({
     name: 'Promptfoo MCP',
     version: '1.0.0',
+    description:
+      'MCP server for LLM evaluation, red teaming, and security testing with promptfoo. Provides tools for running evaluations, testing providers, generating datasets, and performing security assessments.',
   });
 
   // Track MCP server creation

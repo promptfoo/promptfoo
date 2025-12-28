@@ -1,5 +1,5 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Request, Response } from 'express';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { updateResult } from '../../src/util/database';
 
 // Mock dependencies

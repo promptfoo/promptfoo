@@ -10,13 +10,13 @@ import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 /**
  * OpenCode SDK Provider

@@ -1,6 +1,7 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
-import type { GroqResponsesProviderOptions } from './types';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+
+import type { GroqResponsesProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 

@@ -1,4 +1,4 @@
-import type { ElevenLabsBaseConfig, AudioData } from '../types';
+import type { AudioData, ElevenLabsBaseConfig } from '../types';
 
 /**
  * ElevenLabs TTS-specific configuration

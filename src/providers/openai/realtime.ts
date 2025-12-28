@@ -4,13 +4,13 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { OPENAI_REALTIME_MODELS } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions } from './types';
 
 /**

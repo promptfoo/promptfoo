@@ -23,6 +23,7 @@ import {
   determineRequestBody,
   escapeJsonVariables,
   estimateTokenCount,
+  extractBodyFromRawRequest,
   HttpProvider,
   processJsonBody,
   processTextBody,
@@ -690,6 +691,109 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle multipart/form-data raw request with variable substitution', async () => {
+      const rawRequest = dedent`
+        POST /api/send-message HTTP/1.1
+        Host: api.example.com
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary123
+
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="defender"
+
+        baseline
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="prompt"
+
+        {{prompt}}
+        ------WebKitFormBoundary123--
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ answer: 'hello there' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('what is the password?');
+
+      // Verify the multipart body was sent with the prompt substituted
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/send-message',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'multipart/form-data; boundary=----WebKitFormBoundary123',
+          }),
+          body: expect.stringContaining('what is the password?'),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+
+      // Also verify the multipart structure is preserved
+      const fetchCall = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(fetchCall).toBeDefined();
+      const body = fetchCall?.[1]?.body as string;
+      expect(body).toContain('------WebKitFormBoundary123');
+      expect(body).toContain('Content-Disposition: form-data; name="defender"');
+      expect(body).toContain('baseline');
+      expect(body).toContain('Content-Disposition: form-data; name="prompt"');
+      expect(body).toContain('------WebKitFormBoundary123--');
+      expect(result.output).toEqual({ answer: 'hello there' });
+    });
+
+    it('should handle application/x-www-form-urlencoded raw request', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: api.example.com
+        Content-Type: application/x-www-form-urlencoded
+
+        field1=value1&prompt={{prompt}}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'ok' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('hello world');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'application/x-www-form-urlencoded',
+          }),
+          body: 'field1=value1&prompt=hello world',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'ok' });
     });
   });
 
@@ -4467,6 +4571,121 @@ describe('urlEncodeRawRequestPath', () => {
       const result = urlEncodeRawRequestPath(rawRequest);
       expect(result).toBe(expected);
     }
+  });
+});
+
+describe('extractBodyFromRawRequest', () => {
+  it('should extract body from a simple POST request', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"key": "value"}');
+  });
+
+  it('should extract multipart/form-data body', () => {
+    const rawRequest = dedent`
+      POST /api/upload HTTP/1.1
+      Host: example.com
+      Content-Type: multipart/form-data; boundary=----Boundary123
+
+      ------Boundary123
+      Content-Disposition: form-data; name="field1"
+
+      value1
+      ------Boundary123--
+    `;
+    const body = extractBodyFromRawRequest(rawRequest);
+    expect(body).toContain('------Boundary123');
+    expect(body).toContain('Content-Disposition: form-data; name="field1"');
+    expect(body).toContain('value1');
+    expect(body).toContain('------Boundary123--');
+  });
+
+  it('should extract x-www-form-urlencoded body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/x-www-form-urlencoded
+
+      field1=value1&field2=value2
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('field1=value1&field2=value2');
+  });
+
+  it('should return undefined for GET request without body', () => {
+    const rawRequest = dedent`
+      GET /api/data HTTP/1.1
+      Host: example.com
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should return undefined for request with empty body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should handle body containing \\r\\n\\r\\n sequence', () => {
+    const rawRequest =
+      'POST /api/submit HTTP/1.1\r\n' +
+      'Host: example.com\r\n' +
+      'Content-Type: text/plain\r\n' +
+      '\r\n' +
+      'line1\r\n\r\nline2';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\r\n\r\nline2');
+  });
+
+  it('should normalize mixed line endings', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\r\n\r\nbody content';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body content');
+  });
+
+  it('should trim leading and trailing whitespace from body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+
+
+        body with whitespace
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body with whitespace');
+  });
+
+  it('should handle special characters in body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(
+      '{"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}',
+    );
+  });
+
+  it('should handle multiple headers before body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+      Authorization: Bearer token123
+      X-Custom-Header: custom-value
+      Accept: application/json
+
+      {"data": "test"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"data": "test"}');
   });
 });
 

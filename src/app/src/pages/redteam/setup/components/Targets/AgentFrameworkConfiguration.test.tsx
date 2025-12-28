@@ -1,9 +1,8 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
 import type { ProviderOptions } from '../../types';

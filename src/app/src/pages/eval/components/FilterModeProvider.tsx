@@ -1,7 +1,8 @@
 import { createContext, useContext } from 'react';
-import type { EvalResultsFilterMode } from '@promptfoo/types';
+
 import { useSearchParamState } from '@app/hooks/useSearchParamState';
 import { z } from 'zod';
+import type { EvalResultsFilterMode } from '@promptfoo/types';
 
 export const DEFAULT_FILTER_MODE = 'all';
 

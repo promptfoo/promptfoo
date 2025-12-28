@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addHydra } from '../../../src/redteam/strategies/hydra';
+
 import type { TestCase } from '../../../src/types/index';
 
 describe('addHydra', () => {

@@ -323,4 +323,178 @@ describe('TargetTypeSelection', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
     });
   });
+
+  describe('Custom provider persistence (Issue #6729)', () => {
+    it('should show target type section when custom provider is selected (empty id with providerType="custom")', async () => {
+      // This test verifies the fix for https://github.com/promptfoo/promptfoo/issues/6729
+      // Custom providers have empty id but providerType is set to 'custom'
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: '', // Empty id - this is intentional for custom providers
+            label: 'my-custom-target',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'custom', // This is set when user selects custom provider
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      // The target type section should be visible because we have a complete config
+      // (label + providerType='custom', even though id is empty)
+      // This is the key fix for issue #6729 - previously this would NOT be shown
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // The footer Next button should be present (visible when target type section is shown)
+      const footerNextButton = screen.getByRole('button', { name: /Next.*Configure/i });
+      expect(footerNextButton).toBeInTheDocument();
+    });
+
+    it('should NOT show target type section when no provider is selected (empty id without providerType)', async () => {
+      // This verifies we don't accidentally show the section for truly incomplete configs
+      // When there's no complete saved config, the component resets to initial state
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: '',
+            label: '', // No label - fresh state
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: undefined, // No provider type selected
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      // The target type section should NOT be visible
+      expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
+
+      // No footer Next button should be present
+      expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
+    });
+
+    it('should show target type section for standard providers with non-empty id', async () => {
+      // This verifies the normal case still works
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'my-openai-target',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      // The target type section should be visible
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // OpenAI should be displayed in collapsed view
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+
+      // The footer Next button should be present
+      const footerNextButton = screen.getByRole('button', { name: /Next.*Configure/i });
+      expect(footerNextButton).toBeInTheDocument();
+    });
+
+    it('should allow proceeding to next step with custom provider after entering name', async () => {
+      // Start with a custom provider selected but the user needs to confirm/enter a name
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: '', // Empty id for custom provider
+            label: 'my-custom-target',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'custom',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      // Wait for target type section to be visible
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // The footer Next button should be present
+      const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+      expect(footerNextButton).toBeInTheDocument();
+
+      // Enter a name in the input to enable the button
+      const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+      fireEvent.change(nameInput, { target: { value: 'my-custom-target' } });
+
+      // Now the button should be enabled
+      await waitFor(() => {
+        expect(footerNextButton).toBeEnabled();
+      });
+
+      fireEvent.click(footerNextButton);
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve custom provider selection after simulated tab navigation', async () => {
+      // First render - user has selected custom provider
+      const mockSetProviderType = vi.fn();
+      const configWithCustomProvider = {
+        config: {
+          target: {
+            id: '',
+            label: 'my-custom-target',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'custom',
+        setProviderType: mockSetProviderType,
+      };
+
+      mockUseRedTeamConfig.mockReturnValue(configWithCustomProvider);
+
+      const { unmount } = renderComponent();
+
+      // Verify target type section is shown
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // Simulate navigating away (unmount)
+      unmount();
+
+      // Simulate navigating back (re-render with same config from Zustand)
+      mockUseRedTeamConfig.mockReturnValue(configWithCustomProvider);
+      renderComponent();
+
+      // The target type section should STILL be visible after "tab navigation"
+      // This is the KEY behavior we're testing for issue #6729
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // The footer Next button should still be present
+      const footerNextButton = screen.getByRole('button', { name: /Next.*Configure/i });
+      expect(footerNextButton).toBeInTheDocument();
+    });
+  });
 });

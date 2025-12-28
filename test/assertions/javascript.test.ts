@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';

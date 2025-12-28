@@ -1,8 +1,8 @@
 import { sha256 } from '../../../util/createHash';
+import invariant from '../../../util/invariant';
 import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidReusablePolicyId } from './validators';
-import invariant from '../../../util/invariant';
 
 /**
  * Checks if a metric is a policy metric.
@@ -83,14 +83,30 @@ export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
  * Constructs a unique ID for the inline policy by hashing the policy text and
  * taking the first 12 characters of the hash.
  * @param policyText - The text of the policy.
- * @returns The ID for the inline policy.
+ * @returns Promise resolving to the ID for the inline policy.
+ *
+ * Note: This is async to support both Node.js (sync crypto) and browser (async SubtleCrypto).
+ * Use makeInlinePolicyIdSync for synchronous Node.js contexts (e.g., constructors).
  */
-export function makeInlinePolicyId(policyText: string): string {
-  return sha256(policyText).slice(
+export async function makeInlinePolicyId(policyText: string): Promise<string> {
+  const hash = await sha256(policyText);
+  return hash.slice(
     0,
     // 0.18% chance of collision w/ 1M policies i.e. extremely unlikely
     12,
   );
+}
+
+/**
+ * Synchronous version of makeInlinePolicyId for Node.js contexts where async is not available
+ * (e.g., class constructors). This should NOT be used in browser code.
+ * @param policyText - The text of the policy.
+ * @returns The ID for the inline policy.
+ */
+export function makeInlinePolicyIdSync(policyText: string): string {
+  // In Node.js, sha256 returns a string synchronously
+  const hash = sha256(policyText) as string;
+  return hash.slice(0, 12);
 }
 
 /**

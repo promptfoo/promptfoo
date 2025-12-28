@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -40,9 +41,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -76,9 +79,11 @@ describe('PathSelector', () => {
       mockCallApi.mockRejectedValue(new Error('API Error'));
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -115,9 +120,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -155,9 +162,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -194,9 +203,11 @@ describe('PathSelector', () => {
     ];
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     // Find the delete button for the first path
@@ -221,9 +232,11 @@ describe('PathSelector', () => {
     } as any);
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');
@@ -242,9 +255,11 @@ describe('PathSelector', () => {
     } as any);
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');

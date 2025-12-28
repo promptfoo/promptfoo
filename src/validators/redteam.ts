@@ -28,7 +28,12 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+import type {
+  RedteamContext,
+  RedteamFileConfig,
+  RedteamPluginObject,
+  RedteamStrategy,
+} from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
@@ -45,6 +50,20 @@ const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
     strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
   }),
 );
+
+/**
+ * Schema for redteam contexts - allows testing multiple security contexts/states
+ */
+export const RedteamContextSchema = z.object({
+  id: z.string().describe('Unique identifier for the context'),
+  purpose: z
+    .string()
+    .describe('Purpose/context for this context - used for generation and grading'),
+  vars: z
+    .record(z.string())
+    .optional()
+    .describe('Variables passed to provider (e.g., context_file, user_role)'),
+});
 
 const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
   FrameworkComplianceId,
@@ -256,6 +275,10 @@ export const RedteamConfigSchema = z
       .array(z.string())
       .optional()
       .describe('Names of people, brands, or organizations related to your LLM application'),
+    contexts: z
+      .array(RedteamContextSchema)
+      .optional()
+      .describe('Security contexts for testing multiple states - each context has its own purpose'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
@@ -519,6 +542,7 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.contexts ? { contexts: data.contexts as RedteamContext[] } : {}),
       ...(data.excludeTargetOutputFromAgenticAttackGeneration
         ? {
             excludeTargetOutputFromAgenticAttackGeneration:

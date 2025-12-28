@@ -12,8 +12,9 @@
  *   - Pages are workflow-specific (different workflows get different pages)
  */
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as http from 'http';
+
+import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
 

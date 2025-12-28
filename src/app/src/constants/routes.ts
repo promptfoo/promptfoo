@@ -28,6 +28,7 @@ export const REDTEAM_ROUTES = {
   ROOT: '/redteam',
   SETUP: '/redteam/setup',
   REPORTS: '/reports',
+  REPORT_DETAIL: (evalId: string) => `/reports?evalId=${evalId}`,
 } as const;
 
 // Other routes
@@ -35,7 +36,9 @@ export const ROUTES = {
   HOME: '/',
   SETUP: '/setup',
   PROMPTS: '/prompts',
+  PROMPT_DETAIL: (id: string) => `/prompts?id=${id}`,
   DATASETS: '/datasets',
+  DATASET_DETAIL: (id: string) => `/datasets?id=${id}`,
   HISTORY: '/history',
   LOGIN: '/login',
 } as const;

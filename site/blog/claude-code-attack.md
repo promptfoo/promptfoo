@@ -2,7 +2,7 @@
 title: 'How to replicate the Claude Code attack with Promptfoo'
 authors: [ian]
 date: 2025-11-17
-tags: ['ai security', 'red teaming', 'agents', 'cyber espionage', 'jailbreak']
+tags: [ai-security, red-teaming, agents, cyber-espionage, jailbreak]
 image: /img/blog/cyber-espionage-testing/attack-results-overview.png
 ---
 

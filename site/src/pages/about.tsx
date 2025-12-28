@@ -2,6 +2,7 @@ import React from 'react';
 
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -10,7 +11,6 @@ import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {

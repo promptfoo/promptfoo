@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  OpenAiChatKitProvider,
-  cleanAssistantResponse,
-} from '../../../src/providers/openai/chatkit';
 import { disableCache, enableCache } from '../../../src/cache';
+import {
+  cleanAssistantResponse,
+  OpenAiChatKitProvider,
+} from '../../../src/providers/openai/chatkit';
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
 vi.mock('playwright', () => ({

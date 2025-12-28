@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import chalk from 'chalk';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
 import { type EvaluateTable, ResultFailureReason } from '../src/types/index';

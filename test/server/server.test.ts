@@ -1,5 +1,6 @@
-import http from 'node:http';
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -36,10 +37,10 @@ vi.mock('../../src/models/eval', () => ({
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-// Import after mocks are set up
-import { startServer, handleServerError } from '../../src/server/server';
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+// Import after mocks are set up
+import { handleServerError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {

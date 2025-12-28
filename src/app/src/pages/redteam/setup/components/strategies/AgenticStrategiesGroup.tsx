@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { StrategyItem } from './StrategyItem';
+
 import type { StrategyCardData } from './types';
 
 interface AgenticStrategiesGroupProps {

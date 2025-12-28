@@ -1,19 +1,18 @@
-import { renderHook, act } from '@testing-library/react';
-import type { EvaluateTable } from '@promptfoo/types';
-import { describe, expect, it, vi } from 'vitest';
-
 import {
-  usePassingTestCounts,
-  useTestCounts,
-  usePassRates,
-  useMetricsGetter,
+  deserializePolicyIdFromMetric,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import {
   useApplyFilterFromMetric,
+  useMetricsGetter,
+  usePassingTestCounts,
+  usePassRates,
+  useTestCounts,
 } from './hooks';
 import { useTableStore } from './store';
-import {
-  isPolicyMetric,
-  deserializePolicyIdFromMetric,
-} from '@promptfoo/redteam/plugins/policy/utils';
+import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),

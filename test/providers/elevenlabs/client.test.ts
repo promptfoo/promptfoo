@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import {
   ElevenLabsAPIError,
-  ElevenLabsRateLimitError,
   ElevenLabsAuthError,
+  ElevenLabsRateLimitError,
 } from '../../../src/providers/elevenlabs/errors';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
 

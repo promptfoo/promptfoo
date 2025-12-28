@@ -1,14 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
+import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import logger from '../logger';
-import { parseFileUrl } from './functions/loadFunction';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;

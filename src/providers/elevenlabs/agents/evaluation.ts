@@ -3,6 +3,7 @@
  */
 
 import logger from '../../../logger';
+
 import type { EvaluationResult } from './types';
 
 /**

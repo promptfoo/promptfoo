@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 // Define mock module type
@@ -95,8 +95,8 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 
 import {
   AwsBedrockConverseProvider,
-  parseConverseMessages,
   type BedrockConverseOptions,
+  parseConverseMessages,
 } from '../../../src/providers/bedrock/converse';
 
 // Helper to create mock response

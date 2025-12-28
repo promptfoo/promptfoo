@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BatchProcessor,
   EvaluationCache,
   paginate,
   streamProcess,
-  BatchProcessor,
 } from '../../../../src/commands/mcp/lib/performance';
 
 describe('MCP Performance', () => {

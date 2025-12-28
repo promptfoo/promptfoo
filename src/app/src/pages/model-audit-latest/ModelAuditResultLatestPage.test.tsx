@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -55,11 +56,13 @@ describe('ModelAuditResultLatestPage', () => {
 
   const renderComponent = () => {
     return render(
-      <MemoryRouter>
-        <ThemeProvider theme={theme}>
-          <ModelAuditResultLatestPage />
-        </ThemeProvider>
-      </MemoryRouter>,
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAuditResultLatestPage />
+          </ThemeProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 
@@ -97,11 +100,10 @@ describe('ModelAuditResultLatestPage', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByText('Latest Scan Results')).toBeInTheDocument();
+      // The scan name is rendered in a heading by ScanResultHeader
+      expect(screen.getByRole('heading', { name: /Latest Security Scan/i })).toBeInTheDocument();
     });
 
-    // The scan name is combined with date, so use regex
-    expect(screen.getByText(/Latest Security Scan/)).toBeInTheDocument();
     expect(screen.getByTestId('results-tab')).toBeInTheDocument();
   });
 
@@ -117,7 +119,8 @@ describe('ModelAuditResultLatestPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('New Scan')).toBeInTheDocument();
-      expect(screen.getByText('View History')).toBeInTheDocument();
+      // Button shows "History" not "View History" in normal state
+      expect(screen.getByText('History')).toBeInTheDocument();
     });
   });
 
@@ -161,8 +164,8 @@ describe('ModelAuditResultLatestPage', () => {
     renderComponent();
 
     await waitFor(() => {
-      // The text is combined with date, so use regex
-      expect(screen.getByText(/Model Security Scan/)).toBeInTheDocument();
+      // Default title "Latest Scan Results" is used when name is null
+      expect(screen.getByRole('heading', { name: /Latest Scan Results/i })).toBeInTheDocument();
     });
   });
 });

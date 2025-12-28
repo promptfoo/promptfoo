@@ -1,4 +1,11 @@
-import { getAuthHeaders } from './util';
+import {
+  applyQueryParams,
+  getAuthHeaders,
+  getAuthQueryParams,
+  getOAuthToken,
+  renderAuthVars,
+  requiresAsyncAuth,
+} from './util';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -8,7 +15,14 @@ import type {
   Tool as GoogleTool,
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
-import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolInputSchema } from './types';
+import type {
+  MCPConfig,
+  MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
+  MCPServerConfig,
+  MCPTool,
+  MCPToolInputSchema,
+} from './types';
 
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
@@ -89,14 +103,18 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
   return [{ functionDeclarations }];
 }
 
-export function transformMCPConfigToClaudeCode(
+export async function transformMCPConfigToClaudeCode(
   config: MCPConfig,
-): Record<string, ClaudeCodeMcpServerConfig> {
-  const servers =
-    config.servers?.map((server) => transformMCPServerConfigToClaudeCode(server)) ?? [];
+): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
+  const serverConfigs = config.servers ?? [];
   if (config.server) {
-    servers.push(transformMCPServerConfigToClaudeCode(config.server));
+    serverConfigs.push(config.server);
   }
+
+  const servers = await Promise.all(
+    serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
+  );
+
   return servers.reduce(
     (acc, transformed) => {
       const [key, out] = transformed;
@@ -107,17 +125,32 @@ export function transformMCPConfigToClaudeCode(
   );
 }
 
-function transformMCPServerConfigToClaudeCode(
+async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): [string, ClaudeCodeMcpServerConfig] {
+): Promise<[string, ClaudeCodeMcpServerConfig]> {
   const key = config.name ?? config.url ?? config.command ?? 'default';
   let out: ClaudeCodeMcpServerConfig | undefined;
 
   if (config.url) {
+    // Render environment variables in auth config
+    const renderedConfig = renderAuthVars(config);
+
+    // Handle OAuth token fetching if needed
+    let oauthToken: string | undefined;
+    if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
+      oauthToken = await getOAuthToken(
+        renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+      );
+    }
+
+    // Apply query params for api_key with query placement
+    const queryParams = getAuthQueryParams(renderedConfig);
+    const serverUrl = applyQueryParams(config.url, queryParams);
+
     out = {
       type: 'http',
-      url: config.url,
-      headers: { ...(config.headers ?? {}), ...getAuthHeaders(config) },
+      url: serverUrl,
+      headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
   } else if (config.command && config.args) {
     out = { type: 'stdio', command: config.command, args: config.args };

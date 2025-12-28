@@ -1,6 +1,6 @@
-import { act } from '@testing-library/react';
 import { callApi, fetchUserId } from '@app/utils/api';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { act } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
 vi.mock('@app/utils/api', () => ({

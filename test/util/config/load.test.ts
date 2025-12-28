@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';

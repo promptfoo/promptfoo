@@ -2,7 +2,7 @@
 title: 'AI Red Teaming for complete first-timers'
 description: 'A comprehensive guide to AI red teaming for beginners, covering the basics, culture building, and operational feedback loops'
 authors: [tabs]
-tags: [red-teaming, security, best-practices, getting-started]
+tags: [red-teaming, ai-security, best-practices, getting-started]
 keywords:
   [AI red teaming, LLM security, prompt injection, AI vulnerabilities, red team culture, AI testing]
 date: 2025-07-22

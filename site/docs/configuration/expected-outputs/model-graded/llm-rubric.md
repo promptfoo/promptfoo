@@ -52,7 +52,7 @@ Use your knowledge of this structure to give special instructions in your rubric
 assert:
   - type: llm-rubric
     value: |
-      Evaluate the output based on how funny it is.  Grade it on a scale of 0.0 to 1.0, where:
+      Evaluate the output based on how funny it is. Grade it on a scale of 0.0 to 1.0, where:
       Score of 0.1: Only a slight smile.
       Score of 0.5: Laughing out loud.
       Score of 1.0: Rolling on the floor laughing.

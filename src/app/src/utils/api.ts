@@ -1,8 +1,16 @@
 import useApiConfig from '@app/stores/apiConfig';
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
+export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
-  return fetch(`${apiBaseUrl}/api${path}`, options);
+  if (apiBaseUrl) {
+    return apiBaseUrl.replace(/\/$/, '');
+  }
+  // Use base path from build-time config for local deployments behind reverse proxy
+  return import.meta.env.VITE_PUBLIC_BASENAME || '';
+}
+
+export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(`${getApiBaseUrl()}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {

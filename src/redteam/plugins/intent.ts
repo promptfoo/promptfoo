@@ -3,13 +3,13 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { extractGoalFromPrompt } from '../util';
-import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
   Assertion,
-  AtomicTestCase,
   AssertionValue,
+  AtomicTestCase,
   GradingResult,
   PluginConfig,
   TestCase,

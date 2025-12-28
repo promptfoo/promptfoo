@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MetadataPanel } from './MetadataPanel';
+
 import type { ExpandedMetadataState } from './MetadataPanel';
 
 describe('MetadataPanel', () => {

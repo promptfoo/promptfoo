@@ -4,15 +4,16 @@
  * Retrieves and manages past agent conversation data
  */
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderResponse,
-  EnvOverrides,
-} from '../../../types';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  EnvOverrides,
+  ProviderResponse,
+} from '../../../types';
 import type { ConversationHistoryConfig, ConversationHistoryResponse } from './types';
 
 /**

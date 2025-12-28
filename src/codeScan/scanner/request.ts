@@ -6,12 +6,13 @@
 
 import type ora from 'ora';
 import type { Socket } from 'socket.io-client';
+
 import type {
-  ScanRequest,
-  ScanResponse,
-  PullRequestContext,
   FileRecord,
   GitMetadata,
+  PullRequestContext,
+  ScanRequest,
+  ScanResponse,
 } from '../../types/codeScan';
 import type { Config } from '../config/schema';
 

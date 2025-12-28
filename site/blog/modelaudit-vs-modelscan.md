@@ -11,7 +11,7 @@ tags: [tool-comparison, best-practices]
 
 As organizations increasingly adopt machine learning models from various sources, ensuring their security has become critical. Two tools have emerged to address this need: Promptfoo's [ModelAudit](/docs/model-audit/) and Protect AI's ModelScan.
 
-To help security teams understand their options, we conducted an comparison using 11 test files containing documented security vulnerabilities. **The setup of this comparison is entirely open-source and can be [accessed on Github](https://github.com/promptfoo/modelaudit-comparisons#)**.
+To help security teams understand their options, we conducted a comparison using 11 test files containing documented security vulnerabilities. **The setup of this comparison is entirely open-source and can be [accessed on Github](https://github.com/promptfoo/modelaudit-comparisons#)**.
 
 <!-- truncate -->
 

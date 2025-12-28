@@ -7,30 +7,31 @@
 import crypto from 'crypto';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
-import type { Socket } from 'socket.io-client';
 
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
-import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
-import type { Config } from '../config/schema';
 import {
   loadConfigOrDefault,
   mergeConfigWithOptions,
-  resolveGuidance,
   resolveApiHost,
+  resolveGuidance,
 } from '../config/loader';
-import { resolveAuthCredentials } from '../util/auth';
-import { parseGitHubPr } from '../util/github';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { setupMcpBridge } from '../mcp/index';
 import { stopFilesystemMcpServer } from '../mcp/filesystem';
-import type { SocketIoMcpBridge } from '../mcp/transport';
-import { createSocketConnection } from './socket';
+import { setupMcpBridge } from '../mcp/index';
+import { resolveAuthCredentials } from '../util/auth';
+import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequest } from './request';
+import { createSocketConnection } from './socket';
+import type { Socket } from 'socket.io-client';
+
+import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
+import type { Config } from '../config/schema';
+import type { SocketIoMcpBridge } from '../mcp/transport';
 
 /**
  * Options for executing a scan

@@ -1,11 +1,12 @@
 ---
+title: How to Choose the Right LLM Temperature Setting
 sidebar_label: Choosing the right temperature for your LLM
-description: Compare LLM temperature settings from 0.1-1.0 to optimize model creativity vs consistency with automated benchmarks and randomness metrics
+description: Learn how to find the optimal LLM temperature setting by running systematic evaluations. Compare temperature 0.1-1.0 for creativity vs consistency.
 ---
 
 # Choosing the right temperature for your LLM
 
-The `temperature`` setting in language models is like a dial that adjusts how predictable or surprising the responses from the model will be, helping application developers fine-tune the AI's creativity to suit different tasks.
+The `temperature` setting in language models is like a dial that adjusts how predictable or surprising the responses from the model will be, helping application developers fine-tune the AI's creativity to suit different tasks.
 
 In general, a low temperature leads to "safer", more expected words, while a higher temperature encourages the model to choose less obvious words. This is why higher temperature is commonly associated with more creative outputs.
 
@@ -100,9 +101,9 @@ tests:
 
 This assertion will use a language model to determine whether the LLM output adheres to the criteria.
 
-In the above example comparing different temperatures, we notice that gpt-5-mini actually _hallucinates_ an incorrect answer to the question about Henry VII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
+In the above example comparing different temperatures, we notice that gpt-5-mini actually _hallucinates_ an incorrect answer to the question about Henry VIII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
 
-![gpt hallucinating with high temperature](/img/docs/gpt-temperature-hallucination.png)
+![GPT model hallucinating incorrect answer at high temperature setting](/img/docs/gpt-temperature-hallucination.png)
 
 There are many other [assertion types](/docs/configuration/expected-outputs). For example, we can check that the answer to the "space mission risks" question includes all of the following terms:
 
@@ -120,7 +121,7 @@ tests:
 
 In this case, a higher temperature leads to more creative results, but also leads to a mention of "as an AI language model":
 
-![llm temperature comparison web view](/img/docs/llm-temperature-comparison-webview.png)
+![Side-by-side comparison of LLM outputs at different temperature settings in promptfoo web viewer](/img/docs/llm-temperature-comparison-webview.png)
 
 It's worth spending a few minutes to set up these automated checks. They help streamline the evaluation process and quickly identify bad outputs.
 

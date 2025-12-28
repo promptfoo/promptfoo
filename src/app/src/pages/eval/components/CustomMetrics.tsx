@@ -7,6 +7,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
@@ -14,9 +15,9 @@ import { styled } from '@mui/material/styles';
 import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
-import { useTableStore } from './store';
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useApplyFilterFromMetric } from './hooks';
+import { useTableStore } from './store';
+
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;

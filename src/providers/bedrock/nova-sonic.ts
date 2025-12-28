@@ -1,15 +1,14 @@
 import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
 
-import type {
-  BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamInput,
-} from '@aws-sdk/client-bedrock-runtime';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
+import type {
+  BedrockRuntimeClient,
+  InvokeModelWithBidirectionalStreamInput,
+} from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -157,7 +156,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     }
   }
 
-  private createSession(sessionId: string = randomUUID()): SessionState {
+  private createSession(sessionId: string = crypto.randomUUID()): SessionState {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
     }
@@ -168,8 +167,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       closeSignal: new Subject<void>(),
       responseHandlers: new Map(),
       isActive: true,
-      audioContentId: randomUUID(),
-      promptName: randomUUID(),
+      audioContentId: crypto.randomUUID(),
+      promptName: crypto.randomUUID(),
     };
 
     this.sessions.set(sessionId, session);
@@ -229,7 +228,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
-    const textPromptID = randomUUID();
+    const textPromptID = crypto.randomUUID();
     logger.debug('sendTextMessage: ' + prompt);
     this.sendEvent(sessionId, {
       event: {
@@ -275,7 +274,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     const session = this.createSession(sessionId);
 
     let assistantTranscript = '';
@@ -313,7 +312,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       functionCallOccurred = true;
       // const result = await this.handleToolUse(data.toolName, data);
       const result = 'Tool result';
-      const toolResultId = randomUUID();
+      const toolResultId = crypto.randomUUID();
 
       await this.sendEvent(sessionId, {
         event: {

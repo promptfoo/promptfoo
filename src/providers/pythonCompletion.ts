@@ -3,11 +3,11 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 
@@ -90,7 +90,7 @@ export class PythonProvider implements ApiProvider {
           absPath,
           this.functionName || 'call_api',
           workerCount,
-          this.config.pythonExecutable,
+          getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
         );
 

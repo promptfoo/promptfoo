@@ -502,8 +502,9 @@ These serve as global defaults for your eval runs. You can use them to avoid rep
 The SageMaker provider fully supports the promptfoo caching system, which can significantly speed up evaluations and reduce costs when running repeated tests:
 
 ```yaml
-# Enable caching in your config
-cache: true
+# Caching is enabled by default. To explicitly configure it:
+evaluateOptions:
+  cache: true
 
 providers:
   - id: sagemaker:my-endpoint
@@ -517,13 +518,7 @@ When caching is enabled:
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 
-You can enable caching with the command line flag:
-
-```bash
-promptfoo eval --cache
-```
-
-Or disable caching for specific test runs even when globally enabled:
+Caching is enabled by default. To disable caching for specific test runs:
 
 ```bash
 promptfoo eval --no-cache

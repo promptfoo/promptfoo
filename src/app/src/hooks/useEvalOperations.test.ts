@@ -1,10 +1,9 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-
 import { callApi } from '@app/utils/api';
-import type { ReplayEvaluationParams } from '@app/pages/eval/components/EvalOutputPromptDialog';
-import type { Trace } from '@app/components/traces/TraceView';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useEvalOperations } from './useEvalOperations';
+import type { Trace } from '@app/components/traces/TraceView';
+import type { ReplayEvaluationParams } from '@app/pages/eval/components/EvalOutputPromptDialog';
 
 vi.mock('@app/utils/api');
 

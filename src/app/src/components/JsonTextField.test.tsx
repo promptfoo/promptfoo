@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import JsonTextField from './JsonTextField';
 
 const renderWithTheme = (component: React.ReactNode) => {

@@ -1,7 +1,8 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
-import { ToastProvider } from '@app/contexts/ToastContext';
 
 vi.mock('../../../store/providersStore', () => ({
   useProvidersStore: vi.fn(() => ({
@@ -22,9 +23,11 @@ describe('ProviderSelector', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     render(
-      <ToastProvider>
-        <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
-      </ToastProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ToastProvider>
+          <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
+        </ToastProvider>
+      </TooltipProvider>,
     );
     // Wait for the component to finish loading
     await waitFor(() => {
@@ -37,10 +40,10 @@ describe('ProviderSelector', () => {
   });
 
   it('displays the correct number of providers', () => {
-    const chips = screen
-      .getAllByRole('button')
-      .filter((button) => button.classList.contains('MuiChip-root'));
-    expect(chips).toHaveLength(mockProviders.length);
+    // Find provider badges by looking for elements with provider IDs
+    mockProviders.forEach((provider) => {
+      expect(screen.getByText(provider.id)).toBeInTheDocument();
+    });
   });
 
   it('calls onChange when a provider is selected', () => {
@@ -62,7 +65,7 @@ describe('ProviderSelector', () => {
     fireEvent.click(providerChip);
     expect(
       screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
+        'Click a provider to configure its settings. Hover over badges to see model IDs.',
       ),
     ).toBeInTheDocument();
   });

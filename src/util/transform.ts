@@ -2,12 +2,11 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { safeJoin } from './pathUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { safeJoin } from './pathUtils';
+import { getProcessShim } from './processShim';
 
 import type { Vars } from '../types/index';
-
-import { getProcessShim } from './processShim';
 
 export type TransformContext = object;
 

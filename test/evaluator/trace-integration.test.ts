@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
-import { getTraceStore } from '../../src/tracing/store';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import { getTraceStore } from '../../src/tracing/store';
 
 import type Eval from '../../src/models/eval';
 import type { EvaluateOptions, TestSuite } from '../../src/types/index';
@@ -37,6 +37,7 @@ describe('evaluator trace integration', () => {
     addPrompts: vi.fn(),
     fetchResultsByTestIdx: vi.fn(),
     setVars: vi.fn(),
+    setDurationMs: vi.fn(),
     results: [],
     prompts: [],
     persisted: false,

@@ -4,17 +4,19 @@
  * Time-aligns transcripts to audio for subtitle generation
  */
 
+import { promises as fs } from 'fs';
+
+import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
+import { ElevenLabsClient } from '../client';
+
 import type {
   ApiProvider,
   CallApiContextParams,
-  ProviderResponse,
   EnvOverrides,
+  ProviderResponse,
 } from '../../../types';
-import { getEnvString } from '../../../envars';
-import logger from '../../../logger';
-import { promises as fs } from 'fs';
-import { ElevenLabsClient } from '../client';
-import type { ForcedAlignmentConfig, AlignmentResponse } from './types';
+import type { AlignmentResponse, ForcedAlignmentConfig } from './types';
 
 /**
  * Provider for forced alignment (subtitle generation)

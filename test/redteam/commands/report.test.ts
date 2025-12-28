@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { redteamReportCommand } from '../../../src/redteam/commands/report';
 import { startServer } from '../../../src/server/server';
-import { setupEnv } from '../../../src/util/index';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { setupEnv } from '../../../src/util/index';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
 vi.mock('../../../src/server/server');

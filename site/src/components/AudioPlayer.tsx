@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+
 import styles from './AudioPlayer.module.css';
 
 interface AudioPlayerProps {
