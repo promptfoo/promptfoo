@@ -34,12 +34,12 @@ return {
 
 ## Features Demonstrated
 
-| Feature | Description |
-|---------|-------------|
-| **Multiple personas** | `expert`, `coder`, `analyst` with different system prompts |
-| **Task types** | `explain`, `compare`, `troubleshoot` with different structures |
-| **Context injection** | RAG-style context added to prompts |
-| **Template filling** | Variables like `{{domain}}`, `{{audience}}` filled dynamically |
+| Feature               | Description                                                    |
+| --------------------- | -------------------------------------------------------------- |
+| **Multiple personas** | `expert`, `coder`, `analyst` with different system prompts     |
+| **Task types**        | `explain`, `compare`, `troubleshoot` with different structures |
+| **Context injection** | RAG-style context added to prompts                             |
+| **Template filling**  | Variables like `{{domain}}`, `{{audience}}` filled dynamically |
 
 ## Running the Example
 
@@ -68,6 +68,7 @@ In the promptfoo UI, click on any result to see **"Actual Prompt Sent"** showing
 Example transformation:
 
 **Input (what you write):**
+
 ```yaml
 vars:
   topic: quantum entanglement
@@ -77,6 +78,7 @@ vars:
 ```
 
 **Actual Prompt Sent (what the LLM receives):**
+
 ```
 System: You are a world-class expert in quantum physics.
 
@@ -98,11 +100,11 @@ Focus on:
 
 ## Files
 
-| File | Description |
-|------|-------------|
-| `aiSdkProvider.mjs` | Provider using Vercel AI SDK with dynamic prompt construction |
-| `promptfooconfig.yaml` | Test cases showcasing different personas and task types |
-| `package.json` | Dependencies (`ai`, `@ai-sdk/openai`) |
+| File                   | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `aiSdkProvider.mjs`    | Provider using Vercel AI SDK with dynamic prompt construction |
+| `promptfooconfig.yaml` | Test cases showcasing different personas and task types       |
+| `package.json`         | Dependencies (`ai`, `@ai-sdk/openai`)                         |
 
 ## Adapting for Your Use Case
 
