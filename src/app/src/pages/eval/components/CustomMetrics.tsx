@@ -84,14 +84,15 @@ const CustomMetrics = ({
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
+  // Validate props BEFORE hooks to comply with Rules of Hooks
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
+
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
-
-  if (!lookup || !Object.keys(lookup).length) {
-    return null;
-  }
 
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);

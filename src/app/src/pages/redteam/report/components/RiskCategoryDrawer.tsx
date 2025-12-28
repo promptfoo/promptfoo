@@ -115,7 +115,14 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
-  // All hooks must be called unconditionally at the top
+  // Validate category BEFORE any hooks to comply with Rules of Hooks
+  const categoryName = categoryAliases[category as keyof typeof categoryAliases];
+  if (!categoryName) {
+    console.error('[RiskCategoryDrawer] Could not load category', category);
+    return null;
+  }
+
+  // All hooks must be called unconditionally after early returns
   const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
@@ -133,13 +140,6 @@ const RiskCategoryDrawer = ({
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
   }, [failures]);
-
-  // Derived values (not hooks)
-  const categoryName = categoryAliases[category as keyof typeof categoryAliases];
-  if (!categoryName) {
-    console.error('[RiskCategoryDrawer] Could not load category', category);
-    return null;
-  }
 
   const displayName =
     displayNameOverrides[category as keyof typeof displayNameOverrides] || categoryName;

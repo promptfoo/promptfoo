@@ -28,6 +28,22 @@ export default function TraceView({
   promptIndex,
   traces = [],
 }: TraceViewProps) {
+  // Validate props BEFORE hooks to comply with Rules of Hooks
+  if (!evaluationId) {
+    return null;
+  }
+
+  if (traces.length === 0) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          No traces available for this evaluation
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Hooks after early returns (evaluationId is guaranteed to exist here)
   const handleExportTraces = useCallback(
     (tracesToExport: Trace[]) => {
       const exportData = {
@@ -48,20 +64,6 @@ export default function TraceView({
     },
     [evaluationId, testCaseId],
   );
-
-  if (!evaluationId) {
-    return null;
-  }
-
-  if (traces.length === 0) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          No traces available for this evaluation
-        </Typography>
-      </Box>
-    );
-  }
 
   // Filter traces with try-direct-match then fallback approach
   const isComposedId = (id: unknown): id is string =>
