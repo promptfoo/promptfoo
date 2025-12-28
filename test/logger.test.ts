@@ -1462,7 +1462,9 @@ describe('logger', () => {
         'Custom logger must be a valid object with required logging methods',
       );
 
-      expect(() => logger.setLogger({} as any)).toThrow('Custom logger is missing required methods');
+      expect(() => logger.setLogger({} as any)).toThrow(
+        'Custom logger is missing required methods',
+      );
 
       expect(() => logger.setLogger({ info: vi.fn() } as any)).toThrow(
         'Custom logger is missing required methods: debug, warn, error',
