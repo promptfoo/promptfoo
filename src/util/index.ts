@@ -1,18 +1,10 @@
 import * as path from 'path';
 
 import deepEqual from 'fast-deep-equal';
-import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString } from '../envars';
-import { importModule } from '../esm';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
 import { type EvaluateResult, isApiProvider, isProviderOptions, type TestCase } from '../types';
-import invariant from '../util/invariant';
-import { maybeLoadFromExternalFile } from './file';
-import { isJavascriptFile } from './fileExtensions';
-import { parseFileUrl } from './functions/loadFunction';
-import { safeResolve } from './pathUtils';
 
 import type { Vars } from '../types/index';
 
@@ -20,10 +12,8 @@ import type { Vars } from '../types/index';
 export { createOutputMetadata, writeOutput, writeMultipleOutputs } from './output';
 export { setupEnv } from './env';
 export { renderEnvOnlyInObject, renderVarsInObject } from './render';
-export { parsePathOrGlob, readOutput, readFilters } from './file';
+export { parsePathOrGlob, readOutput, readFilters, maybeLoadToolsFromExternalFile } from './file';
 
-// Import renderVarsInObject for internal use (used by maybeLoadToolsFromExternalFile)
-import { renderVarsInObject } from './render';
 
 export function printBorder() {
   const border = '='.repeat(TERMINAL_MAX_WIDTH);
@@ -155,156 +145,3 @@ export function isRunningUnderNpx(): boolean {
   );
 }
 
-/**
- * Renders variables in a tools object and loads from external file if applicable.
- * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
- * specifically for handling tools configurations.
- *
- * Supports loading from JSON, YAML, Python, and JavaScript files.
- *
- * @param tools - The tools configuration object or array to process.
- * @param vars - Variables to use for rendering.
- * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
- * @throws {Error} If the loaded tools are in an invalid format
- */
-export async function maybeLoadToolsFromExternalFile(
-  tools: any,
-  vars?: Record<string, string | object>,
-): Promise<any> {
-  const rendered = renderVarsInObject(tools, vars);
-
-  // Check if this is a Python/JS file reference with function name
-  // These need special handling to execute the function and get the result
-  if (typeof rendered === 'string' && rendered.startsWith('file://')) {
-    const { filePath, functionName } = parseFileUrl(rendered);
-
-    if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
-      // Execute the function to get tool definitions
-      const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
-      logger.debug(
-        `[maybeLoadToolsFromExternalFile] Loading tools from ${fileType} file: ${filePath}:${functionName}`,
-      );
-
-      try {
-        let toolDefinitions: any;
-
-        if (filePath.endsWith('.py')) {
-          // Resolve Python path relative to config base directory (same as JavaScript)
-          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
-          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
-          toolDefinitions = await runPython(absPath, functionName, []);
-        } else {
-          // Use safeResolve for security (prevents path traversal)
-          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
-          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
-
-          const module = await importModule(absPath);
-          const fn = module[functionName] || module.default?.[functionName];
-
-          if (typeof fn !== 'function') {
-            const availableExports = Object.keys(module).filter((k) => k !== 'default');
-            const basePath = cliState.basePath || process.cwd();
-            throw new Error(
-              `Function "${functionName}" not found in ${filePath}. ` +
-                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}\n` +
-                `Resolved from: ${basePath}`,
-            );
-          }
-
-          // Call the function - handle both sync and async functions
-          toolDefinitions = await Promise.resolve(fn());
-        }
-
-        // Validate the result - must be array or object, not primitive
-        if (
-          !toolDefinitions ||
-          typeof toolDefinitions === 'string' ||
-          typeof toolDefinitions === 'number' ||
-          typeof toolDefinitions === 'boolean'
-        ) {
-          throw new Error(
-            `Function "${functionName}" must return an array or object of tool definitions, ` +
-              `but returned: ${toolDefinitions === null ? 'null' : typeof toolDefinitions}`,
-          );
-        }
-
-        logger.debug(
-          `[maybeLoadToolsFromExternalFile] Successfully loaded ${Array.isArray(toolDefinitions) ? toolDefinitions.length : 'object'} tools`,
-        );
-        return toolDefinitions;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const basePath = cliState.basePath || process.cwd();
-        throw new Error(
-          `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
-            `Make sure the function "${functionName}" exists and returns a valid tool definition array.\n` +
-            `Resolved from: ${basePath}`,
-        );
-      }
-    }
-
-    // Python/JS file without function name - provide helpful error
-    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
-      const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
-      const basePath = cliState.basePath || process.cwd();
-      throw new Error(
-        `Cannot load tools from ${rendered}\n` +
-          `${ext} files require a function name. Use this format:\n` +
-          `  tools: file://${filePath}:get_tools\n\n` +
-          `Your ${ext} file should export a function that returns tool definitions:\n` +
-          (filePath.endsWith('.py')
-            ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
-            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`) +
-          `\n\nResolved from: ${basePath}`,
-      );
-    }
-  }
-
-  // Handle arrays by recursively processing each item
-  if (Array.isArray(rendered)) {
-    const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
-    );
-    // Flatten if all items are arrays (common case: multiple file:// references)
-    if (results.every((r) => Array.isArray(r))) {
-      return results.flat();
-    }
-    return results;
-  }
-
-  // If tools is already an object (not a file reference), return it as-is
-  if (typeof rendered !== 'string') {
-    return rendered;
-  }
-
-  // Standard loading for JSON/YAML files
-  const loaded = maybeLoadFromExternalFile(rendered);
-
-  // Validate the loaded result - tools must be an array or object, not a string
-  if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
-    // Unresolved file:// reference
-    if (loaded.startsWith('file://')) {
-      throw new Error(
-        `Failed to load tools from ${loaded}\n` +
-          `Ensure the file exists and contains valid JSON or YAML tool definitions.`,
-      );
-    }
-
-    // Raw file content loaded (e.g., Python code read as text without function name)
-    if (loaded.includes('def ') || loaded.includes('import ')) {
-      throw new Error(
-        `Invalid tools configuration: file appears to contain Python code.\n` +
-          `Python files require a function name. Use this format:\n` +
-          `  tools: file://tools.py:get_tools`,
-      );
-    }
-
-    // Some other invalid string content
-    throw new Error(
-      `Invalid tools configuration: expected an array or object, but got a string.\n` +
-        `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,
-    );
-  }
-
-  return loaded;
-}
