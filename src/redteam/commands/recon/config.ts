@@ -612,7 +612,7 @@ export function buildRedteamConfig(
   const strategies = buildStrategies(result.stateful ?? false);
 
   // Truncate purpose for description (first sentence or 100 chars)
-  const purposeSummary = result.purpose.split('.')[0].trim();
+  const purposeSummary = (result.purpose ?? 'AI application').split('.')[0].trim();
   const description =
     purposeSummary.length > 100 ? `${purposeSummary.substring(0, 97)}...` : purposeSummary;
 

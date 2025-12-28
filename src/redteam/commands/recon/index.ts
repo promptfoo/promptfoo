@@ -35,7 +35,7 @@ const PENDING_RECON_FILENAME = 'pending-recon.json';
  * data structure is consistent between CLI and server.
  */
 function writePendingReconConfig(
-  config: object,
+  config: Record<string, unknown>,
   result: ReconResult,
   codebaseDirectory: string,
 ): string {

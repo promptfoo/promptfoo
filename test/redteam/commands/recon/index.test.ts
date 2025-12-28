@@ -110,21 +110,21 @@ describe('recon CLI pending config', () => {
 
 describe('ReconOptions open flag', () => {
   it('should default to opening browser when open is undefined', () => {
-    const options = { dir: '/path/to/project' };
+    const options: { dir: string; open?: boolean } = { dir: '/path/to/project' };
     const shouldOpen = options.open !== false;
 
     expect(shouldOpen).toBe(true);
   });
 
   it('should open browser when open is explicitly true', () => {
-    const options = { dir: '/path/to/project', open: true };
+    const options: { dir: string; open?: boolean } = { dir: '/path/to/project', open: true };
     const shouldOpen = options.open !== false;
 
     expect(shouldOpen).toBe(true);
   });
 
   it('should not open browser when open is false', () => {
-    const options = { dir: '/path/to/project', open: false };
+    const options: { dir: string; open?: boolean } = { dir: '/path/to/project', open: false };
     const shouldOpen = options.open !== false;
 
     expect(shouldOpen).toBe(false);
