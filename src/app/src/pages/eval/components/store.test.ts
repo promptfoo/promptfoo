@@ -1869,7 +1869,7 @@ describe('useTableStore', () => {
       ]);
     });
 
-    it('should set `userRatedResultsCount` to the correct value when `setTableFromResultsFile` is called with a results file containing user-rated outputs', () => {
+    it('should set `userRatedResultsCount` to the correct value when `setTableFromResultsFile` is called with a results file containing user-rated outputs', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {},
@@ -1949,8 +1949,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
