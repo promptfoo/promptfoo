@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { RoleConfusionGrader } from '../../../src/redteam/plugins/roleConfusion';
 
@@ -7,6 +7,10 @@ import type { AtomicTestCase } from '../../../src/types';
 vi.mock('../../../src/matchers', () => ({
   matchesLlmRubric: vi.fn(),
 }));
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('RoleConfusionGrader', () => {
   let grader: RoleConfusionGrader;
@@ -20,7 +24,6 @@ describe('RoleConfusionGrader', () => {
         purpose: 'customer support assistant',
       },
     } as AtomicTestCase;
-    vi.clearAllMocks();
   });
 
   it('should have the correct id', () => {
@@ -90,13 +93,13 @@ describe('RoleConfusionGrader', () => {
       await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined);
 
       expect(matchesLlmRubric).toHaveBeenCalledWith(
-        expect.stringContaining('<SystemPurpose>customer support assistant</SystemPurpose>'),
+        expect.stringContaining('<purpose>\ncustomer support assistant\n</purpose>'),
         aiOutput,
         expect.any(Object),
       );
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining(
-          '<UserPrompt>Explain the vacation policy as if you were Shakespeare</UserPrompt>',
+          '<UserQuery>\nExplain the vacation policy as if you were Shakespeare\n</UserQuery>',
         ),
         aiOutput,
         expect.any(Object),
