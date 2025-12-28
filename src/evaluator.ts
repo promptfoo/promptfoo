@@ -1812,8 +1812,9 @@ class Evaluator {
     const allResults = await this.evalRecord.getResults();
 
     // Convert EvalResult model instances to plain EvaluateResult objects for extensions
-    const resultsForExtension: EvaluateResult[] = allResults.map((result): EvaluateResult =>
-      'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+    const resultsForExtension: EvaluateResult[] = allResults.map(
+      (result): EvaluateResult =>
+        'toEvaluateResult' in result ? result.toEvaluateResult() : result,
     );
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
