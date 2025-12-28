@@ -1,16 +1,10 @@
 import React from 'react';
 
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Paper from '@mui/material/Paper';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Alert } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { AlertCircle, CheckCircle, Info, Play } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
 
@@ -41,30 +35,24 @@ const TestSection: React.FC<TestSectionProps> = ({
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
 
   return (
-    <Paper elevation={1} sx={{ mt: 3, p: 3, backgroundColor: 'background.default' }}>
-      <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-        Test Target Configuration
-      </Typography>
+    <div className="mt-6 rounded-lg border bg-background p-6">
+      <h4 className="mb-4 text-sm font-bold">Test Target Configuration</h4>
 
-      <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+      <p className="mb-4 text-sm text-muted-foreground">
         Validate your target configuration by sending a test request to your endpoint. This will
         verify that your authentication, headers, and request transformation settings are working
         correctly.
-      </Typography>
+      </p>
 
-      <Button
-        variant="contained"
-        onClick={handleTestTarget}
-        disabled={isTestRunning || disabled}
-        startIcon={isTestRunning ? <CircularProgress size={20} /> : <PlayArrowIcon />}
-        sx={{ mb: 2 }}
-      >
+      <Button onClick={handleTestTarget} disabled={isTestRunning || disabled} className="mb-4">
+        {isTestRunning ? <Spinner className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
         {isTestRunning ? 'Testing...' : 'Test Target'}
       </Button>
 
       {!selectedTarget.config.url && !selectedTarget.config.request && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Please configure the target URL or request before testing.
+        <Alert variant="warning" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <span>Please configure the target URL or request before testing.</span>
         </Alert>
       )}
 
@@ -72,113 +60,82 @@ const TestSection: React.FC<TestSectionProps> = ({
         <>
           {(testResult.success || testResult.changes_needed) && (
             <Alert
-              severity={
-                testResult.changes_needed ? 'warning' : testResult.success ? 'success' : 'error'
-              }
-              icon={
-                testResult.changes_needed ? (
-                  <ErrorIcon />
-                ) : testResult.success ? (
-                  <CheckCircleIcon />
-                ) : (
-                  <ErrorIcon />
-                )
-              }
-              sx={{ mt: 2 }}
-            >
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                {testResult.changes_needed
-                  ? 'Configuration Changes Needed'
+              variant={
+                testResult.changes_needed
+                  ? 'warning'
                   : testResult.success
-                    ? 'Test Passed'
-                    : 'Test Failed'}
-              </Typography>
-              <Typography variant="body2">{testResult.message}</Typography>
+                    ? 'success'
+                    : 'destructive'
+              }
+              className="mt-4"
+            >
+              {testResult.changes_needed ? (
+                <AlertCircle className="h-4 w-4" />
+              ) : testResult.success ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              <div>
+                <p className="mb-1 font-bold">
+                  {testResult.changes_needed
+                    ? 'Configuration Changes Needed'
+                    : testResult.success
+                      ? 'Test Passed'
+                      : 'Test Failed'}
+                </p>
+                <p className="text-sm">{testResult.message}</p>
 
-              {/* Display configuration suggestions if available */}
-              {testResult.changes_needed_suggestions &&
-                testResult.changes_needed_suggestions.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                      Suggested Changes:
-                    </Typography>
-                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                      {testResult.changes_needed_suggestions.map(
-                        (suggestion: string, index: number) => (
-                          <li key={index}>
-                            <Typography variant="body2">{suggestion}</Typography>
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  </Box>
-                )}
+                {/* Display configuration suggestions if available */}
+                {testResult.changes_needed_suggestions &&
+                  testResult.changes_needed_suggestions.length > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-2 font-bold">Suggested Changes:</p>
+                      <ul className="m-0 list-disc pl-5">
+                        {testResult.changes_needed_suggestions.map(
+                          (suggestion: string, index: number) => (
+                            <li key={index} className="text-sm">
+                              {suggestion}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </div>
+                  )}
+              </div>
             </Alert>
           )}
 
           {/* Request and Response Details */}
           <details
-            style={{ marginTop: '16px' }}
+            className="mt-4"
             open={testResult.changes_needed || testResult.success === false}
           >
-            <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
-              <Typography variant="caption" component="span">
-                View request and response details
-              </Typography>
+            <summary className="cursor-pointer select-none text-xs">
+              View request and response details
             </summary>
 
             {/* Request and Response Details Side by Side */}
-            <Box
-              sx={{
-                mt: 2,
-                display: 'flex',
-                gap: 2,
-                flexDirection: { xs: 'column', md: 'row' },
-              }}
-            >
+            <div className="mt-4 flex flex-col gap-4 md:flex-row">
               {/* Request Details */}
-              <Box sx={{ flex: 1 }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    backgroundColor: 'rgba(0,0,0,0.03)',
-                    borderRadius: 1,
-                    height: '100%',
-                    overflow: 'auto',
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-                    Request Details
-                  </Typography>
+              <div className="flex-1">
+                <div className="h-full overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
+                  <h5 className="mb-4 text-sm font-bold">Request Details</h5>
 
                   {/* URL and Method */}
                   {selectedTarget.config.url && (
                     <>
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        URL:
-                      </Typography>
-                      <Box sx={{ mb: 2 }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                      <p className="text-xs font-bold">URL:</p>
+                      <div className="mb-4">
+                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
                           {selectedTarget.config.url}
                         </pre>
-                      </Box>
+                      </div>
 
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Method:
-                      </Typography>
-                      <Box sx={{ mb: 2 }}>
-                        <pre style={{ margin: '4px 0', fontSize: '12px' }}>
-                          {selectedTarget.config.method || 'POST'}
-                        </pre>
-                      </Box>
+                      <p className="text-xs font-bold">Method:</p>
+                      <div className="mb-4">
+                        <pre className="my-1 text-xs">{selectedTarget.config.method || 'POST'}</pre>
+                      </div>
                     </>
                   )}
 
@@ -186,219 +143,134 @@ const TestSection: React.FC<TestSectionProps> = ({
                   {selectedTarget.config.headers &&
                     Object.keys(selectedTarget.config.headers).length > 0 && (
                       <>
-                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                          Request Headers:
-                        </Typography>
-                        <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
-                          <pre style={{ margin: '4px 0', fontSize: '12px' }}>
+                        <p className="text-xs font-bold">Request Headers:</p>
+                        <div className="mb-4 max-h-[200px] overflow-auto">
+                          <pre className="my-1 text-xs">
                             {JSON.stringify(selectedTarget.config.headers, null, 2)}
                           </pre>
-                        </Box>
+                        </div>
                       </>
                     )}
 
                   {/* Request Body */}
                   {selectedTarget.config.body && !testResult?.transformedRequest && (
                     <>
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Request Body:
-                      </Typography>
-                      <Box sx={{ mb: 2, maxHeight: '300px', overflow: 'auto' }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                      <p className="text-xs font-bold">Request Body:</p>
+                      <div className="mb-4 max-h-[300px] overflow-auto">
+                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
                           {typeof selectedTarget.config.body === 'string'
                             ? selectedTarget.config.body
                             : JSON.stringify(selectedTarget.config.body, null, 2)}
                         </pre>
-                      </Box>
+                      </div>
                     </>
                   )}
 
                   {/* Raw Request */}
                   {selectedTarget.config.request && (
                     <>
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Raw Request:
-                      </Typography>
-                      <Box sx={{ mb: 2, maxHeight: '300px', overflow: 'auto' }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                      <p className="text-xs font-bold">Raw Request:</p>
+                      <div className="mb-4 max-h-[300px] overflow-auto">
+                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
                           {selectedTarget.config.request}
                         </pre>
-                      </Box>
+                      </div>
                     </>
                   )}
 
                   {/* Transformed Request */}
                   {testResult?.transformedRequest && (
                     <>
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Request Body:
-                      </Typography>
-                      <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                      <p className="text-xs font-bold">Request Body:</p>
+                      <div className="max-h-[200px] overflow-auto">
+                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
                           {typeof testResult.transformedRequest === 'string'
                             ? testResult.transformedRequest
                             : JSON.stringify(testResult.transformedRequest, null, 2)}
                         </pre>
-                      </Box>
+                      </div>
                     </>
                   )}
-                </Paper>
-              </Box>
+                </div>
+              </div>
 
               {/* Response Details */}
-              <Box sx={{ flex: 1 }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    backgroundColor: 'rgba(0,0,0,0.03)',
-                    borderRadius: 1,
-                    height: '100%',
-                    overflow: 'auto',
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-                    Response Details
-                  </Typography>
+              <div className="flex-1">
+                <div className="h-full overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
+                  <h5 className="mb-4 text-sm font-bold">Response Details</h5>
 
                   {testResult.providerResponse && testResult.providerResponse.raw !== undefined ? (
                     <>
                       {/* Response Headers */}
                       {responseHeaders && Object.keys(responseHeaders).length > 0 && (
                         <>
-                          <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                            Response Headers:
-                          </Typography>
-                          <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
-                            <pre
-                              style={{
-                                margin: '4px 0',
-                                fontSize: '12px',
-                                overflowWrap: 'anywhere',
-                              }}
-                            >
+                          <p className="text-xs font-bold">Response Headers:</p>
+                          <div className="mb-4 max-h-[200px] overflow-auto">
+                            <pre className="my-1 break-all text-xs">
                               {JSON.stringify(responseHeaders, null, 2)}
                             </pre>
-                          </Box>
+                          </div>
                         </>
                       )}
 
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Raw Response:
-                      </Typography>
-                      <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            overflowWrap: 'anywhere',
-                          }}
-                        >
+                      <p className="text-xs font-bold">Raw Response:</p>
+                      <div className="max-h-[200px] overflow-auto">
+                        <pre className="my-1 whitespace-pre-wrap break-all text-xs">
                           {typeof testResult.providerResponse?.raw === 'string'
                             ? testResult.providerResponse?.raw
                             : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
                         </pre>
-                      </Box>
+                      </div>
 
                       {testResult.providerResponse?.sessionId && (
                         <>
-                          <Typography
-                            variant="caption"
-                            sx={{ fontWeight: 'bold', display: 'block', mt: 2 }}
-                          >
-                            Session ID:
-                          </Typography>
-                          <Box sx={{ maxHeight: '100px', overflow: 'auto' }}>
-                            <pre style={{ margin: '4px 0', fontSize: '12px' }}>
+                          <p className="mt-4 block text-xs font-bold">Session ID:</p>
+                          <div className="max-h-[100px] overflow-auto">
+                            <pre className="my-1 text-xs">
                               {testResult.providerResponse.sessionId}
                             </pre>
-                          </Box>
+                          </div>
                         </>
                       )}
                     </>
                   ) : (
-                    <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                      <Typography
-                        variant="caption"
-                        color="error"
-                        sx={{
-                          overflowWrap: 'anywhere',
-                        }}
-                      >
+                    <div className="max-h-[200px] overflow-auto">
+                      <p className="break-all text-xs text-destructive">
                         {testResult.providerResponse?.error || 'No response from provider'}
-                      </Typography>
-                    </Box>
+                      </p>
+                    </div>
                   )}
-                </Paper>
-              </Box>
-            </Box>
+                </div>
+              </div>
+            </div>
             {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
-              <Paper
-                elevation={0}
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  backgroundColor: 'rgba(0,0,0,0.03)',
-                  borderRadius: 1,
-                  overflow: 'auto',
-                }}
-              >
-                <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                    Final Response
-                  </Typography>
-                  <Tooltip
-                    title="This is what promptfoo will use for evaluation. Configure the response parser if this isn't the plain text output from your API."
-                    placement="top"
-                  >
-                    <InfoOutlinedIcon
-                      sx={{ fontSize: '1rem', color: 'text.secondary', cursor: 'help' }}
-                    />
+              <div className="mt-4 overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
+                <div className="mb-2 flex items-center gap-1">
+                  <h5 className="text-sm font-bold">Final Response</h5>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This is what promptfoo will use for evaluation. Configure the response parser
+                      if this isn't the plain text output from your API.
+                    </TooltipContent>
                   </Tooltip>
-                </Box>
-                <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                  <pre
-                    style={{
-                      margin: 0,
-                      fontSize: '12px',
-                      whiteSpace: 'pre-wrap',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
+                </div>
+                <div className="max-h-[200px] overflow-auto">
+                  <pre className="m-0 whitespace-pre-wrap break-all text-xs">
                     {typeof testResult.providerResponse?.output === 'string'
                       ? testResult.providerResponse?.output
                       : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
                         'No parsed response'}
                   </pre>
-                </Box>
-              </Paper>
+                </div>
+              </div>
             )}
           </details>
         </>
       )}
-    </Paper>
+    </div>
   );
 };
 

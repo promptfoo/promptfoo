@@ -1,24 +1,16 @@
 import React from 'react';
 
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import LinearProgress from '@mui/material/LinearProgress';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Alert } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Info, Play } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 
@@ -89,9 +81,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   onApply,
   functionDocumentation,
 }) => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
   const [testLoading, setTestLoading] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{
     success: boolean;
@@ -161,76 +150,58 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   }, [open]);
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xl"
-      fullWidth
-      PaperProps={{
-        sx: {
-          height: '85vh',
-        },
-      }}
-    >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent
-        sx={{ display: 'flex', flexDirection: 'column', height: 'calc(85vh - 64px)', p: 2 }}
-      >
-        <Box sx={{ display: 'flex', gap: 2, flex: 1, flexDirection: { xs: 'column', md: 'row' } }}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="flex h-[85vh] max-w-6xl flex-col p-4">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-1 flex-col gap-4 overflow-hidden md:flex-row">
           {/* Left side - Input */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', flex: '0 0 58%' }}>
-            <Stack spacing={2} sx={{ flex: 1 }}>
+          <div className="flex flex-[0_0_58%] flex-col">
+            <div className="flex flex-1 flex-col gap-4">
               {/* Test Input */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  {testInputLabel}
-                </Typography>
-                <Accordion
-                  expanded={testInputExpanded}
-                  onChange={(_, isExpanded) => setTestInputExpanded(isExpanded)}
-                  sx={{
-                    mb: 2,
-                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                  }}
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">{testInputLabel}</h4>
+                <Collapsible
+                  open={testInputExpanded}
+                  onOpenChange={setTestInputExpanded}
+                  className="mb-4 rounded-md bg-black/5 dark:bg-white/5"
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        width: '100%',
-                        pr: 1,
-                      }}
-                    >
-                      <Typography variant="body2">Test input</Typography>
-                      <Tooltip title="Format JSON">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            formatJson();
-                          }}
-                        >
-                          <FormatAlignLeftIcon fontSize="small" />
-                        </IconButton>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between p-3">
+                    <span className="text-sm">Test input</span>
+                    <div className="flex items-center gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Format JSON"
+                            className="rounded p-1 hover:bg-black/10 dark:hover:bg-white/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              formatJson();
+                            }}
+                          >
+                            <AlignLeft className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Format JSON</TooltipContent>
                       </Tooltip>
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          testInputExpanded && 'rotate-180',
+                        )}
+                      />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-3 pb-3">
                     {formatError && (
-                      <Alert severity="error" sx={{ mb: 1 }}>
-                        {formatError}
+                      <Alert variant="destructive" className="mb-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>{formatError}</span>
                       </Alert>
                     )}
-                    <Box
-                      sx={{
-                        border: 1,
-                        borderColor: 'grey.300',
-                        borderRadius: 1,
-                        backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-                      }}
-                    >
+                    <div className="overflow-hidden rounded border border-border bg-white dark:bg-zinc-900">
                       <Editor
                         value={testInput}
                         onValueChange={onTestInputChange}
@@ -243,77 +214,34 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                           minHeight: `${testInputRows * 20}px`,
                         }}
                       />
-                    </Box>
-                  </AccordionDetails>
-                </Accordion>
-              </Box>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
 
               {/* Transform Code Editor */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Transform Function
-                </Typography>
-                <Box
-                  component="details"
-                  sx={{
-                    mb: 1,
-                    p: 1.5,
-                    borderRadius: 1,
-                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                    '& > summary': {
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    },
-                  }}
-                >
-                  <Typography component="summary" variant="body2" sx={{ fontWeight: 500 }}>
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Transform Function</h4>
+                <details className="mb-2 cursor-pointer rounded bg-black/5 p-3 dark:bg-white/5">
+                  <summary className="select-none text-sm font-medium">
                     View expected response format
-                  </Typography>
-                  <Box sx={{ mt: 1.5 }}>
-                    <Typography variant="body2">{functionDocumentation.description}</Typography>
-                  </Box>
-                </Box>
-                <Box
-                  component="details"
-                  sx={{
-                    mb: 2,
-                    p: 1.5,
-                    borderRadius: 1,
-                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                    '& > summary': {
-                      cursor: 'pointer',
-                    },
-                  }}
-                >
-                  <Typography component="summary" variant="body2" sx={{ fontWeight: 500 }}>
+                  </summary>
+                  <div className="mt-3 text-sm">{functionDocumentation.description}</div>
+                </details>
+                <details className="mb-4 cursor-pointer rounded bg-black/5 p-3 dark:bg-white/5">
+                  <summary className="select-none text-sm font-medium">
                     View function signature
-                  </Typography>
-                  <Box sx={{ mt: 1.5 }}>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
+                  </summary>
+                  <div className="mt-3">
+                    <p className="mb-2 text-sm">
                       <strong>Function signature:</strong>
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      component="pre"
-                      sx={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.75rem',
-                        mb: 0,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
+                    </p>
+                    <pre className="m-0 whitespace-pre-wrap font-mono text-xs">
                       {functionDocumentation.signature}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Box
-                  sx={{
-                    border: 1,
-                    borderColor: 'grey.300',
-                    borderRadius: 1,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-                  }}
-                >
+                    </pre>
+                  </div>
+                </details>
+                <div className="overflow-hidden rounded border border-border bg-white dark:bg-zinc-900">
                   <Editor
                     value={transformCode}
                     onValueChange={onTransformCodeChange}
@@ -326,78 +254,52 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                       minHeight: '150px',
                     }}
                   />
-                </Box>
-              </Box>
+                </div>
+              </div>
 
               {/* Test Button */}
-              <Button
-                variant="contained"
-                onClick={testTransform}
-                disabled={testLoading}
-                startIcon={<PlayArrowIcon />}
-                fullWidth
-              >
+              <Button onClick={testTransform} disabled={testLoading} className="w-full">
+                <Play className="mr-2 h-4 w-4" />
                 Run Test
               </Button>
 
               {/* Loading */}
-              {testLoading && <LinearProgress />}
-            </Stack>
-          </Box>
+              {testLoading && (
+                <div className="h-1 w-full overflow-hidden rounded bg-muted">
+                  <div className="h-full w-1/3 animate-pulse bg-primary" />
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Right side - Result */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Result
-              </Typography>
+          <div className="flex flex-1 flex-col">
+            <div className="flex flex-1 flex-col">
+              <h4 className="mb-2 text-sm font-semibold">Result</h4>
               {testResult ? (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    flex: 1,
-                    overflow: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                >
+                <div className="flex flex-1 flex-col overflow-auto rounded border p-4">
                   {testResult.success ? (
-                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div className="flex flex-1 flex-col">
                       {testResult.noTransform ? (
-                        <Alert severity="info" sx={{ mb: 2 }}>
-                          No transform applied - showing base behavior
+                        <Alert variant="info" className="mb-4">
+                          <Info className="h-4 w-4" />
+                          <span>No transform applied - showing base behavior</span>
                         </Alert>
                       ) : (
-                        <Alert severity="success" sx={{ mb: 2 }}>
-                          {functionDocumentation.successMessage}
+                        <Alert variant="success" className="mb-4">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>{functionDocumentation.successMessage}</span>
                         </Alert>
                       )}
                       {onApply && !testResult.noTransform && (
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          onClick={handleApply}
-                          sx={{ mb: 2 }}
-                        >
+                        <Button onClick={handleApply} className="mb-4">
                           Apply Transform
                         </Button>
                       )}
-                      <Typography variant="caption" color="text.secondary" gutterBottom>
+                      <p className="mb-2 text-xs text-muted-foreground">
                         {functionDocumentation.outputLabel}
-                      </Typography>
-                      <Box
-                        sx={{
-                          mt: 1,
-                          p: 2,
-                          backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                          borderRadius: 1,
-                          fontFamily: 'monospace',
-                          fontSize: '0.875rem',
-                          overflow: 'auto',
-                          flex: 1,
-                        }}
-                      >
+                      </p>
+                      <div className="flex-1 overflow-auto rounded bg-muted p-4 font-mono text-sm">
                         <Editor
                           value={
                             typeof testResult.result === 'string'
@@ -413,31 +315,25 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                             fontSize: 14,
                           }}
                         />
-                      </Box>
-                    </Box>
+                      </div>
+                    </div>
                   ) : (
-                    <Alert severity="error">{testResult.error}</Alert>
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{testResult.error}</span>
+                    </Alert>
                   )}
-                </Paper>
+                </div>
               ) : (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Typography color="text.secondary" align="center">
+                <div className="flex flex-1 items-center justify-center rounded border p-4">
+                  <p className="text-center text-muted-foreground">
                     Run the test to see results here
-                  </Typography>
-                </Paper>
+                  </p>
+                </div>
               )}
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

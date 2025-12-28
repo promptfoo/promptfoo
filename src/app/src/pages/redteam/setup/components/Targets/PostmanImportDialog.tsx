@@ -1,18 +1,24 @@
 import { useState } from 'react';
 
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Textarea } from '@app/components/ui/textarea';
+import { Upload } from 'lucide-react';
 
 interface PostmanImportDialogProps {
   open: boolean;
@@ -33,7 +39,9 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
   >([]);
   const [selectedRequestIndex, setSelectedRequestIndex] = useState<number | null>(null);
 
-  const getMethodColor = (method: string): 'success' | 'info' | 'warning' | 'error' | 'default' => {
+  const _getMethodColor = (
+    method: string,
+  ): 'success' | 'info' | 'warning' | 'error' | 'default' => {
     switch (method?.toUpperCase()) {
       case 'GET':
         return 'info';
@@ -280,50 +288,57 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     }
   };
 
+  const getMethodBadgeVariant = (
+    method: string,
+  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    switch (method?.toUpperCase()) {
+      case 'GET':
+        return 'secondary';
+      case 'POST':
+        return 'default';
+      case 'DELETE':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>Import from Postman Collection</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Upload a Postman collection file or paste the JSON below.
-        </Typography>
-        <Box sx={{ mb: 2 }}>
-          <input
-            accept=".json"
-            style={{ display: 'none' }}
-            id="postman-file-upload"
-            type="file"
-            onChange={handlePostmanFileUpload}
-          />
-          <label htmlFor="postman-file-upload">
-            <Button
-              variant="outlined"
-              component="span"
-              startIcon={<UploadFileIcon />}
-              sx={{
-                borderColor: 'primary.main',
-                color: 'primary.main',
-                '&:hover': {
-                  borderColor: 'primary.dark',
-                  backgroundColor: 'action.hover',
-                },
-              }}
-            >
-              Upload JSON File
-            </Button>
-          </label>
-        </Box>
-        <TextField
-          multiline
-          fullWidth
-          rows={postmanRequests.length > 0 ? 5 : 15}
-          value={postmanJson}
-          onChange={(e) => {
-            setPostmanJson(e.target.value);
-            setPostmanRequests([]);
-            setSelectedRequestIndex(null);
-          }}
-          placeholder={`Paste Postman collection JSON here, for example:
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import from Postman Collection</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Upload a Postman collection file or paste the JSON below.
+          </p>
+          <div>
+            <input
+              accept=".json"
+              className="hidden"
+              id="postman-file-upload"
+              type="file"
+              onChange={handlePostmanFileUpload}
+            />
+            <label htmlFor="postman-file-upload">
+              <Button variant="outline" asChild className="cursor-pointer">
+                <span>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload JSON File
+                </span>
+              </Button>
+            </label>
+          </div>
+          <Textarea
+            rows={postmanRequests.length > 0 ? 5 : 15}
+            value={postmanJson}
+            onChange={(e) => {
+              setPostmanJson(e.target.value);
+              setPostmanRequests([]);
+              setSelectedRequestIndex(null);
+            }}
+            placeholder={`Paste Postman collection JSON here, for example:
 {
   "info": {
     "name": "My API",
@@ -349,86 +364,60 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     }
   ]
 }`}
-          sx={{
-            fontFamily: '"Fira code", "Fira Mono", monospace',
-            fontSize: 12,
-          }}
-        />
+            className="font-mono text-xs"
+          />
 
-        {postmanRequests.length > 0 && (
-          <>
-            <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
-              Select a request to import:
-            </Typography>
-            <FormControl fullWidth>
+          {postmanRequests.length > 0 && (
+            <div className="space-y-2">
+              <Label>Select a request to import:</Label>
               <Select
-                value={selectedRequestIndex ?? ''}
-                onChange={(e) => setSelectedRequestIndex(Number(e.target.value))}
-                displayEmpty
+                value={selectedRequestIndex !== null ? String(selectedRequestIndex) : ''}
+                onValueChange={(value) => setSelectedRequestIndex(Number(value))}
               >
-                <MenuItem value="" disabled>
-                  <em>Choose a request...</em>
-                </MenuItem>
-                {postmanRequests.map((req, index) => (
-                  <MenuItem key={index} value={index}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      {req.request?.method && (
-                        <Chip
-                          label={req.request.method}
-                          color={getMethodColor(req.request.method)}
-                          size="small"
-                          sx={{
-                            fontWeight: 600,
-                            fontSize: '0.7rem',
-                            minWidth: '60px',
-                            height: '20px',
-                          }}
-                        />
-                      )}
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {req.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {req.path}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </MenuItem>
-                ))}
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a request..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {postmanRequests.map((req, index) => (
+                    <SelectItem key={index} value={String(index)}>
+                      <div className="flex items-center gap-2">
+                        {req.request?.method && (
+                          <Badge
+                            variant={getMethodBadgeVariant(req.request.method)}
+                            className="min-w-[50px] justify-center text-xs"
+                          >
+                            {req.request.method}
+                          </Badge>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{req.name}</span>
+                          <span className="text-xs text-muted-foreground">{req.path}</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
-            </FormControl>
-          </>
-        )}
+            </div>
+          )}
 
-        {postmanError && (
-          <Typography color="error" sx={{ mt: 2 }}>
-            {postmanError}
-          </Typography>
-        )}
+          {postmanError && <p className="text-sm text-destructive">{postmanError}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          {postmanRequests.length === 0 ? (
+            <Button onClick={handlePostmanParse} disabled={!postmanJson.trim()}>
+              Parse Collection
+            </Button>
+          ) : (
+            <Button onClick={handlePostmanImport} disabled={selectedRequestIndex === null}>
+              Import Selected Request
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
-        {postmanRequests.length === 0 ? (
-          <Button
-            onClick={handlePostmanParse}
-            variant="contained"
-            color="primary"
-            disabled={!postmanJson.trim()}
-          >
-            Parse Collection
-          </Button>
-        ) : (
-          <Button
-            onClick={handlePostmanImport}
-            variant="contained"
-            color="primary"
-            disabled={selectedRequestIndex === null}
-          >
-            Import Selected Request
-          </Button>
-        )}
-      </DialogActions>
     </Dialog>
   );
 };

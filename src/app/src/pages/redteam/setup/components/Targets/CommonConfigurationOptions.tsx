@@ -1,16 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { cn } from '@app/lib/utils';
+import { ChevronDown } from 'lucide-react';
 import ExtensionEditor from './ExtensionEditor';
 import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
-
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
@@ -27,6 +27,8 @@ const CommonConfigurationOptions = ({
   extensions = [],
   onExtensionsChange,
 }: CommonConfigurationOptionsProps) => {
+  const [isDelayExpanded, setIsDelayExpanded] = useState(!!selectedTarget.delay);
+
   const handleExtensionsChange = React.useCallback(
     (newExtensions: string[]) => {
       onExtensionsChange?.(newExtensions);
@@ -35,42 +37,45 @@ const CommonConfigurationOptions = ({
   );
 
   return (
-    <Box>
-      <Accordion defaultExpanded={!!selectedTarget.delay}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Box>
-            <Typography variant="h6">Delay</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Configure the delay between requests
-            </Typography>
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Typography variant="body1" sx={{ mb: 2 }}>
+    <div>
+      <Collapsible open={isDelayExpanded} onOpenChange={setIsDelayExpanded}>
+        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-background p-4 hover:bg-muted/50">
+          <div className="text-left">
+            <h3 className="font-semibold">Delay</h3>
+            <p className="text-sm text-muted-foreground">Configure the delay between requests</p>
+          </div>
+          <ChevronDown
+            className={cn('h-5 w-5 transition-transform', isDelayExpanded && 'rotate-180')}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="px-4 pb-4 pt-2">
+          <p className="mb-4">
             Add a delay (ms) between requests to simulate a real user. See{' '}
-            <a href="https://www.promptfoo.dev/docs/providers/http/#delay" target="_blank">
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#delay"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
               docs
             </a>{' '}
             for more details.
-          </Typography>
-          <Box>
-            <BaseNumberInput
-              min={0}
-              value={selectedTarget.delay ?? ''}
-              onChange={(v) => updateCustomTarget('delay', v)}
-              helperText="Delay in milliseconds (default: 0)"
-            />
-            <br />
-          </Box>
-        </AccordionDetails>
-      </Accordion>
+          </p>
+          <BaseNumberInput
+            min={0}
+            value={selectedTarget.delay ?? ''}
+            onChange={(v) => updateCustomTarget('delay', v)}
+            helperText="Delay in milliseconds (default: 0)"
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       <ExtensionEditor
         extensions={extensions}
         onExtensionsChange={handleExtensionsChange}
         onValidationChange={onValidationChange}
       />
-    </Box>
+    </div>
   );
 };
 

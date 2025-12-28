@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { cn } from '@app/lib/utils';
+import { ChevronDown } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
 
@@ -23,6 +24,7 @@ const FoundationModelConfiguration = ({
   providerType,
 }: FoundationModelConfigurationProps) => {
   const [modelId, setModelId] = useState(selectedTarget.id || '');
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   useEffect(() => {
     setModelId(selectedTarget.id || '');
@@ -123,87 +125,116 @@ const FoundationModelConfiguration = ({
   const providerInfo = getProviderInfo(providerType);
 
   return (
-    <Box mt={2}>
-      <Typography variant="h6" gutterBottom>
-        {providerInfo.name} Configuration
-      </Typography>
+    <div className="mt-4">
+      <h3 className="mb-4 text-lg font-semibold">{providerInfo.name} Configuration</h3>
 
-      <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-        <TextField
-          fullWidth
-          label="Model ID"
-          value={modelId}
-          onChange={handleModelIdChange}
-          margin="normal"
-          required
-          placeholder={providerInfo.placeholder}
-          helperText={
-            <>
-              Specify the model to use. See{' '}
-              <Link href={providerInfo.docUrl} target="_blank">
-                {providerInfo.name} documentation
-              </Link>{' '}
-              for available models.
-            </>
-          }
-        />
+      <div className="rounded-lg border border-border p-4">
+        <div className="space-y-2">
+          <Label htmlFor="model-id">
+            Model ID <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="model-id"
+            value={modelId}
+            onChange={handleModelIdChange}
+            placeholder={providerInfo.placeholder}
+          />
+          <p className="text-sm text-muted-foreground">
+            Specify the model to use. See{' '}
+            <a
+              href={providerInfo.docUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              {providerInfo.name} documentation
+            </a>{' '}
+            for available models.
+          </p>
+        </div>
 
-        <Accordion sx={{ mt: 2 }}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Box>
-              <Typography variant="subtitle1">Advanced Configuration</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Model parameters and API settings
-              </Typography>
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'grid', gap: 2 }}>
-              <TextField
-                label="Temperature"
-                type="number"
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                value={selectedTarget.config?.temperature ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                }
-                helperText="Controls randomness (0.0 to 2.0)"
-              />
+        <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen} className="mt-4">
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-4 py-3 text-left hover:bg-muted">
+            <div>
+              <p className="font-medium">Advanced Configuration</p>
+              <p className="text-sm text-muted-foreground">Model parameters and API settings</p>
+            </div>
+            <ChevronDown
+              className={cn(
+                'h-5 w-5 transition-transform duration-200',
+                isAdvancedOpen && 'rotate-180',
+              )}
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="temperature">Temperature</Label>
+                <Input
+                  id="temperature"
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={selectedTarget.config?.temperature ?? ''}
+                  onChange={(e) =>
+                    updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
+                  }
+                />
+                <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
+              </div>
 
-              <TextField
-                label="Max Tokens"
-                type="number"
-                inputProps={{ min: 1 }}
-                value={selectedTarget.config?.max_tokens ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
-                }
-                helperText="Maximum number of tokens to generate"
-              />
+              <div className="space-y-2">
+                <Label htmlFor="max-tokens">Max Tokens</Label>
+                <Input
+                  id="max-tokens"
+                  type="number"
+                  min={1}
+                  value={selectedTarget.config?.max_tokens ?? ''}
+                  onChange={(e) =>
+                    updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  Maximum number of tokens to generate
+                </p>
+              </div>
 
-              <TextField
-                label="Top P"
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.01 }}
-                value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
-                helperText="Nucleus sampling parameter (0.0 to 1.0)"
-              />
+              <div className="space-y-2">
+                <Label htmlFor="top-p">Top P</Label>
+                <Input
+                  id="top-p"
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={selectedTarget.config?.top_p ?? ''}
+                  onChange={(e) =>
+                    updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  Nucleus sampling parameter (0.0 to 1.0)
+                </p>
+              </div>
 
-              <TextField
-                label="API Key"
-                type="password"
-                value={selectedTarget.config?.apiKey ?? ''}
-                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-                helperText={`Optional - defaults to ${providerInfo.envVar} environment variable`}
-              />
-            </Box>
-          </AccordionDetails>
-        </Accordion>
-      </Box>
-    </Box>
+              <div className="space-y-2">
+                <Label htmlFor="api-key">API Key</Label>
+                <Input
+                  id="api-key"
+                  type="password"
+                  value={selectedTarget.config?.apiKey ?? ''}
+                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional - defaults to {providerInfo.envVar} environment variable
+                </p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    </div>
   );
 };
 

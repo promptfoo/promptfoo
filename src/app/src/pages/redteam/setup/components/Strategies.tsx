@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Separator } from '@app/components/ui/separator';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
@@ -19,6 +15,7 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
+import { AlertTriangle } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
@@ -77,7 +74,6 @@ const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
-  const theme = useTheme();
   const toast = useToast();
   const {
     data: { status: apiHealthStatus },
@@ -580,23 +576,23 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     <PageWrapper
       title="Strategies"
       description={
-        <Box sx={{ maxWidth: '1200px' }}>
-          <Typography variant="body1" sx={{ mb: 2 }}>
+        <div className="max-w-[1200px]">
+          <p className="mb-4">
             Strategies are attack techniques that systematically probe LLM applications for
             vulnerabilities. While plugins generate adversarial inputs, strategies determine how
             these inputs are delivered to maximize attack success rates.{' '}
             <RouterLink
-              style={{ textDecoration: 'underline' }}
+              className="underline"
               to="https://www.promptfoo.dev/docs/red-team/strategies/"
               target="_blank"
             >
               Learn More
             </RouterLink>
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 2 }}>
+          </p>
+          <p>
             Choose the red team strategies that will guide how attacks are generated and executed.
-          </Typography>
-        </Box>
+          </p>
+        </div>
       }
       onNext={onNext}
       onBack={onBack}
@@ -605,74 +601,36 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     >
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon />}
-          sx={(theme) => ({
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            margin: -3,
-            marginBottom: 3,
-            padding: theme.spacing(2, 3),
-            borderRadius: 0,
-            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
-            '& .MuiAlert-message': {
-              width: '100%',
-            },
-          })}
-        >
-          <Box>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              Remote Generation Disabled
-            </Typography>
-            <Typography variant="body2">
-              Some strategies require remote generation and are currently unavailable. These
-              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
-              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-            </Typography>
-          </Box>
+        <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Remote Generation Disabled</AlertTitle>
+          <AlertDescription>
+            Some strategies require remote generation and are currently unavailable. These
+            strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+            enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+          </AlertDescription>
         </Alert>
       )}
 
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon />}
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 9,
-            margin: -3,
-            marginBottom: 3,
-            padding: theme.spacing(2, 3),
-            borderRadius: 0,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            '& .MuiAlert-message': {
-              width: '100%',
-            },
-          }}
-        >
-          <Box>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              Performance Warning: Too Many Strategies Selected
-            </Typography>
-            <Typography variant="body2">
-              Selecting many strategies is usually not efficient and will significantly increase
-              evaluation time and cost. It's recommended to use the preset configurations or select
-              only the strategies specifically needed for your use case.
-            </Typography>
-          </Box>
+        <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
+          <AlertDescription>
+            Selecting many strategies is usually not efficient and will significantly increase
+            evaluation time and cost. It's recommended to use the preset configurations or select
+            only the strategies specifically needed for your use case.
+          </AlertDescription>
         </Alert>
       )}
 
       <TestCaseGenerationProvider redTeamConfig={config} allowPluginChange>
-        <Box>
+        <div>
           <EstimationsDisplay config={config} />
 
-          <Divider sx={{ my: 4 }} />
+          <Separator className="my-8" />
 
           {/* Preset Selector */}
           <PresetSelector
@@ -789,7 +747,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
           />
-        </Box>
+        </div>
       </TestCaseGenerationProvider>
     </PageWrapper>
   );

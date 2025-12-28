@@ -1,13 +1,13 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { Badge } from '@app/components/ui/badge';
+import { Label } from '@app/components/ui/label';
+import { Switch } from '@app/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
-import { Autocomplete, Chip, FormControlLabel, Switch, TextField } from '@mui/material';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { X } from 'lucide-react';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
 
@@ -33,10 +33,14 @@ export const RUNOPTIONS_TEXT = {
     placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
 } as const;
+
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
-    <Tooltip title={tooltip}>
-      <span style={{ textDecoration: 'underline dotted' }}>{label}</span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help underline decoration-dotted">{label}</span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );
 };
@@ -174,11 +178,7 @@ export const DelayBetweenAPICallsInput = ({
       slotProps={{
         input: {
           readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">ms</Typography>
-            </Box>
-          ),
+          endAdornment: <span className="pl-2 text-xs text-muted-foreground">ms</span>,
         },
       }}
       helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
@@ -242,11 +242,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
       slotProps={{
         input: {
           readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">requests</Typography>
-            </Box>
-          ),
+          endAdornment: <span className="pl-2 text-xs text-muted-foreground">requests</span>,
         },
       }}
       helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
@@ -277,7 +273,7 @@ export const RunOptionsContent = ({
     runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
   );
 
-  // Normalize language to array for Autocomplete
+  // Normalize language to array
   const languageArray = useMemo<string[]>(() => {
     if (!language) {
       return [];
@@ -285,18 +281,60 @@ export const RunOptionsContent = ({
     return Array.isArray(language) ? language : [language];
   }, [language]);
 
-  // Handler for language changes
-  const handleLanguageChange = useCallback(
-    (_event: unknown, newValue: string[]) => {
-      // Normalize all language inputs (converts ISO codes to full names)
-      const normalized = newValue.map((lang) => normalizeLanguage(lang));
-      updateConfig('language', normalized.length > 0 ? normalized : undefined);
+  // Language input state
+  const [languageInput, setLanguageInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Filter suggestions based on input
+  const filteredSuggestions = useMemo(() => {
+    if (!languageInput.trim()) {
+      return COMMON_LANGUAGE_NAMES.filter((lang) => !languageArray.includes(lang)).slice(0, 8);
+    }
+    const search = languageInput.toLowerCase();
+    return COMMON_LANGUAGE_NAMES.filter(
+      (lang) => lang.toLowerCase().includes(search) && !languageArray.includes(lang),
+    ).slice(0, 8);
+  }, [languageInput, languageArray]);
+
+  // Add a language
+  const addLanguage = useCallback(
+    (lang: string) => {
+      const normalized = normalizeLanguage(lang);
+      if (normalized && !languageArray.includes(normalized)) {
+        const newLanguages = [...languageArray, normalized];
+        updateConfig('language', newLanguages.length > 0 ? newLanguages : undefined);
+      }
+      setLanguageInput('');
+      setShowSuggestions(false);
     },
-    [updateConfig],
+    [languageArray, updateConfig],
+  );
+
+  // Remove a language
+  const removeLanguage = useCallback(
+    (lang: string) => {
+      const newLanguages = languageArray.filter((l) => l !== lang);
+      updateConfig('language', newLanguages.length > 0 ? newLanguages : undefined);
+    },
+    [languageArray, updateConfig],
+  );
+
+  // Handle keyboard events
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && languageInput.trim()) {
+        e.preventDefault();
+        addLanguage(languageInput.trim());
+      } else if (e.key === 'Escape') {
+        setShowSuggestions(false);
+      }
+    },
+    [languageInput, addLanguage],
   );
 
   return (
-    <Stack spacing={3}>
+    <div className="flex flex-col gap-6">
       <NumberOfTestCasesInput
         value={numTestsInput}
         setValue={setNumTestsInput}
@@ -326,43 +364,72 @@ export const RunOptionsContent = ({
         canSetMaxConcurrency={canSetMaxConcurrency}
         setDelayValue={setDelayInput}
       />
-      <FormControlLabel
-        control={
-          <Switch
-            checked={runOptions?.verbose}
-            onChange={(e) => updateRunOption('verbose', e.target.checked)}
-          />
-        }
-        label={
-          <Box>
-            <Typography variant="body1">Debug mode</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Show additional debug information in logs
-            </Typography>
-          </Box>
-        }
-      />
-      <Autocomplete
-        multiple
-        freeSolo
-        options={COMMON_LANGUAGE_NAMES}
-        value={languageArray}
-        onChange={handleLanguageChange}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => {
-            const { key, ...tagProps } = getTagProps({ index });
-            return <Chip key={key} label={option} {...tagProps} />;
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={RUNOPTIONS_TEXT.languages.label}
-            placeholder={RUNOPTIONS_TEXT.languages.placeholder}
-            helperText={RUNOPTIONS_TEXT.languages.helper}
-          />
-        )}
-      />
-    </Stack>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="debug-mode"
+          checked={runOptions?.verbose ?? false}
+          onCheckedChange={(checked) => updateRunOption('verbose', checked)}
+        />
+        <div className="flex flex-col">
+          <Label htmlFor="debug-mode" className="cursor-pointer">
+            Debug mode
+          </Label>
+          <span className="text-sm text-muted-foreground">
+            Show additional debug information in logs
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{RUNOPTIONS_TEXT.languages.label}</Label>
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-1 rounded-md border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+            {languageArray.map((lang) => (
+              <Badge key={lang} variant="secondary" className="gap-1">
+                {lang}
+                <button
+                  type="button"
+                  onClick={() => removeLanguage(lang)}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            <input
+              ref={inputRef}
+              type="text"
+              value={languageInput}
+              onChange={(e) => setLanguageInput(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => {
+                // Delay to allow click on suggestions
+                setTimeout(() => setShowSuggestions(false), 200);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={languageArray.length === 0 ? RUNOPTIONS_TEXT.languages.placeholder : ''}
+              className="min-w-[150px] flex-1 border-none bg-transparent outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          {showSuggestions && filteredSuggestions.length > 0 && (
+            <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
+              {filteredSuggestions.map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => addLanguage(lang)}
+                  className="w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <span className="text-sm text-muted-foreground">{RUNOPTIONS_TEXT.languages.helper}</span>
+      </div>
+    </div>
   );
 };

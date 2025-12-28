@@ -1,39 +1,57 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import TextField, { type TextFieldProps } from '@mui/material/TextField';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { cn } from '@app/lib/utils';
+import { Eye, EyeOff } from 'lucide-react';
+
+interface SensitiveTextFieldProps {
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  className?: string;
+  id?: string;
+  disabled?: boolean;
+}
 
 /**
- * A TextField component for sensitive input (passwords, passphrases, etc.)
+ * An Input component for sensitive input (passwords, passphrases, etc.)
  * with built-in visibility toggle functionality
  */
-const SensitiveTextField: React.FC<TextFieldProps> = (props) => {
-  const [showValue, setShowValue] = React.useState(false);
+const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
+  value,
+  onChange,
+  placeholder,
+  className,
+  id,
+  disabled,
+}) => {
+  const [showValue, setShowValue] = useState(false);
 
   return (
-    <TextField
-      {...props}
-      type={showValue ? 'text' : 'password'}
-      InputProps={{
-        ...props.InputProps,
-        endAdornment: (
-          <InputAdornment position="end">
-            {props.InputProps?.endAdornment}
-            <IconButton
-              aria-label="toggle password visibility"
-              onClick={() => setShowValue(!showValue)}
-              onMouseDown={(e) => e.preventDefault()}
-              edge="end"
-            >
-              {showValue ? <VisibilityOff /> : <Visibility />}
-            </IconButton>
-          </InputAdornment>
-        ),
-      }}
-    />
+    <div className="relative">
+      <Input
+        id={id}
+        type={showValue ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={cn('pr-10', className)}
+        disabled={disabled}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+        onClick={() => setShowValue(!showValue)}
+        onMouseDown={(e) => e.preventDefault()}
+        aria-label="toggle password visibility"
+        disabled={disabled}
+      >
+        {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
+    </div>
   );
 };
 

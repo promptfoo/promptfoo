@@ -1,23 +1,14 @@
 import React from 'react';
 
+import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Separator } from '@app/components/ui/separator';
+import { Spinner } from '@app/components/ui/spinner';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { AlertTriangle, CheckCircle, Info, Play, XCircle } from 'lucide-react';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -111,159 +102,169 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   };
 
   return (
-    <Stack spacing={3}>
+    <div className="space-y-6">
       {/* Stateful Configuration Section */}
-      <Box>
-        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-          Does your system maintain conversation state?
-        </Typography>
+      <div>
+        <p className="mb-4 font-semibold">Does your system maintain conversation state?</p>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This determines whether your application remembers context from previous messages in a
           conversation.
-        </Typography>
+        </p>
 
-        <FormControl>
-          <RadioGroup
-            value={String(selectedTarget.config.stateful ?? false)}
-            onChange={(e) => {
-              updateCustomTarget('stateful', e.target.value === 'true');
-              setTestResult(null); // Clear test results when configuration changes
-            }}
-          >
-            <FormControlLabel
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="radio"
+              name="stateful"
               value="true"
-              control={<Radio />}
-              sx={{ alignItems: 'flex-start' }}
-              label={
-                <Box>
-                  <Typography variant="body1">Yes - my system is stateful</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    The system maintains conversation history and context across messages
-                  </Typography>
-                </Box>
-              }
+              checked={String(selectedTarget.config.stateful ?? false) === 'true'}
+              onChange={(e) => {
+                updateCustomTarget('stateful', e.target.value === 'true');
+                setTestResult(null);
+              }}
+              className="mt-1"
             />
-            <FormControlLabel
+            <div>
+              <p className="font-medium">Yes - my system is stateful</p>
+              <p className="text-sm text-muted-foreground">
+                The system maintains conversation history and context across messages
+              </p>
+            </div>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="radio"
+              name="stateful"
               value="false"
-              sx={{ alignItems: 'flex-start' }}
-              control={<Radio />}
-              label={
-                <Box>
-                  <Typography variant="body1">No - my system is not stateful</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    The full conversation history must be sent with every request
-                  </Typography>
-                </Box>
-              }
+              checked={String(selectedTarget.config.stateful ?? false) === 'false'}
+              onChange={(e) => {
+                updateCustomTarget('stateful', e.target.value === 'true');
+                setTestResult(null);
+              }}
+              className="mt-1"
             />
-          </RadioGroup>
-        </FormControl>
+            <div>
+              <p className="font-medium">No - my system is not stateful</p>
+              <p className="text-sm text-muted-foreground">
+                The full conversation history must be sent with every request
+              </p>
+            </div>
+          </label>
+        </div>
 
         {/* Info alert when system is not stateful */}
         {selectedTarget.config.stateful === false && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>Non-stateful configuration:</strong> Since your system doesn't maintain
-              conversation history, the full context will be included in each request during
-              multi-turn testing. This ensures each message contains all necessary information from
-              previous turns.
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              Session management configuration is not needed for non-stateful systems.
-            </Typography>
+          <Alert variant="info" className="mt-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-semibold">Non-stateful configuration:</p>
+              <p className="mt-1">
+                Since your system doesn't maintain conversation history, the full context will be
+                included in each request during multi-turn testing. This ensures each message
+                contains all necessary information from previous turns.
+              </p>
+              <p className="mt-2">
+                Session management configuration is not needed for non-stateful systems.
+              </p>
+            </AlertDescription>
           </Alert>
         )}
-      </Box>
+      </div>
 
       {/* Only show session management options if the system is stateful */}
       {selectedTarget.config.stateful !== false && (
         <>
-          <Divider />
+          <Separator />
 
           {/* Session Management Section */}
-          <Box>
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-              How does your target manage sessions?
-            </Typography>
+          <div>
+            <p className="mb-4 font-semibold">How does your target manage sessions?</p>
 
-            <FormControl>
-              <RadioGroup
-                value={selectedTarget.config.sessionSource || 'server'}
-                onChange={(e) => {
-                  updateCustomTarget('sessionSource', e.target.value);
-                  if (e.target.value === 'client') {
-                    updateCustomTarget('sessionParser', undefined);
-                  }
-                  setTestResult(null); // Clear test results when configuration changes
-                }}
-              >
-                <FormControlLabel
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="radio"
+                  name="sessionSource"
                   value="server"
-                  control={<Radio />}
-                  sx={{ alignItems: 'flex-start' }}
-                  label={
-                    <Box>
-                      <Typography variant="body1">Server-generated Session ID</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Your server creates and returns session IDs (e.g., in cookies, headers, or
-                        response body)
-                      </Typography>
-                    </Box>
+                  checked={
+                    selectedTarget.config.sessionSource === 'server' ||
+                    !selectedTarget.config.sessionSource
                   }
+                  onChange={(e) => {
+                    updateCustomTarget('sessionSource', e.target.value);
+                    if (e.target.value === 'client') {
+                      updateCustomTarget('sessionParser', undefined);
+                    }
+                    setTestResult(null);
+                  }}
+                  className="mt-1"
                 />
-                <FormControlLabel
+                <div>
+                  <p className="font-medium">Server-generated Session ID</p>
+                  <p className="text-sm text-muted-foreground">
+                    Your server creates and returns session IDs (e.g., in cookies, headers, or
+                    response body)
+                  </p>
+                </div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="radio"
+                  name="sessionSource"
                   value="client"
-                  control={<Radio />}
-                  sx={{ alignItems: 'flex-start' }}
-                  label={
-                    <Box>
-                      <Typography variant="body1">Client-generated Session ID</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        The client generates session IDs and includes them in requests
-                      </Typography>
-                    </Box>
-                  }
+                  checked={selectedTarget.config.sessionSource === 'client'}
+                  onChange={(e) => {
+                    updateCustomTarget('sessionSource', e.target.value);
+                    if (e.target.value === 'client') {
+                      updateCustomTarget('sessionParser', undefined);
+                    }
+                    setTestResult(null);
+                  }}
+                  className="mt-1"
                 />
-              </RadioGroup>
-            </FormControl>
-          </Box>
+                <div>
+                  <p className="font-medium">Client-generated Session ID</p>
+                  <p className="text-sm text-muted-foreground">
+                    The client generates session IDs and includes them in requests
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
 
           {selectedTarget.config.sessionSource === 'server' ||
           selectedTarget.config.sessionSource == null ? (
             <>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                  Session ID Extraction
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <div>
+                <p className="mb-2 font-semibold">Session ID Extraction</p>
+                <p className="mb-4 text-sm text-muted-foreground">
                   Specify how to extract the session ID from the server response. Leave empty if the
                   session ID is automatically handled (e.g., via cookies).
-                </Typography>
+                </p>
 
-                <TextField
-                  fullWidth
-                  label="Session Parser (Required)"
-                  value={selectedTarget.config.sessionParser || ''}
-                  placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
-                  onChange={(e) => {
-                    updateCustomTarget('sessionParser', e.target.value);
-                    setTestResult(null); // Clear test results when configuration changes
-                  }}
-                  margin="normal"
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  helperText="JavaScript expression to extract the session ID from the response"
-                />
-              </Box>
+                <div className="space-y-2">
+                  <Label htmlFor="session-parser">Session Parser (Required)</Label>
+                  <Input
+                    id="session-parser"
+                    value={selectedTarget.config.sessionParser || ''}
+                    placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
+                    onChange={(e) => {
+                      updateCustomTarget('sessionParser', e.target.value);
+                      setTestResult(null);
+                    }}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    JavaScript expression to extract the session ID from the response
+                  </p>
+                </div>
+              </div>
 
-              <Alert severity="info">
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Common patterns:
-                </Typography>
-                <Typography variant="body2" component="div">
-                  <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
+              <Alert variant="info">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="mb-2 font-semibold">Common patterns:</p>
+                  <ul className="list-inside list-disc space-y-1 text-sm">
                     <li>
                       <strong>Header:</strong> <code>data.headers['x-session-id']</code>
                     </li>
@@ -278,255 +279,253 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                       <strong>JWT token:</strong> <code>JSON.parse(data.body).auth_token</code>
                     </li>
                   </ul>
-                </Typography>
+                </AlertDescription>
               </Alert>
             </>
           ) : (
-            <Box>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Client-generated sessions enabled
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  A unique UUID will be generated for each conversation and stored in the{' '}
-                  <code>sessionId</code> variable. Include <code>{'{{sessionId}}'}</code> in your
-                  request headers or body where needed.
-                </Typography>
+            <div>
+              <Alert variant="info" className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="mb-2 font-semibold">Client-generated sessions enabled</p>
+                  <p className="mb-4">
+                    A unique UUID will be generated for each conversation and stored in the{' '}
+                    <code className="rounded bg-muted px-1">sessionId</code> variable. Include{' '}
+                    <code className="rounded bg-muted px-1">{'{{sessionId}}'}</code> in your request
+                    headers or body where needed.
+                  </p>
 
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  <strong>Usage examples:</strong>
-                </Typography>
-                <Typography variant="body2" component="div" color="text.secondary">
-                  In your request headers:
-                  <br />
-                  <code>X-Session-ID: {'{{sessionId}}'}</code>
-                  <br />
-                  <br />
-                  Or in your request body:
-                  <br />
-                  <code>
-                    {JSON.stringify(
-                      { session_id: '{{sessionId}}', message: '{{prompt}}' },
-                      null,
-                      2,
-                    )}
-                  </code>
-                </Typography>
+                  <p className="mb-2 text-muted-foreground">
+                    <strong>Usage examples:</strong>
+                  </p>
+                  <div className="text-sm text-muted-foreground">
+                    In your request headers:
+                    <br />
+                    <code className="rounded bg-muted px-1">X-Session-ID: {'{{sessionId}}'}</code>
+                    <br />
+                    <br />
+                    Or in your request body:
+                    <br />
+                    <code className="rounded bg-muted px-1">
+                      {JSON.stringify(
+                        { session_id: '{{sessionId}}', message: '{{prompt}}' },
+                        null,
+                        2,
+                      )}
+                    </code>
+                  </div>
+                </AlertDescription>
               </Alert>
-            </Box>
+            </div>
           )}
 
           {/* Session Test Section */}
-          <Paper
-            elevation={1}
-            sx={{ p: 3, backgroundColor: 'background.default', overflow: 'auto' }}
-          >
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-              Test Session Configuration
-            </Typography>
+          <div className="rounded-lg border border-border bg-muted/30 p-6">
+            <p className="mb-4 font-semibold">Test Session Configuration</p>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <p className="mb-4 text-sm text-muted-foreground">
               Run a quick test to verify that your session configuration is working correctly. This
               will send two requests: first to establish a session with test data, then a second
               request to verify the session persists.
-            </Typography>
+            </p>
 
             <Button
-              variant="contained"
               onClick={runSessionTest}
               disabled={isTestRunning || !selectedTarget.config.url}
-              startIcon={isTestRunning ? <CircularProgress size={20} /> : <PlayArrowIcon />}
-              sx={{ mb: 2 }}
+              className="mb-4"
             >
-              {isTestRunning ? 'Testing Session...' : 'Test Session'}
+              {isTestRunning ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Testing Session...
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Test Session
+                </>
+              )}
             </Button>
 
             {!selectedTarget.config.url && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                Please configure the target URL in the endpoint configuration before testing
-                sessions.
+              <Alert variant="warning" className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Please configure the target URL in the endpoint configuration before testing
+                  sessions.
+                </AlertDescription>
               </Alert>
             )}
 
             {testResult && (
-              <Alert
-                severity={testResult.success ? 'success' : 'error'}
-                icon={testResult.success ? <CheckCircleIcon /> : <ErrorIcon />}
-                sx={{ mt: 2 }}
-              >
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                  {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
-                </Typography>
+              <Alert variant={testResult.success ? 'default' : 'destructive'} className="mt-4">
+                {testResult.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  <p className="mb-2 font-semibold">
+                    {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
+                  </p>
 
-                <Typography
-                  variant="body2"
-                  sx={{ mb: testResult.details ? 2 : 0, overflowWrap: 'anywhere' }}
-                >
-                  {testResult.message}
-                </Typography>
+                  <p
+                    className={testResult.details ? 'mb-4' : ''}
+                    style={{ overflowWrap: 'anywhere' }}
+                  >
+                    {testResult.message}
+                  </p>
 
-                {testResult.details && (
-                  <Box sx={{ mt: 2 }}>
-                    {!testResult.success && (
-                      <Alert severity="warning" sx={{ mb: 2 }}>
-                        <Typography variant="caption">
-                          <strong>What to check:</strong>
-                          <br />• Verify your session configuration matches your target's
-                          requirements
-                          <br />• For server sessions: Check the session parser extracts the correct
-                          ID
-                          <br />• For client sessions: Ensure the {'{{sessionId}}'} variable is in
-                          the right place
-                          <br />• Confirm your target actually supports stateful conversations
-                        </Typography>
-                      </Alert>
-                    )}
+                  {testResult.details && (
+                    <div className="mt-4">
+                      {!testResult.success && (
+                        <Alert variant="warning" className="mb-4">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>What to check:</strong>
+                            <br />• Verify your session configuration matches your target's
+                            requirements
+                            <br />• For server sessions: Check the session parser extracts the
+                            correct ID
+                            <br />• For client sessions: Ensure the {'{{sessionId}}'} variable is in
+                            the right place
+                            <br />• Confirm your target actually supports stateful conversations
+                          </AlertDescription>
+                        </Alert>
+                      )}
 
-                    <details style={{ marginTop: '8px' }}>
-                      <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
-                        <Typography variant="caption" component="span">
+                      <details className="mt-2">
+                        <summary className="cursor-pointer select-none text-sm">
                           View detailed test results
-                        </Typography>
-                      </summary>
+                        </summary>
 
-                      <Box sx={{ mt: 2 }}>
-                        {/* Chat Messages */}
-                        <ChatMessages
-                          messages={(() => {
-                            const messages: Message[] = [];
+                        <div className="mt-4">
+                          {/* Chat Messages */}
+                          <ChatMessages
+                            messages={(() => {
+                              const messages: Message[] = [];
 
-                            // Add first request
-                            if (testResult.details.request1?.prompt) {
-                              messages.push({
-                                role: 'user',
-                                content: testResult.details.request1.prompt,
-                              });
-                            }
+                              // Add first request
+                              if (testResult.details.request1?.prompt) {
+                                messages.push({
+                                  role: 'user',
+                                  content: testResult.details.request1.prompt,
+                                });
+                              }
 
-                            // Add first response
-                            if (testResult.details.response1) {
-                              const content =
-                                typeof testResult.details.response1 === 'string'
-                                  ? testResult.details.response1
-                                  : JSON.stringify(testResult.details.response1, null, 2);
-                              messages.push({
-                                role: 'assistant',
-                                content,
-                              });
-                            }
+                              // Add first response
+                              if (testResult.details.response1) {
+                                const content =
+                                  typeof testResult.details.response1 === 'string'
+                                    ? testResult.details.response1
+                                    : JSON.stringify(testResult.details.response1, null, 2);
+                                messages.push({
+                                  role: 'assistant',
+                                  content,
+                                });
+                              }
 
-                            // Add second request
-                            if (testResult.details.request2?.prompt) {
-                              messages.push({
-                                role: 'user',
-                                content: testResult.details.request2.prompt,
-                              });
-                            }
+                              // Add second request
+                              if (testResult.details.request2?.prompt) {
+                                messages.push({
+                                  role: 'user',
+                                  content: testResult.details.request2.prompt,
+                                });
+                              }
 
-                            // Add second response
-                            if (testResult.details.response2) {
-                              const content =
-                                typeof testResult.details.response2 === 'string'
-                                  ? testResult.details.response2
-                                  : JSON.stringify(testResult.details.response2, null, 2);
-                              messages.push({
-                                role: 'assistant',
-                                content,
-                              });
-                            }
+                              // Add second response
+                              if (testResult.details.response2) {
+                                const content =
+                                  typeof testResult.details.response2 === 'string'
+                                    ? testResult.details.response2
+                                    : JSON.stringify(testResult.details.response2, null, 2);
+                                messages.push({
+                                  role: 'assistant',
+                                  content,
+                                });
+                              }
 
-                            return messages;
-                          })()}
-                        />
+                              return messages;
+                            })()}
+                          />
 
-                        {/* Test Result Explanation */}
-                        {testResult.reason && (
-                          <Alert
-                            severity={testResult.success ? 'success' : 'warning'}
-                            sx={{ mt: 2 }}
-                          >
-                            <Typography variant="caption">
-                              <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
-                              {testResult.reason}
-                            </Typography>
-                          </Alert>
-                        )}
-
-                        {/* Session ID Info */}
-                        <Box
-                          sx={{
-                            mt: 2,
-                            p: 1.5,
-                            backgroundColor: 'rgba(0,0,0,0.03)',
-                            borderRadius: 1,
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            <strong>Session ID used:</strong>{' '}
-                            {testResult.details.sessionId || 'None'}
-                          </Typography>
-                          {testResult.details.sessionSource && (
-                            <>
-                              <br />
-                              <Typography variant="caption" color="text.secondary">
-                                <strong>Session source:</strong> {testResult.details.sessionSource}
-                              </Typography>
-                            </>
+                          {/* Test Result Explanation */}
+                          {testResult.reason && (
+                            <Alert
+                              variant={testResult.success ? 'default' : 'warning'}
+                              className="mt-4"
+                            >
+                              {testResult.success ? (
+                                <CheckCircle className="h-4 w-4" />
+                              ) : (
+                                <AlertTriangle className="h-4 w-4" />
+                              )}
+                              <AlertDescription>
+                                <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
+                                {testResult.reason}
+                              </AlertDescription>
+                            </Alert>
                           )}
-                          {testResult.details.hasSessionIdTemplate !== undefined && (
-                            <>
-                              <br />
-                              <Typography variant="caption" color="text.secondary">
+
+                          {/* Session ID Info */}
+                          <div className="mt-4 rounded-md bg-muted/50 p-3">
+                            <p className="text-sm text-muted-foreground">
+                              <strong>Session ID used:</strong>{' '}
+                              {testResult.details.sessionId || 'None'}
+                            </p>
+                            {testResult.details.sessionSource && (
+                              <p className="text-sm text-muted-foreground">
+                                <strong>Session source:</strong> {testResult.details.sessionSource}
+                              </p>
+                            )}
+                            {testResult.details.hasSessionIdTemplate !== undefined && (
+                              <p className="text-sm text-muted-foreground">
                                 <strong>{'{{sessionId}}'} template found:</strong>{' '}
                                 {testResult.details.hasSessionIdTemplate ? 'Yes' : 'No'}
-                              </Typography>
-                            </>
-                          )}
-                          {testResult.details.hasSessionParser !== undefined && (
-                            <>
-                              <br />
-                              <Typography variant="caption" color="text.secondary">
+                              </p>
+                            )}
+                            {testResult.details.hasSessionParser !== undefined && (
+                              <p className="text-sm text-muted-foreground">
                                 <strong>Session parser configured:</strong>{' '}
                                 {testResult.details.hasSessionParser ? 'Yes' : 'No'}
-                              </Typography>
-                            </>
-                          )}
-                          {testResult.details.sessionParser && (
-                            <>
-                              <br />
-                              <Typography variant="caption" color="text.secondary">
+                              </p>
+                            )}
+                            {testResult.details.sessionParser && (
+                              <p className="text-sm text-muted-foreground">
                                 <strong>Session parser:</strong>{' '}
-                                <code>{testResult.details.sessionParser}</code>
-                              </Typography>
-                            </>
-                          )}
-                        </Box>
-                      </Box>
-                    </details>
-                  </Box>
-                )}
+                                <code className="rounded bg-muted px-1">
+                                  {testResult.details.sessionParser}
+                                </code>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
-          </Paper>
+          </div>
         </>
       )}
 
       {/* Documentation link - always visible */}
-      <Box>
-        <Typography variant="caption" color="text.secondary">
+      <div>
+        <p className="text-sm text-muted-foreground">
           For more information, see the{' '}
           <a
             href="https://www.promptfoo.dev/docs/providers/http/#session-management"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'inherit' }}
+            className="text-primary hover:underline"
           >
             session management documentation
           </a>
           .
-        </Typography>
-      </Box>
-    </Stack>
+        </p>
+      </div>
+    </div>
   );
 };
 

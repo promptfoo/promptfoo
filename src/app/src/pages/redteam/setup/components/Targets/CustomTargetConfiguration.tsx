@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
 
 import type { ProviderOptions } from '../../types';
 
@@ -47,55 +45,56 @@ const CustomTargetConfiguration = ({
   };
 
   return (
-    <Box mt={2}>
-      <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-        <TextField
-          fullWidth
-          label="Target ID"
-          value={targetId}
-          onChange={handleTargetIdChange}
-          margin="normal"
-          required
-          placeholder="e.g., openai:chat:gpt-4o"
-          helperText={
-            <>
-              The configuration string for your custom target. See{' '}
-              <Link href="https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets">
-                Custom Targets documentation
-              </Link>{' '}
-              for more information.
-            </>
-          }
-        />
+    <div className="mt-4">
+      <div className="mt-4 rounded-lg border p-4">
+        <div className="space-y-2">
+          <Label htmlFor="target-id">
+            Target ID <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="target-id"
+            value={targetId}
+            onChange={handleTargetIdChange}
+            placeholder="e.g., openai:chat:gpt-4o"
+          />
+          <p className="text-sm text-muted-foreground">
+            The configuration string for your custom target. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets"
+              className="text-primary hover:underline"
+            >
+              Custom Targets documentation
+            </a>{' '}
+            for more information.
+          </p>
+        </div>
 
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-          Custom Configuration
-        </Typography>
-        <TextField
-          fullWidth
-          label="Configuration (JSON)"
-          value={rawConfigJson}
-          onChange={(e) => {
-            setRawConfigJson(e.target.value);
-            try {
-              const config = JSON.parse(e.target.value);
-              updateCustomTarget('config', config);
-            } catch (error) {
-              console.error('Invalid JSON configuration:', error);
-            }
-          }}
-          margin="normal"
-          multiline
-          minRows={4}
-          maxRows={10}
-          error={!!bodyError}
-          helperText={bodyError || 'Enter your custom configuration as JSON'}
-          InputProps={{
-            inputComponent: TextareaAutosize,
-          }}
-        />
-      </Box>
-    </Box>
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="config-json">Custom Configuration</Label>
+          <Textarea
+            id="config-json"
+            value={rawConfigJson}
+            onChange={(e) => {
+              setRawConfigJson(e.target.value);
+              try {
+                const config = JSON.parse(e.target.value);
+                updateCustomTarget('config', config);
+              } catch (error) {
+                console.error('Invalid JSON configuration:', error);
+              }
+            }}
+            rows={6}
+            placeholder="Configuration (JSON)"
+            className={bodyError ? 'border-destructive' : ''}
+          />
+          {bodyError ? (
+            <p className="text-sm text-destructive">{bodyError}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Enter your custom configuration as JSON</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

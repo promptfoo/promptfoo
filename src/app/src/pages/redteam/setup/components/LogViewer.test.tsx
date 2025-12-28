@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LogViewer } from './LogViewer';
@@ -22,8 +21,6 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
-
-const theme = createTheme();
 
 describe('LogViewer', () => {
   const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
@@ -56,21 +53,17 @@ describe('LogViewer', () => {
       value: containerWidth * 2,
     });
 
-    render(
-      <ThemeProvider theme={theme}>
-        <LogViewer logs={logs} />
-      </ThemeProvider>,
-    );
+    const { container } = render(<LogViewer logs={logs} />);
 
     const logTextElement = screen.getByText(new RegExp(longLogLine));
-    const logContainer = logTextElement.parentElement;
+    // The parent element contains the whitespace-pre class, the grandparent has overflow-auto
+    const logContainerOuter = container.querySelector('.overflow-auto');
 
-    expect(logContainer).toBeInTheDocument();
+    expect(logContainerOuter).toBeInTheDocument();
+    expect(logTextElement).toBeInTheDocument();
 
-    expect(logContainer).toHaveStyle({ overflowX: 'auto' });
-
-    if (logContainer) {
-      expect(logContainer.scrollWidth).toBeGreaterThan(logContainer.clientWidth);
+    if (logContainerOuter) {
+      expect(logContainerOuter.scrollWidth).toBeGreaterThan(logContainerOuter.clientWidth);
     }
   });
 
@@ -112,16 +105,12 @@ describe('LogViewer', () => {
       width: initialWidth,
     });
 
-    render(
-      <ThemeProvider theme={theme}>
-        <LogViewer logs={logs} />
-      </ThemeProvider>,
-    );
+    render(<LogViewer logs={logs} />);
 
     // Get the first occurrence of "Log line 1" (not in the dialog)
     const logTextElements = screen.getAllByText(/Log line 1/);
-    // Get the Paper element which has the width style (first one, not in dialog)
-    const logContainer = logTextElements[0].closest('.MuiPaper-root');
+    // Get the container element which has the width style
+    const logContainer = logTextElements[0].closest('[data-width]');
 
     expect(logContainer).toBeInTheDocument();
 
@@ -177,7 +166,7 @@ describe('LogViewer', () => {
     await waitFor(() => {
       // Re-query for the element as it may have been re-rendered
       const updatedLogTextElements = screen.getAllByText(/Log line 1/);
-      const updatedLogContainer = updatedLogTextElements[0].closest('.MuiPaper-root');
+      const updatedLogContainer = updatedLogTextElements[0].closest('[data-width]');
       // Check the data attribute to verify the width has updated
       expect(updatedLogContainer).toHaveAttribute('data-width', newWidth.toString());
     });
