@@ -49,6 +49,7 @@ export function redteamRunCommand(program: Command) {
       'Only run tests with these providers (regex match)',
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option('-d, --description <text>', 'Custom description/name for this scan run')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});
@@ -67,6 +68,12 @@ export function redteamRunCommand(program: Command) {
         ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
         }
+
+        // Override description if provided via CLI flag
+        if (opts.description) {
+          configObj.description = opts.description;
+        }
+
         opts.liveRedteamConfig = configObj;
         opts.config = undefined;
 

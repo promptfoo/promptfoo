@@ -1,5 +1,3 @@
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 import RiskCard from './RiskCard';
@@ -31,8 +29,8 @@ const RiskCategories = ({
   }));
 
   return (
-    <Stack spacing={4}>
-      <Typography variant="h5">Risk Categories</Typography>
+    <div className="space-y-8">
+      <h2 className="text-xl font-semibold">Risk Categories</h2>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];
@@ -73,7 +71,7 @@ const RiskCategories = ({
           />
         );
       })}
-    </Stack>
+    </div>
   );
 };
 

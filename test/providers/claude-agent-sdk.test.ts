@@ -150,7 +150,7 @@ describe('ClaudeCodeSDKProvider', () => {
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
 
     // Default mocks
-    mockTransformMCPConfigToClaudeCode.mockReturnValue({});
+    mockTransformMCPConfigToClaudeCode.mockResolvedValue({});
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -660,7 +660,7 @@ describe('ClaudeCodeSDKProvider', () => {
     describe('MCP configuration', () => {
       it('should transform MCP config', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
-        mockTransformMCPConfigToClaudeCode.mockReturnValue({
+        mockTransformMCPConfigToClaudeCode.mockResolvedValue({
           'test-server': {
             command: 'test-command',
             args: ['arg1'],

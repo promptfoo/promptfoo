@@ -15,7 +15,6 @@ import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
-import SimbaProvider from '../redteam/providers/simba';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -112,6 +111,7 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
+import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -1155,6 +1155,14 @@ export const providerMap: ProviderFactory[] = [
         });
       }
 
+      // Handle xai:voice:<model> format for Voice Agent API
+      if (modelType === 'voice') {
+        return createXAIVoiceProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
       // Handle regular xai:<model> format
       return createXAIProvider(providerPath, {
         config: providerOptions,
@@ -1364,16 +1372,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamMischievousUserProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simba',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new SimbaProvider(providerOptions.config);
     },
   },
   {

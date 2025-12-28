@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ quiet: true });
 
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -84,10 +85,38 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   process.exit(1);
 }
 
+/**
+ * Finds the static directory containing the web app.
+ *
+ * When running in development (tsx), getDirectory() returns src/ and the app is at src/app/.
+ * When bundled into dist/src/server/index.js, getDirectory() returns dist/src/server/
+ * but the app is at dist/src/app/, so we need to check the parent directory.
+ */
+export function findStaticDir(): string {
+  const baseDir = getDirectory();
+
+  // Try the standard location first (works in development)
+  const standardPath = path.join(baseDir, 'app');
+  if (fs.existsSync(path.join(standardPath, 'index.html'))) {
+    return standardPath;
+  }
+
+  // When bundled, the server is at dist/src/server/ but app is at dist/src/app/
+  const parentPath = path.resolve(baseDir, '..', 'app');
+  if (fs.existsSync(path.join(parentPath, 'index.html'))) {
+    logger.debug(`Static directory resolved to parent: ${parentPath}`);
+    return parentPath;
+  }
+
+  // Fall back to standard path even if it doesn't exist (will fail gracefully later)
+  logger.warn(`Static directory not found at ${standardPath} or ${parentPath}`);
+  return standardPath;
+}
+
 export function createApp() {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'app');
+  const staticDir = findStaticDir();
 
   app.use(cors());
   app.use(compression());

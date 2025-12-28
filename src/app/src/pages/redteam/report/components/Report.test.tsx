@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
@@ -8,6 +9,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
+
+// Helper to render with all needed providers
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <TooltipProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </TooltipProvider>,
+  );
+};
 
 vi.mock('@app/utils/api');
 vi.mock('react-router-dom', async () => {
@@ -612,11 +622,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const overviewTotal = await screen.findByTestId('overview-total');
     expect(overviewTotal).toHaveTextContent('1');
@@ -635,11 +641,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toHaveTextContent('Target: Provider 0');
@@ -696,11 +698,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toBeInTheDocument();
@@ -713,11 +711,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const chip = await screen.findByText('Target:');
     expect(chip).toBeInTheDocument();
@@ -773,11 +767,7 @@ describe('App component categoryStats calculation with moderation', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />,
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('overview-category-stats')).toBeInTheDocument();
