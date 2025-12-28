@@ -320,38 +320,72 @@ describe('ProviderDisplay', () => {
   };
 
   describe('provider name display', () => {
-    it('displays provider with prefix and name', () => {
+    it('displays provider with prefix:name format for standard providers', () => {
       renderWithProviders('openai:gpt-4o', undefined);
       expect(screen.getByText('openai:')).toBeInTheDocument();
       expect(screen.getByText('gpt-4o')).toBeInTheDocument();
     });
 
-    it('displays label when provided', () => {
+    it('displays label when matched by label', () => {
       const providers = [{ id: 'openai:gpt-4o', label: 'My Custom GPT' }];
       renderWithProviders('My Custom GPT', providers);
       expect(screen.getByText('My Custom GPT')).toBeInTheDocument();
     });
+
+    it('displays only provider name for providers without colon (e.g., echo)', () => {
+      const { container } = renderWithProviders('echo', undefined);
+      // Should show just "echo", not "echo:echo"
+      const span = container.querySelector('span');
+      expect(span?.textContent).toBe('echo');
+      // Verify no duplication - only one "echo" text node
+      expect(screen.getAllByText('echo')).toHaveLength(1);
+    });
+
+    it('does not duplicate display when label equals model name', () => {
+      // Critical regression test: when label="gpt-4o" and id="openai:gpt-4o",
+      // matching by label should show "gpt-4o" ONCE, not "gpt-4o:gpt-4o"
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          label: 'gpt-4o',
+          config: { temperature: 0.7 },
+        },
+      ];
+      renderWithProviders('gpt-4o', providers);
+
+      // Should show label exactly once
+      expect(screen.getAllByText('gpt-4o')).toHaveLength(1);
+      // The display should NOT contain a colon (would indicate duplication)
+      const span = screen.getByText('gpt-4o').closest('span');
+      expect(span?.textContent).toBe('gpt-4o');
+    });
   });
 
   describe('tooltip behavior', () => {
-    it('shows tooltip on hover with config', async () => {
+    it('shows tooltip with config on hover', async () => {
       const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
-          config: { temperature: 0.7 },
+          config: { temperature: 0.7, max_tokens: 1000 },
         },
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
       const providerElement = screen.getByText('gpt-4o');
+      expect(providerElement.closest('span')).toHaveStyle({ cursor: 'help' });
+
       await user.hover(providerElement);
 
-      // Tooltip should appear with temperature
-      // Note: MUI tooltips may need waitFor
+      // Wait for MUI tooltip to appear
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('temperature');
+      expect(tooltip?.textContent).toContain('0.7');
     });
 
-    it('shows id in tooltip when label is used', async () => {
+    it('shows id in tooltip when label differs from underlying id', async () => {
+      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -361,52 +395,182 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('Fast Model', providers);
 
-      // The display should show "Fast Model"
       expect(screen.getByText('Fast Model')).toBeInTheDocument();
+
+      await user.hover(screen.getByText('Fast Model'));
+
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      // Should show underlying id since display shows "Fast Model"
+      expect(tooltip?.textContent).toContain('id: openai:gpt-4o');
+      expect(tooltip?.textContent).toContain('temperature');
     });
 
-    it('does not show tooltip when provider has no config', () => {
-      // Provider with just an id and no config should not show tooltip
-      const providers = [{ id: 'openai:gpt-4o' }];
-      renderWithProviders('openai:gpt-4o', providers);
-
-      // Should render without tooltip (no MUI Tooltip wrapper)
-      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
-      // Cursor should be default (not help) since no tooltip
-      const span = screen.getByText('gpt-4o').closest('span');
-      expect(span).toHaveStyle({ cursor: 'default' });
-    });
-
-    it('does not show redundant id when label equals model name', () => {
-      // When label is just the model name (e.g., "gpt-4o"), don't show "id: openai:gpt-4o"
-      // because it's obvious the full id is prefix:label
+    it('shows id in tooltip when label is just the model name', async () => {
+      // When label="gpt-4o" but id="openai:gpt-4o", we SHOULD show the id
+      // because "gpt-4o" could be from any provider (openai, azure, etc.)
+      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
-          label: 'gpt-4o', // Label equals name part
+          label: 'gpt-4o',
           config: { temperature: 0.7 },
         },
       ];
       renderWithProviders('gpt-4o', providers);
 
-      // Should show the label
-      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
-      // Should have help cursor since there's config to show (just not redundant id)
-      const span = screen.getByText('gpt-4o').closest('span');
-      expect(span).toHaveStyle({ cursor: 'help' });
+      await user.hover(screen.getByText('gpt-4o'));
+
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('id: openai:gpt-4o');
     });
 
-    it('does not show id when it equals providerString', () => {
-      // When id equals providerString, don't show id in tooltip (redundant)
+    it('does not show id in tooltip when display already shows full id', async () => {
+      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
-          label: 'openai:gpt-4o', // Label equals full provider string
           config: { temperature: 0.7 },
         },
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
+      await user.hover(screen.getByText('gpt-4o'));
+
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      // Should NOT contain "id:" since display shows "openai:gpt-4o"
+      expect(tooltip?.textContent).not.toContain('id:');
+      // Should still show config
+      expect(tooltip?.textContent).toContain('temperature');
+    });
+
+    it('does not show tooltip when provider has no config', () => {
+      const providers = [{ id: 'openai:gpt-4o' }];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+      // Cursor should be default (not help) since no tooltip content
+      const span = screen.getByText('gpt-4o').closest('span');
+      expect(span).toHaveStyle({ cursor: 'default' });
+    });
+
+    it('does not show tooltip for string-only provider', () => {
+      const providers = ['openai:gpt-4o', 'anthropic:claude-3'];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      const span = screen.getByText('gpt-4o').closest('span');
+      expect(span).toHaveStyle({ cursor: 'default' });
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles provider with only label (no id)', () => {
+      const providers = [{ label: 'Custom Provider', config: { temperature: 0.5 } }];
+      renderWithProviders('Custom Provider', providers);
+
+      expect(screen.getByText('Custom Provider')).toBeInTheDocument();
+    });
+
+    it('handles provider with nested config.config structure', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: {
+            config: { temperature: 0.8 }, // Double-nested
+          },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('temperature');
+    });
+
+    it('handles empty providers array gracefully', () => {
+      renderWithProviders('openai:gpt-4o', []);
+
+      expect(screen.getByText('openai:')).toBeInTheDocument();
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    });
+
+    it('handles provider with multiple colons in name', () => {
+      const providers = [
+        {
+          id: 'google:gemini-2.0-flash:thinking',
+          config: { temperature: 0.7 },
+        },
+      ];
+      renderWithProviders('google:gemini-2.0-flash:thinking', providers);
+
+      expect(screen.getByText('google:')).toBeInTheDocument();
+      expect(screen.getByText('gemini-2.0-flash:thinking')).toBeInTheDocument();
+    });
+
+    it('handles label containing colons without splitting', () => {
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          label: 'prod:us-east:gpt4',
+          config: { temperature: 0.5 },
+        },
+      ];
+      renderWithProviders('prod:us-east:gpt4', providers);
+
+      // Should show the whole label, not split it
+      expect(screen.getByText('prod:us-east:gpt4')).toBeInTheDocument();
+      // Verify it's shown as a single strong element (label display)
+      const strongElement = screen.getByText('prod:us-east:gpt4');
+      expect(strongElement.tagName).toBe('STRONG');
+    });
+
+    it('handles fallback to index when provider not found by id/label', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        { id: 'openai:gpt-4o', config: { temperature: 0.5 } },
+        { id: 'anthropic:claude-3', config: { temperature: 0.7 } },
+      ];
+      // providerString doesn't match any id/label, but fallbackIndex points to second provider
+      const { container } = renderWithProviders('unknown-provider', providers, 1);
+
+      // Hover to verify we get config from index fallback
+      const span = container.querySelector('span');
+      expect(span).toBeInTheDocument();
+      if (span) {
+        await user.hover(span);
+        await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+        const tooltip = document.querySelector('[role="tooltip"]');
+        // Should show config from providers[1] (temperature: 0.7)
+        expect(tooltip?.textContent).toContain('temperature');
+        expect(tooltip?.textContent).toContain('0.7');
+      }
+    });
+
+    it('handles undefined providersArray', () => {
+      renderWithProviders('openai:gpt-4o', undefined);
+
+      expect(screen.getByText('openai:')).toBeInTheDocument();
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    });
+
+    it('handles provider where label equals full id', () => {
+      // Edge case: label is same as id - should not show label in this case
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          label: 'openai:gpt-4o',
+          config: { temperature: 0.5 },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      // Should show prefix:name format, not as a label
+      expect(screen.getByText('openai:')).toBeInTheDocument();
       expect(screen.getByText('gpt-4o')).toBeInTheDocument();
     });
   });

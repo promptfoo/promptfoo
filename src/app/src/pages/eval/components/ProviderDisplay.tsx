@@ -132,30 +132,31 @@ export function ProviderDisplay({
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
-  const { config: providerConfig } = useMemo(
+  const { config: providerConfig, matchType } = useMemo(
     () => findProviderConfig(providerString, providersArray, fallbackIndex),
     [providerString, providersArray, fallbackIndex],
   );
 
   const { prefix, name, label } = useMemo(
-    () => getProviderDisplayName(providerString, providerConfig),
-    [providerString, providerConfig],
+    () => getProviderDisplayName(providerString, providerConfig, matchType),
+    [providerString, providerConfig, matchType],
   );
 
-  // Determine if we should show the id in tooltip (when label is used and id provides additional context)
-  // Don't show id if:
-  // - No label (display already shows prefix:name which equals the id)
-  // - Id equals the label (no additional info)
-  // - Id equals providerString (redundant with what's displayed)
-  // - Id equals prefix:label (label is just the name part, id is obvious)
+  // Compute what text the user actually sees displayed
+  // - If there's a label, we show the label
+  // - Otherwise we show "prefix:name" (or just "name" if prefix === name, e.g., "echo")
+  const displayedText = label || (prefix && prefix !== name ? `${prefix}:${name}` : name);
+
+  // Show the underlying provider id in tooltip only when it differs from what's displayed.
+  // This provides context without redundancy:
+  // - User sees "My Custom GPT" → tooltip shows "id: openai:gpt-4o"
+  // - User sees "gpt-4o" (label) → tooltip shows "id: openai:gpt-4o"
+  // - User sees "openai:gpt-4o" → no id in tooltip (already visible)
   const showId =
-    label &&
     providerConfig?.id &&
     typeof providerConfig.id === 'string' &&
     providerConfig.id.trim() &&
-    providerConfig.id !== label &&
-    providerConfig.id !== providerString &&
-    providerConfig.id !== `${prefix}:${label}`;
+    providerConfig.id !== displayedText;
   const displayId = showId ? providerConfig.id : null;
 
   // Tooltip: show id (if label used) + sanitized config
@@ -209,10 +210,14 @@ export function ProviderDisplay({
     <span style={{ cursor: tooltipContent ? 'help' : 'default' }}>
       {label ? (
         <strong>{label}</strong>
-      ) : (
+      ) : prefix && prefix !== name ? (
+        // Standard format: "openai:gpt-4o"
         <>
           {prefix}:<strong>{name}</strong>
         </>
+      ) : (
+        // Provider without colon (e.g., "echo", "ollama") - just show name
+        <strong>{name}</strong>
       )}
     </span>
   );

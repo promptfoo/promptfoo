@@ -232,4 +232,96 @@ describe('getProviderDisplayName', () => {
     expect(result.prefix).toBe('ollama');
     expect(result.name).toBe('ollama');
   });
+
+  describe('matchType handling', () => {
+    it('returns providerString as label when matchType is "label"', () => {
+      const config = { id: 'openai:gpt-4o', label: 'gpt-4o' };
+      const result = getProviderDisplayName('gpt-4o', config, 'label');
+      expect(result.prefix).toBe('');
+      expect(result.name).toBe('gpt-4o');
+      expect(result.label).toBe('gpt-4o');
+    });
+
+    it('prevents duplication when label equals model name and matched by label', () => {
+      // This is the critical case that caused the "gpt-4o:gpt-4o" bug
+      const config = { id: 'openai:gpt-4o', label: 'gpt-4o' };
+      const result = getProviderDisplayName('gpt-4o', config, 'label');
+      // With matchType='label', we should NOT split on colon
+      expect(result.prefix).toBe('');
+      expect(result.name).toBe('gpt-4o');
+      expect(result.label).toBe('gpt-4o');
+    });
+
+    it('uses normal splitting for non-label matchTypes', () => {
+      const config = { id: 'openai:gpt-4o' };
+      const result = getProviderDisplayName('openai:gpt-4o', config, 'id');
+      expect(result.prefix).toBe('openai');
+      expect(result.name).toBe('gpt-4o');
+      expect(result.label).toBeUndefined();
+    });
+
+    it('still detects config label for id matchType', () => {
+      const config = { id: 'openai:gpt-4o', label: 'Fast Model' };
+      const result = getProviderDisplayName('openai:gpt-4o', config, 'id');
+      expect(result.prefix).toBe('openai');
+      expect(result.name).toBe('gpt-4o');
+      expect(result.label).toBe('Fast Model');
+    });
+
+    it('handles label containing colons when matched by label', () => {
+      // Edge case: label itself contains colons
+      const config = { id: 'openai:gpt-4o', label: 'my:custom:label' };
+      const result = getProviderDisplayName('my:custom:label', config, 'label');
+      // Should NOT split on colon - the whole string is the label
+      expect(result.prefix).toBe('');
+      expect(result.name).toBe('my:custom:label');
+      expect(result.label).toBe('my:custom:label');
+    });
+
+    it('handles index matchType (fallback behavior)', () => {
+      const config = { id: 'openai:gpt-4o', config: { temperature: 0.5 } };
+      const result = getProviderDisplayName('unknown-provider', config, 'index');
+      // Index match still splits on colon normally
+      expect(result.prefix).toBe('unknown-provider');
+      expect(result.name).toBe('unknown-provider');
+    });
+
+    it('handles none matchType (no config found)', () => {
+      const result = getProviderDisplayName('openai:gpt-4o', undefined, 'none');
+      expect(result.prefix).toBe('openai');
+      expect(result.name).toBe('gpt-4o');
+      expect(result.label).toBeUndefined();
+    });
+
+    it('handles undefined matchType gracefully', () => {
+      const config = { id: 'openai:gpt-4o' };
+      const result = getProviderDisplayName('openai:gpt-4o', config);
+      expect(result.prefix).toBe('openai');
+      expect(result.name).toBe('gpt-4o');
+    });
+
+    it('handles empty providerString with label matchType', () => {
+      // Edge case: empty string - should return empty but not crash
+      const config = { id: 'openai:gpt-4o', label: '' };
+      const result = getProviderDisplayName('', config, 'label');
+      // Empty string is falsy, so we skip the label handling
+      expect(result.prefix).toBe('');
+      expect(result.name).toBe('');
+    });
+  });
+
+  describe('multiple colon handling', () => {
+    it('preserves content after first colon for provider with multiple colons', () => {
+      const result = getProviderDisplayName('google:gemini-2.0-flash:thinking', undefined);
+      expect(result.prefix).toBe('google');
+      expect(result.name).toBe('gemini-2.0-flash:thinking');
+    });
+
+    it('handles record-key matchType with multiple colons', () => {
+      const config = { id: 'google:gemini-2.0-flash:thinking', config: { temperature: 0.5 } };
+      const result = getProviderDisplayName('google:gemini-2.0-flash:thinking', config, 'record-key');
+      expect(result.prefix).toBe('google');
+      expect(result.name).toBe('gemini-2.0-flash:thinking');
+    });
+  });
 });

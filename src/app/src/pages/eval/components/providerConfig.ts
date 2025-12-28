@@ -312,18 +312,30 @@ function formatNumber(num: number): string {
 /**
  * Get the display name for a provider.
  * Returns the label if set, otherwise formats the provider ID.
+ *
+ * @param providerString - The string used to match/identify this provider
+ * @param providerConfig - The full provider configuration object
+ * @param matchType - How the provider was matched (affects display logic)
  */
 export function getProviderDisplayName(
   providerString: string,
   providerConfig: any,
+  matchType?: ProviderConfigMatch['matchType'],
 ): { prefix: string; name: string; label?: string } {
+  // When matched by label, the providerString IS the label.
+  // Return it directly to avoid incorrect prefix:name splitting.
+  // Example: label="My GPT" would incorrectly split to prefix="My GPT", name="My GPT"
+  if (matchType === 'label' && providerString) {
+    return { prefix: '', name: providerString, label: providerString };
+  }
+
   const parts = providerString.split(':');
   const prefix = parts[0];
   const name = parts.slice(1).join(':') || prefix;
 
-  // Check for custom label
+  // Check for custom label in config (for id/record-key matches that have a label)
   const label = providerConfig?.label;
-  if (label && label !== providerString) {
+  if (label && typeof label === 'string' && label !== providerString) {
     return { prefix, name, label };
   }
 
