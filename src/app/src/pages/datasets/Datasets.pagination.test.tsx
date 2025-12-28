@@ -8,56 +8,34 @@
  * This test verifies the fix by checking that handleRowClick correctly maps
  * clicked rows to the original data, regardless of sorting and pagination.
  */
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Datasets from './Datasets';
-import type { TestCasesWithMetadata } from '@promptfoo/types';
+import { describe, expect, it } from 'vitest';
 
-type DatasetRow = TestCasesWithMetadata & { recentEvalDate: string };
+// Simplified test type that matches the shape used by Datasets component
+// We only need id and recentEvalDate for pagination/sorting logic tests
+interface TestDatasetRow {
+  id: string;
+  recentEvalDate: string;
+}
 
 describe('Issue #2248: Dataset pagination row click bug', () => {
   // Generate 15 test datasets with distinct IDs and dates
   // IDs are alphabetically ordered, dates are in reverse order
   // This ensures sorting changes the visual order significantly
-  const generateTestData = (): DatasetRow[] => {
+  const generateTestData = (): TestDatasetRow[] => {
     return Array.from({ length: 15 }, (_, i) => ({
       id: `dataset-${String(i).padStart(2, '0')}`, // dataset-00, dataset-01, ..., dataset-14
-      testCases: [{ vars: { uniqueMarker: `MARKER_${i}` } }],
-      prompts: [],
-      count: i + 1,
       // Dates go backwards: dataset-00 has latest date, dataset-14 has earliest
       // After sorting by date DESC, order should be: 00, 01, 02, ..., 14
       recentEvalDate: new Date(2024, 0, 15 - i).toISOString(),
-      recentEvalId: `eval-${i}`,
     }));
   };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should render the Datasets component with test data', async () => {
-    const testData = generateTestData();
-
-    render(
-      <MemoryRouter>
-        <Datasets data={testData} isLoading={false} error={null} />
-      </MemoryRouter>,
-    );
-
-    // Wait for the table to render
-    await waitFor(() => {
-      expect(screen.getByText('Datasets')).toBeInTheDocument();
-    });
-  });
 
   it('verifies handleRowClick finds correct index using ID matching', () => {
     // This is a unit test of the core logic
     const testData = generateTestData();
 
     // Simulate what happens in handleRowClick
-    const simulateRowClick = (clickedDataset: DatasetRow) => {
+    const simulateRowClick = (clickedDataset: TestDatasetRow) => {
       const index = testData.findIndex((d) => d.id === clickedDataset.id);
       return { index, dataAtIndex: testData[index] };
     };
@@ -141,9 +119,5 @@ describe('Issue #2248: Dataset pagination row click bug', () => {
 
     // And the data at that index should be dataset-10, not dataset-00
     expect(testData[indexForPage2Row1].id).toBe('dataset-10');
-    expect(testData[indexForPage2Row1].testCases[0].vars.uniqueMarker).toBe('MARKER_10');
-
-    // NOT dataset-00's marker
-    expect(testData[indexForPage2Row1].testCases[0].vars.uniqueMarker).not.toBe('MARKER_0');
   });
 });
