@@ -55,7 +55,7 @@ describe('Redteam Recon Routes', () => {
           source: 'recon-cli',
           timestamp: 1703692800000,
           codebaseDirectory: '/path/to/project',
-          filesAnalyzed: 150,
+          keyFilesAnalyzed: 150,
         },
         reconResult: {
           purpose: 'Healthcare app',
@@ -85,7 +85,9 @@ describe('Redteam Recon Routes', () => {
       const response = await request(app).get('/api/redteam/recon/pending');
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'Invalid pending recon file format' });
+      expect(response.body.error).toBe('Invalid pending recon file format');
+      // Response may include additional details about validation failures
+      expect(response.body.details).toBeDefined();
     });
 
     it('should return 500 for malformed JSON', async () => {

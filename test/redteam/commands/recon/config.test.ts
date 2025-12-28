@@ -3,7 +3,7 @@ import {
   applicationDefinitionToPurpose,
   buildRedteamConfig,
   buildApplicationDefinition,
-  buildReconContext,
+  buildReconDetails,
   buildReconMetadata,
   isValidPlugin,
   isValueMeaningful,
@@ -558,10 +558,10 @@ describe('buildApplicationDefinition', () => {
   });
 });
 
-describe('buildReconContext', () => {
+describe('buildReconDetails', () => {
   it('should include stateful flag when defined', () => {
     const result: ReconResult = { purpose: 'Test', stateful: true };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
     expect(context.stateful).toBe(true);
   });
 
@@ -573,7 +573,7 @@ describe('buildReconContext', () => {
         { name: 'fetch', description: 'Fetch data' },
       ],
     };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.discoveredTools).toHaveLength(2);
     expect(context.discoveredTools![0]).toEqual({
@@ -593,7 +593,7 @@ describe('buildReconContext', () => {
       purpose: 'Test',
       securityNotes: ['Uses plaintext credentials', 'No rate limiting'],
     };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.securityNotes).toEqual(['Uses plaintext credentials', 'No rate limiting']);
   });
@@ -603,7 +603,7 @@ describe('buildReconContext', () => {
       purpose: 'Test',
       keyFiles: ['src/agent.ts', 'src/tools.ts'],
     };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.keyFiles).toEqual(['src/agent.ts', 'src/tools.ts']);
   });
@@ -613,7 +613,7 @@ describe('buildReconContext', () => {
       purpose: 'Test',
       suggestedPlugins: ['pii:direct', 'sql-injection'],
     };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.suggestedPlugins).toEqual(['pii:direct', 'sql-injection']);
   });
@@ -623,14 +623,14 @@ describe('buildReconContext', () => {
       purpose: 'Test',
       entities: ['Acme Corp', 'ProductX'],
     };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.entities).toEqual(['Acme Corp', 'ProductX']);
   });
 
   it('should return empty context for minimal result', () => {
     const result: ReconResult = { purpose: 'Test' };
-    const context = buildReconContext(result);
+    const context = buildReconDetails(result);
 
     expect(context.stateful).toBeUndefined();
     expect(context.discoveredTools).toBeUndefined();
@@ -675,7 +675,7 @@ describe('buildReconMetadata', () => {
     expect(meta.applicationDefinition.industry).toBe('Healthcare');
   });
 
-  it('should include reconContext', () => {
+  it('should include reconDetails', () => {
     const result: ReconResult = {
       purpose: 'Test',
       stateful: true,
@@ -683,8 +683,8 @@ describe('buildReconMetadata', () => {
     };
     const meta = buildReconMetadata(result, '/path');
 
-    expect(meta.reconContext.stateful).toBe(true);
-    expect(meta.reconContext.entities).toEqual(['Acme']);
+    expect(meta.reconDetails.stateful).toBe(true);
+    expect(meta.reconDetails.entities).toEqual(['Acme']);
   });
 });
 
@@ -723,6 +723,6 @@ describe('buildRedteamConfig with metadata', () => {
 
     // And metadata is included
     expect(config.metadata).toBeDefined();
-    expect(config.metadata?.reconContext?.stateful).toBe(true);
+    expect(config.metadata?.reconDetails?.stateful).toBe(true);
   });
 });

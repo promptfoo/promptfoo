@@ -58,22 +58,22 @@ describe('recon CLI pending config', () => {
           source: 'recon-cli' as const,
           timestamp: Date.now(),
           codebaseDirectory,
-          filesAnalyzed: result.keyFiles?.length || 0,
+          keyFilesAnalyzed: result.keyFiles?.length || 0,
         },
         reconResult: result,
       };
 
       expect(pendingData.metadata.source).toBe('recon-cli');
       expect(pendingData.metadata.codebaseDirectory).toBe('/path/to/project');
-      expect(pendingData.metadata.filesAnalyzed).toBe(2);
+      expect(pendingData.metadata.keyFilesAnalyzed).toBe(2);
       expect(typeof pendingData.metadata.timestamp).toBe('number');
     });
 
     it('should handle empty keyFiles array', () => {
-      const result = { purpose: 'Test app' };
+      const result: { purpose: string; keyFiles?: string[] } = { purpose: 'Test app' };
 
-      const filesAnalyzed = result.keyFiles?.length || 0;
-      expect(filesAnalyzed).toBe(0);
+      const keyFilesAnalyzed = result.keyFiles?.length || 0;
+      expect(keyFilesAnalyzed).toBe(0);
     });
 
     it('should include full reconResult', () => {
