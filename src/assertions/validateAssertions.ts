@@ -1,10 +1,12 @@
 import { fromError } from 'zod-validation-error';
+import logger from '../logger';
 import {
   type Assertion,
   AssertionOrSetSchema,
   type AssertionSet,
   type TestCase,
 } from '../types/index';
+import { validateAssertionValue } from './assertionSchemas';
 
 export class AssertValidationError extends Error {
   constructor(message: string) {
@@ -66,6 +68,23 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     }
     for (let i = 0; i < assertSet.assert.length; i++) {
       parseAssertion(assertSet.assert[i], `${context}.assert[${i}]`);
+    }
+  } else {
+    // Validate assertion value against type-specific schema
+    const valueValidation = validateAssertionValue(result.data as Assertion, context);
+
+    // Log warnings but don't fail
+    for (const warning of valueValidation.warnings) {
+      logger.warn(warning);
+    }
+
+    // Throw errors as validation failures
+    if (!valueValidation.valid) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          valueValidation.errors.join('\n') +
+          `\n\nReceived: ${JSON.stringify(assertion, null, 2)}`,
+      );
     }
   }
 

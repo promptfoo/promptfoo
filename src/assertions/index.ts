@@ -5,7 +5,6 @@ import async from 'async';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
@@ -38,57 +37,10 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
-import { handleBleuScore } from './bleu';
-import { handleClassifier } from './classifier';
-import {
-  handleContains,
-  handleContainsAll,
-  handleContainsAny,
-  handleIContains,
-  handleIContainsAll,
-  handleIContainsAny,
-} from './contains';
-import { handleContextFaithfulness } from './contextFaithfulness';
-import { handleContextRecall } from './contextRecall';
-import { handleContextRelevance } from './contextRelevance';
-import { handleCost } from './cost';
-import { handleEquals } from './equals';
-import { handleFactuality } from './factuality';
-import { handleFinishReason } from './finishReason';
-import { handleIsValidFunctionCall } from './functionToolCall';
-import { handleGEval } from './geval';
-import { handleGleuScore } from './gleu';
-import { handleGuardrails } from './guardrails';
-import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
-import { handleContainsJson, handleIsJson } from './json';
-import { handleLatency } from './latency';
-import { handleLevenshtein } from './levenshtein';
-import { handleLlmRubric } from './llmRubric';
-import { handleModelGradedClosedQa } from './modelGradedClosedQa';
-import { handleModeration } from './moderation';
-import { handleIsValidOpenAiToolsCall } from './openai';
-import { handlePerplexity, handlePerplexityScore } from './perplexity';
-import { handlePiScorer } from './pi';
-import { handlePython } from './python';
 import { handleRedteam } from './redteam';
-import { handleIsRefusal } from './refusal';
-import { handleRegex } from './regex';
-import { handleRougeScore } from './rouge';
-import { handleRuby } from './ruby';
-import { handleSearchRubric } from './searchRubric';
-import { handleSimilar } from './similar';
-import { handleContainsSql, handleIsSql } from './sql';
-import { handleStartsWith } from './startsWith';
-import { handleToolCallF1 } from './toolCallF1';
-import { handleTraceErrorSpans } from './traceErrorSpans';
-import { handleTraceSpanCount } from './traceSpanCount';
-import { handleTraceSpanDuration } from './traceSpanDuration';
+import { ASSERTION_DEFINITIONS } from './registry';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
-import { handleWebhook } from './webhook';
-import { handleIsXml } from './xml';
 
 import type {
   AssertionParams,
@@ -98,103 +50,35 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
+// Re-export schema validation utilities
+export {
+  createAssertionSchema,
+  requiresValue,
+  supportsThreshold,
+  VALUE_TYPE_SCHEMAS,
+  validateAssertionValue,
+  validateAssertionValues,
+} from './assertionSchemas';
+// Re-export from registry - this is now the single source of truth for LLM requirements
+export { MODEL_GRADED_ASSERTION_TYPES, requiresLlm } from './registry';
+
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
-export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'search-rubric',
-]);
-
+/**
+ * Assertion handlers derived from the centralized registry.
+ * This replaces the manually maintained ASSERTION_HANDLERS map.
+ */
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
   (params: AssertionParams) => GradingResult | Promise<GradingResult>
-> = {
-  'answer-relevance': handleAnswerRelevance,
-  bleu: handleBleuScore,
-  classifier: handleClassifier,
-  contains: handleContains,
-  'contains-all': handleContainsAll,
-  'contains-any': handleContainsAny,
-  'contains-html': handleContainsHtml,
-  'contains-json': handleContainsJson,
-  'contains-sql': handleContainsSql,
-  'contains-xml': handleIsXml,
-  'context-faithfulness': handleContextFaithfulness,
-  'context-recall': handleContextRecall,
-  'context-relevance': handleContextRelevance,
-  'conversation-relevance': handleConversationRelevance,
-  cost: handleCost,
-  equals: handleEquals,
-  factuality: handleFactuality,
-  'finish-reason': handleFinishReason,
-  'g-eval': handleGEval,
-  gleu: handleGleuScore,
-  guardrails: handleGuardrails,
-  icontains: handleIContains,
-  'icontains-all': handleIContainsAll,
-  'icontains-any': handleIContainsAny,
-  'is-html': handleIsHtml,
-  'is-json': handleIsJson,
-  'is-refusal': handleIsRefusal,
-  'is-sql': handleIsSql,
-  'is-valid-function-call': handleIsValidFunctionCall,
-  'is-valid-openai-function-call': handleIsValidFunctionCall,
-  'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-  'is-xml': handleIsXml,
-  javascript: handleJavascript,
-  latency: handleLatency,
-  levenshtein: handleLevenshtein,
-  'llm-rubric': handleLlmRubric,
-  meteor: async (params: AssertionParams) => {
-    try {
-      const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message.includes('Cannot find module') ||
-          error.message.includes('natural" package is required'))
-      ) {
-        return {
-          pass: false,
-          score: 0,
-          reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
-          assertion: params.assertion,
-        };
-      }
-      throw error;
-    }
-  },
-  'model-graded-closedqa': handleModelGradedClosedQa,
-  'model-graded-factuality': handleFactuality,
-  moderation: handleModeration,
-  perplexity: handlePerplexity,
-  'perplexity-score': handlePerplexityScore,
-  pi: handlePiScorer,
-  python: handlePython,
-  regex: handleRegex,
-  ruby: handleRuby,
-  'rouge-n': handleRougeScore,
-  'search-rubric': handleSearchRubric,
-  similar: handleSimilar,
-  'similar:cosine': handleSimilar,
-  'similar:dot': handleSimilar,
-  'similar:euclidean': handleSimilar,
-  'starts-with': handleStartsWith,
-  'tool-call-f1': handleToolCallF1,
-  'trace-error-spans': handleTraceErrorSpans,
-  'trace-span-count': handleTraceSpanCount,
-  'trace-span-duration': handleTraceSpanDuration,
-  webhook: handleWebhook,
-};
+> = Object.fromEntries(
+  Object.entries(ASSERTION_DEFINITIONS)
+    .filter(([, def]) => def.handler !== undefined)
+    .map(([id, def]) => [id, def.handler]),
+) as Record<
+  BaseAssertionTypes,
+  (params: AssertionParams) => GradingResult | Promise<GradingResult>
+>;
 
 const nunjucks = getNunjucksEngine();
 
