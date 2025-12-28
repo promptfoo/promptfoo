@@ -28,8 +28,6 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-import type EvalResult from './models/evalResult';
-
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
@@ -550,8 +548,8 @@ export type AfterEachExtensionHookContext = {
 export type AfterAllExtensionHookContext = {
   /** The test suite configuration */
   suite: TestSuite;
-  /** All evaluation results */
-  results: EvalResult[];
+  /** All evaluation results as plain data objects */
+  results: EvaluateResult[];
   /** Completed prompts with metrics */
   prompts: CompletedPrompt[];
   /** Unique identifier for this evaluation run */

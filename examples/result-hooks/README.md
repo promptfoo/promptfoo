@@ -51,11 +51,11 @@ The `afterAll` hook receives:
 
 ```typescript
 {
-  evalId: string;           // Unique evaluation ID
-  config: UnifiedConfig;    // Full evaluation configuration
-  suite: TestSuite;         // Test suite that was evaluated
-  results: EvalResult[];    // All individual test results
-  prompts: CompletedPrompt[]; // Prompts with metrics
+  evalId: string;              // Unique evaluation ID
+  config: UnifiedConfig;       // Full evaluation configuration
+  suite: TestSuite;            // Test suite that was evaluated
+  results: EvaluateResult[];   // All individual test results
+  prompts: CompletedPrompt[];  // Prompts with metrics
 }
 ```
 

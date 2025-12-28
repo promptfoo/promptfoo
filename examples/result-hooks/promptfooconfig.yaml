@@ -6,7 +6,7 @@ prompts:
   - 'Write a haiku about {{topic}}'
 
 providers:
-  - openai:gpt-4.1-nano
+  - openai:gpt-4.1-mini
 
 # Extension hooks for processing results
 extensions:
