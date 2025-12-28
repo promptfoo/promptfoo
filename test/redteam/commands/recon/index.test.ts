@@ -42,8 +42,8 @@ describe('recon CLI pending config', () => {
       const configDir = getConfigDirectoryPath(true);
       const pendingPath = path.join(configDir, 'pending-recon.json');
 
-      // Verify the path construction
-      expect(pendingPath).toBe('/tmp/promptfoo-test/pending-recon.json');
+      // Verify the path construction (use path.join for cross-platform compatibility)
+      expect(pendingPath).toBe(path.join('/tmp/promptfoo-test', 'pending-recon.json'));
     });
 
     it('should include required metadata fields', () => {
