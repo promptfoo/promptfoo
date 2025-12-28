@@ -1,24 +1,24 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import chalk from 'chalk';
 import confirm from '@inquirer/confirm';
+import chalk from 'chalk';
 import open from 'open';
 import ora from 'ora';
-
 import logger from '../../../logger';
 import { getConfigDirectoryPath } from '../../../util/config/manage';
 import { writePromptfooConfig } from '../../../util/config/writer';
-import type { PendingReconConfig } from '../../../validators/recon';
 import { buildRedteamConfig } from './config';
 import { buildReconPrompt } from './prompt';
 import {
-  selectProvider,
-  createOpenAIReconProvider,
   createAnthropicReconProvider,
+  createOpenAIReconProvider,
   type ReconProgressCallback,
+  selectProvider,
 } from './providers';
 import { createScratchpad } from './scratchpad';
+
+import type { PendingReconConfig } from '../../../validators/recon';
 import type { ReconOptions, ReconResult } from './types';
 
 /** Default port for the promptfoo web server */

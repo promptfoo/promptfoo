@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { callApi } from '@app/utils/api';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import type { PendingReconConfig } from '@promptfoo/validators/recon';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SETUP_TAB_INDICES } from '../constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './useRedTeamConfig';
+import type { PendingReconConfig } from '@promptfoo/validators/recon';
+
 import type { Config, ReconContext } from '../types';
 
 interface UsePendingReconResult {
@@ -100,8 +102,7 @@ export function usePendingRecon(
         plugins: reconConfig.redteam?.plugins || ['default'],
         strategies: reconConfig.redteam?.strategies || ['basic'],
         purpose: reconConfig.redteam?.purpose || '',
-        entities:
-          reconConfig.redteam?.entities || metadata.reconDetails?.entities || [],
+        entities: reconConfig.redteam?.entities || metadata.reconDetails?.entities || [],
         numTests: reconConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,

@@ -1,4 +1,4 @@
-import { vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { selectProvider } from '../../../../src/redteam/commands/recon/providers';
 
 // Mock the envars module
@@ -7,6 +7,7 @@ vi.mock('../../../../src/envars', () => ({
 }));
 
 import { getEnvString } from '../../../../src/envars';
+
 const mockedGetEnvString = getEnvString as Mock;
 
 describe('selectProvider', () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useRedTeamConfig } from './useRedTeamConfig';
+
 import type { Config, ReconContext } from '../types';
 
 describe('useRedTeamConfig', () => {

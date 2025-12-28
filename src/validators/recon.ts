@@ -103,15 +103,18 @@ export const ReconResultSchema = ApplicationDefinitionSchema.extend({
  */
 export const ReconContextSchema = z.object({
   /** Source of the recon data */
-  source: z
-    .enum(['recon-cli', 'in-app-recon'])
-    .describe('Source of the reconnaissance data'),
+  source: z.enum(['recon-cli', 'in-app-recon']).describe('Source of the reconnaissance data'),
   /** Timestamp when the recon was performed (Unix ms) */
   timestamp: z.number().int().positive().describe('Unix timestamp in milliseconds'),
   /** Directory that was scanned */
   codebaseDirectory: z.string().optional().describe('Path to the scanned codebase'),
   /** Number of key files that were analyzed (not total files scanned) */
-  keyFilesAnalyzed: z.number().int().nonnegative().optional().describe('Number of key files analyzed'),
+  keyFilesAnalyzed: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Number of key files analyzed'),
   /** Number of application definition fields that were populated */
   fieldsPopulated: z.number().int().nonnegative().optional().describe('Fields populated count'),
 });
@@ -132,7 +135,12 @@ export const PendingReconMetadataSchema = z.object({
   /** Path to the directory that was scanned */
   codebaseDirectory: z.string().optional().describe('Path to the scanned codebase'),
   /** Number of key files that were analyzed (not total files scanned) */
-  keyFilesAnalyzed: z.number().int().nonnegative().optional().describe('Number of key files analyzed'),
+  keyFilesAnalyzed: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Number of key files analyzed'),
   /** Structured application definition extracted from recon */
   applicationDefinition: ApplicationDefinitionSchema.optional().describe(
     'Structured application definition',
@@ -163,9 +171,15 @@ export const PendingReconRedteamConfigSchema = z.object({
   /** Purpose/context for red team testing */
   purpose: z.string().optional().describe('Red team purpose string'),
   /** Plugins to use for testing */
-  plugins: z.array(z.union([z.string(), z.object({}).passthrough()])).optional().describe('Red team plugins'),
+  plugins: z
+    .array(z.union([z.string(), z.object({}).passthrough()]))
+    .optional()
+    .describe('Red team plugins'),
   /** Strategies to apply */
-  strategies: z.array(z.union([z.string(), z.object({}).passthrough()])).optional().describe('Attack strategies'),
+  strategies: z
+    .array(z.union([z.string(), z.object({}).passthrough()]))
+    .optional()
+    .describe('Attack strategies'),
   /** Named entities for personalized attacks */
   entities: z.array(z.string()).optional().describe('Named entities'),
   /** Number of tests to generate */
@@ -175,13 +189,15 @@ export const PendingReconRedteamConfigSchema = z.object({
 /**
  * Schema for the config block in pending recon.
  */
-export const PendingReconConfigBlockSchema = z.object({
-  /** Description of the configuration */
-  description: z.string().optional().describe('Configuration description'),
-  /** Red team specific configuration */
-  redteam: PendingReconRedteamConfigSchema.optional().describe('Red team configuration'),
-  /** Additional fields passed through */
-}).passthrough();
+export const PendingReconConfigBlockSchema = z
+  .object({
+    /** Description of the configuration */
+    description: z.string().optional().describe('Configuration description'),
+    /** Red team specific configuration */
+    redteam: PendingReconRedteamConfigSchema.optional().describe('Red team configuration'),
+    /** Additional fields passed through */
+  })
+  .passthrough();
 
 /**
  * Schema for the complete pending recon configuration.

@@ -1,16 +1,17 @@
-import type { UnifiedConfig } from '../../../types/index';
 import {
   ALL_PLUGINS,
-  HARM_PLUGINS,
-  PII_PLUGINS,
   BIAS_PLUGINS,
-  MEDICAL_PLUGINS,
-  FINANCIAL_PLUGINS,
-  PHARMACY_PLUGINS,
-  INSURANCE_PLUGINS,
   ECOMMERCE_PLUGINS,
+  FINANCIAL_PLUGINS,
+  HARM_PLUGINS,
+  INSURANCE_PLUGINS,
+  MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
+  PII_PLUGINS,
 } from '../../constants/plugins';
-import type { ReconMetadata, ReconApplicationDefinition, ReconDetails } from './metadata';
+
+import type { UnifiedConfig } from '../../../types/index';
+import type { ReconApplicationDefinition, ReconDetails, ReconMetadata } from './metadata';
 import type { ReconResult } from './types';
 
 /**

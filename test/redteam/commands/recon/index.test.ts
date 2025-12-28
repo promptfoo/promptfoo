@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock external dependencies before importing the module
 vi.mock('fs');
@@ -37,9 +38,7 @@ describe('recon CLI pending config', () => {
   describe('pending recon file structure', () => {
     it('should write pending recon config with correct structure', async () => {
       // We need to import the module after mocks are set up
-      const { getConfigDirectoryPath } = await import(
-        '../../../../src/util/config/manage'
-      );
+      const { getConfigDirectoryPath } = await import('../../../../src/util/config/manage');
       const configDir = getConfigDirectoryPath(true);
       const pendingPath = path.join(configDir, 'pending-recon.json');
 

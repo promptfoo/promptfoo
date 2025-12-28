@@ -1,9 +1,9 @@
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { doRecon } from './recon/index';
+import type { Command } from 'commander';
 
 const COMMAND = 'recon';
 

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import { vi } from 'vitest';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createScratchpad } from '../../../../src/redteam/commands/recon/scratchpad';
 
 describe('createScratchpad', () => {

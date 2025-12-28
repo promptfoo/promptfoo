@@ -7,11 +7,11 @@
 
 // Re-export core domain types from shared validators
 export type {
-  DiscoveredTool,
-  ReconResult,
   ApplicationDefinition,
-  ReconContext,
+  DiscoveredTool,
   PendingReconConfig,
+  ReconContext,
+  ReconResult,
 } from '../../../validators/recon';
 
 /**
