@@ -1,8 +1,9 @@
 import * as path from 'path';
 
 import { describe, expect, it } from 'vitest';
-import type { EvaluateResult, TestCase } from '../../src/types/index';
 import { filterRuntimeVars, resultIsForTestCase, varsMatch } from '../../src/util/comparison';
+
+import type { EvaluateResult, TestCase } from '../../src/types/index';
 
 describe('varsMatch', () => {
   it('true with both undefined', async () => {

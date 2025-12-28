@@ -1,8 +1,9 @@
 import * as path from 'path';
 
 import { describe, expect, it } from 'vitest';
-import type { ApiProvider } from '../../src/types/index';
 import { providerToIdentifier } from '../../src/util/provider';
+
+import type { ApiProvider } from '../../src/types/index';
 
 describe('providerToIdentifier', () => {
   it('works with provider string', async () => {
