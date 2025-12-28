@@ -181,7 +181,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           frameworksToShow={frameworksToShow}
         />
       </div>
-      <Card className="framework-compliance-card">
+      <Card className="overflow-hidden rounded-xl transition-shadow duration-300">
         <CardContent className="pt-6">
           <p className="mb-2 text-sm text-muted-foreground">
             {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
@@ -198,7 +198,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
               style={{ width: `${Math.min(100, pluginComplianceStats.attackSuccessRate)}%` }}
             />
           </div>
-          <div className="framework-grid grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {frameworksToShow.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
               const isCompliant = frameworkCompliance[framework] ?? false;
