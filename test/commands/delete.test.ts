@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';

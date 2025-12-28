@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs/promises';
 import { unlinkSync } from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -20,7 +20,7 @@ import {
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
 import type { Command } from 'commander';
 
-import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
 // ============================================================================
 // Types

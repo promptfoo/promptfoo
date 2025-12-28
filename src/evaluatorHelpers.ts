@@ -22,8 +22,8 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from './types/index';
-import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';

@@ -9,11 +9,13 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -29,11 +31,9 @@ import {
 import invariant from '../util/invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
-import { runPython } from '../python/pythonUtils';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
-import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
@@ -438,15 +438,31 @@ export function providerToIdentifier(
 }
 
 /**
- * Filters out runtime-only variables that are added during evaluation
- * but aren't part of the original test definition
+ * Runtime variables that are added during evaluation but aren't part
+ * of the original test definition. These should be filtered when
+ * comparing test cases for matching purposes.
+ *
+ * - _conversation: Added by the evaluator for multi-turn conversations
+ * - sessionId: Added by multi-turn strategy providers (GOAT, Crescendo, SIMBA)
  */
-function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+const RUNTIME_VAR_KEYS = ['_conversation', 'sessionId'] as const;
+
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition.
+ *
+ * This is used when comparing test cases to determine if a result
+ * corresponds to a particular test, regardless of runtime state.
+ */
+export function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
   if (!vars) {
     return vars;
   }
-  const { _conversation, ...userVars } = vars;
-  return userVars;
+  const filtered = { ...vars };
+  for (const key of RUNTIME_VAR_KEYS) {
+    delete filtered[key];
+  }
+  return filtered;
 }
 
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
@@ -458,9 +474,8 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  // Filter out runtime variables like _conversation when matching
-  // These are added during evaluation but shouldn't affect test matching
-  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  // Filter out runtime variables like _conversation and sessionId when matching.
+  // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
   const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
   return varsMatch(testVars, resultVars) && providersMatch;

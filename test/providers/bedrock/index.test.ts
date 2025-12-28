@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
@@ -11,15 +13,13 @@ import {
   extractTextAndImages,
   extractTextContent,
   formatPromptLlama2Chat,
-  formatPromptLlama32Vision,
   formatPromptLlama3Instruct,
   formatPromptLlama4,
+  formatPromptLlama32Vision,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
-import { getCache, isCacheEnabled } from '../../../src/cache';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -2964,6 +2964,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      undefined, // vars not provided when context is undefined
     );
   });
 
@@ -3004,6 +3005,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 
@@ -3047,6 +3049,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 });

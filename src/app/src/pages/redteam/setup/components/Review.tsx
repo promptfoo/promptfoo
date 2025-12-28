@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Code from '@app/components/Code';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -18,7 +19,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -31,33 +31,32 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
+import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
-
-import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
-import EstimationsDisplay from './EstimationsDisplay';
-import Tooltip from '@mui/material/Tooltip';
-import {
-  isValidPolicyObject,
-  makeDefaultPolicyName,
-} from '@promptfoo/redteam/plugins/policy/utils';
+import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -1295,7 +1294,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/reports?evalId=${evalId}`}
+                      href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}
                       startIcon={<AssessmentIcon />}
                     >
                       View Report
@@ -1303,7 +1302,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/eval?evalId=${evalId}`}
+                      href={EVAL_ROUTES.DETAIL(evalId)}
                       startIcon={<SearchIcon />}
                     >
                       View Probes

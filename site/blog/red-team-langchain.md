@@ -165,7 +165,7 @@ targets:
     label: 'LangChain App'
 
 redteam:
-  # Purpose is a short description of your application.  It's used to generate highly relevant malicious test cases.
+  # Purpose is a short description of your application. It's used to generate highly relevant malicious test cases.
   purpose: 'A customer support agent for Acme, Inc...'
 
   # Number of test cases per plugin.
