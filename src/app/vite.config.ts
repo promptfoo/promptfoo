@@ -76,10 +76,7 @@ const API_PORT = process.env.API_PORT || '15500';
 if (process.env.NODE_ENV === 'development') {
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
-  process.env.VITE_PUBLIC_PROMPTFOO_SHARE_API_URL = `http://localhost:${API_PORT}`;
 } else {
-  process.env.VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL = 'https://app.promptfoo.dev';
-  process.env.VITE_PUBLIC_PROMPTFOO_SHARE_API_URL = 'https://api.promptfoo.dev';
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
 }

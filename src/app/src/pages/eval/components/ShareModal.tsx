@@ -160,9 +160,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
               }}
             />
             <DialogContentText sx={{ fontSize: '0.75rem' }}>
-              {shareUrl.includes('api.promptfoo.dev')
-                ? 'Shared URLs are deleted after 2 weeks.'
-                : 'This URL is accessible to users with access to your organization.'}
+              This URL is accessible to users with access to your organization.
             </DialogContentText>
           </DialogContent>
           <DialogActions>

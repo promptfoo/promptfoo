@@ -12,13 +12,7 @@ export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
 
 // This is used for sharing evals.
 export function getShareApiBaseUrl(): string {
-  return (
-    // TODO(ian): Backwards compatibility, 2024-04-01
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL') ||
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_BASE_URL') ||
-    getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') ||
-    DEFAULT_API_BASE_URL
-  );
+  return getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') || DEFAULT_API_BASE_URL;
 }
 
 export function getDefaultShareViewBaseUrl(): string {
@@ -27,11 +21,7 @@ export function getDefaultShareViewBaseUrl(): string {
 
 // This is used for creating shared eval links.
 export function getShareViewBaseUrl(): string {
-  return (
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_BASE_URL') ||
-    getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') ||
-    getDefaultShareViewBaseUrl()
-  );
+  return getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') || getDefaultShareViewBaseUrl();
 }
 
 export function getDefaultPort(): number {

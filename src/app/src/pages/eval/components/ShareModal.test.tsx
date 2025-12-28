@@ -75,7 +75,7 @@ describe('ShareModal', () => {
   });
 
   it('displays share URL when successfully generated', async () => {
-    const testUrl = 'https://api.promptfoo.dev/shared/test-id';
+    const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
 
     render(<ShareModal {...defaultProps} />);
@@ -87,7 +87,7 @@ describe('ShareModal', () => {
   });
 
   it('handles copy to clipboard functionality', async () => {
-    const testUrl = 'https://api.promptfoo.dev/shared/test-id';
+    const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
 
     render(<ShareModal {...defaultProps} />);
@@ -133,7 +133,7 @@ describe('ShareModal', () => {
   });
 
   it('calls onClose when close button is clicked', async () => {
-    const testUrl = 'https://api.promptfoo.dev/shared/test-id';
+    const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
 
     render(<ShareModal {...defaultProps} />);
@@ -172,8 +172,8 @@ describe('ShareModal', () => {
     expect(mockOpen).toHaveBeenCalledWith('https://www.promptfoo.app', '_blank');
   });
 
-  it('shows different message for organization URLs', async () => {
-    const testUrl = 'https://custom-domain.com/shared/test-id';
+  it('shows organization access message for shared URLs', async () => {
+    const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
 
     render(<ShareModal {...defaultProps} />);
@@ -182,17 +182,6 @@ describe('ShareModal', () => {
       expect(
         screen.getByText('This URL is accessible to users with access to your organization.'),
       ).toBeInTheDocument();
-    });
-  });
-
-  it('shows deletion message for public URLs', async () => {
-    const testUrl = 'https://api.promptfoo.dev/shared/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Shared URLs are deleted after 2 weeks.')).toBeInTheDocument();
     });
   });
 });
