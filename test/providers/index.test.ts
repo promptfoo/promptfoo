@@ -19,7 +19,7 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
-import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import { getProviderIds, loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -1178,6 +1178,52 @@ describe('loadApiProvider', () => {
       expect(provider.id()).toBe('openai:gpt-5.1-mini');
       expect(validateLinkedTargetId).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('getProviderIds', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns provider IDs from a file-based config', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = vi.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/providers.yaml');
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\/]to[\\/]providers\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('flattens file-based providers when mixed with inline providers', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds(['echo', 'file://path/to/providers.yaml']);
+    expect(providerIds).toEqual([
+      'echo',
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
   });
 });
 

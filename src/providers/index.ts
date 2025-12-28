@@ -316,14 +316,48 @@ export async function loadApiProviders(
  * @param providerPaths - The list of providers to get the IDs of.
  * @returns The IDs of the providers in the providerPaths list.
  */
+function getProviderIdsFromFile(providerPath: string): string[] {
+  const basePath = cliState.basePath || process.cwd();
+  const relativePath = providerPath.slice('file://'.length);
+  const modulePath = path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath, relativePath);
+
+  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
+    | ProviderOptions
+    | ProviderOptions[];
+  invariant(fileContent, `Provider config ${relativePath} is undefined`);
+
+  const configs = [fileContent].flat() as ProviderOptions[];
+  return configs.map((config) => {
+    invariant(config.id, `Provider config in ${relativePath} must have an id`);
+    return config.id;
+  });
+}
+
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
+    if (
+      providerPaths.startsWith('file://') &&
+      (providerPaths.endsWith('.yaml') ||
+        providerPaths.endsWith('.yml') ||
+        providerPaths.endsWith('.json'))
+    ) {
+      return getProviderIdsFromFile(providerPaths);
+    }
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
     return ['custom-function'];
   } else if (Array.isArray(providerPaths)) {
-    return providerPaths.map((provider, idx) => {
+    return providerPaths.flatMap((provider, idx) => {
       if (typeof provider === 'string') {
+        if (
+          provider.startsWith('file://') &&
+          (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
+        ) {
+          return getProviderIdsFromFile(provider);
+        }
         return provider;
       }
       if (typeof provider === 'function') {
