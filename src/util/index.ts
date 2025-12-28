@@ -39,6 +39,7 @@ import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
+import type { EnvOverrides } from '../types/env';
 import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -502,7 +503,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
  * @param obj - The object to process
  * @returns The object with only env templates rendered
  */
-export function renderEnvOnlyInObject<T>(obj: T): T {
+export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
@@ -519,7 +520,11 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
     }
 
     const nunjucks = getNunjucksEngine();
-    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+    const baseEnvGlobals = nunjucks.getGlobal('env') as Record<
+      string,
+      string | number | boolean | undefined
+    >;
+    const envGlobals = envOverrides ? { ...baseEnvGlobals, ...envOverrides } : baseEnvGlobals;
 
     // Match ALL Nunjucks templates {{ ... }}
     // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
@@ -556,13 +561,13 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+    return obj.map((item) => renderEnvOnlyInObject(item, envOverrides)) as unknown as T;
   }
 
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key], envOverrides);
     }
     return result as T;
   }

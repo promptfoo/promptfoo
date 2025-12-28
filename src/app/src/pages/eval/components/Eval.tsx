@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
@@ -120,7 +121,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
@@ -144,20 +145,26 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
           // clear the search params
-          setSearchParams((prev) => {
-            prev.delete('filter');
-            return prev;
-          });
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             // Add each filter to the search params
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
           }
         }
       },

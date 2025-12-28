@@ -131,7 +131,7 @@ export async function recordBlobReference(
   const provider = getBlobStorageProvider();
   const exists = await provider.exists(hash).catch(() => false);
   if (!exists) {
-    logger.warn('[BlobStorage] Attempted to record reference for missing blob', {
+    logger.debug('[BlobStorage] Attempted to record reference for missing blob', {
       hash,
       evalId: refContext.evalId,
       location: refContext.location,

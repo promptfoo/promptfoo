@@ -684,13 +684,13 @@ ${exampleRequest}`;
                   label="Name"
                   value={key}
                   onChange={(e) => updateHeaderKey(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
+                  sx={{ mr: 1, flex: 1, minWidth: 100 }}
                 />
                 <TextField
                   label="Value"
                   value={value}
                   onChange={(e) => updateHeaderValue(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
+                  sx={{ mr: 1, flex: 2, minWidth: 120 }}
                 />
                 <IconButton onClick={() => removeHeader(index)}>
                   <DeleteIcon />

@@ -337,11 +337,13 @@ prompts:
     label: claude_prompt
 
 providers:
-  - id: gpt-5
+  - id: openai:gpt-4
     prompts: [gpt_prompt]
   - id: anthropic:claude-3
     prompts: [claude_prompt]
 ```
+
+The `prompts` field also works when providers are defined in external files (`file://provider.yaml`).
 
 ## CSV Prompts
 
