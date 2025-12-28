@@ -859,19 +859,42 @@ thead .header-dismiss {
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* Dark mode code blocks - better contrast */
+/* Dark mode code blocks - VS Code inspired styling */
 [data-theme='dark'] .results-table tr .cell pre {
   background: #1e1e1e;
-  border: 1px solid #3d3d3d;
+  border: 1px solid #3e3e3e;
+  color: #d4d4d4;
 }
 
+[data-theme='dark'] .results-table tr .cell pre code {
+  color: #d4d4d4;
+}
+
+/* Dark mode inline code - high contrast */
 [data-theme='dark'] .results-table tr .cell code:not(pre code) {
   background: #2d2d2d;
-  border: 1px solid #3d3d3d;
+  border: 1px solid #404040;
+  color: #e06c75;
 }
 
-/* Dark mode blockquote - more visible border */
+/* Dark mode blockquote - subtle but visible */
 [data-theme='dark'] .results-table tr .cell blockquote {
-  border-left-color: #606060;
-  background: rgba(255, 255, 255, 0.03);
+  border-left-color: #4a9eff;
+  background: rgba(74, 158, 255, 0.08);
+  color: #b0b0b0;
+}
+
+/* Dark mode table improvements */
+[data-theme='dark'] .results-table tr .cell table {
+  border-color: #3e3e3e;
+}
+
+[data-theme='dark'] .results-table tr .cell th,
+[data-theme='dark'] .results-table tr .cell td {
+  border-color: #3e3e3e;
+}
+
+/* Dark mode strong/bold text */
+[data-theme='dark'] .results-table tr .cell strong {
+  color: #ffffff;
 }
