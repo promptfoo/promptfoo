@@ -859,22 +859,26 @@ thead .header-dismiss {
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* Dark mode code blocks - VS Code inspired styling */
+/* Dark mode code blocks - clean, high contrast */
 [data-theme='dark'] .results-table tr .cell pre {
-  background: #1e1e1e;
-  border: 1px solid #3e3e3e;
-  color: #d4d4d4;
+  background: #0d1117;
+  border: none;
+  border-radius: 6px;
+  color: #e6edf3;
+  padding: 0.75em 1em;
 }
 
 [data-theme='dark'] .results-table tr .cell pre code {
-  color: #d4d4d4;
+  color: #e6edf3;
 }
 
-/* Dark mode inline code - high contrast */
+/* Dark mode inline code - subtle but readable */
 [data-theme='dark'] .results-table tr .cell code:not(pre code) {
-  background: #2d2d2d;
-  border: 1px solid #404040;
-  color: #e06c75;
+  background: rgba(110, 118, 129, 0.4);
+  border: none;
+  border-radius: 6px;
+  color: #e6edf3;
+  padding: 0.2em 0.4em;
 }
 
 /* Dark mode blockquote - subtle but visible */
