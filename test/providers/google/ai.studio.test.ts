@@ -425,7 +425,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });
@@ -490,7 +490,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -556,7 +556,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -626,7 +626,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -720,7 +720,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -756,7 +756,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -801,7 +801,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -838,7 +838,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
 
       expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
@@ -847,7 +847,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -960,7 +960,7 @@ describe('AIStudioChatProvider', () => {
         },
         300000,
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1069,7 +1069,7 @@ describe('AIStudioChatProvider', () => {
         },
         300000,
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1166,7 +1166,7 @@ describe('AIStudioChatProvider', () => {
         },
         300000,
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1270,7 +1270,7 @@ describe('AIStudioChatProvider', () => {
         },
         300000,
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1350,7 +1350,7 @@ describe('AIStudioChatProvider', () => {
         },
         300000,
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1401,7 +1401,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -1455,7 +1455,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
 
       // Verify maybeLoadFromExternalFile was called with the file path

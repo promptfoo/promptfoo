@@ -5,7 +5,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
 import { calculateXAICost, GROK_4_MODELS } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -341,7 +341,7 @@ export class XAIResponsesProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
         this.config.maxRetries,
       );
 

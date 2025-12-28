@@ -387,9 +387,8 @@ export async function runEval({
         repeatIndex,
       };
 
-      if (repeatIndex > 0) {
-        callApiContext.bustCache = true;
-      }
+      // Note: repeatIndex is passed to providers which handle per-repeat caching
+      // via unique cache keys. bustCache is only set by --no-cache flag or debug mode.
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {

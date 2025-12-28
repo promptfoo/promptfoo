@@ -129,6 +129,8 @@ describe('Mistral', () => {
           body: expect.stringContaining('"messages":[{"role":"user","content":"Test prompt"}]'),
         }),
         expect.any(Number),
+        'json',
+        { bust: undefined, repeatIndex: undefined },
       );
 
       expect(result).toEqual({
@@ -241,6 +243,8 @@ describe('Mistral', () => {
         expect.stringContaining('/chat/completions'),
         expect.any(Object),
         expect.any(Number),
+        'json',
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -280,6 +284,8 @@ describe('Mistral', () => {
         'https://custom.mistral.ai/v1/chat/completions',
         expect.any(Object),
         expect.any(Number),
+        'json',
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -305,6 +311,8 @@ describe('Mistral', () => {
         'https://custom.mistral.ai/v1/chat/completions',
         expect.any(Object),
         expect.any(Number),
+        'json',
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });

@@ -133,7 +133,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
 
@@ -185,7 +185,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -252,7 +252,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
 
@@ -322,7 +322,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -417,7 +417,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -560,7 +560,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -673,7 +673,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
 
@@ -940,7 +940,7 @@ describe('OpenAiResponsesProvider', () => {
       expect.anything(),
       expect.anything(),
       'json',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
     expect(result.output).toBe('Test response');
@@ -2630,7 +2630,7 @@ describe('OpenAiResponsesProvider', () => {
         expect.any(Object),
         600000, // 10 minutes
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2668,7 +2668,7 @@ describe('OpenAiResponsesProvider', () => {
         expect.any(Object),
         600000, // 10 minutes
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });

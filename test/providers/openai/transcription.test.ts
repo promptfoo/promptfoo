@@ -141,7 +141,7 @@ describe('OpenAiTranscriptionProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
 
       expect(result).toEqual({
@@ -475,7 +475,7 @@ describe('OpenAiTranscriptionProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -515,7 +515,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -537,7 +537,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        true,
+        { bust: true, repeatIndex: undefined },
       );
     });
 
@@ -559,7 +559,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        true,
+        { bust: true, repeatIndex: undefined },
       );
     });
   });

@@ -378,7 +378,7 @@ describe('AzureChatCompletionProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });

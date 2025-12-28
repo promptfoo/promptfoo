@@ -96,7 +96,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      { bust: undefined, repeatIndex: undefined },
     );
 
     expect(result.output).toContain('Here is your image:');
@@ -241,7 +241,7 @@ describe('GeminiImageProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
 
       const callArgs = mockFetchWithCache.mock.calls[0];
@@ -500,7 +500,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
       expect(result.output).toContain('![Generated Image]');
     });
@@ -544,7 +544,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });
@@ -576,7 +576,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -606,7 +606,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });

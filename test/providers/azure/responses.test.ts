@@ -382,7 +382,7 @@ describe('AzureResponsesProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -425,7 +425,7 @@ describe('AzureResponsesProvider', () => {
         expect.any(Object),
         600000, // 10 minutes timeout for deep research
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
 
@@ -455,7 +455,7 @@ describe('AzureResponsesProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
     });
   });

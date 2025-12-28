@@ -408,7 +408,7 @@ describe('OllamaChatProvider', () => {
     expect(JSON.parse(call[1].body)).toMatchObject({
       tools: [{ name: 'test-tool' }],
     });
-    expect(call[4]).toBe(true);
+    expect(call[4]).toEqual({ bust: true, repeatIndex: undefined });
   });
 
   it('should handle context bustCache parameter', async () => {
@@ -433,7 +433,7 @@ describe('OllamaChatProvider', () => {
 
     expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
     const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
-    expect(call[4]).toBe(true);
+    expect(call[4]).toEqual({ bust: true, repeatIndex: undefined });
   });
 
   it('should extract token usage from chat response', async () => {

@@ -137,7 +137,7 @@ describe('Snowflake Cortex Provider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
       );
 
       expect(result).toEqual({
