@@ -10,7 +10,7 @@ import {
   INSURANCE_PLUGINS,
   ECOMMERCE_PLUGINS,
 } from '../../constants/plugins';
-import type { ReconMetadata, ReconApplicationDefinition, ReconContext } from './metadata';
+import type { ReconMetadata, ReconApplicationDefinition, ReconDetails } from './metadata';
 import type { ReconResult } from './types';
 
 /**
@@ -242,17 +242,18 @@ export function buildApplicationDefinition(result: ReconResult): ReconApplicatio
 }
 
 /**
- * Builds recon context with additional information beyond ApplicationDefinition
+ * Builds recon details with additional information beyond ApplicationDefinition.
+ * Named "reconDetails" to distinguish from the UI's "ReconContext" type.
  */
-export function buildReconContext(result: ReconResult): ReconContext {
-  const context: ReconContext = {};
+export function buildReconDetails(result: ReconResult): ReconDetails {
+  const details: ReconDetails = {};
 
   if (result.stateful !== undefined) {
-    context.stateful = result.stateful;
+    details.stateful = result.stateful;
   }
 
   if (result.discoveredTools?.length) {
-    context.discoveredTools = result.discoveredTools.map((t) => ({
+    details.discoveredTools = result.discoveredTools.map((t) => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,
@@ -260,22 +261,22 @@ export function buildReconContext(result: ReconResult): ReconContext {
   }
 
   if (result.securityNotes?.length) {
-    context.securityNotes = result.securityNotes;
+    details.securityNotes = result.securityNotes;
   }
 
   if (result.keyFiles?.length) {
-    context.keyFiles = result.keyFiles;
+    details.keyFiles = result.keyFiles;
   }
 
   if (result.suggestedPlugins?.length) {
-    context.suggestedPlugins = result.suggestedPlugins;
+    details.suggestedPlugins = result.suggestedPlugins;
   }
 
   if (result.entities?.length) {
-    context.entities = result.entities;
+    details.entities = result.entities;
   }
 
-  return context;
+  return details;
 }
 
 /**
@@ -288,7 +289,7 @@ export function buildReconMetadata(result: ReconResult, scannedDirectory: string
     generatedAt: new Date().toISOString(),
     scannedDirectory,
     applicationDefinition: buildApplicationDefinition(result),
-    reconContext: buildReconContext(result),
+    reconDetails: buildReconDetails(result),
   };
 }
 

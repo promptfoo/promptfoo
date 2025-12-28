@@ -57,15 +57,15 @@ describe('ReconSummaryBanner', () => {
     expect(screen.getByText('.../projects/my-app')).toBeInTheDocument();
   });
 
-  it('should display files analyzed count', () => {
+  it('should display key files analyzed count', () => {
     mockReconContext.mockReturnValue({
       source: 'recon-cli',
       timestamp: Date.now(),
-      filesAnalyzed: 42,
+      keyFilesAnalyzed: 42,
     });
 
     render(<ReconSummaryBanner />);
-    expect(screen.getByText('42 files analyzed')).toBeInTheDocument();
+    expect(screen.getByText('42 key files analyzed')).toBeInTheDocument();
   });
 
   it('should display fields populated count', () => {
@@ -95,12 +95,12 @@ describe('ReconSummaryBanner', () => {
     mockReconContext.mockReturnValue({
       source: 'recon-cli',
       timestamp: Date.now(),
-      filesAnalyzed: 0,
+      keyFilesAnalyzed: 0,
       fieldsPopulated: 0,
     });
 
     render(<ReconSummaryBanner />);
-    expect(screen.queryByText(/files analyzed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/key files analyzed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/fields populated/)).not.toBeInTheDocument();
   });
 

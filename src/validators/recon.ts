@@ -110,8 +110,8 @@ export const ReconContextSchema = z.object({
   timestamp: z.number().int().positive().describe('Unix timestamp in milliseconds'),
   /** Directory that was scanned */
   codebaseDirectory: z.string().optional().describe('Path to the scanned codebase'),
-  /** Number of files that were analyzed */
-  filesAnalyzed: z.number().int().nonnegative().optional().describe('Number of files analyzed'),
+  /** Number of key files that were analyzed (not total files scanned) */
+  keyFilesAnalyzed: z.number().int().nonnegative().optional().describe('Number of key files analyzed'),
   /** Number of application definition fields that were populated */
   fieldsPopulated: z.number().int().nonnegative().optional().describe('Fields populated count'),
 });
@@ -131,14 +131,18 @@ export const PendingReconMetadataSchema = z.object({
   timestamp: z.number().int().positive().describe('Unix timestamp in milliseconds'),
   /** Path to the directory that was scanned */
   codebaseDirectory: z.string().optional().describe('Path to the scanned codebase'),
-  /** Number of key files that were analyzed */
-  filesAnalyzed: z.number().int().nonnegative().optional().describe('Number of files analyzed'),
+  /** Number of key files that were analyzed (not total files scanned) */
+  keyFilesAnalyzed: z.number().int().nonnegative().optional().describe('Number of key files analyzed'),
   /** Structured application definition extracted from recon */
   applicationDefinition: ApplicationDefinitionSchema.optional().describe(
     'Structured application definition',
   ),
-  /** Additional recon context (tools, security notes, etc.) */
-  reconContext: z
+  /**
+   * Additional reconnaissance details (tools, security notes, etc.)
+   * Named "reconDetails" to distinguish from the UI's "ReconContext" type
+   * which tracks display metadata (timestamp, keyFilesAnalyzed, fieldsPopulated).
+   */
+  reconDetails: z
     .object({
       stateful: z.boolean().optional().describe('Whether the application is stateful'),
       entities: z.array(z.string()).optional().describe('Discovered entities'),
@@ -148,7 +152,7 @@ export const PendingReconMetadataSchema = z.object({
       suggestedPlugins: z.array(z.string()).optional().describe('Suggested plugins'),
     })
     .optional()
-    .describe('Additional recon context'),
+    .describe('Additional reconnaissance details'),
 });
 
 /**

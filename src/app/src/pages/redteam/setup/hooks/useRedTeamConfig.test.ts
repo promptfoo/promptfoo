@@ -146,7 +146,7 @@ describe('useRedTeamConfig', () => {
         source: 'recon-cli',
         timestamp: Date.now(),
         codebaseDirectory: '/path/to/project',
-        filesAnalyzed: 150,
+        keyFilesAnalyzed: 150,
         fieldsPopulated: 12,
       };
 
@@ -214,7 +214,7 @@ describe('useRedTeamConfig', () => {
         source: 'in-app-recon',
         timestamp: 1703692800000,
         codebaseDirectory: '/Users/dev/my-app',
-        filesAnalyzed: 847,
+        keyFilesAnalyzed: 847,
         fieldsPopulated: 14,
       };
 

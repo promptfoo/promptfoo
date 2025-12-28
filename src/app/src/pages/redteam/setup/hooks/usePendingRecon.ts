@@ -2,60 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import type { PendingReconConfig } from '@promptfoo/validators/recon';
+import { SETUP_TAB_INDICES } from '../constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './useRedTeamConfig';
 import type { Config, ReconContext } from '../types';
-
-/**
- * Pending recon data structure from the server
- */
-interface PendingReconData {
-  config: {
-    description?: string;
-    redteam?: {
-      purpose?: string;
-      plugins?: string[];
-      strategies?: Array<string | { id: string; config?: Record<string, unknown> }>;
-      entities?: string[];
-      numTests?: number;
-    };
-  };
-  metadata: {
-    source: 'recon-cli';
-    timestamp: number;
-    codebaseDirectory?: string;
-    filesAnalyzed?: number;
-    applicationDefinition?: {
-      purpose?: string;
-      features?: string;
-      industry?: string;
-      systemPrompt?: string;
-      hasAccessTo?: string;
-      doesNotHaveAccessTo?: string;
-      userTypes?: string;
-      securityRequirements?: string;
-      sensitiveDataTypes?: string;
-      exampleIdentifiers?: string;
-      criticalActions?: string;
-      forbiddenTopics?: string;
-      attackConstraints?: string;
-      competitors?: string;
-      connectedSystems?: string;
-      redteamUser?: string;
-    };
-    reconContext?: {
-      stateful?: boolean;
-      entities?: string[];
-      discoveredTools?: Array<{ name: string; description: string; parameters?: string }>;
-      securityNotes?: string[];
-      keyFiles?: string[];
-      suggestedPlugins?: string[];
-    };
-  };
-  reconResult?: {
-    purpose?: string;
-    [key: string]: unknown;
-  };
-}
 
 interface UsePendingReconResult {
   /** Whether the hook is currently loading pending recon data */
@@ -94,11 +44,11 @@ export function usePendingRecon(
   const { setFullConfig, setReconContext: setStoreReconContext } = useRedTeamConfig();
 
   const applyReconConfig = useCallback(
-    async (data: PendingReconData) => {
+    async (data: PendingReconConfig) => {
       const { config: reconConfig, metadata } = data;
 
       // Build the full config for the Zustand store
-      const stateful = metadata.reconContext?.stateful ?? false;
+      const stateful = metadata.reconDetails?.stateful ?? false;
 
       // Prepare target with stateful flag if needed
       let target = DEFAULT_HTTP_TARGET;
@@ -151,7 +101,7 @@ export function usePendingRecon(
         strategies: reconConfig.redteam?.strategies || ['basic'],
         purpose: reconConfig.redteam?.purpose || '',
         entities:
-          reconConfig.redteam?.entities || metadata.reconContext?.entities || [],
+          reconConfig.redteam?.entities || metadata.reconDetails?.entities || [],
         numTests: reconConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,
@@ -162,7 +112,7 @@ export function usePendingRecon(
         source: 'recon-cli',
         timestamp: metadata.timestamp,
         codebaseDirectory: metadata.codebaseDirectory,
-        filesAnalyzed: metadata.filesAnalyzed,
+        keyFilesAnalyzed: metadata.keyFilesAnalyzed,
         fieldsPopulated: meaningfulFields,
       };
 
@@ -207,7 +157,7 @@ export function usePendingRecon(
           throw new Error('Failed to fetch pending recon configuration');
         }
 
-        const data: PendingReconData = await response.json();
+        const data: PendingReconConfig = await response.json();
 
         // Apply the configuration
         await applyReconConfig(data);
@@ -217,12 +167,12 @@ export function usePendingRecon(
 
         setReconApplied(true);
 
-        // Clean up URL and navigate to Review tab (index 5)
-        navigate('/redteam/setup#5', { replace: true });
+        // Clean up URL and navigate to Review tab
+        navigate(`/redteam/setup#${SETUP_TAB_INDICES.REVIEW}`, { replace: true });
 
         // Notify parent to switch tabs
         if (onReconApplied) {
-          onReconApplied(5);
+          onReconApplied(SETUP_TAB_INDICES.REVIEW);
         }
       } catch (err) {
         console.error('Failed to load pending recon config:', err);

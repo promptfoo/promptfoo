@@ -81,11 +81,11 @@ export default function ReconSummaryBanner() {
               sx={{ borderColor: alpha(theme.palette.info.main, 0.3) }}
             />
           )}
-          {reconContext.filesAnalyzed !== undefined && reconContext.filesAnalyzed > 0 && (
+          {reconContext.keyFilesAnalyzed !== undefined && reconContext.keyFilesAnalyzed > 0 && (
             <Chip
               size="small"
               icon={<InsertDriveFileIcon />}
-              label={`${reconContext.filesAnalyzed} files analyzed`}
+              label={`${reconContext.keyFilesAnalyzed} key files analyzed`}
               variant="outlined"
               sx={{ borderColor: alpha(theme.palette.info.main, 0.3) }}
             />

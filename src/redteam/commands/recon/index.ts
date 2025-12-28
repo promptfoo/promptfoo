@@ -49,7 +49,7 @@ function writePendingReconConfig(
       source: 'recon-cli',
       timestamp: Date.now(),
       codebaseDirectory,
-      filesAnalyzed: result.keyFiles?.length || 0,
+      keyFilesAnalyzed: result.keyFiles?.length || 0,
     },
     reconResult: result,
   };

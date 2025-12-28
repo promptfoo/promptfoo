@@ -83,7 +83,7 @@ describe('usePendingRecon', () => {
               source: 'recon-cli',
               timestamp: Date.now(),
               codebaseDirectory: '/path/to/project',
-              filesAnalyzed: 10,
+              keyFilesAnalyzed: 10,
             },
           }),
       } as Response);
@@ -117,7 +117,7 @@ describe('usePendingRecon', () => {
           source: 'recon-cli' as const,
           timestamp: 1703692800000,
           codebaseDirectory: '/path/to/project',
-          filesAnalyzed: 25,
+          keyFilesAnalyzed: 25,
           applicationDefinition: {
             purpose: 'Healthcare app',
             industry: 'Healthcare',
@@ -165,7 +165,7 @@ describe('usePendingRecon', () => {
         source: 'recon-cli',
         timestamp: 1703692800000,
         codebaseDirectory: '/path/to/project',
-        filesAnalyzed: 25,
+        keyFilesAnalyzed: 25,
         fieldsPopulated: expect.any(Number),
       });
     });
@@ -211,7 +211,7 @@ describe('usePendingRecon', () => {
         metadata: {
           source: 'recon-cli' as const,
           timestamp: Date.now(),
-          reconContext: {
+          reconDetails: {
             stateful: true,
           },
         },

@@ -10,3 +10,18 @@
 
 export const SIDEBAR_WIDTH = 240;
 export const NAVBAR_HEIGHT = 64;
+
+/**
+ * Tab indices for the setup wizard.
+ * Used for programmatic navigation (e.g., after recon import).
+ */
+export const SETUP_TAB_INDICES = {
+  TARGET_TYPE: 0,
+  TARGET_CONFIG: 1,
+  PURPOSE: 2,
+  PLUGINS: 3,
+  STRATEGIES: 4,
+  REVIEW: 5,
+} as const;
+
+export type SetupTabIndex = (typeof SETUP_TAB_INDICES)[keyof typeof SETUP_TAB_INDICES];

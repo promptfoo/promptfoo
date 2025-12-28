@@ -587,17 +587,17 @@ export default function RedTeamSetupPage() {
           redteamUser: reconAppDef.redteamUser || mappedConfig.applicationDefinition.redteamUser,
         };
 
-        // Set stateful flag from recon context if applicable
-        if (yamlConfig.metadata?.reconContext?.stateful) {
+        // Set stateful flag from recon details if applicable
+        if (yamlConfig.metadata?.reconDetails?.stateful) {
           if (typeof target === 'object') {
             target.config = { ...target.config, stateful: true };
             mappedConfig.target = target;
           }
         }
 
-        // Import entities from recon context if not already set from redteam config
-        if (!mappedConfig.entities?.length && yamlConfig.metadata?.reconContext?.entities?.length) {
-          mappedConfig.entities = yamlConfig.metadata.reconContext.entities;
+        // Import entities from recon details if not already set from redteam config
+        if (!mappedConfig.entities?.length && yamlConfig.metadata?.reconDetails?.entities?.length) {
+          mappedConfig.entities = yamlConfig.metadata.reconDetails.entities;
         }
       }
 

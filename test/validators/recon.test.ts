@@ -161,7 +161,7 @@ describe('ReconContextSchema', () => {
       source: 'recon-cli',
       timestamp: Date.now(),
       codebaseDirectory: '/Users/test/projects/my-app',
-      filesAnalyzed: 42,
+      keyFilesAnalyzed: 42,
       fieldsPopulated: 8,
     };
     const result = ReconContextSchema.safeParse(context);
@@ -195,11 +195,11 @@ describe('ReconContextSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('should reject negative filesAnalyzed', () => {
+  it('should reject negative keyFilesAnalyzed', () => {
     const context = {
       source: 'recon-cli',
       timestamp: Date.now(),
-      filesAnalyzed: -5,
+      keyFilesAnalyzed: -5,
     };
     const result = ReconContextSchema.safeParse(context);
     expect(result.success).toBe(false);
@@ -212,12 +212,12 @@ describe('PendingReconMetadataSchema', () => {
       source: 'recon-cli' as const,
       timestamp: Date.now(),
       codebaseDirectory: '/path/to/project',
-      filesAnalyzed: 100,
+      keyFilesAnalyzed: 100,
       applicationDefinition: {
         purpose: 'Test app',
         features: 'Feature 1, Feature 2',
       },
-      reconContext: {
+      reconDetails: {
         stateful: true,
         entities: ['Entity1'],
         discoveredTools: [{ name: 'tool1', description: 'A tool' }],
@@ -266,7 +266,7 @@ describe('PendingReconConfigSchema', () => {
         source: 'recon-cli',
         timestamp: Date.now(),
         codebaseDirectory: '/path/to/app',
-        filesAnalyzed: 50,
+        keyFilesAnalyzed: 50,
       },
       reconResult: {
         purpose: 'Customer support bot',

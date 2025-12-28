@@ -38,9 +38,11 @@ export interface ReconMetadata {
   applicationDefinition: ReconApplicationDefinition;
 
   /**
-   * Additional context from recon that doesn't fit in applicationDefinition
+   * Additional details from recon that don't fit in applicationDefinition.
+   * Named "reconDetails" to distinguish from the UI's "ReconContext" type
+   * which tracks display metadata (timestamp, keyFilesAnalyzed, fieldsPopulated).
    */
-  reconContext: ReconContext;
+  reconDetails: ReconDetails;
 }
 
 /**
@@ -67,9 +69,10 @@ export interface ReconApplicationDefinition {
 }
 
 /**
- * Additional recon context beyond ApplicationDefinition
+ * Additional recon details beyond ApplicationDefinition.
+ * Named "ReconDetails" to distinguish from the UI's "ReconContext" type.
  */
-export interface ReconContext {
+export interface ReconDetails {
   /**
    * Whether the application maintains conversation state
    */
