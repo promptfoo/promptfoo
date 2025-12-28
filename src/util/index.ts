@@ -172,13 +172,40 @@ export async function writeOutput(
     // Use streaming for memory-efficient CSV export
     // This processes results in batches instead of loading everything into memory
     const writeStream = fs.createWriteStream(outputPath);
+
+    // Track any stream errors
+    let streamError: Error | null = null;
+    writeStream.on('error', (err) => {
+      streamError = err;
+    });
+
     await streamEvalCsv(evalRecord, {
       isRedteam: Boolean(evalRecord.config.redteam),
-      write: (data: string) => {
-        writeStream.write(data);
+      write: async (data: string) => {
+        if (streamError) {
+          throw streamError;
+        }
+        // Handle backpressure: if write() returns false, wait for drain
+        const canContinue = writeStream.write(data);
+        if (!canContinue) {
+          await new Promise<void>((resolve, reject) => {
+            writeStream.once('drain', resolve);
+            writeStream.once('error', reject);
+          });
+        }
       },
     });
-    writeStream.end();
+
+    // Wait for the stream to finish writing
+    await new Promise<void>((resolve, reject) => {
+      if (streamError) {
+        reject(streamError);
+        return;
+      }
+      writeStream.end();
+      writeStream.once('finish', resolve);
+      writeStream.once('error', reject);
+    });
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
