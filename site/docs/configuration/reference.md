@@ -183,12 +183,12 @@ npx promptfoo eval --max-concurrency 5
 
 Configure default column visibility for the web viewer. These defaults apply to all users viewing the eval.
 
-| Property      | Type                    | Description                                              |
-| ------------- | ----------------------- | -------------------------------------------------------- |
-| variables     | `'visible' \| 'hidden'` | Default visibility for all variable columns              |
-| prompts       | `'visible' \| 'hidden'` | Default visibility for all prompt columns                |
-| hideColumns   | `string[]`              | List of column names to hide by default                  |
-| showColumns   | `string[]`              | List of column names to always show (overrides hideColumns) |
+| Property    | Type                    | Description                                                 |
+| ----------- | ----------------------- | ----------------------------------------------------------- |
+| variables   | `'visible' \| 'hidden'` | Default visibility for all variable columns                 |
+| prompts     | `'visible' \| 'hidden'` | Default visibility for all prompt columns                   |
+| hideColumns | `string[]`              | List of column names to hide by default                     |
+| showColumns | `string[]`              | List of column names to always show (overrides hideColumns) |
 
 #### Example
 

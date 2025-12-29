@@ -13,6 +13,7 @@
 
 import type { DefaultColumnVisibility, UnifiedConfig } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
+
 import type { ColumnVisibilityByName, GlobalColumnDefaults } from './store';
 
 /**

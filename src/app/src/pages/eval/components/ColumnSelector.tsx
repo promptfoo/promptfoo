@@ -20,6 +20,7 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { SelectChangeEvent } from '@mui/material/Select';
+
 import type { ColumnVisibilityByName } from './store';
 
 interface ColumnData {
@@ -115,8 +116,7 @@ export const ColumnSelector = ({
 
   // Check if all variables are currently visible
   const variablesVisible =
-    variableColumnIds.length > 0 &&
-    variableColumnIds.every((col) => selectedColumns.includes(col));
+    variableColumnIds.length > 0 && variableColumnIds.every((col) => selectedColumns.includes(col));
 
   const handleToggleVariables = () => {
     const newVariablesVisible = !variablesVisible;

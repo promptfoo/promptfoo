@@ -28,12 +28,12 @@ When you run `promptfoo view`, the `context` and `system_prompt` columns will be
 
 ## Configuration Options
 
-| Property      | Type                    | Description                                |
-| ------------- | ----------------------- | ------------------------------------------ |
+| Property      | Type                    | Description                                 |
+| ------------- | ----------------------- | ------------------------------------------- |
 | `variables`   | `'visible' \| 'hidden'` | Default visibility for all variable columns |
-| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns  |
-| `hideColumns` | `string[]`              | Column names to hide by default            |
-| `showColumns` | `string[]`              | Column names to always show                |
+| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns   |
+| `hideColumns` | `string[]`              | Column names to hide by default             |
+| `showColumns` | `string[]`              | Column names to always show                 |
 
 ## User Preferences
 

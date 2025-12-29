@@ -47,6 +47,7 @@ import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
+import { getConfigColumnVisibility, resolveColumnVisibility } from './columnVisibility';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
@@ -58,15 +59,7 @@ import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import {
-  useResultsViewSettingsStore,
-  useTableStore,
-  type ColumnVisibilityByName,
-} from './store';
-import {
-  resolveColumnVisibility,
-  getConfigColumnVisibility,
-} from './columnVisibility';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -218,7 +211,6 @@ export default function ResultsView({
     // New name-based column visibility
     columnVisibilityByName,
     setColumnVisibilityByName,
-    setMultipleColumnVisibilityByName,
     clearColumnVisibilityByName,
     clearAllColumnVisibilityByName,
     globalColumnDefaults,

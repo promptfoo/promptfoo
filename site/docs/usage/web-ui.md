@@ -99,11 +99,11 @@ defaultColumnVisibility:
     - expected
 ```
 
-| Property      | Type                    | Description                                        |
-| ------------- | ----------------------- | -------------------------------------------------- |
-| `variables`   | `'visible' \| 'hidden'` | Default visibility for all variable columns        |
-| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns          |
-| `hideColumns` | `string[]`              | List of column names to hide by default            |
+| Property      | Type                    | Description                                          |
+| ------------- | ----------------------- | ---------------------------------------------------- |
+| `variables`   | `'visible' \| 'hidden'` | Default visibility for all variable columns          |
+| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns            |
+| `hideColumns` | `string[]`              | List of column names to hide by default              |
 | `showColumns` | `string[]`              | List of column names to show (overrides hideColumns) |
 
 Config defaults apply to all users viewing this eval, while browser preferences are personal.
