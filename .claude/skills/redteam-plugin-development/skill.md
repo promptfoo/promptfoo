@@ -89,17 +89,17 @@ protected async getTemplate(): Promise<string> {
 
 ## Template Variables
 
-| Variable            | Description                                              |
-| ------------------- | -------------------------------------------------------- |
-| `{{purpose}}`       | System purpose                                           |
-| `{{prompt}}`        | Full prompt (includes base64 for multimodal - avoid!)    |
-| `{{testVars.X}}`    | Test variables (use `testVars.prompt` for text-only)     |
-| `{{entities}}`      | Allowed entities                                         |
-| `{{goal}}`          | Jailbreak goal (intent plugin)                           |
-| `{{tools}}`         | Available tools                                          |
-| `{{n}}`             | Number of prompts to generate                            |
-| `{{value}}`         | Return value from `extractAssertionValue()`              |
-| Custom variables    | Any key returned by `extractAssertionValue()` is spread  |
+| Variable         | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| `{{purpose}}`    | System purpose                                          |
+| `{{prompt}}`     | Full prompt (includes base64 for multimodal - avoid!)   |
+| `{{testVars.X}}` | Test variables (use `testVars.prompt` for text-only)    |
+| `{{entities}}`   | Allowed entities                                        |
+| `{{goal}}`       | Jailbreak goal (intent plugin)                          |
+| `{{tools}}`      | Available tools                                         |
+| `{{n}}`          | Number of prompts to generate                           |
+| `{{value}}`      | Return value from `extractAssertionValue()`             |
+| Custom variables | Any key returned by `extractAssertionValue()` is spread |
 
 ## Image Dataset Plugins
 
