@@ -128,7 +128,7 @@ describe('columnVisibility', () => {
       it('should hide all variables when config sets variables to hidden', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
-          configDefaults: { variables: 'hidden' },
+          configDefaults: { variables: 'hidden', prompts: 'visible' },
         });
 
         expect(result.columnVisibility['Variable 1']).toBe(false);
@@ -140,7 +140,7 @@ describe('columnVisibility', () => {
       it('should hide all prompts when config sets prompts to hidden', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
-          configDefaults: { prompts: 'hidden' },
+          configDefaults: { variables: 'visible', prompts: 'hidden' },
         });
 
         expect(result.columnVisibility['Variable 1']).toBe(true);
@@ -151,7 +151,11 @@ describe('columnVisibility', () => {
       it('should hide specific columns from hideColumns', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
-          configDefaults: { hideColumns: ['context', 'expected'] },
+          configDefaults: {
+            variables: 'visible',
+            prompts: 'visible',
+            hideColumns: ['context', 'expected'],
+          },
         });
 
         expect(result.columnVisibility['Variable 1']).toBe(true); // question
@@ -162,7 +166,7 @@ describe('columnVisibility', () => {
       it('should show specific columns from showColumns even when variables are hidden', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
-          configDefaults: { variables: 'hidden', showColumns: ['question'] },
+          configDefaults: { variables: 'hidden', prompts: 'visible', showColumns: ['question'] },
         });
 
         expect(result.columnVisibility['Variable 1']).toBe(true); // question - in showColumns
@@ -173,7 +177,12 @@ describe('columnVisibility', () => {
       it('should prioritize showColumns over hideColumns for the same column', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
-          configDefaults: { hideColumns: ['context'], showColumns: ['context'] },
+          configDefaults: {
+            variables: 'visible',
+            prompts: 'visible',
+            hideColumns: ['context'],
+            showColumns: ['context'],
+          },
         });
 
         // showColumns is checked before hideColumns in the resolution logic
@@ -184,7 +193,11 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           hasDescription: true,
-          configDefaults: { hideColumns: ['description'] },
+          configDefaults: {
+            variables: 'visible',
+            prompts: 'visible',
+            hideColumns: ['description'],
+          },
         });
 
         expect(result.columnVisibility['description']).toBe(false);
@@ -194,7 +207,7 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           hasDescription: true,
-          configDefaults: { variables: 'hidden', showColumns: ['description'] },
+          configDefaults: { variables: 'hidden', prompts: 'visible', showColumns: ['description'] },
         });
 
         expect(result.columnVisibility['description']).toBe(true);
@@ -204,7 +217,12 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           hasDescription: true,
-          configDefaults: { hideColumns: ['description'], showColumns: ['description'] },
+          configDefaults: {
+            variables: 'visible',
+            prompts: 'visible',
+            hideColumns: ['description'],
+            showColumns: ['description'],
+          },
         });
 
         // showColumns is checked before hideColumns
@@ -215,7 +233,7 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           hasDescription: true,
-          configDefaults: { variables: 'hidden' },
+          configDefaults: { variables: 'hidden', prompts: 'visible' },
         });
 
         // Description follows variable visibility rules
@@ -297,7 +315,7 @@ describe('columnVisibility', () => {
           ...defaultParams,
           perEvalColumnState: { 'Variable 2': true },
           columnVisibilityByName: { context: false },
-          configDefaults: { hideColumns: ['context'] },
+          configDefaults: { variables: 'visible', prompts: 'visible', hideColumns: ['context'] },
         });
 
         // Per-eval says show Variable 2, even though name prefs and config say hide
@@ -308,7 +326,7 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           columnVisibilityByName: { context: true },
-          configDefaults: { hideColumns: ['context'] },
+          configDefaults: { variables: 'visible', prompts: 'visible', hideColumns: ['context'] },
         });
 
         // Name pref says show, config says hide - name pref wins
@@ -319,7 +337,7 @@ describe('columnVisibility', () => {
         const result = resolveColumnVisibility({
           ...defaultParams,
           globalColumnDefaults: { showAllVariables: true, showAllPrompts: true },
-          configDefaults: { variables: 'hidden' },
+          configDefaults: { variables: 'hidden', prompts: 'visible' },
         });
 
         // Config says hide variables, global says show - config wins
@@ -415,6 +433,7 @@ describe('columnVisibility', () => {
       const config = {
         defaultColumnVisibility: {
           variables: 'hidden' as const,
+          prompts: 'visible' as const,
           hideColumns: ['context'],
         },
       };
@@ -423,6 +442,7 @@ describe('columnVisibility', () => {
 
       expect(result).toEqual({
         variables: 'hidden',
+        prompts: 'visible',
         hideColumns: ['context'],
       });
     });
