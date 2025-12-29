@@ -35,6 +35,229 @@ interface RiskCategoriesProps {
   >;
 }
 
+interface TestType {
+  name: string;
+  categoryPassed: boolean;
+  numPassed: number;
+  numFailed: number;
+  total: number;
+}
+
+interface CategoryData {
+  name: string;
+  description: string;
+  totalPasses: number;
+  totalTests: number;
+  testTypes: TestType[];
+  passRate: number;
+}
+
+const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
+  if (passRate >= 0.9) {
+    return {
+      bg: 'bg-emerald-500',
+      text: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+  if (passRate >= 0.7) {
+    return {
+      bg: 'bg-amber-500',
+      text: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+  if (passRate >= 0.5) {
+    return {
+      bg: 'bg-orange-500',
+      text: 'text-orange-600 dark:text-orange-400',
+    };
+  }
+  return {
+    bg: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
+  };
+};
+
+interface PluginRowProps {
+  test: TestType;
+  pluginPassRateThreshold: number;
+  onPluginClick: (pluginName: string) => void;
+}
+
+const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowProps) => {
+  const passRate = test.numPassed / test.total;
+  const isPassing = passRate >= pluginPassRateThreshold;
+
+  const displayName =
+    displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
+    categoryAliases[test.name as keyof typeof categoryAliases] ||
+    test.name;
+
+  return (
+    <button
+      key={test.name}
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPluginClick(test.name);
+      }}
+      className={cn(
+        'flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm transition-all cursor-pointer',
+        'hover:bg-background/50',
+      )}
+    >
+      {/* Spacer to align with category chevron */}
+      <div className="w-4 shrink-0 print:hidden" />
+
+      {/* Plugin Name with Tooltip */}
+      <div className="min-w-0 flex-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="truncate inline-block max-w-full">{displayName}</span>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-xs">
+            <TooltipArrow className="fill-foreground" />
+            <p>
+              {subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions] ||
+                'Click to view details'}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      {/* Progress Bar - same width as category (w-32) */}
+      <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn('h-full rounded-full', getPassRateStyles(passRate).bg)}
+            style={{ width: `${passRate * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Stats - fixed width to align with category stats */}
+      <div className="w-20 shrink-0 text-right">
+        <span className="text-xs text-muted-foreground">
+          {test.numPassed}/{test.total}
+        </span>
+      </div>
+
+      {/* Status Icon - same w-5 as category */}
+      <div className="w-5 shrink-0 flex justify-center">
+        {isPassing ? (
+          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+        ) : (
+          <XCircle className="h-4 w-4 text-destructive" />
+        )}
+      </div>
+
+      {/* Chevron - in w-4 container to match category spacer */}
+      <div className="w-4 shrink-0 flex justify-center print:hidden">
+        <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+      </div>
+    </button>
+  );
+};
+
+interface RiskCategoryRowProps {
+  category: CategoryData;
+  isExpanded: boolean;
+  pluginPassRateThreshold: number;
+  onToggle: () => void;
+  onPluginClick: (pluginName: string) => void;
+}
+
+const RiskCategoryRow = ({
+  category,
+  isExpanded,
+  pluginPassRateThreshold,
+  onToggle,
+  onPluginClick,
+}: RiskCategoryRowProps) => {
+  const hasFailed = category.passRate < pluginPassRateThreshold;
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+      {/* Category Header Row */}
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'flex w-full items-center gap-4 px-4 py-4 text-left transition-colors cursor-pointer',
+            'hover:bg-muted/50',
+            isExpanded && 'bg-muted/30',
+          )}
+        >
+          {/* Expand/Collapse Icon */}
+          <div className="shrink-0 text-muted-foreground print:hidden">
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </div>
+
+          {/* Category Name & Description */}
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold">{category.name}</span>
+            <p className="truncate text-sm text-muted-foreground">{category.description}</p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all',
+                  getPassRateStyles(category.passRate).bg,
+                )}
+                style={{ width: `${category.passRate * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Stats - fixed width to align with plugin rows */}
+          <div className="w-20 shrink-0 text-right">
+            <span
+              className={cn('text-sm font-semibold', getPassRateStyles(category.passRate).text)}
+            >
+              {Math.round(category.passRate * 100)}%
+            </span>
+            <p className="text-xs text-muted-foreground">
+              {category.totalPasses}/{category.totalTests}
+            </p>
+          </div>
+
+          {/* Status Icon */}
+          <div className="w-5 shrink-0 flex justify-center">
+            {hasFailed ? (
+              <XCircle className="h-4 w-4 text-destructive" />
+            ) : (
+              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+            )}
+          </div>
+
+          {/* Spacer for chevron alignment */}
+          <div className="w-4 shrink-0 print:hidden" />
+        </button>
+      </CollapsibleTrigger>
+
+      {/* Expanded Plugin List */}
+      <CollapsibleContent forceMount className={cn('data-[state=closed]:hidden print:!block')}>
+        <div className="border-t border-border bg-muted/20">
+          {category.testTypes.map((test) => (
+            <PluginRow
+              key={test.name}
+              test={test}
+              pluginPassRateThreshold={pluginPassRateThreshold}
+              onPluginClick={onPluginClick}
+            />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 const RiskCategories = ({
   categoryStats,
   evalId,
@@ -107,31 +330,6 @@ const RiskCategories = ({
     setDrawerOpen(true);
   };
 
-  const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
-    if (passRate >= 0.9) {
-      return {
-        bg: 'bg-emerald-500',
-        text: 'text-emerald-600 dark:text-emerald-400',
-      };
-    }
-    if (passRate >= 0.7) {
-      return {
-        bg: 'bg-amber-500',
-        text: 'text-amber-600 dark:text-amber-400',
-      };
-    }
-    if (passRate >= 0.5) {
-      return {
-        bg: 'bg-orange-500',
-        text: 'text-orange-600 dark:text-orange-400',
-      };
-    }
-    return {
-      bg: 'bg-red-500',
-      text: 'text-red-600 dark:text-red-400',
-    };
-  };
-
   if (categories.length === 0) {
     return null;
   }
@@ -157,173 +355,16 @@ const RiskCategories = ({
 
       <Card>
         <CardContent className="divide-y divide-border p-0">
-          {categories.map((category) => {
-            const isExpanded = expandedCategories.has(category.name);
-            const hasFailed = category.passRate < pluginPassRateThreshold;
-
-            return (
-              <Collapsible
-                key={category.name}
-                open={isExpanded}
-                onOpenChange={() => toggleCategory(category.name)}
-              >
-                {/* Category Header Row */}
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center gap-4 px-4 py-4 text-left transition-colors cursor-pointer',
-                      'hover:bg-muted/50',
-                      isExpanded && 'bg-muted/30',
-                    )}
-                  >
-                    {/* Expand/Collapse Icon */}
-                    <div className="shrink-0 text-muted-foreground print:hidden">
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </div>
-
-                    {/* Category Name & Description */}
-                    <div className="min-w-0 flex-1">
-                      <span className="font-semibold">{category.name}</span>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {category.description}
-                      </p>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={cn(
-                            'h-full rounded-full transition-all',
-                            getPassRateStyles(category.passRate).bg,
-                          )}
-                          style={{ width: `${category.passRate * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Stats - fixed width to align with plugin rows */}
-                    <div className="w-20 shrink-0 text-right">
-                      <span
-                        className={cn(
-                          'text-sm font-semibold',
-                          getPassRateStyles(category.passRate).text,
-                        )}
-                      >
-                        {Math.round(category.passRate * 100)}%
-                      </span>
-                      <p className="text-xs text-muted-foreground">
-                        {category.totalPasses}/{category.totalTests}
-                      </p>
-                    </div>
-
-                    {/* Status Icon */}
-                    <div className="w-5 shrink-0 flex justify-center">
-                      {hasFailed ? (
-                        <XCircle className="h-4 w-4 text-destructive" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
-                      )}
-                    </div>
-
-                    {/* Spacer for chevron alignment */}
-                    <div className="w-4 shrink-0 print:hidden" />
-                  </button>
-                </CollapsibleTrigger>
-
-                {/* Expanded Plugin List */}
-                <CollapsibleContent
-                  forceMount
-                  className={cn('data-[state=closed]:hidden print:!block')}
-                >
-                  <div className="border-t border-border bg-muted/20">
-                    {category.testTypes.map((test) => {
-                      const passRate = test.numPassed / test.total;
-                      const isPassing = passRate >= pluginPassRateThreshold;
-
-                      return (
-                        <button
-                          key={test.name}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePluginClick(test.name);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm transition-all cursor-pointer',
-                            'hover:bg-background/50',
-                          )}
-                        >
-                          {/* Spacer to align with category chevron */}
-                          <div className="w-4 shrink-0 print:hidden" />
-
-                          {/* Plugin Name with Tooltip */}
-                          <div className="min-w-0 flex-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="truncate inline-block max-w-full">
-                                  {displayNameOverrides[
-                                    test.name as keyof typeof displayNameOverrides
-                                  ] || categoryAliases[test.name as keyof typeof categoryAliases]}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-xs">
-                                <TooltipArrow className="fill-foreground" />
-                                <p>
-                                  {subCategoryDescriptions[
-                                    test.name as keyof typeof subCategoryDescriptions
-                                  ] || 'Click to view details'}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-
-                          {/* Progress Bar - same width as category (w-32) */}
-                          <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  getPassRateStyles(passRate).bg,
-                                )}
-                                style={{ width: `${passRate * 100}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Stats - fixed width to align with category stats */}
-                          <div className="w-20 shrink-0 text-right">
-                            <span className="text-xs text-muted-foreground">
-                              {test.numPassed}/{test.total}
-                            </span>
-                          </div>
-
-                          {/* Status Icon - same w-5 as category */}
-                          <div className="w-5 shrink-0 flex justify-center">
-                            {isPassing ? (
-                              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
-                            ) : (
-                              <XCircle className="h-4 w-4 text-destructive" />
-                            )}
-                          </div>
-
-                          {/* Chevron - in w-4 container to match category spacer */}
-                          <div className="w-4 shrink-0 flex justify-center print:hidden">
-                            <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })}
+          {categories.map((category) => (
+            <RiskCategoryRow
+              key={category.name}
+              category={category}
+              isExpanded={expandedCategories.has(category.name)}
+              pluginPassRateThreshold={pluginPassRateThreshold}
+              onToggle={() => toggleCategory(category.name)}
+              onPluginClick={handlePluginClick}
+            />
+          ))}
         </CardContent>
       </Card>
 
