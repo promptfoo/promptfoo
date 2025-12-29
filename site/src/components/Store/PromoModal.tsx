@@ -196,16 +196,10 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
                 {item.step}
               </Box>
               <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, mb: 0.25 }}
-                >
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25 }}>
                   {item.title}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}
-                >
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>
                   {item.description}
                 </Typography>
               </Box>
@@ -225,11 +219,17 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
               overflow: 'auto',
             }}
           >
-            <Box component="span" sx={{ color: '#e94560' }}>if</Box>
+            <Box component="span" sx={{ color: '#e94560' }}>
+              if
+            </Box>
             {' (pr.status === '}
-            <Box component="span" sx={{ color: '#4ade80' }}>"merged"</Box>
+            <Box component="span" sx={{ color: '#4ade80' }}>
+              "merged"
+            </Box>
             {') {\n  '}
-            <Box component="span" sx={{ color: '#60a5fa' }}>getDiscountCode</Box>
+            <Box component="span" sx={{ color: '#60a5fa' }}>
+              getDiscountCode
+            </Box>
             {'();\n}'}
           </Box>
         </Box>
