@@ -3547,6 +3547,14 @@ describe('isAllowedPrompt', () => {
     expect(isAllowedPrompt(prompt2, ['group1'])).toBe(true);
   });
 
+  it('should return true if allowedPrompts includes a wildcard prefix', () => {
+    expect(isAllowedPrompt(prompt2, ['group1:*'])).toBe(true);
+  });
+
+  it('should return false if a wildcard prefix does not match the prompt label', () => {
+    expect(isAllowedPrompt(prompt3, ['group1:*'])).toBe(false);
+  });
+
   it('should return false if allowedPrompts does not include the prompt label or any matching start label with a colon', () => {
     expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
   });
