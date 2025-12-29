@@ -67,7 +67,7 @@ export const AuthorChip = ({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(newOpen) => editable && setOpen(newOpen)}>
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
@@ -125,7 +125,7 @@ export const AuthorChip = ({
           </div>
           {!currentUserEmail && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Info className="h-4 w-4 text-blue-500" />
+              <Info className="h-4 w-4 text-blue-500" data-testid="InfoIcon" />
               <p className="text-xs">
                 {`Setting an email address will also set the default author for future evals.
                 It is changeable with \`promptfoo config set email <your-email@example.com>\``}

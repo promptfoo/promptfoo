@@ -1,8 +1,29 @@
-import { render, screen } from '@testing-library/react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import { useTableStore } from './store';
+
+// Helper to render CompareEvalMenuItem with required Radix context
+function renderCompareEvalMenuItem(props: {
+  onComparisonEvalSelected: (evalId: string) => void;
+  initialEvals: never[];
+}) {
+  return renderWithProviders(
+    <DropdownMenu>
+      <DropdownMenuTrigger>Open Menu</DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <CompareEvalMenuItem {...props} />
+      </DropdownMenuContent>
+    </DropdownMenu>,
+  );
+}
 
 vi.mock('./EvalSelectorDialog', () => ({
   default: vi.fn(({ open, onEvalSelected, onClose, focusedEvalId, filterByDatasetId }) => {
@@ -44,13 +65,13 @@ describe('CompareEvalMenuItem', () => {
 
   it('should call onComparisonEvalSelected with the selected evalId and close the dialog when an eval is selected', async () => {
     const user = userEvent.setup();
-    render(
-      <CompareEvalMenuItem
-        onComparisonEvalSelected={mockOnComparisonEvalSelected}
-        initialEvals={[]}
-      />,
-    );
+    renderCompareEvalMenuItem({
+      onComparisonEvalSelected: mockOnComparisonEvalSelected,
+      initialEvals: [],
+    });
 
+    // Open the dropdown menu first
+    await user.click(screen.getByText('Open Menu'));
     const menuItem = screen.getByText('Compare with another eval');
     await user.click(menuItem);
 
@@ -68,13 +89,13 @@ describe('CompareEvalMenuItem', () => {
 
   it('should render EvalSelectorDialog with open=true, focusedEvalId set to the current evalId from useTableStore, and filterByDatasetId enabled when the menu item is clicked', async () => {
     const user = userEvent.setup();
-    render(
-      <CompareEvalMenuItem
-        onComparisonEvalSelected={mockOnComparisonEvalSelected}
-        initialEvals={[]}
-      />,
-    );
+    renderCompareEvalMenuItem({
+      onComparisonEvalSelected: mockOnComparisonEvalSelected,
+      initialEvals: [],
+    });
 
+    // Open the dropdown menu first
+    await user.click(screen.getByText('Open Menu'));
     const menuItem = screen.getByText('Compare with another eval');
     await user.click(menuItem);
 
@@ -90,13 +111,13 @@ describe('CompareEvalMenuItem', () => {
 
   it('should pass filterByDatasetId prop to EvalSelectorDialog', async () => {
     const user = userEvent.setup();
-    render(
-      <CompareEvalMenuItem
-        onComparisonEvalSelected={mockOnComparisonEvalSelected}
-        initialEvals={[]}
-      />,
-    );
+    renderCompareEvalMenuItem({
+      onComparisonEvalSelected: mockOnComparisonEvalSelected,
+      initialEvals: [],
+    });
 
+    // Open the dropdown menu first
+    await user.click(screen.getByText('Open Menu'));
     const menuItem = screen.getByText('Compare with another eval');
     await user.click(menuItem);
 

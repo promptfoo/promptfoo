@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -43,21 +44,23 @@ const ThemeDisplay = () => {
 
 const renderPageShell = (initialPath = '/', children: React.ReactNode = null) => {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route element={<PageShell />}>
-          <Route
-            path="*"
-            element={
-              <>
-                <ThemeDisplay />
-                {children}
-              </>
-            }
-          />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <TooltipProvider delayDuration={0}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route element={<PageShell />}>
+            <Route
+              path="*"
+              element={
+                <>
+                  <ThemeDisplay />
+                  {children}
+                </>
+              }
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 };
 
@@ -131,7 +134,8 @@ describe('PageShell', () => {
 
     renderPageShell();
     await waitFor(() => {
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
+      // Check the DOM attribute directly since ThemeDisplay doesn't re-render on changes
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
   });
 
@@ -140,13 +144,16 @@ describe('PageShell', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('light');
+      // Initially may be 'light' or null (no attribute)
+      const theme = document.documentElement.getAttribute('data-theme');
+      expect(theme === 'light' || theme === null).toBe(true);
     });
 
     await user.click(screen.getByTestId('toggle-button'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
+      // Check the DOM attribute directly since ThemeDisplay doesn't re-render on changes
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
   });
 
@@ -169,7 +176,8 @@ describe('PageShell', () => {
     renderPageShell();
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
+      // Check the DOM attribute directly since ThemeDisplay doesn't re-render on changes
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
   });
 });

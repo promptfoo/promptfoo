@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvalIdChip } from './EvalIdChip';
@@ -15,38 +16,38 @@ describe('EvalIdChip', () => {
   });
 
   it('renders with the correct eval ID', () => {
-    render(<EvalIdChip {...defaultProps} />);
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     expect(screen.getByText('ID:')).toBeInTheDocument();
     expect(screen.getByText('test-eval-id-123')).toBeInTheDocument();
   });
 
   it('displays the fingerprint icon', () => {
-    render(<EvalIdChip {...defaultProps} />);
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     expect(screen.getByTestId('FingerprintIcon')).toBeInTheDocument();
   });
 
   it('displays the copy icon button', () => {
-    render(<EvalIdChip {...defaultProps} />);
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     expect(screen.getByLabelText('Copy Eval ID')).toBeInTheDocument();
   });
 
   it('calls onCopy when the copy button is clicked', async () => {
-    render(<EvalIdChip {...defaultProps} />);
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     await userEvent.click(screen.getByLabelText('Copy Eval ID'));
     expect(mockOnCopy).toHaveBeenCalledTimes(1);
   });
 
   it('displays a tooltip on hover', async () => {
-    render(<EvalIdChip {...defaultProps} />);
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     await userEvent.hover(screen.getByLabelText('Copy Eval ID'));
-    expect(await screen.findByText('Copy ID')).toBeInTheDocument();
+    // Radix tooltip renders both visible content and an accessibility span with the same text
+    const tooltips = await screen.findAllByText('Copy ID');
+    expect(tooltips.length).toBeGreaterThan(0);
   });
 
-  it('changes background color on hover', async () => {
-    render(<EvalIdChip {...defaultProps} />);
+  it('has hover:bg-muted class for hover state', () => {
+    renderWithProviders(<EvalIdChip {...defaultProps} />);
     const box = screen.getByText('ID:').closest('div');
-    expect(box).toHaveStyle({ backgroundColor: '' });
-    await userEvent.hover(box!);
-    expect(box).toHaveStyle({ backgroundColor: 'action.hover' });
+    expect(box).toHaveClass('hover:bg-muted');
   });
 });

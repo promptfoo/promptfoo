@@ -13,7 +13,7 @@ export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
 
   return (
     <div className="flex items-center border border-border rounded px-2 py-1 hover:bg-muted transition-colors">
-      <Fingerprint className="h-4 w-4 mr-2 opacity-70" />
+      <Fingerprint className="h-4 w-4 mr-2 opacity-70" data-testid="FingerprintIcon" />
       <span className="text-sm mr-2">
         <strong>ID:</strong> {evalId}
       </span>

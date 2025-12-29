@@ -1,9 +1,27 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/dom';
-import { render, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
+
+// Helper to render DownloadMenu with its required Radix context
+function renderDownloadMenu() {
+  return renderWithProviders(
+    <DropdownMenu>
+      <DropdownMenuTrigger>Open Menu</DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DownloadMenu />
+      </DropdownMenuContent>
+    </DropdownMenu>,
+  );
+}
 
 // Get a reference to the mock
 const showToastMock = vi.fn();
@@ -161,19 +179,23 @@ describe('DownloadMenu', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the Download menu item', () => {
-    render(<DownloadMenu />);
+  it('renders the Download menu item', async () => {
+    renderDownloadMenu();
+    // Open the dropdown menu first to see the Download menu item
+    await userEvent.click(screen.getByText('Open Menu'));
     expect(screen.getByText('Download')).toBeInTheDocument();
   });
 
   it('opens the dialog when clicking the Download menu item', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
   });
 
   it('downloads YAML config when clicking the button', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Download YAML Config'));
 
@@ -184,9 +206,11 @@ describe('DownloadMenu', () => {
   });
 
   it('downloads CSV when clicking the button', async () => {
-    render(<DownloadMenu />);
-    expect(csvHookOptions?.onSuccess).toBeInstanceOf(Function);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
+    // Hook options should be set after component renders
+    expect(csvHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
@@ -195,9 +219,11 @@ describe('DownloadMenu', () => {
   });
 
   it('downloads Table JSON when clicking the button', async () => {
-    render(<DownloadMenu />);
-    expect(jsonHookOptions?.onSuccess).toBeInstanceOf(Function);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
+    // Hook options should be set after component renders
+    expect(jsonHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download Results JSON'));
 
     await waitFor(() => {
@@ -208,7 +234,8 @@ describe('DownloadMenu', () => {
   it('shows loading state while CSV download is in progress', async () => {
     csvIsLoading = true;
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
 
     const csvButton = screen.getByRole('button', { name: 'Downloading...' });
@@ -218,7 +245,8 @@ describe('DownloadMenu', () => {
   it('shows loading state while JSON download is in progress', async () => {
     jsonIsLoading = true;
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
 
     const jsonButton = screen.getByRole('button', { name: 'Downloading...' });
@@ -226,7 +254,8 @@ describe('DownloadMenu', () => {
   });
 
   it('downloads DPO JSON when clicking the button', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('DPO JSON'));
 
@@ -237,7 +266,8 @@ describe('DownloadMenu', () => {
   });
 
   it('downloads Human Eval Test YAML when clicking the button', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Human Eval YAML'));
 
@@ -268,7 +298,8 @@ describe('DownloadMenu', () => {
       evalId: mockEvalId,
     });
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('DPO JSON'));
 
@@ -287,7 +318,8 @@ describe('DownloadMenu', () => {
     // Clear any previous calls to the mock
     showToastMock.mockClear();
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Download Results CSV'));
 
@@ -315,7 +347,8 @@ describe('DownloadMenu', () => {
       evalId: mockEvalId,
     });
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Human Eval YAML'));
 
@@ -346,12 +379,13 @@ describe('DownloadMenu', () => {
     });
 
     expect(() => {
-      render(<DownloadMenu />);
+      renderDownloadMenu();
     }).not.toThrow();
   });
 
   it('downloads Burp Suite Payloads when clicking the button', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Burp Payloads'));
 
@@ -362,7 +396,8 @@ describe('DownloadMenu', () => {
   });
 
   it('properly categorizes download options into sections', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
 
     // Check the category headings
@@ -372,17 +407,14 @@ describe('DownloadMenu', () => {
   });
 
   it('displays the "Downloaded" indicator in CommandBlock after downloading YAML config', async () => {
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Download YAML Config'));
 
     await waitFor(() => {
-      const commandBlock = screen
-        .getByText('Run this command to execute the eval again:')
-        .closest('.MuiPaper-root');
-      expect(commandBlock).toBeInTheDocument();
+      // Check for the "Downloaded" text which appears after download
       expect(screen.getByText('Downloaded')).toBeVisible();
-      expect(commandBlock?.querySelector('svg[data-testid="CheckCircleIcon"]')).toBeInTheDocument();
     });
   });
 
@@ -391,7 +423,8 @@ describe('DownloadMenu', () => {
       Promise.reject(new Error('Clipboard write failed')),
     );
 
-    render(<DownloadMenu />);
+    renderDownloadMenu();
+    await userEvent.click(screen.getByText('Open Menu'));
     await userEvent.click(screen.getByText('Download'));
 
     const copyButton = screen.getAllByLabelText('Copy command')[0];
@@ -410,7 +443,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
@@ -427,7 +461,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
@@ -444,7 +479,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
@@ -472,7 +508,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
@@ -487,7 +524,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
@@ -504,7 +542,8 @@ describe('DownloadMenu', () => {
         evalId: mockEvalId,
       });
 
-      render(<DownloadMenu />);
+      renderDownloadMenu();
+      await userEvent.click(screen.getByText('Open Menu'));
       await userEvent.click(screen.getByText('Download'));
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });

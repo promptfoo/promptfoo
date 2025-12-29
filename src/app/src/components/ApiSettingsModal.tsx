@@ -108,6 +108,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
                   onClick={() => checkHealth()}
                   disabled={isChecking}
                   className="h-8 w-8"
+                  aria-label="Check connection"
                 >
                   {isChecking ? <Spinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
                 </Button>

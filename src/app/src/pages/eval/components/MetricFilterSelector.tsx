@@ -29,7 +29,7 @@ export const MetricFilterSelector = () => {
 
   return (
     <Select value={selectedMetric ?? 'all'} onValueChange={handleChange}>
-      <SelectTrigger className="min-w-[180px] h-9">
+      <SelectTrigger className="min-w-[180px] h-9" aria-label="Filter by Metric">
         <SelectValue placeholder="Filter by Metric" />
       </SelectTrigger>
       <SelectContent>

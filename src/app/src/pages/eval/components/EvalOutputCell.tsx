@@ -524,17 +524,18 @@ function EvalOutputCell({
         tokenUsage.completionDetails.reasoning ?? 0,
       );
 
+      const tooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`;
       tokenUsageDisplay = (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span>
+            <span aria-label={tooltipText}>
               {totalTokens}
               {(promptTokens !== '0' || completionTokens !== '0') &&
                 ` (${promptTokens}+${completionTokens})`}
               {` R${reasoningTokens}`}
             </span>
           </TooltipTrigger>
-          <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}</TooltipContent>
+          <TooltipContent>{tooltipText}</TooltipContent>
         </Tooltip>
       );
     } else {
@@ -735,6 +736,7 @@ function EvalOutputCell({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
+                aria-label="Toggle test highlight"
               >
                 <Star className="h-4 w-4" />
               </button>
@@ -748,6 +750,7 @@ function EvalOutputCell({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleRowShareLink}
                 onMouseDown={(e) => e.preventDefault()}
+                aria-label="Share output"
               >
                 {linked ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
               </button>
@@ -764,6 +767,7 @@ function EvalOutputCell({
                 type="button"
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handlePromptOpen}
+                aria-label="View output and test details"
               >
                 <Search className="h-4 w-4" />
               </button>
@@ -827,6 +831,7 @@ function EvalOutputCell({
             type="button"
             className="action p-1 rounded hover:bg-muted transition-colors"
             onClick={handleSetScore}
+            aria-label="Set test score"
           >
             <Hash className="h-4 w-4" />
           </button>
@@ -839,6 +844,7 @@ function EvalOutputCell({
             type="button"
             className="action p-1 rounded hover:bg-muted transition-colors"
             onClick={handleCommentOpen}
+            aria-label="Edit comment"
           >
             <Pencil className="h-4 w-4" />
           </button>

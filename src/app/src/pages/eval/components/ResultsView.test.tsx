@@ -1,5 +1,6 @@
 import { callApi } from '@app/utils/api';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,7 +155,7 @@ const mockRecentEvals: ResultLightweightWithLabel[] = [
 ];
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
+  return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
 vi.mock('react-router-dom', async () => {

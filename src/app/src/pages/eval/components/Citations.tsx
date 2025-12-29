@@ -185,7 +185,7 @@ export default function Citations({ citations }: { citations: any }) {
                   aria-label={`Copy citation content ${i + 1}`}
                 >
                   {copiedCitations[key] ? (
-                    <Check className="h-4 w-4" />
+                    <Check className="h-4 w-4" data-testid="CheckIcon" />
                   ) : (
                     <ClipboardCopy className="h-4 w-4" />
                   )}
