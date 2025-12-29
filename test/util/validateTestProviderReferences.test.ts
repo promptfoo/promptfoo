@@ -4,7 +4,7 @@ import {
   validateTestProviderReferences,
 } from '../../src/util/validateTestProviderReferences';
 
-import type { TestCase } from '../../src/types/index';
+import type { Scenario, TestCase } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
 
 describe('validateTestProviderReferences', () => {
@@ -94,5 +94,77 @@ describe('validateTestProviderReferences', () => {
       { vars: { baz: 'qux' }, providers: ['nonexistent'] },
     ];
     expect(() => validateTestProviderReferences(tests, providers)).toThrow(/Test #2/);
+  });
+
+  describe('scenario validation', () => {
+    it('passes with valid scenario tests', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['smart-model'] }],
+        },
+      ];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, scenarios),
+      ).not.toThrow();
+    });
+
+    it('throws for invalid scenario test provider', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['nonexistent'] }],
+        },
+      ];
+      expect(() => validateTestProviderReferences(tests, providers, undefined, scenarios)).toThrow(
+        /Scenario #1 test #1 references provider "nonexistent"/,
+      );
+    });
+
+    it('throws for invalid scenario config provider', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{ providers: ['nonexistent'] }],
+          tests: [],
+        },
+      ];
+      expect(() => validateTestProviderReferences(tests, providers, undefined, scenarios)).toThrow(
+        /Scenario #1 config\[0\] references provider "nonexistent"/,
+      );
+    });
+
+    it('includes scenario description in error', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          description: 'My scenario',
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['nonexistent'] }],
+        },
+      ];
+      expect(() => validateTestProviderReferences(tests, providers, undefined, scenarios)).toThrow(
+        /Scenario #1 \("My scenario"\)/,
+      );
+    });
+
+    it('validates multiple scenarios', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['smart-model'] }],
+        },
+        {
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['nonexistent'] }],
+        },
+      ];
+      expect(() => validateTestProviderReferences(tests, providers, undefined, scenarios)).toThrow(
+        /Scenario #2/,
+      );
+    });
   });
 });
