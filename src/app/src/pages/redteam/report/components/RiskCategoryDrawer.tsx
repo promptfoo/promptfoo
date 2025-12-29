@@ -157,22 +157,38 @@ const RiskCategoryDrawer = ({
     return (
       <div
         key={index}
-        className="failure-item group relative cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/50"
+        className="failure-item group relative cursor-pointer rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:shadow-sm"
         onClick={() => {
           setSelectedTest(test);
           setDetailsDialogOpen(true);
         }}
       >
         <div className="flex w-full items-start">
-          <div className="min-w-0 flex-1">
-            <p className="prompt text-sm font-medium">{getPromptDisplayString(test.prompt)}</p>
-            <p className="output mt-1 text-sm text-muted-foreground">
-              {getOutputDisplay(test.output)}
-            </p>
+          <div className="min-w-0 flex-1 space-y-2">
+            {/* Prompt/Input section */}
+            <div className="rounded-md bg-blue-50/50 p-2.5 dark:bg-blue-950/20">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                Prompt
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm">
+                {getPromptDisplayString(test.prompt)}
+              </p>
+            </div>
+
+            {/* Response/Output section */}
+            <div className="rounded-md bg-violet-50/50 p-2.5 dark:bg-violet-950/20">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                Response
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                {getOutputDisplay(test.output)}
+              </p>
+            </div>
+
             {test.gradingResult && strategyId && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="mt-2 inline-block">
+                  <span className="inline-block">
                     <Badge variant="secondary">
                       {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
                         strategyId}
@@ -290,7 +306,7 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="flagged">
               {failures.length > 0 ? (
-                <div className="mt-2">
+                <div className="mt-3 space-y-3">
                   {sortedFailures.map((failure, i) => renderTestItem(failure, i))}
                 </div>
               ) : (
@@ -300,7 +316,9 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="passed">
               {passes.length > 0 ? (
-                <div className="mt-2">{passes.map((pass, i) => renderTestItem(pass, i))}</div>
+                <div className="mt-3 space-y-3">
+                  {passes.map((pass, i) => renderTestItem(pass, i))}
+                </div>
               ) : (
                 <p className="mt-4 text-center text-muted-foreground">No passed tests</p>
               )}
