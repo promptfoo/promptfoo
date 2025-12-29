@@ -2282,4 +2282,186 @@ describe('useTableStore', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('columnVisibilityByName', () => {
+    it('should set a column to visible by name', () => {
+      act(() => {
+        const { columnVisibilityByName } = useTableStore.getState();
+        useTableStore.setState({
+          columnVisibilityByName: { ...columnVisibilityByName, context: true },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName.context).toBe(true);
+    });
+
+    it('should set a column to hidden by name', () => {
+      act(() => {
+        const { columnVisibilityByName } = useTableStore.getState();
+        useTableStore.setState({
+          columnVisibilityByName: { ...columnVisibilityByName, context: false },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName.context).toBe(false);
+    });
+
+    it('should update existing column visibility preference', () => {
+      act(() => {
+        useTableStore.setState({ columnVisibilityByName: { context: true } });
+      });
+
+      act(() => {
+        useTableStore.setState({ columnVisibilityByName: { context: false } });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName.context).toBe(false);
+    });
+
+    it('should handle multiple column preferences', () => {
+      act(() => {
+        useTableStore.setState({
+          columnVisibilityByName: {
+            context: false,
+            expected: false,
+            question: true,
+          },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName).toEqual({
+        context: false,
+        expected: false,
+        question: true,
+      });
+    });
+
+    it('should clear all column visibility preferences', () => {
+      act(() => {
+        useTableStore.setState({
+          columnVisibilityByName: { context: false, expected: false },
+        });
+      });
+
+      act(() => {
+        useTableStore.setState({ columnVisibilityByName: {} });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName).toEqual({});
+    });
+
+    it('should handle column names with special characters', () => {
+      act(() => {
+        useTableStore.setState({
+          columnVisibilityByName: {
+            'user-input': false,
+            system_prompt: true,
+            'context.nested': false,
+          },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName).toEqual({
+        'user-input': false,
+        system_prompt: true,
+        'context.nested': false,
+      });
+    });
+  });
+
+  describe('globalColumnDefaults', () => {
+    it('should have default values of true for both variables and prompts', () => {
+      act(() => {
+        useTableStore.setState({
+          globalColumnDefaults: { showAllVariables: true, showAllPrompts: true },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.globalColumnDefaults).toEqual({
+        showAllVariables: true,
+        showAllPrompts: true,
+      });
+    });
+
+    it('should update showAllVariables', () => {
+      act(() => {
+        useTableStore.setState({
+          globalColumnDefaults: { showAllVariables: false, showAllPrompts: true },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.globalColumnDefaults.showAllVariables).toBe(false);
+      expect(state.globalColumnDefaults.showAllPrompts).toBe(true);
+    });
+
+    it('should update showAllPrompts', () => {
+      act(() => {
+        useTableStore.setState({
+          globalColumnDefaults: { showAllVariables: true, showAllPrompts: false },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.globalColumnDefaults.showAllVariables).toBe(true);
+      expect(state.globalColumnDefaults.showAllPrompts).toBe(false);
+    });
+
+    it('should update both settings at once', () => {
+      act(() => {
+        useTableStore.setState({
+          globalColumnDefaults: { showAllVariables: false, showAllPrompts: false },
+        });
+      });
+
+      const state = useTableStore.getState();
+      expect(state.globalColumnDefaults).toEqual({
+        showAllVariables: false,
+        showAllPrompts: false,
+      });
+    });
+  });
+
+  describe('column visibility persistence', () => {
+    it('should persist column visibility by name across eval ID changes', () => {
+      // Set a preference
+      act(() => {
+        useTableStore.setState({ columnVisibilityByName: { context: false } });
+      });
+
+      // Change eval ID (simulating navigation to different eval)
+      act(() => {
+        useTableStore.getState().setEvalId('new-eval-id');
+      });
+
+      // Preference should still be there
+      const state = useTableStore.getState();
+      expect(state.columnVisibilityByName).toEqual({ context: false });
+    });
+
+    it('should persist global defaults across eval ID changes', () => {
+      // Set global defaults
+      act(() => {
+        useTableStore.setState({
+          globalColumnDefaults: { showAllVariables: false, showAllPrompts: true },
+        });
+      });
+
+      // Change eval ID
+      act(() => {
+        useTableStore.getState().setEvalId('another-eval-id');
+      });
+
+      // Global defaults should still be there
+      const state = useTableStore.getState();
+      expect(state.globalColumnDefaults.showAllVariables).toBe(false);
+    });
+  });
 });
