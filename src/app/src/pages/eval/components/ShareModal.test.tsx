@@ -258,6 +258,16 @@ describe('ShareModal', () => {
     const testUrl1 = 'https://promptfoo.app/eval/test-id-1';
     const testUrl2 = 'https://promptfoo.app/eval/test-id-2';
 
+    // Must return a fresh Response for each call since Response body can only be consumed once
+    mockCallApi.mockImplementation(() =>
+      Promise.resolve(
+        Response.json({
+          domain: 'localhost:3000',
+          isCloudEnabled: false,
+        }),
+      ),
+    );
+
     mockOnShare.mockImplementation(async (id: string) => {
       if (id === 'test-eval-id-1') {
         return testUrl1;
