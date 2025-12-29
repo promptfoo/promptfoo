@@ -118,7 +118,11 @@ tests:
       - smart-model # Override default for this test
 ```
 
-Without the `providers` filter, each test runs against all providers, creating a cross-product of tests × providers.
+**Edge cases:**
+
+- **No filter**: Without the `providers` field, the test runs against all providers (cross-product behavior)
+- **Empty array**: `providers: []` means the test runs on no providers and is effectively skipped
+- **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
 
 ## External Test Files
 

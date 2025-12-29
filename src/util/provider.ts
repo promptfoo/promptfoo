@@ -82,6 +82,19 @@ export function getProviderIdentifier(provider: ApiProvider): string {
 }
 
 /**
+ * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
+ * Useful for error messages to help users debug provider reference issues.
+ */
+export function getProviderDescription(provider: ApiProvider): string {
+  const label = provider.label;
+  const id = provider.id();
+  if (label && label !== id) {
+    return `${label} (${id})`;
+  }
+  return id;
+}
+
+/**
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
  */
@@ -89,26 +102,34 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   const label = provider.label;
   const id = provider.id();
 
+  // Canonicalize the reference for file/exec providers
+  const canonicalRef = canonicalizeProviderId(ref);
+  const canonicalId = canonicalizeProviderId(id);
+
   // Exact label match
   if (label && label === ref) {
     return true;
   }
 
-  // Exact ID match
-  if (id === ref) {
+  // Exact ID match (raw and canonicalized)
+  if (id === ref || canonicalId === canonicalRef) {
     return true;
   }
 
   // Wildcard match: 'openai:*' matches 'openai:gpt-4', etc.
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
-    if (label?.startsWith(prefix) || id.startsWith(prefix)) {
+    if (label?.startsWith(prefix) || id.startsWith(prefix) || canonicalId.startsWith(prefix)) {
       return true;
     }
   }
 
   // Legacy prefix match: 'openai' matches 'openai:gpt-4'
-  if (label?.startsWith(`${ref}:`) || id.startsWith(`${ref}:`)) {
+  if (
+    label?.startsWith(`${ref}:`) ||
+    id.startsWith(`${ref}:`) ||
+    canonicalId.startsWith(`${ref}:`)
+  ) {
     return true;
   }
 

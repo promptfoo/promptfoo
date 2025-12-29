@@ -1,4 +1,4 @@
-import { doesProviderRefMatch, getProviderIdentifier } from './provider';
+import { doesProviderRefMatch, getProviderDescription } from './provider';
 
 import type { TestCase } from '../types/index';
 import type { ApiProvider } from '../types/providers';
@@ -30,7 +30,7 @@ export function validateTestProviderReferences(
     }
     for (const ref of defaultTest.providers) {
       if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
-        const available = providers.map(getProviderIdentifier).join(', ');
+        const available = providers.map(getProviderDescription).join(', ');
         throw new ProviderReferenceValidationError(
           `defaultTest references provider "${ref}" which does not exist. Available providers: ${available}`,
         );
@@ -52,7 +52,7 @@ export function validateTestProviderReferences(
     for (const ref of test.providers) {
       if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
         const desc = test.description ? ` ("${test.description}")` : '';
-        const available = providers.map(getProviderIdentifier).join(', ');
+        const available = providers.map(getProviderDescription).join(', ');
         throw new ProviderReferenceValidationError(
           `Test #${i + 1}${desc} references provider "${ref}" which does not exist. Available providers: ${available}`,
         );

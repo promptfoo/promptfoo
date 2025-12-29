@@ -3,6 +3,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   doesProviderRefMatch,
+  getProviderDescription,
   getProviderIdentifier,
   isProviderAllowed,
   providerToIdentifier,
@@ -100,6 +101,31 @@ describe('getProviderIdentifier', () => {
   });
 });
 
+describe('getProviderDescription', () => {
+  it('returns both label and id when both present', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      label: 'my-custom-label',
+    } as ApiProvider;
+    expect(getProviderDescription(provider)).toBe('my-custom-label (openai:gpt-4)');
+  });
+
+  it('returns only id when no label', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+    } as ApiProvider;
+    expect(getProviderDescription(provider)).toBe('openai:gpt-4');
+  });
+
+  it('returns only id when label equals id', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      label: 'openai:gpt-4',
+    } as ApiProvider;
+    expect(getProviderDescription(provider)).toBe('openai:gpt-4');
+  });
+});
+
 describe('doesProviderRefMatch', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
     ({
@@ -146,6 +172,14 @@ describe('doesProviderRefMatch', () => {
     const provider = createProvider('openai:gpt-4');
     expect(doesProviderRefMatch('openai:gpt', provider)).toBe(false);
     expect(doesProviderRefMatch('gpt-4', provider)).toBe(false);
+  });
+
+  it('matches canonicalized file paths', () => {
+    // Provider has relative path, ref uses absolute - should still match after canonicalization
+    const absolutePath = path.resolve('./my-provider.js');
+    const provider = createProvider(`file://${absolutePath}`);
+    expect(doesProviderRefMatch('./my-provider.js', provider)).toBe(true);
+    expect(doesProviderRefMatch(`file://${absolutePath}`, provider)).toBe(true);
   });
 });
 
