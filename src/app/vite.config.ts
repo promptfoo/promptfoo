@@ -92,7 +92,11 @@ export default defineConfig({
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
     browserModulesPlugin(),
-    react(),
+    react({
+      babel: {
+        plugins: [['babel-plugin-react-compiler', {}]],
+      },
+    }),
     // Node.js polyfills - only include what we actually need
     // See: https://github.com/nicolo-ribaudo/vite-plugin-node-polyfills
     //

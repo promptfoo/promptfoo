@@ -45,7 +45,12 @@ import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import type {
+  CellContext,
+  ColumnDef,
+  ColumnSizingState,
+  VisibilityState,
+} from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -328,6 +333,10 @@ function ResultsTable({
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
 
+  // Persist column sizing state to prevent header resize flicker during pagination.
+  // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+
   /**
    * Reset the pagination state when the filtered results count changes.
    */
@@ -551,7 +560,8 @@ function ResultsTable({
   }, [filters.values]);
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
+    // Use functional update to avoid stale closure over pagination state
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
@@ -561,7 +571,8 @@ function ResultsTable({
   // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
-      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      // Use functional update to avoid stale closure over pagination state
+      setPagination((prev) => ({ pageIndex: 0, pageSize: prev.pageSize }));
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -1245,8 +1256,10 @@ function ResultsTable({
     pageCount,
     state: {
       columnVisibility,
+      columnSizing,
       pagination,
     },
+    onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
 
