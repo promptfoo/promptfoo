@@ -7,6 +7,7 @@
 
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import logger from '../logger';
@@ -98,10 +99,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   /**
    * Save the hash index to disk
    */
-  private saveHashIndex(): void {
+  private async saveHashIndex(): Promise<void> {
     try {
       const data = JSON.stringify(Object.fromEntries(this.hashIndex), null, 2);
-      fs.writeFileSync(this.hashIndexPath, data, 'utf8');
+      await fsPromises.writeFile(this.hashIndexPath, data, 'utf8');
     } catch (error) {
       logger.warn(`[LocalStorage] Failed to save hash index`, { error });
     }
@@ -157,20 +158,18 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
     // Ensure subdirectory exists
     const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    await fsPromises.mkdir(dir, { recursive: true });
 
     // Write file
-    fs.writeFileSync(filePath, data);
+    await fsPromises.writeFile(filePath, data);
 
     // Update hash index
     this.hashIndex.set(contentHash, key);
-    this.saveHashIndex();
+    await this.saveHashIndex();
 
     // Write metadata alongside
     const metadataPath = `${filePath}.meta.json`;
-    fs.writeFileSync(
+    await fsPromises.writeFile(
       metadataPath,
       JSON.stringify(
         {
@@ -203,17 +202,21 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async retrieve(key: string): Promise<Buffer> {
     const filePath = this.getFilePath(key);
 
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`[LocalStorage] Media not found: ${key}`);
+    try {
+      return await fsPromises.readFile(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`[LocalStorage] Media not found: ${key}`);
+      }
+      throw error;
     }
-
-    return fs.readFileSync(filePath);
   }
 
   async exists(key: string): Promise<boolean> {
     try {
       const filePath = this.getFilePath(key);
-      return fs.existsSync(filePath);
+      await fsPromises.access(filePath);
+      return true;
     } catch {
       return false;
     }
@@ -230,14 +233,22 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         break;
       }
     }
-    this.saveHashIndex();
+    await this.saveHashIndex();
 
-    // Delete files
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete files (ignore ENOENT errors)
+    try {
+      await fsPromises.unlink(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
-    if (fs.existsSync(metadataPath)) {
-      fs.unlinkSync(metadataPath);
+    try {
+      await fsPromises.unlink(metadataPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
 
     logger.debug(`[LocalStorage] Deleted media: ${key}`);
@@ -248,10 +259,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     // The web UI will need to handle this via the API
     try {
       const filePath = this.getFilePath(key);
-      if (fs.existsSync(filePath)) {
-        return `file://${filePath}`;
-      }
-      return null;
+      await fsPromises.access(filePath);
+      return `file://${filePath}`;
     } catch {
       return null;
     }
@@ -265,7 +274,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     // Clean up stale index entry if file doesn't exist
     if (key) {
       this.hashIndex.delete(contentHash);
-      this.saveHashIndex();
+      await this.saveHashIndex();
     }
     return null;
   }
