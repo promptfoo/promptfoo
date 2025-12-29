@@ -113,9 +113,6 @@ export default defineConfig({
         // Manual chunking to split vendor libraries
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-mui-core': ['@mui/material', '@mui/system'],
-          'vendor-mui-icons': ['@mui/icons-material'],
-          'vendor-mui-x': ['@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff'],
           'vendor-syntax': ['prismjs'],
@@ -130,14 +127,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: false,
-    // Enable CSS processing for MUI X v8
+    // Enable CSS processing for component styles
     css: true,
-    // Force vitest to transform MUI packages including CSS imports
-    server: {
-      deps: {
-        inline: ['@mui/x-charts'],
-      },
-    },
 
     // Memory leak prevention settings
     // Use forks (child processes) instead of threads for better memory isolation

@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { renderWithProviders } from '@app/utils/testutils';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -13,10 +13,6 @@ vi.mock('../../../hooks/useTelemetry', () => ({
   }),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
 
 describe('AgentFrameworkConfiguration', () => {
   it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', () => {
@@ -28,7 +24,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const newPath = 'file:///path/to/my_agent.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -53,7 +49,7 @@ describe('AgentFrameworkConfiguration', () => {
     };
     const invalidAgentType = 'invalid-agent-type';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -81,7 +77,7 @@ describe('AgentFrameworkConfiguration', () => {
       },
     });
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -107,7 +103,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const invalidPath = '/path/to/my_agent.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -133,7 +129,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const invalidPath = 'file:///path/to/nonexistent_file.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}

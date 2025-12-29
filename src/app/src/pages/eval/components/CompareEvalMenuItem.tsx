@@ -1,10 +1,8 @@
 import { useState } from 'react';
 
-import CompareIcon from '@mui/icons-material/Compare';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
+import { DropdownMenuItem, DropdownMenuItemIcon } from '@app/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { GitCompareArrows } from 'lucide-react';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
@@ -45,13 +43,22 @@ function CompareEvalMenuItem({ onComparisonEvalSelected, onMenuClose }: CompareE
 
   return (
     <>
-      <Tooltip title="Combine this eval with another eval run" placement="left">
-        <MenuItem onClick={handleOpenDialog}>
-          <ListItemIcon>
-            <CompareIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Compare with another eval</ListItemText>
-        </MenuItem>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              // Prevent the dropdown from closing so the dialog can open
+              event.preventDefault();
+              handleOpenDialog();
+            }}
+          >
+            <DropdownMenuItemIcon>
+              <GitCompareArrows className="h-4 w-4" />
+            </DropdownMenuItemIcon>
+            Compare with another eval
+          </DropdownMenuItem>
+        </TooltipTrigger>
+        <TooltipContent side="left">Combine this eval with another eval run</TooltipContent>
       </Tooltip>
       <EvalSelectorDialog
         open={dialogOpen}

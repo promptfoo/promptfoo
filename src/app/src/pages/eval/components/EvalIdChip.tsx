@@ -1,9 +1,5 @@
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FingerprintIcon from '@mui/icons-material/Fingerprint';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { ClipboardCopy, Fingerprint } from 'lucide-react';
 
 interface EvalIdChipProps {
   evalId: string;
@@ -16,29 +12,24 @@ export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
   };
 
   return (
-    <Box
-      display="flex"
-      alignItems="center"
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        px: 1,
-        py: 0.5,
-        '&:hover': {
-          bgcolor: 'action.hover',
-        },
-      }}
-    >
-      <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-      <Typography variant="body2" sx={{ mr: 1 }}>
+    <div className="flex items-center border border-border rounded px-2 py-1 hover:bg-muted transition-colors">
+      <Fingerprint className="h-4 w-4 mr-2 opacity-70" />
+      <span className="text-sm mr-2">
         <strong>ID:</strong> {evalId}
-      </Typography>
-      <Tooltip title="Copy ID">
-        <IconButton size="small" onClick={handleCopy} sx={{ ml: 'auto' }} aria-label="Copy Eval ID">
-          <ContentCopyIcon fontSize="small" />
-        </IconButton>
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="ml-auto p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleCopy}
+            aria-label="Copy Eval ID"
+          >
+            <ClipboardCopy className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Copy ID</TooltipContent>
       </Tooltip>
-    </Box>
+    </div>
   );
 };

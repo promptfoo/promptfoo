@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -26,7 +25,6 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
   ResultPageSkeleton: () => <div data-testid="loading-skeleton" />,
 }));
 
-const theme = createTheme();
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -90,11 +88,11 @@ describe('ModelAuditResult', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter initialEntries={[`/model-audit/${scanId}`]}>
-          <ThemeProvider theme={theme}>
+          
             <Routes>
               <Route path="/model-audit/:id" element={<ModelAuditResult />} />
             </Routes>
-          </ThemeProvider>
+          
         </MemoryRouter>
       </TooltipProvider>,
     );

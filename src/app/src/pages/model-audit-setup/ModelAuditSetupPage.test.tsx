@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +35,6 @@ vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
   default: () => <div data-testid="files-dialog" />,
 }));
 
-const theme = createTheme();
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -130,9 +128,9 @@ describe('ModelAuditSetupPage', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <ThemeProvider theme={theme}>
+          
             <ModelAuditSetupPage />
-          </ThemeProvider>
+          
         </MemoryRouter>
       </TooltipProvider>,
     );

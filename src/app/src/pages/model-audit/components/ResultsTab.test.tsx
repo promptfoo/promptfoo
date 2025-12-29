@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +12,6 @@ vi.mock('./ChecksSection', () => ({
 
 const MockedChecksSection = vi.mocked(ChecksSection);
 
-const theme = createTheme();
 
 describe('ResultsTab', () => {
   beforeEach(() => {
@@ -34,9 +32,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     // Check heading with count
@@ -71,9 +69,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     // All issues should be visible
@@ -99,9 +97,9 @@ describe('ResultsTab', () => {
     const user = userEvent.setup();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     const rawButton = screen.getByRole('button', { name: /Raw/i });
@@ -128,9 +126,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     expect(MockedChecksSection).toHaveBeenCalledTimes(1);
@@ -156,9 +154,9 @@ describe('ResultsTab', () => {
     const user = userEvent.setup();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     const filesButton = screen.getByRole('button', { name: /Files/i });
@@ -178,9 +176,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -197,9 +195,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -220,9 +218,9 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     render(
-      <ThemeProvider theme={theme}>
+      
         <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      ,
     );
 
     // Critical and warning should be visible

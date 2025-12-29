@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { renderWithProviders } from '@app/utils/testutils';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -19,10 +19,6 @@ vi.mock('react-simple-code-editor', () => ({
   ),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
 
 describe('WebSocketEndpointConfiguration', () => {
   const baseProvider: ProviderOptions = {
@@ -40,7 +36,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('calls updateWebSocketTarget on URL change', () => {
     const update = vi.fn();
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={baseProvider}
         updateWebSocketTarget={update}
@@ -57,7 +53,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('calls updateWebSocketTarget on Message Template change', () => {
     const update = vi.fn();
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={baseProvider}
         updateWebSocketTarget={update}
@@ -79,7 +75,7 @@ describe('WebSocketEndpointConfiguration', () => {
       config: { ...baseProvider.config, streamResponse: undefined },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={nonStreamingProvider}
         updateWebSocketTarget={update}
@@ -96,7 +92,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('calls updateWebSocketTarget on Stream Response Transform change', () => {
     const update = vi.fn();
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={baseProvider}
         updateWebSocketTarget={update}
@@ -113,7 +109,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('calls updateWebSocketTarget on Timeout change', () => {
     const update = vi.fn();
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={baseProvider}
         updateWebSocketTarget={update}
@@ -134,7 +130,7 @@ describe('WebSocketEndpointConfiguration', () => {
       config: { ...baseProvider.config, streamResponse: undefined },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={nonStreamingProvider}
         updateWebSocketTarget={update}
@@ -149,7 +145,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('renders Stream Response editor when streaming is enabled', () => {
     const update = vi.fn();
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={baseProvider}
         updateWebSocketTarget={update}
@@ -168,7 +164,7 @@ describe('WebSocketEndpointConfiguration', () => {
       config: { ...baseProvider.config, streamResponse: undefined },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={nonStreamingProvider}
         updateWebSocketTarget={update}
@@ -212,7 +208,7 @@ describe('WebSocketEndpointConfiguration', () => {
       config: { ...baseProvider.config, timeoutMs: undefined },
     };
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <WebSocketEndpointConfiguration
         selectedTarget={providerUndefined}
         updateWebSocketTarget={update}

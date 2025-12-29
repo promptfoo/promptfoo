@@ -1,5 +1,4 @@
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
-import { createTheme, Theme, ThemeProvider } from '@mui/material/styles';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
@@ -108,23 +107,18 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    const lightTheme = createTheme({ palette: { mode: 'light' } });
-    const darkTheme = createTheme({ palette: { mode: 'dark' } });
-
-    const renderWithTheme = (theme: Theme) =>
-      render(
-        <ThemeProvider theme={theme}>
-          <UpdateBanner />
-        </ThemeProvider>,
-      );
-
-    renderWithTheme(lightTheme);
+    // Light mode
+    document.documentElement.removeAttribute('data-theme');
+    render(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
 
     cleanup();
 
-    renderWithTheme(darkTheme);
+    // Dark mode
+    document.documentElement.setAttribute('data-theme', 'dark');
+    render(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
+    document.documentElement.removeAttribute('data-theme');
   });
 
   it('should render the copy command button with default text when commandType is undefined', () => {

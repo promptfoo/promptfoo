@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { FilterModeSelector } from './FilterModeSelector';
-import type { SelectChangeEvent } from '@mui/material/Select';
 
 const noop = () => {};
 
@@ -83,7 +82,6 @@ describe('FilterModeSelector', () => {
     await user.click(failuresOption);
 
     expect(onChange).toHaveBeenCalledTimes(1);
-    const event = onChange.mock.calls[0][0] as SelectChangeEvent;
-    expect(event.target.value).toBe('failures');
+    expect(onChange).toHaveBeenCalledWith('failures');
   });
 });

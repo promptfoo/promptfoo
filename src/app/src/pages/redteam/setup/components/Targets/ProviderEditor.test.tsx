@@ -1,9 +1,9 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithProviders } from '@app/utils/testutils';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -65,25 +65,6 @@ vi.mock('./providerOptions', () => ({
   ],
 }));
 
-vi.mock('@mui/icons-material/Search', () => ({
-  default: () => <div data-testid="search-icon" />,
-}));
-vi.mock('@mui/icons-material/CheckCircle', () => ({
-  default: () => <div data-testid="check-circle-icon" />,
-}));
-
-const theme = createTheme();
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <ThemeProvider theme={theme}>
-    <TooltipProvider>{children}</TooltipProvider>
-  </ThemeProvider>
-);
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  return render(ui, { wrapper: AllProviders });
-};
-
 describe('ProviderEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -96,7 +77,7 @@ describe('ProviderEditor', () => {
     };
     const setProvider = vi.fn();
 
-    renderWithTheme(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
+    renderWithProviders(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
 
     const textField = screen.getByRole('textbox', { name: /Provider Name/i });
     expect(textField).toBeInTheDocument();
@@ -117,7 +98,7 @@ describe('ProviderEditor', () => {
     };
     const setProvider = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor provider={initialProvider} setProvider={setProvider} />,
     );
 
@@ -148,7 +129,7 @@ describe('ProviderEditor', () => {
     const onActionButtonClick = vi.fn();
     const initialProvider: ProviderOptions = defaultHttpTarget();
 
-    renderWithTheme(
+    renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={vi.fn()}
@@ -170,7 +151,7 @@ describe('ProviderEditor', () => {
     const setProvider = vi.fn();
     const setError = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={setProvider}

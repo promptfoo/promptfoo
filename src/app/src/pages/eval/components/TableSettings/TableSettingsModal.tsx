@@ -1,22 +1,17 @@
 import React from 'react';
 
-import CloseIcon from '@mui/icons-material/Close';
-import RestoreIcon from '@mui/icons-material/Restore';
-import SettingsIcon from '@mui/icons-material/Settings';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Separator } from '@app/components/ui/separator';
+import { RotateCcw, Settings, X } from 'lucide-react';
 import SettingsPanel from './components/SettingsPanel';
 import { useSettingsState } from './hooks/useSettingsState';
-import { tokens } from './tokens';
 
 interface SettingsModalProps {
   open: boolean;
@@ -24,9 +19,6 @@ interface SettingsModalProps {
 }
 
 const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
   const { resetToDefaults } = useSettingsState(open);
 
   const handleClose = () => {
@@ -34,135 +26,46 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{
-        elevation: tokens.elevation.dialog,
-        sx: {
-          maxWidth: 680,
-          borderRadius: tokens.borderRadius.medium,
-          overflow: 'hidden',
-          backgroundImage:
-            theme.palette.mode === 'dark'
-              ? `linear-gradient(${alpha(theme.palette.background.paper, 0.8)}, ${alpha(theme.palette.background.paper, 0.95)})`
-              : `linear-gradient(${alpha(theme.palette.background.paper, 0.97)}, ${theme.palette.background.paper})`,
-          backdropFilter: 'blur(8px)',
-        },
-      }}
-      sx={{
-        '& .MuiBackdrop-root': {
-          backdropFilter: 'blur(4px)',
-          backgroundColor: alpha(theme.palette.background.default, 0.4),
-        },
-      }}
-      aria-labelledby="settings-dialog-title"
-      fullScreen={isMobile}
-    >
-      <DialogTitle
-        id="settings-dialog-title"
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          p: tokens.spacing.padding.container,
-          pb: tokens.spacing.padding.item,
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        }}
-      >
-        <Stack direction="row" alignItems="center" spacing={tokens.spacing.stack.medium}>
-          <SettingsIcon
-            color="primary"
-            sx={{
-              fontSize: '1.75rem',
-              opacity: 0.9,
-            }}
-          />
-          <Typography variant="h6" fontWeight={600}>
-            Table Settings
-          </Typography>
-        </Stack>
-        <IconButton
-          edge="end"
-          color="inherit"
-          onClick={handleClose}
-          aria-label="close"
-          sx={{
-            transition: `all ${tokens.animation.fast}ms ease`,
-            '&:hover': {
-              backgroundColor: alpha(theme.palette.primary.main, 0.08),
-            },
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-[680px] p-0 overflow-hidden">
+        <DialogHeader className="flex flex-row items-center justify-between p-5 pb-3 border-b border-border/10">
+          <div className="flex items-center gap-3">
+            <Settings className="h-7 w-7 text-primary opacity-90" />
+            <DialogTitle className="text-lg font-semibold">Table Settings</DialogTitle>
+          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="p-2 rounded hover:bg-primary/10 transition-colors"
+            aria-label="close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </DialogHeader>
 
-      <DialogContent
-        sx={{
-          p: 0,
-          minHeight: {
-            xs: 'auto',
-            sm: 'auto',
-          },
-        }}
-      >
-        <SettingsPanel />
+        <div className="p-0">
+          <SettingsPanel />
+        </div>
+
+        <Separator className="opacity-60" />
+
+        <DialogFooter className="px-5 py-3 justify-between">
+          <Button
+            onClick={resetToDefaults}
+            variant="ghost"
+            size="sm"
+            className="rounded-full px-4"
+            aria-label="Reset settings to defaults"
+            title="Reset all settings to their default values"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset to Defaults
+          </Button>
+          <Button onClick={handleClose} className="rounded-full px-6 font-semibold">
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
-
-      <Divider sx={{ opacity: 0.6 }} />
-
-      <DialogActions
-        sx={{
-          px: {
-            xs: tokens.spacing.padding.item,
-            sm: tokens.spacing.padding.container,
-          },
-          py: tokens.spacing.padding.item,
-          justifyContent: 'space-between',
-        }}
-      >
-        <Button
-          startIcon={<RestoreIcon />}
-          onClick={resetToDefaults}
-          color="inherit"
-          size="small"
-          aria-label="Reset settings to defaults"
-          title="Reset all settings to their default values"
-          sx={{
-            borderRadius: tokens.borderRadius.pill,
-            px: tokens.spacing.padding.item,
-            py: tokens.spacing.padding.compact - 0.25,
-            transition: `all ${tokens.animation.fast}ms ease-in-out`,
-            '&:hover': {
-              backgroundColor: alpha(theme.palette.text.primary, 0.07),
-            },
-          }}
-        >
-          Reset to Defaults
-        </Button>
-        <Button
-          onClick={handleClose}
-          color="primary"
-          variant="contained"
-          disableElevation
-          sx={{
-            borderRadius: tokens.borderRadius.pill,
-            px: tokens.spacing.padding.container,
-            py: tokens.spacing.padding.compact - 0.1,
-            fontWeight: 600,
-            transition: `all ${tokens.animation.fast}ms ease-in-out`,
-            '&:hover': {
-              boxShadow: theme.shadows[2],
-              transform: 'translateY(-1px)',
-            },
-          }}
-        >
-          Done
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

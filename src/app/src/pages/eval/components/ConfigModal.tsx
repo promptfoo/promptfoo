@@ -1,18 +1,17 @@
 import React from 'react';
 
-import Check from '@mui/icons-material/Check';
-import Download from '@mui/icons-material/Download';
-import FileCopy from '@mui/icons-material/FileCopy';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import yaml from 'js-yaml';
+import { Check, ClipboardCopy, Download } from 'lucide-react';
 import { useTableStore } from './store';
 
 interface ConfigModalProps {
@@ -58,50 +57,56 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      aria-labelledby="config-dialog-title"
-      maxWidth="md"
-      fullWidth
-    >
-      <DialogTitle id="config-dialog-title">
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6" style={{ flexGrow: 1 }}>
-            Config
-          </Typography>
-          <Box>
-            <Tooltip title="Copy to clipboard">
-              <IconButton onClick={handleCopyClick}>{copied ? <Check /> : <FileCopy />}</IconButton>
-            </Tooltip>
-            <Tooltip title="Download .yaml">
-              <IconButton onClick={handleDownloadClick}>
-                <Download />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      </DialogTitle>
-      <DialogContent>
-        <Typography variant="body1" component="div">
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <div className="flex justify-between items-center">
+            <DialogTitle className="flex-1">Config</DialogTitle>
+            <div className="flex gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleCopyClick}
+                    className="p-2 rounded hover:bg-muted transition-colors"
+                  >
+                    {copied ? <Check className="h-5 w-5" /> : <ClipboardCopy className="h-5 w-5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy to clipboard</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleDownloadClick}
+                    className="p-2 rounded hover:bg-muted transition-colors"
+                  >
+                    <Download className="h-5 w-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Download .yaml</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </DialogHeader>
+        <div>
           <textarea
             ref={textareaRef}
             readOnly
             value={yamlConfig}
-            style={{
-              width: '100%',
-              minHeight: '400px',
-              fontFamily: 'monospace',
-              border: '1px solid #ccc',
-            }}
+            className={cn(
+              'w-full min-h-[400px] font-mono text-sm p-3 rounded border border-border',
+              'bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring',
+            )}
           />
-        </Typography>
+        </div>
+        <DialogFooter>
+          <Button onClick={handleClose} variant="outline">
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} color="primary">
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

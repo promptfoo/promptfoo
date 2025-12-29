@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,7 +8,6 @@ import ModelAuditHistory from './ModelAuditHistory';
 
 vi.mock('../model-audit/stores');
 
-const theme = createTheme();
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -73,9 +71,9 @@ describe('ModelAuditHistory', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <ThemeProvider theme={theme}>
+          
             <ModelAuditHistory />
-          </ThemeProvider>
+          
         </MemoryRouter>
       </TooltipProvider>,
     );

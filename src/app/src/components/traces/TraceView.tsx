@@ -1,10 +1,8 @@
 import { useCallback } from 'react';
 
-import DownloadIcon from '@mui/icons-material/Download';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Download } from 'lucide-react';
 import TraceTimeline from './TraceTimeline';
 
 export interface Trace {
@@ -35,11 +33,9 @@ export default function TraceView({
 
   if (traces.length === 0) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          No traces available for this evaluation
-        </Typography>
-      </Box>
+      <div className="p-2">
+        <p className="text-sm text-muted-foreground">No traces available for this evaluation</p>
+      </div>
     );
   }
 
@@ -106,11 +102,9 @@ export default function TraceView({
 
   if (filteredTraces.length === 0 && (testCaseId || testIndex !== undefined)) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          No traces available for this test case
-        </Typography>
-      </Box>
+      <div className="p-2">
+        <p className="text-sm text-muted-foreground">No traces available for this test case</p>
+      </div>
     );
   }
 
@@ -119,39 +113,38 @@ export default function TraceView({
 
   if (!hasAnySpans) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="info">
-          Traces were created but no spans were received. Make sure your provider is:
-          <ul style={{ marginTop: 8 }}>
-            <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
-            <li>Creating spans within the trace context</li>
-            <li>Properly exporting spans before the evaluation completes</li>
-          </ul>
+      <div className="p-2">
+        <Alert variant="info">
+          <AlertTitle>No spans received</AlertTitle>
+          <AlertDescription>
+            <p>Traces were created but no spans were received. Make sure your provider is:</p>
+            <ul className="mt-2 ml-4 list-disc space-y-1">
+              <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
+              <li>Creating spans within the trace context</li>
+              <li>Properly exporting spans before the evaluation completes</li>
+            </ul>
+          </AlertDescription>
         </Alert>
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<DownloadIcon />}
-          onClick={() => handleExportTraces(filteredTraces)}
-        >
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button variant="outline" size="sm" onClick={() => handleExportTraces(filteredTraces)}>
+          <Download className="h-4 w-4 mr-2" />
           Export Traces
         </Button>
-      </Box>
+      </div>
       {filteredTraces.map((trace, index) => (
-        <Box
+        <div
           key={`trace-${trace.traceId}-${index}`}
-          sx={{ mb: index < filteredTraces.length - 1 ? 3 : 0 }}
+          className={index < filteredTraces.length - 1 ? 'mb-6' : ''}
         >
           <TraceTimeline trace={trace} />
-        </Box>
+        </div>
       ))}
-    </Box>
+    </div>
   );
 }

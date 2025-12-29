@@ -1,6 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +24,6 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
   LatestScanSkeleton: () => <div data-testid="loading-skeleton" />,
 }));
 
-const theme = createTheme();
 
 const createMockScan = (id: string, name: string) => ({
   id,
@@ -58,9 +56,9 @@ describe('ModelAuditResultLatestPage', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <ThemeProvider theme={theme}>
+          
             <ModelAuditResultLatestPage />
-          </ThemeProvider>
+          
         </MemoryRouter>
       </TooltipProvider>,
     );

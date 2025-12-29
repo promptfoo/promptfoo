@@ -13,10 +13,6 @@ vi.mock('./components/SettingsPanel', () => ({
   default: () => <div data-testid="mock-settings-panel"></div>,
 }));
 
-vi.mock('@mui/material/useMediaQuery', () => ({
-  default: vi.fn(() => true),
-}));
-
 describe('TableSettingsModal', () => {
   const mockOnClose = vi.fn();
   const mockResetToDefaults = vi.fn();
@@ -86,12 +82,13 @@ describe('TableSettingsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should render the dialog in full screen mode when isMobile is true', () => {
+  it('should render the dialog with proper sizing', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const dialog = screen.getByRole('dialog');
 
-    expect(dialog).toHaveClass('MuiDialog-paperFullScreen');
+    // The dialog uses Radix UI with Tailwind classes for sizing
+    expect(dialog).toHaveClass('max-w-[680px]');
   });
 
   it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', () => {

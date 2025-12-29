@@ -1,28 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import DeleteIcon from '@mui/icons-material/Delete';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
 import {
-  Box,
-  Button,
-  CircularProgress,
-  Divider,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Popover,
   Select,
-  Stack,
-  TextField,
-} from '@mui/material';
-import Autocomplete from '@mui/material/Autocomplete';
-import { useTheme } from '@mui/material/styles';
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Spinner } from '@app/components/ui/spinner';
+import { cn } from '@app/lib/utils';
 import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
-import { BaseNumberInput } from '../../../../components/form/input/BaseNumberInput';
+import { NumberInput } from '@app/components/ui/number-input';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -68,51 +61,58 @@ function Dropdown({
 }: {
   id: string;
   label?: string;
-  values: { label: string | React.ReactNode; value: string }[];
+  values: { label: string | React.ReactNode; value: string; sortValue?: string }[];
   value: string;
   onChange: (value: string) => void;
   width?: number | string;
   disabled?: boolean;
   disabledValues?: string[];
 }) {
+  const selectedItem = values.find((item) => item.value === value);
+
   return (
-    <FormControl variant="outlined" size="small" sx={{ minWidth: width }}>
-      {label && <InputLabel id={`${id}-label`}>{label}</InputLabel>}
-      <Select
-        labelId={`${id}-label`}
-        id={`${id}-select`}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        label={label}
-        disabled={disabled}
-        sx={{
-          '& .MuiSelect-select': {
-            py: 1,
-          },
-        }}
-      >
-        {values.map((item) => (
-          <MenuItem
-            key={item.value}
-            value={item.value}
-            disabled={disabledValues.includes(item.value)}
-          >
-            {item.label}
-          </MenuItem>
-        ))}
+    <div style={{ minWidth: typeof width === 'number' ? `${width}px` : width }}>
+      {label && (
+        <label className="text-xs text-muted-foreground mb-1 block" id={`${id}-label`}>
+          {label}
+        </label>
+      )}
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger id={`${id}-select`} aria-labelledby={label ? `${id}-label` : undefined}>
+          <SelectValue>
+            {typeof selectedItem?.label === 'string' ? selectedItem.label : value || 'Select...'}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {values.map((item) => (
+            <SelectItem
+              key={item.value}
+              value={item.value}
+              disabled={disabledValues.includes(item.value)}
+            >
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
-    </FormControl>
+    </div>
   );
 }
 
 function DebouncedTextField({
   value,
   onChange,
-  ...props
+  label,
+  placeholder,
+  fullWidth,
+  className,
 }: {
   value: string;
   onChange: (value: string) => void;
-  [key: string]: any;
+  label?: string;
+  placeholder?: string;
+  fullWidth?: boolean;
+  className?: string;
 }) {
   const [localValue, setLocalValue] = useState(value);
   const [debouncedValue] = useDebounce(localValue, 500);
@@ -130,17 +130,15 @@ function DebouncedTextField({
   }, [value]);
 
   return (
-    <TextField
-      {...props}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      sx={{
-        '& .MuiInputBase-input': {
-          py: 1,
-        },
-        ...props.sx,
-      }}
-    />
+    <div className={cn(fullWidth && 'w-full', className)}>
+      {label && <label className="text-xs text-muted-foreground mb-1 block">{label}</label>}
+      <Input
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        placeholder={placeholder}
+        className="h-9"
+      />
+    </div>
   );
 }
 
@@ -154,8 +152,7 @@ function Filter({
   totalFilters: number;
   onClose: () => void;
 }) {
-  const theme = useTheme();
-  const [metadataAutocompleteOpen, setMetadataAutocompleteOpen] = useState(false);
+  const [_metadataAutocompleteOpen, setMetadataAutocompleteOpen] = useState(false);
   const [metadataValueInput, setMetadataValueInput] = useState(value.value);
   const {
     filters,
@@ -351,42 +348,17 @@ function Filter({
   }, [filters.values, removeFilter, value.id, onClose]);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 1.5,
-        alignItems: 'center',
-        p: 1.5,
-        borderRadius: 1,
-        overflow: 'hidden',
-        '&:hover': {
-          backgroundColor: 'action.hover',
-        },
-      }}
-    >
-      <IconButton
+    <div className="flex items-center gap-3 p-3 rounded overflow-hidden hover:bg-muted/50">
+      <button
+        type="button"
         onClick={handleRemove}
-        size="small"
-        sx={{
-          color: 'text.secondary',
-          '&:hover': {
-            color: 'error.main',
-          },
-        }}
+        className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded"
+        aria-label="Remove filter"
       >
-        <CloseIcon fontSize="small" />
-      </IconButton>
+        <X className="h-4 w-4" />
+      </button>
 
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 1.5,
-          flex: 1,
-          alignItems: 'center',
-          flexWrap: 'nowrap',
-          minWidth: 0,
-        }}
-      >
+      <div className="flex items-center gap-3 flex-1 min-w-0 flex-nowrap">
         {index !== 0 &&
           (() => {
             // Get the filter with sortIndex === 1 to determine the logic operator for all filters
@@ -444,19 +416,19 @@ function Filter({
         {value.type === 'metadata' &&
           // Show loading state initially to prevent flicker
           (metadataKeysLoading ? (
-            <TextField
-              id={`${index}-field-loading`}
-              label="Key"
-              variant="outlined"
-              size="small"
-              value=""
-              placeholder="Loading keys..."
-              disabled
-              sx={{ width: 180 }}
-              InputProps={{
-                endAdornment: <CircularProgress size={16} />,
-              }}
-            />
+            <div style={{ width: 180 }}>
+              <label className="text-xs text-muted-foreground mb-1 block">Key</label>
+              <div className="relative">
+                <Input
+                  id={`${index}-field-loading`}
+                  value=""
+                  placeholder="Loading keys..."
+                  disabled
+                  className="h-9 pr-8"
+                />
+                <Spinner className="h-4 w-4 absolute right-2 top-2.5" />
+              </div>
+            </div>
           ) : metadataKeys && metadataKeys.length > 0 ? (
             // Show dropdown if keys are available
             <Dropdown
@@ -469,20 +441,21 @@ function Filter({
             />
           ) : (
             // Fallback to text input with error indication if needed
-            <TextField
-              id={`${index}-field-input`}
-              label="Key"
-              variant="outlined"
-              size="small"
-              value={value.field || ''}
-              onChange={(e) => handleFieldChange(e.target.value)}
-              placeholder={
-                metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
-              }
-              sx={{ width: 180 }}
-              error={metadataKeysError}
-              helperText={metadataKeysError ? 'Failed to load available keys' : undefined}
-            />
+            <div style={{ width: 180 }}>
+              <label className="text-xs text-muted-foreground mb-1 block">Key</label>
+              <Input
+                id={`${index}-field-input`}
+                value={value.field || ''}
+                onChange={(e) => handleFieldChange(e.target.value)}
+                placeholder={
+                  metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
+                }
+                className={cn('h-9', metadataKeysError && 'border-destructive')}
+              />
+              {metadataKeysError && (
+                <p className="text-xs text-destructive mt-1">Failed to load available keys</p>
+              )}
+            </div>
           ))}
 
         {value.type === 'metric' && filters.options.metric.length > 0 && (
@@ -531,14 +504,7 @@ function Filter({
 
         {/* Hide value input when exists or is_defined operator is selected */}
         {value.operator !== 'exists' && value.operator !== 'is_defined' && (
-          <Box
-            sx={{
-              // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
-              // to the width of its contents i.e. the dropdown values.
-              flex: 1,
-              minWidth: 250,
-            }}
-          >
+          <div className="flex-1 min-w-[250px]">
             {value.type === 'plugin' || solelyHasEqualsOperator(value.type) ? (
               <Dropdown
                 id={`${index}-value-select`}
@@ -566,25 +532,9 @@ function Filter({
                       // For policy filters, don't show the ID in the code section
                       const showValue = value.type !== 'policy';
                       label = showValue ? (
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            width: '100%',
-                            gap: 16,
-                          }}
-                        >
+                        <div className="flex items-center justify-between w-full gap-4">
                           {displayName}
-                          <code
-                            style={{
-                              fontSize: '0.8em',
-                              color: theme.palette.text.secondary,
-                            }}
-                          >
-                            {optionValue}
-                          </code>
+                          <code className="text-[0.8em] text-muted-foreground">{optionValue}</code>
                         </div>
                       ) : (
                         displayName
@@ -612,11 +562,9 @@ function Filter({
               />
             ) : value.type === 'metric' &&
               ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator) ? (
-              <BaseNumberInput
+              <NumberInput
                 id={`${index}-value-input`}
                 label="Value"
-                variant="outlined"
-                size="small"
                 value={value.value === '' ? undefined : Number(value.value)}
                 onChange={(numericValue) => {
                   handleValueChange(numericValue === undefined ? '' : String(numericValue));
@@ -624,104 +572,54 @@ function Filter({
                 allowDecimals
                 step={0.1}
                 fullWidth
-                slotProps={{
-                  input: {
-                    sx: {
-                      py: 1,
-                    },
-                  },
-                }}
               />
             ) : value.type === 'metadata' && value.operator === 'equals' ? (
-              <Autocomplete
-                freeSolo
-                id={`${index}-metadata-value-autocomplete`}
-                size="small"
-                value={value.value || null}
-                inputValue={metadataValueInput}
-                onInputChange={(_event, newInputValue, reason) => {
-                  if (reason === 'reset') {
-                    return;
-                  }
-
-                  setMetadataValueInput(newInputValue);
-
-                  if (reason === 'input') {
-                    handleValueChange(newInputValue);
-                  }
-
-                  if (reason === 'clear') {
-                    handleValueChange('');
-                  }
-                }}
-                onChange={(_event, newValue) => {
-                  const nextValue = typeof newValue === 'string' ? newValue : '';
-                  setMetadataValueInput(nextValue);
-                  handleValueChange(nextValue);
-                }}
-                open={metadataAutocompleteOpen}
-                onOpen={() => {
-                  if (!metadataKey || !evalId) {
-                    setMetadataAutocompleteOpen(false);
-                    return;
-                  }
-
-                  setMetadataAutocompleteOpen(true);
-                  fetchMetadataValues(evalId, metadataKey);
-                }}
-                onClose={() => setMetadataAutocompleteOpen(false)}
-                options={metadataValueOptions}
-                loading={metadataValuesAreLoading}
-                noOptionsText={metadataKey ? 'No values found' : 'Select a key to load values'}
-                loadingText="Loading values..."
-                disabled={!metadataKey || !evalId}
-                isOptionEqualToValue={(option, currentValue) => option === currentValue}
-                sx={{ width: '100%' }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Value"
-                    variant="outlined"
-                    size="small"
-                    error={metadataValuesHadError}
-                    helperText={
-                      metadataValuesHadError ? 'Failed to load metadata values' : undefined
-                    }
+              // Simplified metadata value input with datalist
+              <div className="w-full">
+                <label className="text-xs text-muted-foreground mb-1 block">Value</label>
+                <div className="relative">
+                  <Input
+                    id={`${index}-metadata-value-input`}
+                    list={`${index}-metadata-value-options`}
+                    value={metadataValueInput}
+                    onChange={(e) => {
+                      setMetadataValueInput(e.target.value);
+                      handleValueChange(e.target.value);
+                    }}
+                    onFocus={() => {
+                      if (metadataKey && evalId) {
+                        fetchMetadataValues(evalId, metadataKey);
+                      }
+                    }}
                     placeholder={metadataKey ? 'Select or type a value' : 'Select a key first'}
-                    sx={{
-                      '& .MuiInputBase-input': {
-                        py: 1,
-                      },
-                    }}
-                    InputProps={{
-                      ...params.InputProps,
-                      endAdornment: (
-                        <>
-                          {metadataValuesAreLoading ? (
-                            <CircularProgress color="inherit" size={16} />
-                          ) : null}
-                          {params.InputProps.endAdornment}
-                        </>
-                      ),
-                    }}
+                    disabled={!metadataKey || !evalId}
+                    className={cn('h-9', metadataValuesHadError && 'border-destructive')}
                   />
+                  {metadataValuesAreLoading && (
+                    <Spinner className="h-4 w-4 absolute right-2 top-2.5" />
+                  )}
+                  <datalist id={`${index}-metadata-value-options`}>
+                    {metadataValueOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+                {metadataValuesHadError && (
+                  <p className="text-xs text-destructive mt-1">Failed to load metadata values</p>
                 )}
-              />
+              </div>
             ) : (
               <DebouncedTextField
-                id={`${index}-value-input`}
                 label="Value"
-                variant="outlined"
-                size="small"
                 value={value.value}
                 onChange={handleValueChange}
                 fullWidth
               />
             )}
-          </Box>
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -812,33 +710,52 @@ export default function FiltersForm({
     return Object.values(filters.values).sort((a, b) => a.sortIndex - b.sortIndex);
   }, [filters.values]);
 
+  // Handle click outside to close
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const popoverContent = document.getElementById('filters-popover-content');
+      if (popoverContent && !popoverContent.contains(target) && !anchorEl?.contains(target)) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open, onClose, anchorEl]);
+
+  if (!open || !anchorEl) {
+    return null;
+  }
+
+  // Calculate position based on anchor element
+  const rect = anchorEl.getBoundingClientRect();
+
   return (
-    <Popover
-      open={open}
-      onClose={onClose}
-      anchorEl={anchorEl}
-      anchorOrigin={{
-        vertical: 'bottom',
-        horizontal: 'left',
-      }}
-      transformOrigin={{
-        vertical: 'top',
-        horizontal: 'left',
-      }}
-      PaperProps={{
-        sx: {
-          mt: 1,
-          minWidth: { xs: 400, sm: 600 },
-          maxWidth: { xs: '95vw', sm: '90vw' },
-          maxHeight: '80vh',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        },
+    <div
+      id="filters-popover-content"
+      className="fixed z-[var(--z-dropdown)] mt-1 min-w-[400px] sm:min-w-[600px] max-w-[95vw] sm:max-w-[90vw] max-h-[80vh] overflow-hidden flex flex-col bg-popover border border-border rounded-lg shadow-lg"
+      style={{
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
       }}
     >
-      <Box sx={{ px: 2, pt: 2, pb: 1, flex: 1, overflowY: 'auto' }}>
-        <Stack direction="column" spacing={0.5}>
+      <div className="px-4 pt-4 pb-2 flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-1">
           {filterValuesList.map((filter, index) => (
             <Filter
               key={filter.id}
@@ -848,33 +765,24 @@ export default function FiltersForm({
               onClose={onClose}
             />
           ))}
-        </Stack>
-      </Box>
+        </div>
+      </div>
 
-      <Box sx={{ px: 2, pt: 1, pb: 2 }}>
-        {filterValuesList.length > 0 && <Divider sx={{ mb: 1.5 }} />}
-        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-          <Button
-            startIcon={<AddIcon />}
-            onClick={handleAddFilter}
-            variant="contained"
-            size="small"
-          >
+      <div className="px-4 pt-2 pb-4">
+        {filterValuesList.length > 0 && <hr className="border-border mb-3" />}
+        <div className="flex gap-2 justify-between">
+          <Button onClick={handleAddFilter} size="sm">
+            <Plus className="h-4 w-4 mr-1" />
             Add Filter
           </Button>
           {filterValuesList.length > 0 && (
-            <Button
-              startIcon={<DeleteIcon />}
-              onClick={handleRemoveAllFilters}
-              color="error"
-              variant="outlined"
-              size="small"
-            >
+            <Button onClick={handleRemoveAllFilters} variant="outline" size="sm">
+              <Trash2 className="h-4 w-4 mr-1" />
               Remove All
             </Button>
           )}
-        </Box>
-      </Box>
-    </Popover>
+        </div>
+      </div>
+    </div>
   );
 }

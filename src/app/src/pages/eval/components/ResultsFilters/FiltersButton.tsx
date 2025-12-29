@@ -1,20 +1,8 @@
 import { forwardRef } from 'react';
 
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
-import Badge, { badgeClasses } from '@mui/material/Badge';
-import IconButton from '@mui/material/IconButton';
-import { styled } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-
-const CountBadge = styled(Badge)`
-  & .${badgeClasses.badge} {
-    top: -8px;
-    right: -8px;
-    min-width: 16px;
-    height: 16px;
-    font-size: 0.75rem;
-  }
-`;
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { SlidersHorizontal } from 'lucide-react';
 
 interface FiltersButtonProps {
   appliedFiltersCount: number;
@@ -24,11 +12,30 @@ interface FiltersButtonProps {
 const FiltersButton = forwardRef<HTMLButtonElement, FiltersButtonProps>(
   ({ appliedFiltersCount, onClick }, ref) => {
     return (
-      <Tooltip title="Filters" placement="bottom">
-        <IconButton onClick={onClick} ref={ref}>
-          <FilterAltIcon fontSize="small" />
-          <CountBadge badgeContent={appliedFiltersCount} color="primary" overlap="circular" />
-        </IconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            ref={ref}
+            className="relative p-2 rounded hover:bg-muted transition-colors"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {appliedFiltersCount > 0 && (
+              <span
+                className={cn(
+                  'absolute -top-1 -right-1 min-w-[16px] h-4 px-1',
+                  'flex items-center justify-center',
+                  'bg-primary text-primary-foreground text-[0.75rem] font-medium',
+                  'rounded-full',
+                )}
+              >
+                {appliedFiltersCount}
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Filters</TooltipContent>
       </Tooltip>
     );
   },

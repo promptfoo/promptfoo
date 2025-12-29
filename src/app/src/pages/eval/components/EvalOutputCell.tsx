@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
@@ -9,21 +10,19 @@ import {
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import {
-  Check,
-  ContentCopy,
-  Edit,
-  Link,
-  Numbers,
-  Search,
-  Star,
-  ThumbDown,
-  ThumbUp,
-} from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
+import {
+  Check,
+  ClipboardCopy,
+  Hash,
+  Link,
+  Pencil,
+  Search,
+  Star,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -82,10 +81,6 @@ export function isVideoProvider(provider: string | undefined): boolean {
   // Check for :video: namespace (Google Veo)
   return provider.includes(':video:');
 }
-
-const tooltipSlotProps: TooltipProps['slotProps'] = {
-  popper: { disablePortal: true },
-};
 
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
@@ -530,27 +525,29 @@ function EvalOutputCell({
       );
 
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-            {` R${reasoningTokens}`}
-          </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              {totalTokens}
+              {(promptTokens !== '0' || completionTokens !== '0') &&
+                ` (${promptTokens}+${completionTokens})`}
+              {` R${reasoningTokens}`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}</TooltipContent>
         </Tooltip>
       );
     } else {
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-          </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              {totalTokens}
+              {(promptTokens !== '0' || completionTokens !== '0') &&
+                ` (${promptTokens}+${completionTokens})`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}</TooltipContent>
         </Tooltip>
       );
     }
@@ -663,8 +660,11 @@ function EvalOutputCell({
           : null;
     if (providerId) {
       providerOverride = (
-        <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider pill">{providerId}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="provider pill">{providerId}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top">Model override for this test</TooltipContent>
         </Tooltip>
       );
     }
@@ -715,44 +715,60 @@ function EvalOutputCell({
     <div className="cell-actions">
       {shiftKeyPressed && (
         <>
-          <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleCopy}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleCopy}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
-          <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleToggleHighlight}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              <Star fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleToggleHighlight}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <Star className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleRowShareLink}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {linked ? <Check fontSize="small" /> : <Link fontSize="small" />}
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleRowShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {linked ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Share output</TooltipContent>
           </Tooltip>
         </>
       )}
       {output.prompt && (
         <>
-          <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
-            <IconButton className="action" size="small" onClick={handlePromptOpen}>
-              <Search fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handlePromptOpen}
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>View output and test details</TooltipContent>
           </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
@@ -777,39 +793,57 @@ function EvalOutputCell({
           )}
         </>
       )}
-      <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
-        <IconButton
-          className={`action ${activeRating === true ? 'active' : ''}`}
-          size="small"
-          onClick={() => handleRating(true)}
-          color={activeRating === true ? 'success' : 'default'}
-          aria-pressed={activeRating === true}
-          aria-label="Mark test passed"
-        >
-          <ThumbUp fontSize="small" />
-        </IconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            onClick={() => handleRating(true)}
+            aria-pressed={activeRating === true}
+            aria-label="Mark test passed"
+          >
+            <ThumbsUp className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
       </Tooltip>
-      <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
-        <IconButton
-          className={`action ${activeRating === false ? 'active' : ''}`}
-          size="small"
-          onClick={() => handleRating(false)}
-          color={activeRating === false ? 'error' : 'default'}
-          aria-pressed={activeRating === false}
-          aria-label="Mark test failed"
-        >
-          <ThumbDown fontSize="small" />
-        </IconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            onClick={() => handleRating(false)}
+            aria-pressed={activeRating === false}
+            aria-label="Mark test failed"
+          >
+            <ThumbsDown className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
       </Tooltip>
-      <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
-        <IconButton className="action" size="small" onClick={handleSetScore}>
-          <Numbers fontSize="small" />
-        </IconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleSetScore}
+          >
+            <Hash className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Set test score</TooltipContent>
       </Tooltip>
-      <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
-        <IconButton className="action" size="small" onClick={handleCommentOpen}>
-          <Edit fontSize="small" />
-        </IconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleCommentOpen}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
     </div>
   );
