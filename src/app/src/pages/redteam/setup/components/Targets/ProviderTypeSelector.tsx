@@ -434,7 +434,8 @@ export default function ProviderTypeSelector({
   const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
 
   // Tag filter options - 4 categories based on user intent
-  const tagFilters = [
+  type TagKey = 'app' | 'agents' | 'providers' | 'local';
+  const tagFilters: Array<{ key: TagKey; label: string }> = [
     { key: 'app', label: 'My Application' },
     { key: 'agents', label: 'Agent Frameworks' },
     { key: 'providers', label: 'AI Providers' },
@@ -1088,7 +1089,7 @@ export default function ProviderTypeSelector({
   }
 
   // Calculate counts for each tag
-  const getTagCount = (tagKey: string | undefined) => {
+  const getTagCount = (tagKey: TagKey | undefined) => {
     if (tagKey === undefined) {
       return allProviderOptions.filter(
         (opt) => !availableProviderIds || availableProviderIds.includes(opt.value),

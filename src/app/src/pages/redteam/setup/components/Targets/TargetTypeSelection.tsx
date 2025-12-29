@@ -136,24 +136,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       }
     >
       <div className="flex flex-col gap-6">
-        {/* Context + Quick Start */}
-        <div className="rounded-lg border border-border bg-muted/30 p-4">
-          <p className="text-sm text-foreground">
-            A target is the AI system you want to test—an agent, chatbot, API endpoint, or any{' '}
-            <a
-              href="https://www.promptfoo.dev/docs/providers/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              supported provider
-            </a>
-            .
-          </p>
-          <div className="mt-3 flex items-center gap-3">
-            <LoadExampleButton />
-            <span className="text-sm text-muted-foreground">New to Promptfoo? Try a demo</span>
-          </div>
+        {/* Quick Start */}
+        <div className="flex items-center gap-3">
+          <LoadExampleButton />
+          <span className="text-sm text-muted-foreground">New to Promptfoo? Try a demo</span>
         </div>
 
         {/* Target Name */}

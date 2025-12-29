@@ -420,9 +420,7 @@ Content-Type: application/json
       const changeButton = screen.getByRole('button', { name: 'Change' });
       fireEvent.click(changeButton);
 
-      const websocketProviderCard = screen
-        .getByText('WebSocket')
-        .closest('.cursor-pointer');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('.cursor-pointer');
       fireEvent.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
@@ -541,9 +539,7 @@ Content-Type: application/json
       const changeButton = screen.getByRole('button', { name: 'Change' });
       fireEvent.click(changeButton);
 
-      const websocketProviderCard = screen
-        .getByText('WebSocket')
-        .closest('.cursor-pointer');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('.cursor-pointer');
       fireEvent.click(websocketProviderCard!);
 
       await waitFor(() => {
