@@ -289,28 +289,41 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   /**
    * Get stats about stored media
    */
-  getStats(): { fileCount: number; totalSizeBytes: number } {
+  async getStats(): Promise<{ fileCount: number; totalSizeBytes: number }> {
     let fileCount = 0;
     let totalSizeBytes = 0;
 
-    const walkDir = (dir: string): void => {
-      if (!fs.existsSync(dir)) {
-        return;
+    const walkDir = async (dir: string): Promise<void> => {
+      let entries: fs.Dirent[];
+      try {
+        entries = await fsPromises.readdir(dir, { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return;
+        }
+        throw error;
       }
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          walkDir(fullPath);
+          await walkDir(fullPath);
         } else if (!entry.name.endsWith('.json')) {
           // Skip metadata files
-          fileCount++;
-          totalSizeBytes += fs.statSync(fullPath).size;
+          try {
+            const stat = await fsPromises.stat(fullPath);
+            fileCount++;
+            totalSizeBytes += stat.size;
+          } catch (error) {
+            // File may have been deleted between readdir and stat
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              throw error;
+            }
+          }
         }
       }
     };
 
-    walkDir(this.basePath);
+    await walkDir(this.basePath);
     return { fileCount, totalSizeBytes };
   }
 }
