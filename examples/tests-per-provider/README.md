@@ -31,7 +31,7 @@ tests:
   - vars:
       question: 'Quick math question'
     providers:
-      - fast-model  # Only runs on fast-model
+      - fast-model # Only runs on fast-model
     assert:
       - type: latency
         threshold: 2000
@@ -39,19 +39,19 @@ tests:
   - vars:
       question: 'Complex reasoning'
     providers:
-      - smart-model  # Only runs on smart-model
+      - smart-model # Only runs on smart-model
 ```
 
 ### Matching Patterns
 
 The `providers` filter supports multiple matching patterns:
 
-| Pattern | Example | Matches |
-|---------|---------|---------|
-| Label | `fast-model` | Provider with `label: fast-model` |
-| Exact ID | `openai:gpt-4` | Provider with that exact ID |
-| Wildcard | `openai:*` | All providers starting with `openai:` |
-| Prefix | `openai` | All providers starting with `openai:` |
+| Pattern  | Example        | Matches                               |
+| -------- | -------------- | ------------------------------------- |
+| Label    | `fast-model`   | Provider with `label: fast-model`     |
+| Exact ID | `openai:gpt-4` | Provider with that exact ID           |
+| Wildcard | `openai:*`     | All providers starting with `openai:` |
+| Prefix   | `openai`       | All providers starting with `openai:` |
 
 ### Default Filters
 
@@ -60,7 +60,7 @@ Use `defaultTest.providers` to apply filters to all tests:
 ```yaml
 defaultTest:
   providers:
-    - openai:*  # All tests default to OpenAI only
+    - openai:* # All tests default to OpenAI only
 
 tests:
   - vars:
@@ -68,12 +68,13 @@ tests:
   - vars:
       question: 'Question 2'
     providers:
-      - anthropic:*  # Override for this test only
+      - anthropic:* # Override for this test only
 ```
 
 ## Result
 
 Instead of 6 test cases (3 tests × 2 providers), this example runs exactly 3 test cases:
+
 - Quick facts test → fast-model only
 - Complex reasoning test → smart-model only
 - Basic test → both providers

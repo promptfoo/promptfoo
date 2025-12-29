@@ -1,6 +1,7 @@
+import { doesProviderRefMatch, getProviderIdentifier } from './provider';
+
 import type { TestCase } from '../types/index';
 import type { ApiProvider } from '../types/providers';
-import { doesProviderRefMatch, getProviderIdentifier } from './provider';
 
 export class ProviderReferenceValidationError extends Error {
   constructor(message: string) {

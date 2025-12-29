@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { TestCase } from '../../src/types/index';
-import type { ApiProvider } from '../../src/types/providers';
 import {
   ProviderReferenceValidationError,
   validateTestProviderReferences,
 } from '../../src/util/validateTestProviderReferences';
+
+import type { TestCase } from '../../src/types/index';
+import type { ApiProvider } from '../../src/types/providers';
 
 describe('validateTestProviderReferences', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
@@ -76,9 +77,7 @@ describe('validateTestProviderReferences', () => {
 
   it('throws for non-array providers field', () => {
     const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: 'not-an-array' as any }];
-    expect(() => validateTestProviderReferences(tests, providers)).toThrow(
-      /must be an array/,
-    );
+    expect(() => validateTestProviderReferences(tests, providers)).toThrow(/must be an array/);
   });
 
   it('validates multiple tests', () => {
@@ -94,8 +93,6 @@ describe('validateTestProviderReferences', () => {
       { vars: { foo: 'bar' }, providers: ['smart-model'] },
       { vars: { baz: 'qux' }, providers: ['nonexistent'] },
     ];
-    expect(() => validateTestProviderReferences(tests, providers)).toThrow(
-      /Test #2/,
-    );
+    expect(() => validateTestProviderReferences(tests, providers)).toThrow(/Test #2/);
   });
 });
