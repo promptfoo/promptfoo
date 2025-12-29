@@ -101,8 +101,8 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
         onPluginClick(test.name);
       }}
       className={cn(
-        'flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm transition-all cursor-pointer',
-        'hover:bg-background/50',
+        'group flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm transition-all cursor-pointer',
+        'hover:bg-accent dark:hover:bg-accent/50',
       )}
     >
       {/* Spacer to align with category chevron */}
@@ -112,7 +112,9 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
       <div className="min-w-0 flex-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="truncate inline-block max-w-full">{displayName}</span>
+            <span className="truncate inline-block max-w-full group-hover:text-accent-foreground">
+              {displayName}
+            </span>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-xs">
             <TooltipArrow className="fill-foreground" />
@@ -126,7 +128,7 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
 
       {/* Progress Bar - same width as category (w-32) */}
       <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
           <div
             className={cn('h-full rounded-full', getPassRateStyles(passRate).bg)}
             style={{ width: `${passRate * 100}%` }}
@@ -152,7 +154,7 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
 
       {/* Chevron - in w-4 container to match category spacer */}
       <div className="w-4 shrink-0 flex justify-center print:hidden">
-        <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+        <ChevronRight className="h-3 w-3 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
       </div>
     </button>
   );
@@ -204,7 +206,7 @@ const RiskCategoryRow = ({
 
           {/* Progress Bar */}
           <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
               <div
                 className={cn(
                   'h-full rounded-full transition-all',
