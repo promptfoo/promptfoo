@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
 import * as SelectPrimitive from '@radix-ui/react-select';
+import { cva, type VariantProps } from 'class-variance-authority';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 const Select = SelectPrimitive.Root;
@@ -10,19 +11,31 @@ const SelectGroup = SelectPrimitive.Group;
 
 const SelectValue = SelectPrimitive.Value;
 
-function SelectTrigger({
-  className,
-  children,
-  ref,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+const selectTriggerVariants = cva(
+  'flex w-full items-center justify-between rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+  {
+    variants: {
+      size: {
+        default: 'h-10 px-3 py-2 text-sm',
+        sm: 'h-8 px-2 py-1 text-xs',
+        lg: 'h-12 px-4 py-3 text-base',
+      },
+    },
+    defaultVariants: {
+      size: 'default',
+    },
+  },
+);
+
+export interface SelectTriggerProps
+  extends React.ComponentProps<typeof SelectPrimitive.Trigger>,
+    VariantProps<typeof selectTriggerVariants> {}
+
+function SelectTrigger({ className, children, size, ref, ...props }: SelectTriggerProps) {
   return (
     <SelectPrimitive.Trigger
       ref={ref}
-      className={cn(
-        'flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
-        className,
-      )}
+      className={cn(selectTriggerVariants({ size }), className)}
       {...props}
     >
       {children}
@@ -42,6 +55,7 @@ function SelectScrollUpButton({
     <SelectPrimitive.ScrollUpButton
       ref={ref}
       className={cn('flex cursor-default items-center justify-center py-1', className)}
+      aria-label="Scroll up"
       {...props}
     >
       <ChevronUp className="h-4 w-4" />
@@ -58,6 +72,7 @@ function SelectScrollDownButton({
     <SelectPrimitive.ScrollDownButton
       ref={ref}
       className={cn('flex cursor-default items-center justify-center py-1', className)}
+      aria-label="Scroll down"
       {...props}
     >
       <ChevronDown className="h-4 w-4" />
@@ -160,6 +175,7 @@ export {
   SelectGroup,
   SelectValue,
   SelectTrigger,
+  selectTriggerVariants,
   SelectContent,
   SelectLabel,
   SelectItem,

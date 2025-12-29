@@ -15,15 +15,15 @@ function Textarea({ className, ref, ...props }: TextareaProps) {
         // Background - solid colors to match Input component
         'bg-white dark:bg-zinc-900',
         // Typography
-        'text-sm text-foreground',
-        // Border styling
-        'border-input',
+        'text-sm leading-relaxed',
+        // Border styling - consistent with input
+        'border-input hover:border-primary/50',
         // Placeholder
         'placeholder:text-muted-foreground',
         // Focus state
         'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         // Disabled state
-        'disabled:cursor-not-allowed disabled:opacity-50',
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input',
         className,
       )}
       ref={ref}
