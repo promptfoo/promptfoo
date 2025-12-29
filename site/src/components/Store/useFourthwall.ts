@@ -8,11 +8,62 @@ import type {
   PaginatedResponse,
 } from './types';
 
-// Public storefront token (encoded to bypass overzealous secret scanners)
+// Public storefront token - this is INTENTIONALLY public and client-facing.
+// Fourthwall storefront tokens are designed to be exposed in frontend code.
+// Base64 encoded only to prevent false-positive secret scanner alerts.
+// Decoded value: ptkn_1be7c822-bfc7-4167-83a6-95619ff7ed7f
 const STOREFRONT_TOKEN = atob('cHRrbl8xYmU3YzgyMi1iZmM3LTQxNjctODNhNi05NTYxOWZmN2VkN2Y=');
 const API_BASE = 'https://storefront-api.fourthwall.com/v1';
-// Your Fourthwall store checkout domain
 const CHECKOUT_DOMAIN = 'https://promptfoo-shop.fourthwall.com';
+
+// Maximum pages to fetch (safety limit for pagination)
+const MAX_PAGES = 50;
+const PAGE_SIZE = 10;
+
+// Safe localStorage wrapper (handles private browsing mode)
+function safeLocalStorage() {
+  return {
+    getItem(key: string): string | null {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    setItem(key: string, value: string): void {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Silently fail in private browsing mode
+      }
+    },
+    removeItem(key: string): void {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Silently fail in private browsing mode
+      }
+    },
+  };
+}
+
+// Input validation helpers
+function validateVariantId(variantId: string): void {
+  if (!variantId || typeof variantId !== 'string' || variantId.trim() === '') {
+    throw new Error('Invalid variant ID');
+  }
+}
+
+function validateQuantity(quantity: number): void {
+  if (
+    typeof quantity !== 'number' ||
+    quantity < 1 ||
+    quantity > 99 ||
+    !Number.isInteger(quantity)
+  ) {
+    throw new Error('Quantity must be an integer between 1 and 99');
+  }
+}
 
 async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = new URL(`${API_BASE}${endpoint}`);
@@ -63,12 +114,11 @@ export function useProducts(collectionSlug: string = 'all') {
       try {
         const allProducts: FourthwallProduct[] = [];
         let page = 0;
-        const pageSize = 10;
 
         // Fetch pages until we get an empty results array
         while (true) {
           const response = await apiFetch<{ results: FourthwallProduct[] }>(
-            `/collections/${collectionSlug}/products?page=${page}&size=${pageSize}`,
+            `/collections/${collectionSlug}/products?page=${page}&size=${PAGE_SIZE}`,
           );
 
           if (!response.results || response.results.length === 0) {
@@ -79,7 +129,13 @@ export function useProducts(collectionSlug: string = 'all') {
           page++;
 
           // Safety limit to prevent infinite loops
-          if (page > 50) break;
+          if (page >= MAX_PAGES) {
+            console.warn(
+              `[Store] Pagination limit reached (${MAX_PAGES} pages, ${allProducts.length} products). ` +
+                'Some products may not be displayed. Consider increasing MAX_PAGES if the catalog has grown.',
+            );
+            break;
+          }
         }
 
         setProducts(allProducts);
@@ -120,6 +176,7 @@ export function useProduct(slug: string | null) {
 
 // Cart operations
 const CART_STORAGE_KEY = 'promptfoo_cart_id';
+const storage = safeLocalStorage();
 
 export function useCart() {
   const [cart, setCart] = useState<FourthwallCart | null>(null);
@@ -128,20 +185,24 @@ export function useCart() {
 
   // Load existing cart on mount
   useEffect(() => {
-    const cartId = localStorage.getItem(CART_STORAGE_KEY);
+    const cartId = storage.getItem(CART_STORAGE_KEY);
     if (cartId) {
       setIsLoading(true);
       apiFetch<FourthwallCart>(`/carts/${cartId}`)
         .then(setCart)
         .catch(() => {
           // Cart expired or invalid, clear it
-          localStorage.removeItem(CART_STORAGE_KEY);
+          storage.removeItem(CART_STORAGE_KEY);
         })
         .finally(() => setIsLoading(false));
     }
   }, []);
 
   const createCart = useCallback(async (variantId: string, quantity: number = 1) => {
+    // Validate inputs
+    validateVariantId(variantId);
+    validateQuantity(quantity);
+
     setIsLoading(true);
     setError(null);
     try {
@@ -151,7 +212,7 @@ export function useCart() {
           items: [{ variantId, quantity }],
         }),
       });
-      localStorage.setItem(CART_STORAGE_KEY, newCart.id);
+      storage.setItem(CART_STORAGE_KEY, newCart.id);
       setCart(newCart);
       return newCart;
     } catch (err) {
@@ -164,6 +225,10 @@ export function useCart() {
 
   const addToCart = useCallback(
     async (variantId: string, quantity: number = 1) => {
+      // Validate inputs
+      validateVariantId(variantId);
+      validateQuantity(quantity);
+
       setIsLoading(true);
       setError(null);
       try {
@@ -193,6 +258,9 @@ export function useCart() {
     async (variantId: string) => {
       if (!cart) return;
 
+      // Validate input
+      validateVariantId(variantId);
+
       setIsLoading(true);
       setError(null);
       try {
@@ -219,6 +287,10 @@ export function useCart() {
     async (variantId: string, quantity: number) => {
       if (!cart) return;
 
+      // Validate inputs
+      validateVariantId(variantId);
+      validateQuantity(quantity);
+
       setIsLoading(true);
       setError(null);
       try {
@@ -242,7 +314,7 @@ export function useCart() {
   );
 
   const clearCart = useCallback(() => {
-    localStorage.removeItem(CART_STORAGE_KEY);
+    storage.removeItem(CART_STORAGE_KEY);
     setCart(null);
   }, []);
 
@@ -268,20 +340,66 @@ export function formatPrice(money: { value: number; currency: string }): string 
   }).format(money.value);
 }
 
-// Strip HTML tags from a string
+// Common HTML entities for SSR decoding
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&apos;': "'",
+  '&nbsp;': ' ',
+  '&copy;': '©',
+  '&reg;': '®',
+  '&trade;': '™',
+};
+
+/**
+ * Strip HTML tags from a string.
+ * Uses DOMParser in browser (safe), regex fallback for SSR.
+ * Note: SSR fallback is designed for trusted content (Fourthwall API responses).
+ */
 export function stripHtml(html: string): string {
+  if (!html) return '';
+
+  // Browser: Use DOMParser (safe, handles all edge cases)
   if (typeof document !== 'undefined') {
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Remove script and style elements before getting textContent
+    doc.querySelectorAll('script, style').forEach((el) => el.remove());
     return doc.body.textContent || '';
   }
-  // Fallback for SSR: loop regex until no more tags (handles nested/malformed HTML)
+
+  // SSR fallback: Regex-based stripping for trusted content only
+  // This is used for Fourthwall product descriptions which are trusted
   let result = html;
+
+  // Remove script and style tags and their contents first
+  result = result.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  result = result.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+
+  // Remove all remaining HTML tags (loop handles nested/malformed HTML)
   let previous = '';
-  while (result !== previous) {
+  let iterations = 0;
+  const MAX_ITERATIONS = 100; // Prevent infinite loops
+  while (result !== previous && iterations < MAX_ITERATIONS) {
     previous = result;
     result = result.replace(/<[^>]*>/g, '');
+    iterations++;
   }
-  return result;
+
+  // Decode common HTML entities
+  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
+    result = result.split(entity).join(char);
+  }
+
+  // Decode numeric entities (&#123; or &#x1F600;)
+  result = result.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number.parseInt(code, 10)));
+  result = result.replace(/&#x([0-9a-f]+);/gi, (_, code) =>
+    String.fromCharCode(Number.parseInt(code, 16)),
+  );
+
+  return result.trim();
 }
 
 // Check if variant is in stock

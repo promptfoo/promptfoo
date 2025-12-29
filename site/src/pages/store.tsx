@@ -5,7 +5,13 @@ import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
-import { ProductGrid, ProductModal, useCartContext, useProducts } from '@site/src/components/Store';
+import {
+  ProductGrid,
+  ProductModal,
+  StoreErrorBoundary,
+  useCartContext,
+  useProducts,
+} from '@site/src/components/Store';
 // CSS module for store-specific styles
 import styles from '@site/src/components/Store/store.module.css';
 import Layout from '@theme/Layout';
@@ -93,7 +99,9 @@ export default function StorePage() {
         <meta name="theme-color" content="#fafafa" />
         <link rel="preconnect" href="https://storefront-api.fourthwall.com" />
       </Head>
-      <StoreContent />
+      <StoreErrorBoundary>
+        <StoreContent />
+      </StoreErrorBoundary>
     </Layout>
   );
 }

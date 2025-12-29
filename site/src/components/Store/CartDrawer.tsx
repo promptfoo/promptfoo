@@ -6,6 +6,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
@@ -93,7 +94,16 @@ export function CartDrawer() {
             <Typography variant="body1">Your cart is empty</Typography>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              opacity: isLoading ? 0.6 : 1,
+              transition: 'opacity 0.2s ease-in-out',
+              pointerEvents: isLoading ? 'none' : 'auto',
+            }}
+          >
             {cart.items.map((item) => {
               // Get image from variant first, then product, with fallbacks
               const image = item.variant?.images?.[0] || item.variant?.product?.images?.[0] || null;
@@ -287,7 +297,7 @@ export function CartDrawer() {
               },
             }}
           >
-            Checkout
+            {isLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'Checkout'}
           </Button>
         </Box>
       )}

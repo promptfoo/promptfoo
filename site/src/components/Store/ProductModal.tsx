@@ -353,6 +353,8 @@ export function ProductModal() {
 
               {/* Image indicators */}
               <Box
+                component="nav"
+                aria-label="Image navigation"
                 sx={{
                   position: 'absolute',
                   bottom: 16,
@@ -365,14 +367,27 @@ export function ProductModal() {
                 {images.map((_, index) => (
                   <Box
                     key={index}
+                    component="button"
+                    type="button"
                     onClick={() => setCurrentImageIndex(index)}
+                    aria-label={`Go to image ${index + 1} of ${images.length}`}
+                    aria-current={index === currentImageIndex ? 'true' : undefined}
                     sx={{
                       width: 8,
                       height: 8,
+                      padding: 0,
+                      border: 'none',
                       borderRadius: '50%',
                       backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.3)',
                       cursor: 'pointer',
                       transition: 'background-color 0.2s',
+                      '&:hover': {
+                        backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.5)',
+                      },
+                      '&:focus-visible': {
+                        outline: '2px solid #1a1a2e',
+                        outlineOffset: 2,
+                      },
                     }}
                   />
                 ))}
