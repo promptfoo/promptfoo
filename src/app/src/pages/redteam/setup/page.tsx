@@ -49,6 +49,7 @@ import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvi
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
@@ -347,6 +348,12 @@ export default function RedTeamSetupPage() {
         }
       }
 
+      // Parse applicationDefinition from purpose string or use explicit definition if available
+      // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
+      const applicationDefinition = yamlConfig.redteam?.applicationDefinition
+        ? yamlConfig.redteam.applicationDefinition
+        : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
+
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
@@ -358,16 +365,10 @@ export default function RedTeamSetupPage() {
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
-        applicationDefinition: {
-          purpose: yamlConfig.redteam?.purpose || '',
-          // We could potentially parse these from redteam.purpose if it follows a specific format.
-          redteamUser: '',
-          accessToData: '',
-          forbiddenData: '',
-          accessToActions: '',
-          forbiddenActions: '',
-          connectedSystems: '',
-        },
+        applicationDefinition,
+        testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',
+        language: yamlConfig.redteam?.language,
+        extensions: yamlConfig.extensions,
       };
 
       setFullConfig(mappedConfig);
@@ -642,10 +643,16 @@ export default function RedTeamSetupPage() {
         <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Load Configuration</DialogTitle>
+              <DialogTitle>Load or Import Configuration</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Import YAML Section */}
               <div>
+                <p className="text-sm font-medium">Import YAML File</p>
+                <p className="mb-2 text-sm text-muted-foreground">
+                  Import an existing promptfoo redteam YAML configuration. Your application details
+                  will be automatically parsed and pre-filled in the form.
+                </p>
                 <input
                   accept=".yml,.yaml"
                   className="hidden"
@@ -655,7 +662,7 @@ export default function RedTeamSetupPage() {
                 />
                 <label htmlFor="yaml-file-upload">
                   <Button variant="outline" className="w-full" asChild>
-                    <span>Upload YAML File</span>
+                    <span>Import YAML File</span>
                   </Button>
                 </label>
               </div>
