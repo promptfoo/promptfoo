@@ -79,12 +79,12 @@ describe('TargetTypeSelection', () => {
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
-    // After entering name, the inline "Next: Select Target Type" button should appear
+    // After entering name, the inline "Continue" button should appear
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Next: Select Target Type' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
 
-    const inlineNextButton = screen.getByRole('button', { name: 'Next: Select Target Type' });
+    const inlineNextButton = screen.getByRole('button', { name: 'Continue' });
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
@@ -156,7 +156,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
-      name: 'Next: Select Target Type',
+      name: 'Continue',
     });
     fireEvent.click(inlineNextButton);
 
@@ -196,7 +196,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
-      name: 'Next: Select Target Type',
+      name: 'Continue',
     });
     fireEvent.click(inlineNextButton);
 
@@ -223,7 +223,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
-      name: 'Next: Select Target Type',
+      name: 'Continue',
     });
     fireEvent.click(inlineNextButton);
 
@@ -270,7 +270,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = screen.getByRole('button', {
-      name: 'Next: Select Target Type',
+      name: 'Continue',
     });
     fireEvent.click(inlineNextButton);
 
@@ -438,9 +438,9 @@ describe('TargetTypeSelection', () => {
       const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
       await user.type(nameInput, 'my-custom-target');
 
-      // Click the inline "Next: Select Target Type" button to reveal the section
+      // Click the inline "Continue" button to reveal the section
       const inlineNextButton = await screen.findByRole('button', {
-        name: 'Next: Select Target Type',
+        name: 'Continue',
       });
       await user.click(inlineNextButton);
 
