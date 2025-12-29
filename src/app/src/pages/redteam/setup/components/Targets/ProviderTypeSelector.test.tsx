@@ -37,14 +37,14 @@ describe('ProviderTypeSelector', () => {
 
     // Component should start in collapsed state showing the selected provider
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     // Click the "Change" button to expand the view
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
 
     // Now we should see the expanded view with all providers
-    const pythonProviderCard = screen.getByText('Python Provider').closest('.cursor-pointer');
+    const pythonProviderCard = screen.getByText('Python').closest('.cursor-pointer');
     expect(pythonProviderCard).toBeInTheDocument();
 
     if (pythonProviderCard) {
@@ -61,8 +61,8 @@ describe('ProviderTypeSelector', () => {
     );
 
     // After selection, component should collapse again and show the new selection
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.getByText('Custom Python script or integration')).toBeVisible();
   });
 
   it('should filter provider options by search term when the user enters text in the search box', () => {
@@ -99,13 +99,16 @@ describe('ProviderTypeSelector', () => {
     );
 
     // Should start in expanded view since no provider is initially selected
-    const apiEndpointsChip = screen.getByText('API Endpoints');
-    fireEvent.click(apiEndpointsChip);
+    // Click on 'AI Providers' tag to filter to only AI providers
+    const aiProvidersChip = screen.getByText(/^AI Providers \(/);
+    fireEvent.click(aiProvidersChip);
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    // OpenAI should be visible under AI Providers
+    expect(screen.getByText('OpenAI')).toBeVisible();
 
-    const javascriptProvider = screen.queryByText('JavaScript Provider');
-    expect(javascriptProvider).toBeNull();
+    // HTTP should be hidden since it's in 'My Application' tag
+    const httpProvider = screen.queryByText('HTTP/HTTPS Endpoint');
+    expect(httpProvider).toBeNull();
   });
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
@@ -129,11 +132,11 @@ describe('ProviderTypeSelector', () => {
     // Should start in expanded view since no provider is initially selected
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
 
-    expect(screen.getByText('Python Provider')).toBeVisible();
+    expect(screen.getByText('Python')).toBeVisible();
 
     expect(screen.getByText('OpenAI')).toBeVisible();
 
-    expect(screen.queryByText('WebSocket Endpoint')).toBeNull();
+    expect(screen.queryByText('WebSocket')).toBeNull();
   });
 
   it("should default to 'http' provider and call setProvider with default HTTP config when mounted with no provider.id", () => {
@@ -159,7 +162,7 @@ describe('ProviderTypeSelector', () => {
 
     // After auto-selection, should show collapsed view with HTTP provider
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
   });
 
   it('should handle a provider with a malformed ID (empty string) and default to HTTP provider', () => {
@@ -193,7 +196,7 @@ describe('ProviderTypeSelector', () => {
 
     // After auto-selection, should show collapsed view with HTTP provider
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
   });
 
   it('should maintain category filters when a search term is entered and then cleared', () => {
@@ -209,29 +212,32 @@ describe('ProviderTypeSelector', () => {
     );
 
     // Should start in expanded view since no provider is initially selected
-    const customCategoryChip = screen.getByText('Custom');
-    fireEvent.click(customCategoryChip);
+    const myAppCategoryChip = screen.getByText(/^My Application \(/);
+    fireEvent.click(myAppCategoryChip);
 
     const searchInput = screen.getByPlaceholderText('Search providers...');
     fireEvent.change(searchInput, { target: { value: 'javascript' } });
 
     fireEvent.change(searchInput, { target: { value: '' } });
 
-    const customProviders = [
-      'JavaScript Provider',
-      'Python Provider',
-      'Go Provider',
+    // Providers in the 'My Application' (app) tag
+    const appProviders = [
+      'JavaScript / TypeScript',
+      'Python',
+      'Go',
       'Custom Provider',
-      'MCP Server',
-      'Web Browser',
+      'Browser Automation',
       'Shell Command',
+      'HTTP/HTTPS Endpoint',
+      'WebSocket',
     ];
 
-    customProviders.forEach((providerLabel) => {
+    appProviders.forEach((providerLabel) => {
       expect(screen.getByText(providerLabel)).toBeVisible();
     });
 
-    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+    // OpenAI should be hidden when filtering to 'My Application' tag
+    expect(screen.queryByText('OpenAI')).toBeNull();
   });
   it('should show collapsed view when provider is selected and expand when Change button is clicked', () => {
     const mockSetProvider = vi.fn();
@@ -251,7 +257,7 @@ describe('ProviderTypeSelector', () => {
 
     // Should show collapsed view with selected provider
     expect(screen.getByText('Anthropic')).toBeVisible();
-    expect(screen.getByText('Claude models including Claude Sonnet 4')).toBeVisible();
+    expect(screen.getByText('Claude Sonnet, Opus, and Haiku models')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
 
     // Should not show other providers or search/filter UI
@@ -266,10 +272,10 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
     expect(screen.getByText('OpenAI')).toBeVisible();
     expect(screen.getByText('Anthropic')).toBeVisible();
-    expect(screen.getByText('All Tags')).toBeVisible();
+    expect(screen.getByText(/^All \(/)).toBeVisible();
   });
 
-  it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", () => {
+  it("should call setProvider with the correct Go provider configuration when the 'Go' card is selected", () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -286,12 +292,12 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
 
-    const goProviderCard = screen.getByText('Go Provider').closest('.cursor-pointer');
+    const goProviderCard = screen.getByText('Go').closest('.cursor-pointer');
     expect(goProviderCard).toBeInTheDocument();
 
     if (goProviderCard) {
@@ -307,8 +313,8 @@ describe('ProviderTypeSelector', () => {
       'go',
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Go')).toBeVisible();
+    expect(screen.getByText('Custom Go integration')).toBeVisible();
   });
 
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
@@ -329,8 +335,8 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Go')).toBeVisible();
+    expect(screen.getByText('Custom Go integration')).toBeVisible();
   });
 
   it('should initialize correctly when providerType is undefined but provider.id is set', () => {
@@ -350,7 +356,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT models including GPT-4.1 and reasoning models')).toBeVisible();
+    expect(screen.getByText('GPT-5.2, GPT-5.1, and GPT-5 models')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', () => {
@@ -369,8 +375,8 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Go')).toBeVisible();
+    expect(screen.getByText('Custom Go integration')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
@@ -399,7 +405,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
   });
 
   // Skip: Component uses providerType prop for initial value only, not for controlled updates
@@ -420,7 +426,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     rerender(
       <TooltipProvider>
@@ -432,8 +438,8 @@ describe('ProviderTypeSelector', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.getByText('Custom Python script or integration')).toBeVisible();
   });
 
   it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {
@@ -470,7 +476,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
@@ -492,12 +498,10 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
-  it('should filter provider options to show only agentic frameworks when the Agents category chip is selected', () => {
+  it('should filter provider options to show only agentic frameworks when the Agent Frameworks category chip is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -508,7 +512,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const agentsChip = screen.getByText('Agents');
+    const agentsChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();
@@ -519,7 +523,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
     expect(screen.getByText('PydanticAI')).toBeVisible();
     expect(screen.getByText('Google ADK')).toBeVisible();
-    expect(screen.getByText('Other Agent')).toBeVisible();
+    expect(screen.getByText('Other Agent Framework')).toBeVisible();
 
     expect(screen.queryByText('AI/ML API')).toBeNull();
     expect(screen.queryByText('AI21 Labs')).toBeNull();
@@ -543,7 +547,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const agentsCategoryChip = screen.getByText('Agents');
+    const agentsCategoryChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsCategoryChip);
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -611,7 +615,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
@@ -633,9 +637,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
   it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', () => {
@@ -662,7 +664,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
@@ -684,9 +686,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
   it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', () => {
@@ -706,7 +706,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const agentsChip = screen.getByText('Agents');
+    const agentsChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();
@@ -717,7 +717,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
     expect(screen.getByText('PydanticAI')).toBeVisible();
     expect(screen.getByText('Google ADK')).toBeVisible();
-    expect(screen.getByText('Other Agent')).toBeVisible();
+    expect(screen.getByText('Other Agent Framework')).toBeVisible();
 
     expect(screen.queryByText('AI/ML API')).toBeNull();
     expect(screen.queryByText('AI21 Labs')).toBeNull();
@@ -746,7 +746,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const pythonProviderCard = screen.getByText('Python Provider').closest('.cursor-pointer');
+    const pythonProviderCard = screen.getByText('Python').closest('.cursor-pointer');
     if (pythonProviderCard) {
       fireEvent.click(pythonProviderCard);
     }
@@ -754,8 +754,8 @@ describe('ProviderTypeSelector', () => {
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'redteam_provider_type_selected',
       provider_type: 'python',
-      provider_label: 'Python Provider',
-      provider_tag: 'custom',
+      provider_label: 'Python',
+      provider_tag: 'app',
     });
   });
 
@@ -770,12 +770,12 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const agentsChip = screen.getByText('Agents');
+    const agentsChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsChip);
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
 
-    const allTagsChip = screen.getByText('All Tags');
+    const allTagsChip = screen.getByText(/^All \(/);
     fireEvent.click(allTagsChip);
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
@@ -798,17 +798,17 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
 
     const changeButton = screen.getByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
 
-    const agentsChip = screen.getByText('Agents');
+    const agentsChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsChip);
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
 
-    const allTagsButton = screen.getByText('All Tags');
+    const allTagsButton = screen.getByText(/^All \(/);
     fireEvent.click(allTagsButton);
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
@@ -834,7 +834,7 @@ describe('ProviderTypeSelector', () => {
     const searchInput = screen.getByPlaceholderText('Search providers...');
     fireEvent.change(searchInput, { target: { value: 'lang' } });
 
-    const agentsChip = screen.getByText('Agents');
+    const agentsChip = screen.getByText(/^Agent Frameworks \(/);
     fireEvent.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();

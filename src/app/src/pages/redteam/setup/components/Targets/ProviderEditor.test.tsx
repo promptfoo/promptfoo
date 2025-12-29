@@ -135,7 +135,7 @@ describe('ProviderEditor', () => {
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-4o',
+      id: 'openai:gpt-5.2',
       config: {},
       label: 'My Test Provider',
     };
