@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
@@ -20,10 +20,10 @@ import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -153,10 +153,34 @@ function EvalOutputCell({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-  const toggleLightbox = (url?: string) => {
-    setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+
+  // Memoized to maintain stable reference across renders, preventing
+  // unnecessary re-renders of markdown components that use this callback.
+  // Uses functional update to avoid stale closure issues.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const toggleLightbox = useCallback((url?: string) => {
+    setLightboxImage(url ?? null);
+    setLightboxOpen((prev) => !prev);
+  }, []);
+
+  // Memoized components object for ReactMarkdown to prevent re-renders.
+  // Creating this inline would cause ReactMarkdown to re-render on every
+  // parent render, even when content hasn't changed.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <img
+          loading="lazy"
+          src={src}
+          alt={alt}
+          onClick={() => toggleLightbox(src)}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
+    }),
+    [toggleLightbox],
+  );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
@@ -342,22 +366,14 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      // Use stable constants and memoized components to prevent unnecessary
+      // re-renders when parent re-renders due to layout changes.
+      // @see https://github.com/promptfoo/promptfoo/issues/969
       node = (
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          // Allow data: URIs for inline images (e.g., from Gemini image generation)
-          urlTransform={(url) => url}
-          components={{
-            img: ({ src, alt }) => (
-              <img
-                loading="lazy"
-                src={src}
-                alt={alt}
-                onClick={() => toggleLightbox(src)}
-                style={{ cursor: 'pointer' }}
-              />
-            ),
-          }}
+          remarkPlugins={REMARK_PLUGINS}
+          urlTransform={IDENTITY_URL_TRANSFORM}
+          components={markdownComponents}
         >
           {normalizedText}
         </ReactMarkdown>
