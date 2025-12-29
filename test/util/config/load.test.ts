@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -1937,9 +1936,7 @@ describe('maybeReadConfig', () => {
     vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
 
     // importModule preserves ERR_MODULE_NOT_FOUND for missing dependencies
-    const esmError = new Error(
-      "Cannot find module 'missing-dependency'",
-    ) as NodeJS.ErrnoException;
+    const esmError = new Error("Cannot find module 'missing-dependency'") as NodeJS.ErrnoException;
     esmError.code = 'ERR_MODULE_NOT_FOUND';
     vi.mocked(importModule).mockRejectedValue(esmError);
 
