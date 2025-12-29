@@ -71,31 +71,30 @@ export function validateTestProviderReferences(
 
   // Validate scenario tests and config
   if (scenarios) {
-    for (let i = 0; i < scenarios.length; i++) {
-      const scenario = scenarios[i];
+    scenarios.forEach((scenario, i) => {
       const scenarioDesc = scenario.description ? ` ("${scenario.description}")` : '';
 
       // Validate scenario config items (partial test cases)
       if (scenario.config) {
-        for (let j = 0; j < scenario.config.length; j++) {
+        scenario.config.forEach((configItem, j) => {
           validateTestProviders(
-            scenario.config[j],
+            configItem,
             providers,
             `Scenario #${i + 1}${scenarioDesc} config[${j}]`,
           );
-        }
+        });
       }
 
       // Validate scenario tests
       if (scenario.tests) {
-        for (let j = 0; j < scenario.tests.length; j++) {
+        scenario.tests.forEach((test, j) => {
           validateTestProviders(
-            scenario.tests[j],
+            test,
             providers,
             `Scenario #${i + 1}${scenarioDesc} test #${j + 1}`,
           );
-        }
+        });
       }
-    }
+    });
   }
 }
