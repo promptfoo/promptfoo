@@ -142,4 +142,82 @@ describe('DataTable', () => {
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
+
+  describe('pagination', () => {
+    // Generate test data with enough rows to require pagination
+    const generateData = (count: number): TestRow[] =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `id-${i + 1}`,
+        name: `Item ${i + 1}`,
+      }));
+
+    it('should show pagination controls when data exceeds page size', () => {
+      const data = generateData(30);
+
+      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+
+      // Should show pagination controls
+      expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
+    });
+
+    it('should navigate to next page when Next is clicked', async () => {
+      const user = userEvent.setup();
+      const data = generateData(15);
+
+      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+
+      // First page: items 1-10 visible
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Item 10')).toBeInTheDocument();
+      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
+
+      // Click Next
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      // Second page: items 11-15 visible, items 1-10 not visible
+      expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
+      expect(screen.queryByText('Item 10')).not.toBeInTheDocument();
+      expect(screen.getByText('Item 11')).toBeInTheDocument();
+      expect(screen.getByText('Item 15')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 11 to 15 of 15 rows/)).toBeInTheDocument();
+    });
+
+    it('should navigate back when Previous is clicked', async () => {
+      const user = userEvent.setup();
+      const data = generateData(15);
+
+      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+
+      // Go to page 2
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      expect(screen.getByText('Item 11')).toBeInTheDocument();
+
+      // Go back to page 1
+      await user.click(screen.getByRole('button', { name: 'Previous' }));
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
+    });
+
+    it('should change page size when rows per page is changed', async () => {
+      const user = userEvent.setup();
+      const data = generateData(30);
+
+      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+
+      // Initially showing 10 rows
+      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
+
+      // Change to 25 rows per page
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      // Now showing 25 rows
+      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Item 25')).toBeInTheDocument();
+    });
+  });
 });
