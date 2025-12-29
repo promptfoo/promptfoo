@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
@@ -128,21 +126,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   return (
     <PageWrapper
       title="Target Setup"
-      description={
-        <span className="text-base">
-          A target is the AI system you want to red team. It could be an API endpoint, a language
-          model, a custom script, or any other{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            supported provider
-          </a>
-          . Choose a descriptive name to identify your target throughout the testing process.
-        </span>
-      }
+      description="Configure the AI system you want to test"
       onNext={shouldShowFooterButton() ? handleNext : undefined}
       onBack={onBack}
       nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
@@ -152,35 +136,35 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       }
     >
       <div className="flex flex-col gap-6">
-        {/* Quick Start Section */}
-        <Alert variant="info" className="[&>svg]:hidden">
-          <AlertDescription className="flex w-full flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Info className="h-4 w-4 shrink-0" />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
-                <span className="min-w-[300px] flex-1 text-sm">
-                  <strong>New to Promptfoo</strong> and want to see it in action? Load an example
-                  configuration to get started immediately.
-                </span>
-                <LoadExampleButton />
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              <strong>Have an existing YAML config?</strong> Use the <strong>"Load Config"</strong>{' '}
-              button in the sidebar to import it and pre-fill the form.
-            </p>
-          </AlertDescription>
-        </Alert>
+        {/* Context + Quick Start */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <p className="text-sm text-foreground">
+            A target is the AI system you want to test—an agent, chatbot, API endpoint, or any{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              supported provider
+            </a>
+            .
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <LoadExampleButton />
+            <span className="text-sm text-muted-foreground">New to Promptfoo? Try a demo</span>
+          </div>
+        </div>
 
-        {/* Provider Name Field */}
-        <div className="w-[360px] space-y-2">
-          <Label htmlFor="target-name">
+        {/* Target Name */}
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="target-name" className="text-sm font-medium">
             Target Name <span className="text-destructive">*</span>
           </Label>
           <Input
             id="target-name"
             value={selectedTarget?.label ?? ''}
-            placeholder="e.g. 'customer-service-agent'"
+            placeholder="e.g. onboarding-agent"
             onChange={(e) => {
               const newTarget = { ...selectedTarget, label: e.target.value };
               setSelectedTarget(newTarget);
@@ -196,11 +180,15 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
             }}
             autoFocus
           />
+          <p className="text-xs text-muted-foreground">
+            e.g. <code className="rounded bg-muted px-1 py-0.5">support-agent</code> or{' '}
+            <code className="rounded bg-muted px-1 py-0.5">rag-chatbot</code>
+          </p>
         </div>
 
-        {/* Inline Next Button for first step */}
+        {/* Continue button - shown before target type is revealed */}
         {hasTargetName && !showTargetTypeSection && (
-          <div className="flex justify-start">
+          <div>
             <Button
               onClick={() => {
                 setShowTargetTypeSection(true);
@@ -208,64 +196,23 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   feature: 'redteam_config_target_type_section_revealed',
                 });
               }}
-              className="min-w-[200px]"
             >
-              Next: Select Target Type
+              Continue
             </Button>
           </div>
         )}
 
-        {/* Only show target type selection after user clicks to reveal it */}
+        {/* Target Type Selection */}
         {showTargetTypeSection && (
-          <div className="mt-6 space-y-4">
-            <h2 className="mt-6 text-xl font-bold">Select Target Type</h2>
-            <p className="text-base">
-              Select the type that best matches your target. Don't see what you need? Try 'Custom
-              Target' to access{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                more providers
-              </a>
-              . You can also create your own using{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/python/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                Python
-              </a>
-              ,{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/custom-api/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                JavaScript
-              </a>
-              , or{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/custom-script/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                shell scripts
-              </a>
-              .
-            </p>
-            {/* Provider Type Selection */}
+          <section className="space-y-4 border-t border-border pt-6">
+            <h2 className="text-base font-semibold text-foreground">Select Target Type</h2>
+
             <ProviderTypeSelector
               provider={selectedTarget}
               setProvider={handleProviderChange}
               providerType={providerType}
             />
-          </div>
+          </section>
         )}
       </div>
     </PageWrapper>
