@@ -478,7 +478,7 @@ export default function EvalOutputPromptDialog({
             {/* Evaluation Panel */}
             {hasEvaluationData && (
               <TabsContent value="evaluation" className="mt-0">
-                <EvaluationPanel gradingResults={gradingResults} />
+                <EvaluationPanel gradingResults={gradingResults} actualOutput={output} />
               </TabsContent>
             )}
 
