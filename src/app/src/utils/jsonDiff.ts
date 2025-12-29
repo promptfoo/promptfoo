@@ -66,15 +66,15 @@ export function computeJsonDiff(
       const keyPath = path ? `${path}.${key}` : key;
       if (!(key in expectedObj)) {
         diffs.push({ path: keyPath, expected: undefined, actual: actualObj[key], type: 'added' });
-      } else if (!(key in actualObj)) {
+      } else if (key in actualObj) {
+        diffs.push(...computeJsonDiff(expectedObj[key], actualObj[key], keyPath));
+      } else {
         diffs.push({
           path: keyPath,
           expected: expectedObj[key],
           actual: undefined,
           type: 'removed',
         });
-      } else {
-        diffs.push(...computeJsonDiff(expectedObj[key], actualObj[key], keyPath));
       }
     }
     return diffs;

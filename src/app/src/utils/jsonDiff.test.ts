@@ -168,7 +168,8 @@ describe('isJsonAssertion', () => {
       reason: 'test',
       assertion: {
         type: 'equals',
-        value: null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        value: null as any, // Test runtime null handling
       },
     };
     expect(isJsonAssertion(result)).toBe(false);
