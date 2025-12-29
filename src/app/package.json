@@ -50,7 +50,6 @@
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
     "jsdom": "^26.1.0",
-    "lightningcss-darwin-arm64": "^1.30.2",
     "lucide-react": "^0.562.0",
     "postcss": "^8.5.6",
     "posthog-js": "^1.298.0",
@@ -87,6 +86,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tanstack/react-virtual": "^3.13.13"
+    "@tanstack/react-virtual": "^3.13.13",
+    "lightningcss": "^1.30.2"
   }
 }
