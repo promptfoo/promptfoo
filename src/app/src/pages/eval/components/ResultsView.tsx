@@ -58,7 +58,15 @@ import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import {
+  useResultsViewSettingsStore,
+  useTableStore,
+  type ColumnVisibilityByName,
+} from './store';
+import {
+  resolveColumnVisibility,
+  getConfigColumnVisibility,
+} from './columnVisibility';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -207,6 +215,14 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
+    // New name-based column visibility
+    columnVisibilityByName,
+    setColumnVisibilityByName,
+    setMultipleColumnVisibilityByName,
+    clearColumnVisibilityByName,
+    clearAllColumnVisibilityByName,
+    globalColumnDefaults,
+    setGlobalColumnDefaults,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -340,13 +356,14 @@ export default function ResultsView({
 
   const columnData = React.useMemo(() => {
     return [
-      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
-      ...head.vars.map((_, idx) => ({
+      ...(hasAnyDescriptions
+        ? [{ value: 'description', label: 'Description', semanticName: 'description' }]
+        : []),
+      ...head.vars.map((varName, idx) => ({
         value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
+        label: `Var ${idx + 1}: ${varName.length > 100 ? varName.slice(0, 97) + '...' : varName}`,
         group: 'Variables',
+        semanticName: varName, // Semantic name for preference persistence
       })),
       ...promptOptions,
     ];
@@ -368,10 +385,42 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  // Resolve column visibility using the new layered approach:
+  // 1. Per-eval override (legacy columnStates)
+  // 2. Name-based user preferences (columnVisibilityByName)
+  // 3. Config defaults (defaultColumnVisibility from config)
+  // 4. Global defaults (globalColumnDefaults)
+  const resolvedColumnState = React.useMemo(() => {
+    const configDefaults = getConfigColumnVisibility(config);
+    const perEvalState = columnStates[currentEvalId]?.columnVisibility;
+
+    const result = resolveColumnVisibility({
+      varNames: head.vars,
+      promptCount: head.prompts.length,
+      hasDescription: hasAnyDescriptions,
+      perEvalColumnState: perEvalState,
+      columnVisibilityByName,
+      globalColumnDefaults,
+      configDefaults,
+    });
+
+    return {
+      selectedColumns: result.visibleColumns,
+      columnVisibility: result.columnVisibility,
+    };
+  }, [
+    config,
+    columnStates,
+    currentEvalId,
+    head.vars,
+    head.prompts.length,
+    hasAnyDescriptions,
+    columnVisibilityByName,
+    globalColumnDefaults,
+  ]);
+
+  // Use resolved state, falling back to legacy state if needed
+  const currentColumnState = resolvedColumnState;
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -890,6 +939,14 @@ export default function ResultsView({
                   columnData={columnData}
                   selectedColumns={currentColumnState.selectedColumns}
                   onChange={handleChange}
+                  columnVisibilityByName={columnVisibilityByName}
+                  onSaveColumnPreference={setColumnVisibilityByName}
+                  onClearColumnPreference={clearColumnVisibilityByName}
+                  onResetAllPreferences={clearAllColumnVisibilityByName}
+                  onSetGlobalVariableVisibility={(visible) =>
+                    setGlobalColumnDefaults({ showAllVariables: visible })
+                  }
+                  hasPreferences={Object.keys(columnVisibilityByName).length > 0}
                 />
                 <Tooltip title="Edit table view settings" placement="bottom">
                   <Button
