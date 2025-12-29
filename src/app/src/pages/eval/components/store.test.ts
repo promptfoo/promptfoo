@@ -3,7 +3,7 @@ import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvalTableDTO, EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 // Mock crypto.randomUUID
@@ -2282,57 +2282,61 @@ describe('useTableStore', () => {
       vi.useRealTimers();
     });
   });
+});
+
+describe('useResultsViewSettingsStore', () => {
+  beforeEach(() => {
+    act(() => {
+      useResultsViewSettingsStore.setState({
+        columnVisibilityByName: {},
+        globalColumnDefaults: { showAllVariables: true, showAllPrompts: true },
+        columnStates: {},
+      });
+    });
+  });
 
   describe('columnVisibilityByName', () => {
-    it('should set a column to visible by name', () => {
+    it('should set a column to visible by name using action', () => {
       act(() => {
-        const { columnVisibilityByName } = useTableStore.getState();
-        useTableStore.setState({
-          columnVisibilityByName: { ...columnVisibilityByName, context: true },
-        });
+        useResultsViewSettingsStore.getState().setColumnVisibilityByName('context', true);
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName.context).toBe(true);
     });
 
-    it('should set a column to hidden by name', () => {
+    it('should set a column to hidden by name using action', () => {
       act(() => {
-        const { columnVisibilityByName } = useTableStore.getState();
-        useTableStore.setState({
-          columnVisibilityByName: { ...columnVisibilityByName, context: false },
-        });
+        useResultsViewSettingsStore.getState().setColumnVisibilityByName('context', false);
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName.context).toBe(false);
     });
 
     it('should update existing column visibility preference', () => {
       act(() => {
-        useTableStore.setState({ columnVisibilityByName: { context: true } });
+        useResultsViewSettingsStore.getState().setColumnVisibilityByName('context', true);
       });
 
       act(() => {
-        useTableStore.setState({ columnVisibilityByName: { context: false } });
+        useResultsViewSettingsStore.getState().setColumnVisibilityByName('context', false);
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName.context).toBe(false);
     });
 
-    it('should handle multiple column preferences', () => {
+    it('should handle multiple column preferences using setMultipleColumnVisibilityByName', () => {
       act(() => {
-        useTableStore.setState({
-          columnVisibilityByName: {
-            context: false,
-            expected: false,
-            question: true,
-          },
+        useResultsViewSettingsStore.getState().setMultipleColumnVisibilityByName({
+          context: false,
+          expected: false,
+          question: true,
         });
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName).toEqual({
         context: false,
         expected: false,
@@ -2340,33 +2344,48 @@ describe('useTableStore', () => {
       });
     });
 
-    it('should clear all column visibility preferences', () => {
+    it('should clear a single column visibility preference', () => {
       act(() => {
-        useTableStore.setState({
-          columnVisibilityByName: { context: false, expected: false },
+        useResultsViewSettingsStore.getState().setMultipleColumnVisibilityByName({
+          context: false,
+          expected: false,
         });
       });
 
       act(() => {
-        useTableStore.setState({ columnVisibilityByName: {} });
+        useResultsViewSettingsStore.getState().clearColumnVisibilityByName('context');
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
+      expect(state.columnVisibilityByName).toEqual({ expected: false });
+    });
+
+    it('should clear all column visibility preferences', () => {
+      act(() => {
+        useResultsViewSettingsStore.getState().setMultipleColumnVisibilityByName({
+          context: false,
+          expected: false,
+        });
+      });
+
+      act(() => {
+        useResultsViewSettingsStore.getState().clearAllColumnVisibilityByName();
+      });
+
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName).toEqual({});
     });
 
     it('should handle column names with special characters', () => {
       act(() => {
-        useTableStore.setState({
-          columnVisibilityByName: {
-            'user-input': false,
-            system_prompt: true,
-            'context.nested': false,
-          },
+        useResultsViewSettingsStore.getState().setMultipleColumnVisibilityByName({
+          'user-input': false,
+          system_prompt: true,
+          'context.nested': false,
         });
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName).toEqual({
         'user-input': false,
         system_prompt: true,
@@ -2377,51 +2396,41 @@ describe('useTableStore', () => {
 
   describe('globalColumnDefaults', () => {
     it('should have default values of true for both variables and prompts', () => {
-      act(() => {
-        useTableStore.setState({
-          globalColumnDefaults: { showAllVariables: true, showAllPrompts: true },
-        });
-      });
-
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.globalColumnDefaults).toEqual({
         showAllVariables: true,
         showAllPrompts: true,
       });
     });
 
-    it('should update showAllVariables', () => {
+    it('should update showAllVariables using action', () => {
       act(() => {
-        useTableStore.setState({
-          globalColumnDefaults: { showAllVariables: false, showAllPrompts: true },
-        });
+        useResultsViewSettingsStore.getState().setGlobalColumnDefaults({ showAllVariables: false });
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.globalColumnDefaults.showAllVariables).toBe(false);
       expect(state.globalColumnDefaults.showAllPrompts).toBe(true);
     });
 
-    it('should update showAllPrompts', () => {
+    it('should update showAllPrompts using action', () => {
       act(() => {
-        useTableStore.setState({
-          globalColumnDefaults: { showAllVariables: true, showAllPrompts: false },
-        });
+        useResultsViewSettingsStore.getState().setGlobalColumnDefaults({ showAllPrompts: false });
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.globalColumnDefaults.showAllVariables).toBe(true);
       expect(state.globalColumnDefaults.showAllPrompts).toBe(false);
     });
 
     it('should update both settings at once', () => {
       act(() => {
-        useTableStore.setState({
-          globalColumnDefaults: { showAllVariables: false, showAllPrompts: false },
-        });
+        useResultsViewSettingsStore
+          .getState()
+          .setGlobalColumnDefaults({ showAllVariables: false, showAllPrompts: false });
       });
 
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.globalColumnDefaults).toEqual({
         showAllVariables: false,
         showAllPrompts: false,
@@ -2429,38 +2438,84 @@ describe('useTableStore', () => {
     });
   });
 
-  describe('column visibility persistence', () => {
-    it('should persist column visibility by name across eval ID changes', () => {
-      // Set a preference
+  describe('columnStates (legacy per-eval)', () => {
+    it('should set per-eval column state using setColumnState', () => {
       act(() => {
-        useTableStore.setState({ columnVisibilityByName: { context: false } });
+        useResultsViewSettingsStore.getState().setColumnState('eval-123', {
+          selectedColumns: ['Variable 1', 'Prompt 1'],
+          columnVisibility: { 'Variable 1': true, 'Prompt 1': true },
+        });
       });
 
-      // Change eval ID (simulating navigation to different eval)
+      const state = useResultsViewSettingsStore.getState();
+      expect(state.columnStates['eval-123']).toEqual({
+        selectedColumns: ['Variable 1', 'Prompt 1'],
+        columnVisibility: { 'Variable 1': true, 'Prompt 1': true },
+      });
+    });
+
+    it('should clear per-eval column state using clearColumnState', () => {
+      // First set some column states
+      act(() => {
+        useResultsViewSettingsStore.getState().setColumnState('eval-123', {
+          selectedColumns: ['Variable 1'],
+          columnVisibility: { 'Variable 1': true },
+        });
+        useResultsViewSettingsStore.getState().setColumnState('eval-456', {
+          selectedColumns: ['Variable 2'],
+          columnVisibility: { 'Variable 2': false },
+        });
+      });
+
+      // Clear one of them
+      act(() => {
+        useResultsViewSettingsStore.getState().clearColumnState('eval-123');
+      });
+
+      const state = useResultsViewSettingsStore.getState();
+      expect(state.columnStates['eval-123']).toBeUndefined();
+      expect(state.columnStates['eval-456']).toBeDefined();
+    });
+
+    it('should not throw when clearing non-existent column state', () => {
+      expect(() => {
+        act(() => {
+          useResultsViewSettingsStore.getState().clearColumnState('non-existent-eval');
+        });
+      }).not.toThrow();
+    });
+  });
+
+  describe('column visibility persistence', () => {
+    it('columnVisibilityByName persists independently from useTableStore eval changes', () => {
+      // Set a preference in settings store
+      act(() => {
+        useResultsViewSettingsStore.getState().setColumnVisibilityByName('context', false);
+      });
+
+      // Change eval ID in table store (simulating navigation to different eval)
       act(() => {
         useTableStore.getState().setEvalId('new-eval-id');
       });
 
-      // Preference should still be there
-      const state = useTableStore.getState();
+      // Preference should still be there in settings store
+      const state = useResultsViewSettingsStore.getState();
       expect(state.columnVisibilityByName).toEqual({ context: false });
     });
 
-    it('should persist global defaults across eval ID changes', () => {
-      // Set global defaults
+    it('globalColumnDefaults persists independently from useTableStore eval changes', () => {
+      // Set global defaults in settings store
       act(() => {
-        useTableStore.setState({
-          globalColumnDefaults: { showAllVariables: false, showAllPrompts: true },
-        });
+        useResultsViewSettingsStore.getState().setGlobalColumnDefaults({ showAllVariables: false });
       });
 
-      // Change eval ID
+      // Change eval ID in table store
       act(() => {
         useTableStore.getState().setEvalId('another-eval-id');
       });
 
       // Global defaults should still be there
-      const state = useTableStore.getState();
+      const state = useResultsViewSettingsStore.getState();
       expect(state.globalColumnDefaults.showAllVariables).toBe(false);
     });
   });

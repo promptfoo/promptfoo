@@ -46,6 +46,10 @@ interface ColumnSelectorProps {
   onResetAllPreferences?: () => void;
   /** Callback to set global variable visibility default */
   onSetGlobalVariableVisibility?: (visible: boolean) => void;
+  /** Callback to set global prompt visibility default */
+  onSetGlobalPromptVisibility?: (visible: boolean) => void;
+  /** Callback to clear per-eval column state (for migrating from legacy state) */
+  onClearPerEvalState?: () => void;
   /** Whether there are any saved preferences */
   hasPreferences?: boolean;
 }
@@ -59,6 +63,8 @@ export const ColumnSelector = ({
   onClearColumnPreference,
   onResetAllPreferences,
   onSetGlobalVariableVisibility,
+  onSetGlobalPromptVisibility,
+  onClearPerEvalState,
   hasPreferences = false,
 }: ColumnSelectorProps) => {
   const [open, setOpen] = React.useState(false);
@@ -96,17 +102,32 @@ export const ColumnSelector = ({
 
   const handleShowAll = () => {
     onChange(createSelectEvent(columnData.map((col) => col.value)));
-    // When showing all, also update the global default
+    // When showing all, also update the global defaults for both variables and prompts
     if (onSetGlobalVariableVisibility) {
       onSetGlobalVariableVisibility(true);
+    }
+    if (onSetGlobalPromptVisibility) {
+      onSetGlobalPromptVisibility(true);
     }
   };
 
   const handleResetToDefaults = () => {
+    // Clear all name-based preferences
     if (onResetAllPreferences) {
       onResetAllPreferences();
     }
-    // Also show all columns after reset
+    // Clear per-eval column state for current eval (legacy migration)
+    if (onClearPerEvalState) {
+      onClearPerEvalState();
+    }
+    // Reset global defaults to show all
+    if (onSetGlobalVariableVisibility) {
+      onSetGlobalVariableVisibility(true);
+    }
+    if (onSetGlobalPromptVisibility) {
+      onSetGlobalPromptVisibility(true);
+    }
+    // Show all columns after reset
     onChange(createSelectEvent(columnData.map((col) => col.value)));
   };
 

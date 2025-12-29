@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   getConfigColumnVisibility,
   getSemanticColumnName,
-  resolveColumnVisibility,
   type ResolveColumnVisibilityParams,
+  resolveColumnVisibility,
 } from './columnVisibility';
 
 describe('columnVisibility', () => {

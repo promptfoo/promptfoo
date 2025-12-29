@@ -421,6 +421,8 @@ interface SettingsState {
   columnStates: Record<string, ColumnState>;
   /** @deprecated Use setColumnVisibilityByName instead */
   setColumnState: (evalId: string, state: ColumnState) => void;
+  /** Clears per-eval column state for a specific eval (for migration from legacy state) */
+  clearColumnState: (evalId: string) => void;
 
   /**
    * Name-based column visibility preferences.
@@ -500,6 +502,11 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
             [evalId]: state,
           },
         })),
+      clearColumnState: (evalId: string) =>
+        set((prevState) => {
+          const { [evalId]: _, ...rest } = prevState.columnStates;
+          return { columnStates: rest };
+        }),
 
       // Name-based column visibility (persists across evals with matching column names)
       columnVisibilityByName: {},

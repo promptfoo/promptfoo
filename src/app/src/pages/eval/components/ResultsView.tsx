@@ -63,7 +63,6 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
-import type { VisibilityState } from '@tanstack/table-core';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -202,7 +201,7 @@ export default function ResultsView({
   const {
     setInComparisonMode,
     columnStates,
-    setColumnState,
+    clearColumnState,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
@@ -368,15 +367,6 @@ export default function ResultsView({
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  const allColumns = React.useMemo(
-    () => [
-      ...(hasAnyDescriptions ? ['description'] : []),
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ],
-    [hasAnyDescriptions, head.vars, head.prompts],
-  );
-
   // Resolve column visibility using the new layered approach:
   // 1. Per-eval override (legacy columnStates)
   // 2. Name-based user preferences (columnVisibilityByName)
@@ -422,19 +412,15 @@ export default function ResultsView({
     [head.prompts, currentColumnState.columnVisibility],
   );
 
-  const updateColumnVisibility = React.useCallback(
-    (columns: string[]) => {
-      const newColumnVisibility: VisibilityState = {};
-      allColumns.forEach((col) => {
-        newColumnVisibility[col] = columns.includes(col);
-      });
-      setColumnState(currentEvalId, {
-        selectedColumns: columns,
-        columnVisibility: newColumnVisibility,
-      });
-    },
-    [allColumns, setColumnState, currentEvalId],
-  );
+  // Note: updateColumnVisibility no longer writes to per-eval columnStates.
+  // Column visibility is now managed through name-based preferences (columnVisibilityByName)
+  // which are set by ColumnSelector's onSaveColumnPreference callback.
+  // Per-eval columnStates are treated as legacy read-only data for backwards compatibility.
+  const updateColumnVisibility = React.useCallback((_columns: string[]) => {
+    // Intentionally empty - column visibility updates are handled by name-based preferences
+    // set through the ColumnSelector's onSaveColumnPreference callback.
+    // This function is kept for API compatibility with ColumnSelector's onChange.
+  }, []);
 
   const handleChange = React.useCallback(
     (event: SelectChangeEvent<string[]>) => {
@@ -938,6 +924,10 @@ export default function ResultsView({
                   onSetGlobalVariableVisibility={(visible) =>
                     setGlobalColumnDefaults({ showAllVariables: visible })
                   }
+                  onSetGlobalPromptVisibility={(visible) =>
+                    setGlobalColumnDefaults({ showAllPrompts: visible })
+                  }
+                  onClearPerEvalState={() => clearColumnState(currentEvalId)}
                   hasPreferences={Object.keys(columnVisibilityByName ?? {}).length > 0}
                 />
                 <Tooltip title="Edit table view settings" placement="bottom">
