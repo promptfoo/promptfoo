@@ -604,6 +604,8 @@ export interface AssertionValueFunctionContext {
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
   trace?: TraceData;
+  /** Shortcut to providerResponse.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 export type AssertionValueFunction = (
