@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
@@ -10,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -318,15 +318,14 @@ const MultiTurnExtensionControl: React.FC<{
 
   return (
     <div className="flex items-center gap-2">
-      <BaseNumberInput
-        size="small"
+      <NumberInput
         value={additionalTurns}
         onChange={(value) => {
           if (value !== undefined) {
             setAdditionalTurns(Math.max(1, Math.min(100, value)));
           }
         }}
-        sx={{ width: 125 }}
+        className="w-32"
         label="Additional Turns"
         min={1}
         max={100}

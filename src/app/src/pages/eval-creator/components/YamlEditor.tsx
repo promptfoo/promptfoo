@@ -136,7 +136,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   }, [code, originalCode]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
         <div className="flex items-center justify-between">
@@ -175,7 +175,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       )}
 
       {/* Editor Container */}
-      <div className="relative">
+      <div className="relative min-w-0">
         <div
           className={cn(
             'rounded-lg overflow-auto max-h-[60vh]',

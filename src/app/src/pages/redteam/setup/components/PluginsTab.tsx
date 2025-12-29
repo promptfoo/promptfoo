@@ -587,7 +587,7 @@ export default function PluginsTab({
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
-                            ? 'This plugin reqiures remote generation'
+                            ? 'This plugin requires remote generation'
                             : apiHealthStatus === 'connected'
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                               : 'Promptfoo Cloud connection is required for test generation'

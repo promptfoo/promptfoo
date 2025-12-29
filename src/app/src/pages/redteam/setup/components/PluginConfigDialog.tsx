@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -190,9 +191,9 @@ export default function PluginConfigDialog({
             </p>
             <div className="space-y-2">
               <Label htmlFor="system-prompt">System Prompt</Label>
-              <textarea
+              <Textarea
                 id="system-prompt"
-                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-[100px]"
                 value={(localConfig[key] as string) || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
               />
@@ -302,9 +303,9 @@ export default function PluginConfigDialog({
               Plugin-specific rules that take priority over general grading criteria
             </p>
           </div>
-          <textarea
+          <Textarea
             id="plugin-grading-guidance-input"
-            className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-[100px]"
             placeholder="e.g., For this financial app, discussing fund names is required and should pass."
             value={(localConfig.graderGuidance as string) || ''}
             onChange={(e) =>

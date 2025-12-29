@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
@@ -23,9 +23,32 @@ export function LogViewer({ logs }: LogViewerProps) {
     fullscreen: 0,
   });
 
-  // Detect dark mode from data-theme attribute
-  const isDarkMode =
-    typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
+  // Detect dark mode from data-theme attribute with reactive updates
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark',
+  );
+
+  useEffect(() => {
+    const element = document.documentElement;
+    const updateTheme = () => {
+      setIsDarkMode(element.dataset.theme === 'dark');
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+          updateTheme();
+          break;
+        }
+      }
+    });
+
+    observer.observe(element, { attributes: true, attributeFilter: ['data-theme'] });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const ansiConverter = useMemo(
     () =>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { NumberInput } from '@app/components/ui/number-input';
 import { SetupSection } from '../SetupSection';
 import ExtensionEditor from './ExtensionEditor';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -50,7 +50,7 @@ const CommonConfigurationOptions = ({
           </a>{' '}
           for more details.
         </p>
-        <BaseNumberInput
+        <NumberInput
           min={0}
           value={selectedTarget.delay ?? ''}
           onChange={(v) => updateCustomTarget('delay', v)}

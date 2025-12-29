@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
@@ -51,13 +52,13 @@ export default function ExtensionEditor({
   onExtensionsChange,
   onValidationChange,
 }: ExtensionEditorProps) {
-  const [isTyping, setIsTyping] = React.useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const error = React.useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
+  const error = useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
 
-  const handleChange = React.useCallback(
+  const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
       setIsTyping(true);
@@ -80,7 +81,7 @@ export default function ExtensionEditor({
   );
 
   // Cleanup timeout on unmount
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);

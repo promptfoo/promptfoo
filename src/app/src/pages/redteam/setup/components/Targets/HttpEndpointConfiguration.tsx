@@ -549,7 +549,7 @@ ${exampleRequest}`;
       </div>
 
       {/* Main configuration box containing everything */}
-      <div className="mt-4 rounded-lg border border-border bg-white p-4 dark:bg-zinc-900">
+      <div className="mt-4 rounded-lg border border-border bg-card p-4">
         {selectedTarget.config.request ? (
           <>
             <div className="mb-4 flex items-center gap-2">
@@ -808,7 +808,7 @@ ${exampleRequest}`;
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >
                     {copied ? (
-                      <Check className="h-4 w-4 text-green-600" />
+                      <Check className="h-4 w-4 text-emerald-600" />
                     ) : (
                       <Copy className="h-4 w-4" />
                     )}

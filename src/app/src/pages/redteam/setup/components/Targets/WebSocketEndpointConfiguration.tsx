@@ -1,9 +1,10 @@
 import { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
+import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
 import Prism from 'prismjs';
@@ -59,19 +60,17 @@ const WebSocketEndpointConfiguration = ({
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="message-template">Message Template</Label>
-          <textarea
+          <Textarea
             id="message-template"
             value={selectedTarget.config.messageTemplate}
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
             rows={3}
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
         <div className="mt-4">
-          <BaseNumberInput
+          <NumberInput
             fullWidth
-            margin="normal"
             label="Timeout (ms)"
             onBlur={() => {
               if (
@@ -126,7 +125,7 @@ const WebSocketEndpointConfiguration = ({
               </a>{' '}
               for more information.
             </p>
-            <div className="relative rounded-md border border-border bg-background dark:bg-zinc-900">
+            <div className="relative rounded-md border border-border bg-card">
               <Editor
                 id="stream-response-transform"
                 aria-describedby="stream-response-helper-text"

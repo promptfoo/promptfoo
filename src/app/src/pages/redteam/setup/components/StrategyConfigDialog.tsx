@@ -1173,7 +1173,7 @@ export default function StrategyConfigDialog({
                         <span>{index + 1}.</span>
                         <span>{stepId}</span>
                         {hasConfig && (
-                          <Badge className="h-5 bg-green-600 text-[0.7rem] text-white">
+                          <Badge className="h-5 bg-emerald-600 text-[0.7rem] text-white">
                             configured
                           </Badge>
                         )}

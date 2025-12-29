@@ -1170,11 +1170,13 @@ export default function Review({
 
         {/* YAML Dialog */}
         <Dialog open={isYamlDialogOpen} onOpenChange={setIsYamlDialogOpen}>
-          <DialogContent className="max-w-6xl w-[90vw] max-h-none overflow-visible">
+          <DialogContent className="max-w-6xl w-[90vw] overflow-hidden">
             <DialogHeader>
               <DialogTitle>YAML Configuration</DialogTitle>
             </DialogHeader>
-            <YamlEditor initialYaml={yamlContent} readOnly />
+            <div className="min-w-0 overflow-auto">
+              <YamlEditor initialYaml={yamlContent} readOnly />
+            </div>
           </DialogContent>
         </Dialog>
 

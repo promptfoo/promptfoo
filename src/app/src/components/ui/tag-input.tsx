@@ -56,7 +56,16 @@ export function TagInput({
 
   // Filter suggestions based on input and already selected values
   const filteredSuggestions = useMemo(() => {
-    const available = suggestions.filter((s) => !value.includes(s));
+    // Build a set of normalized selected values for efficient lookup
+    const selectedNormalized = new Set(
+      value.map((v) => (normalizeValue ? normalizeValue(v) : v) || v),
+    );
+
+    // Filter out suggestions that match already-selected values (accounting for normalization)
+    const available = suggestions.filter((s) => {
+      const normalizedSuggestion = normalizeValue ? normalizeValue(s) : s;
+      return !selectedNormalized.has(normalizedSuggestion || s);
+    });
 
     if (!inputValue.trim()) {
       return available;
@@ -64,7 +73,7 @@ export function TagInput({
 
     const search = inputValue.toLowerCase();
     return available.filter((s) => s.toLowerCase().includes(search));
-  }, [inputValue, value, suggestions]);
+  }, [inputValue, value, suggestions, normalizeValue]);
 
   // Reset highlighted index when suggestions change
   useEffect(() => {

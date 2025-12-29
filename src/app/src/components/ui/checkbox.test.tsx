@@ -90,4 +90,22 @@ describe('Checkbox', () => {
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toHaveAttribute('value', 'accepted');
   });
+
+  it('stops click propagation to prevent double-toggle in tables', async () => {
+    const user = userEvent.setup();
+    const parentClickHandler = vi.fn();
+    const checkboxChangeHandler = vi.fn();
+
+    render(
+      <div onClick={parentClickHandler}>
+        <Checkbox onChange={checkboxChangeHandler} />
+      </div>,
+    );
+
+    const checkbox = screen.getByRole('checkbox');
+    await user.click(checkbox);
+
+    expect(checkboxChangeHandler).toHaveBeenCalledTimes(1);
+    expect(parentClickHandler).not.toHaveBeenCalled();
+  });
 });

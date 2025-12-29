@@ -69,12 +69,19 @@ export interface RadioGroupItemProps
   value: string;
 }
 
-function RadioGroupItem({ className, value, id, disabled, ...props }: RadioGroupItemProps) {
+function RadioGroupItem({
+  className,
+  value,
+  id,
+  disabled,
+  children,
+  ...props
+}: RadioGroupItemProps) {
   const { name, value: groupValue, onValueChange } = useRadioGroup();
   const isChecked = groupValue === value;
 
   return (
-    <label className="relative inline-flex items-center">
+    <label htmlFor={id} className="relative inline-flex items-center gap-2 cursor-pointer">
       <input
         type="radio"
         id={id}
@@ -88,7 +95,7 @@ function RadioGroupItem({ className, value, id, disabled, ...props }: RadioGroup
       />
       <div
         className={cn(
-          'aspect-square h-4 w-4 rounded-full border border-border cursor-pointer',
+          'aspect-square h-4 w-4 shrink-0 rounded-full border border-border',
           'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2',
           'peer-disabled:cursor-not-allowed peer-disabled:opacity-50',
           'hover:border-primary/50 hover:bg-muted/50',
@@ -103,6 +110,7 @@ function RadioGroupItem({ className, value, id, disabled, ...props }: RadioGroup
           </span>
         )}
       </div>
+      {children && <span>{children}</span>}
     </label>
   );
 }

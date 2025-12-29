@@ -12,7 +12,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { AlertTriangle, Code, Copy, Download, Info, X } from 'lucide-react';
+import { AlertTriangle, Code, Copy, Download, Info } from 'lucide-react';
 import { AGENT_TEMPLATE } from './consts';
 
 import type { ProviderOptions } from '../../types';
@@ -191,18 +191,10 @@ export default function AgentFrameworkConfiguration({
       {/* Template Modal */}
       <Dialog open={templateModalOpen} onOpenChange={(open) => !open && handleCloseTemplateModal()}>
         <DialogContent className="min-h-[80vh] sm:max-w-4xl">
-          <DialogHeader className="flex flex-row items-center justify-between">
+          <DialogHeader>
             <DialogTitle>
               {frameworkDetails.name} Template - {templateFilename}
             </DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleCloseTemplateModal}
-              className="h-6 w-6"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </DialogHeader>
 
           <div className="space-y-4">

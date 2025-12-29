@@ -39,24 +39,6 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
   >([]);
   const [selectedRequestIndex, setSelectedRequestIndex] = useState<number | null>(null);
 
-  const _getMethodColor = (
-    method: string,
-  ): 'success' | 'info' | 'warning' | 'error' | 'default' => {
-    switch (method?.toUpperCase()) {
-      case 'GET':
-        return 'info';
-      case 'POST':
-        return 'success';
-      case 'PUT':
-      case 'PATCH':
-        return 'warning';
-      case 'DELETE':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
   const handleClose = () => {
     setPostmanJson('');
     setPostmanError('');

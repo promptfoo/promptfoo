@@ -267,6 +267,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
           <div className="flex rounded-lg border border-border">
             <button
               type="button"
+              aria-pressed={testMode === 'application'}
               className={cn(
                 'flex flex-1 flex-col gap-1 px-4 py-3 text-left transition-colors',
                 testMode === 'application' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50',
@@ -280,6 +281,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             </button>
             <button
               type="button"
+              aria-pressed={testMode === 'model'}
               className={cn(
                 'flex flex-1 flex-col gap-1 border-l border-border px-4 py-3 text-left transition-colors',
                 testMode === 'model' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50',
@@ -477,7 +479,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('features', e.target.value)}
                           placeholder="e.g. Patient record access, appointment scheduling, prescription management, lab results retrieval..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -526,7 +528,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. The agent only responds to voicemail-related queries, so every attack should mention voicemail services. OR: All interactions must be in the context of medical appointments, so attacks should reference scheduling or patient care."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
                     </div>
@@ -582,7 +584,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Patient's own medical records, appointment scheduling system, prescription database..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -603,7 +605,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Other patients' records, financial systems, admin backends..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -622,7 +624,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('userTypes', e.target.value)}
                           placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -643,7 +645,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. HIPAA compliance, patient confidentiality, audit logging..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
                     </div>
@@ -693,7 +695,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Personal health information, financial records, SSNs, payment data..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -715,7 +717,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Patient IDs (MRN2023001), Emails (user@example.com), Prescription IDs (RX123456)..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -736,7 +738,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Prescribing medication, financial transactions, data deletion..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
 
@@ -757,7 +759,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Self-harm, illegal drugs, violence, competitor products..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
                     </div>
@@ -806,7 +808,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           }
                           placeholder="e.g. Epic Systems, Cerner, Allscripts, athenahealth..."
                           rows={2}
-                          className="min-h-[56px] resize-y"
+                          className="min-h-14 resize-y"
                         />
                       </div>
                     </div>
@@ -835,7 +837,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
                     placeholder="e.g. An engineer at Acme Inc, a healthcare provider, a financial analyst..."
                     rows={2}
-                    className="min-h-[56px] resize-y"
+                    className="min-h-14 resize-y"
                   />
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { Alert } from '@app/components/ui/alert';
+import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 
 export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
@@ -91,7 +91,9 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
       ) : (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <span>{providerResponse?.error || 'No response from provider'}</span>
+          <AlertDescription>
+            {providerResponse?.error || 'No response from provider'}
+          </AlertDescription>
         </Alert>
       )}
     </div>

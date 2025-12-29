@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { TagInput } from '@app/components/ui/tag-input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -84,7 +84,7 @@ export const NumberOfTestCasesInput = ({
 }: NumberOfTestCasesInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.numberOfTests.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label="Number of test cases"
       value={value}
@@ -106,9 +106,7 @@ export const NumberOfTestCasesInput = ({
         updateConfig('numTests', safe);
         setValue(String(safe));
       }}
-      slotProps={{
-        input: { readOnly },
-      }}
+      readOnly={readOnly}
       helperText={error ? error : RUNOPTIONS_TEXT.numberOfTests.helper}
       error={Boolean(error)}
     />
@@ -141,7 +139,7 @@ export const DelayBetweenAPICallsInput = ({
 }: DelayBetweenAPICallsInputProps) => {
   const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label={
         canSetDelay ? (
@@ -174,12 +172,8 @@ export const DelayBetweenAPICallsInput = ({
         setMaxConcurrencyValue('1');
       }}
       min={0}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: <span className="pl-2 text-xs text-muted-foreground">ms</span>,
-        },
-      }}
+      readOnly={readOnly}
+      endAdornment={<span className="text-xs text-muted-foreground">ms</span>}
       helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
       error={Boolean(error)}
     />
@@ -205,7 +199,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
 }: MaxNumberOfConcurrentRequestsInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label={
         canSetMaxConcurrency ? (
@@ -238,12 +232,8 @@ export const MaxNumberOfConcurrentRequestsInput = ({
         updateRunOption('delay', 0);
         setDelayValue('0');
       }}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: <span className="pl-2 text-xs text-muted-foreground">requests</span>,
-        },
-      }}
+      readOnly={readOnly}
+      endAdornment={<span className="text-xs text-muted-foreground">requests</span>}
       helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
       error={Boolean(error)}
     />

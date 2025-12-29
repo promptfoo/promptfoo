@@ -463,7 +463,7 @@ export default function ProviderTypeSelector({
         'http',
       );
     }
-  }, []);
+  }, [provider?.id, setProvider]);
 
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {

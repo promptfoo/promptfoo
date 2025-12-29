@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -917,7 +917,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             </p>
           </div>
 
-          <BaseNumberInput
+          <NumberInput
             fullWidth
             label="Signature Validity (ms)"
             value={selectedTarget.config.signatureAuth?.signatureValidityMs}
@@ -939,14 +939,9 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               }
             }}
             placeholder="How long the signature remains valid"
-            slotProps={{
-              inputLabel: {
-                shrink: true,
-              },
-            }}
           />
 
-          <BaseNumberInput
+          <NumberInput
             fullWidth
             label="Signature Refresh Buffer (ms)"
             value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
@@ -957,11 +952,6 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               })
             }
             placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
-            slotProps={{
-              inputLabel: {
-                shrink: true,
-              },
-            }}
           />
 
           <div className="space-y-2">

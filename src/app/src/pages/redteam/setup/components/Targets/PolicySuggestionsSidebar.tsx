@@ -66,13 +66,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
               >
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <Plus
-                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer text-primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSuggestedPolicy(policy);
-                      }}
-                    />
+                    <Plus className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <div className="flex-1">
                       <h4 className="mb-1 font-semibold">{policy.name}</h4>
                       <p className="text-sm leading-relaxed text-muted-foreground">{policy.text}</p>

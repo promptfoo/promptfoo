@@ -308,6 +308,8 @@ describe('HttpAdvancedConfiguration', () => {
     await user.click(authorizationTab);
 
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
+    // Use fireEvent.change instead of user.type for controlled inputs
+    // since the mock doesn't update selectedTarget between keystrokes
     fireEvent.change(pfxPasswordInput, { target: { value: 'test-password' } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -343,6 +345,8 @@ describe('HttpAdvancedConfiguration', () => {
     const keystorePasswordInput = screen.getByLabelText('Keystore Password');
     const keyAliasInput = screen.getByLabelText('Key Alias');
 
+    // Use fireEvent.change instead of user.type for controlled inputs
+    // since the mock doesn't update selectedTarget between keystrokes
     fireEvent.change(keystorePasswordInput, { target: { value: 'testPassword' } });
     fireEvent.change(keyAliasInput, { target: { value: 'testAlias' } });
 
@@ -386,6 +390,8 @@ describe('HttpAdvancedConfiguration', () => {
     expect(keystorePasswordInput).toBeInTheDocument();
 
     const envVar = '${MY_PASSWORD}';
+    // Use fireEvent.change instead of user.type for controlled inputs
+    // since the mock doesn't update selectedTarget between keystrokes
     fireEvent.change(keystorePasswordInput, { target: { value: envVar } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
