@@ -36,8 +36,8 @@ Click the **Share** button to send results to teammates.
 Sharing to [promptfoo.app](https://promptfoo.app/welcome) is free and creates private links visible only to your organization.
 
 ```sh
-# One-time setup
-promptfoo auth login -k YOUR_API_KEY
+# One-time setup (opens browser to authenticate)
+promptfoo auth login
 
 # Share any eval
 promptfoo share

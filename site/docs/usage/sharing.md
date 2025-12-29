@@ -10,21 +10,22 @@ Share your eval results with others using the `share` command or the web interfa
 
 ## Quick Start (Cloud)
 
-Most users will share to promptfoo.app cloud:
+Share evaluations to Promptfoo Cloud:
 
 ```sh
 # Login (one-time setup)
-# First, get your API key from https://promptfoo.app/welcome
-promptfoo auth login -k YOUR_API_KEY
+promptfoo auth login
 
 # Run an eval and share it
 promptfoo eval
 promptfoo share
 ```
 
+The login command opens your browser to authenticate. If you don't have an account, visit https://promptfoo.app/welcome to create one.
+
 :::note
 
-Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
+Cloud sharing creates private links only visible to you and your organization.
 
 :::
 
@@ -70,8 +71,7 @@ If you have a Promptfoo Enterprise account:
 
 ```sh
 # Login to your enterprise instance
-# Get your API key from the "CLI Login Information" section in your profile
-promptfoo auth login --host https://your-company.promptfoo.app -k YOUR_API_KEY
+promptfoo auth login --host https://your-company.promptfoo.app
 
 # Share your eval
 promptfoo share

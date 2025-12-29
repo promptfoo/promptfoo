@@ -18,27 +18,68 @@ Promptfoo supports basic authentication into the application through `auth.promp
 
 You can also authenticate into the application using a magic link. To do this, navigate to `auth.promptfoo.app` and click the "Login with a magic link" button. You will receive an email with a link to log in. If you do not receive an email, please be sure to check your spam folder.
 
-## Authenticating Into the CLI
+## Authenticating the CLI
 
-You may wish to authenticate into the CLI when using Promptfoo. Follow these steps to connect Promptfoo Enterprise to the CLI.
+Connect the Promptfoo CLI to your Enterprise account to share evaluations and run red team scans.
 
-1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
+### Browser-Based Login (Recommended)
 
-2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
+The simplest way to authenticate is through your browser:
 
-![CLI Login Information](/img/enterprise-docs/CLI-login-setting.png)
+```sh
+promptfoo auth login
+```
 
-3. Copy the first command and run in your CLI. Your CLI will then be authenticated to Promptfoo Enterprise, allowing you to share eval results run locally.
+This opens your browser to a device authorization page. Verify the code displayed in your terminal matches the one shown in the browser, then sign in with your Enterprise credentials. The CLI receives your authentication token automatically.
 
-![CLI Login Command](/img/enterprise-docs/CLI-login-key.png)
+![Device authorization - sign in to authorize](/img/enterprise-docs/device-auth-code-verified.png)
 
-4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Enterprise organization.
+Once authorized, you'll see a confirmation and can close the browser:
+
+![Device authorized successfully](/img/enterprise-docs/device-auth-success.png)
+
+For self-hosted instances, specify your host:
+
+```sh
+promptfoo auth login --host https://promptfoo.your-company.com
+```
+
+### API Key Login
+
+For CI/CD pipelines or automated environments where browser authentication isn't available, use an API key:
+
+```sh
+promptfoo auth login --api-key YOUR_API_KEY
+```
+
+To obtain an API key:
+
+1. Open the Promptfoo Enterprise app
+2. Navigate to your profile settings
+3. Select **CLI Login Information**
+4. Copy the API key
+
+For CI/CD, set the `PROMPTFOO_API_KEY` environment variable instead of passing it on the command line.
+
+### Verify Authentication
+
+Check your current authentication status:
+
+```sh
+promptfoo auth whoami
+```
+
+### Logout
+
+```sh
+promptfoo auth logout
+```
 
 :::tip
-All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Enterprise organization by running `promptfoo share`.
+All evaluations are stored locally until you share them. Run `promptfoo share` to upload existing local evaluations to your Enterprise organization.
 :::
 
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
+Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization.
 
 ## Working with Multiple Teams
 
