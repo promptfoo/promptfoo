@@ -1062,6 +1062,21 @@ export const TestSuiteConfigSchema = z.object({
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),
 
+  // Default column visibility settings for the web viewer
+  // Controls which columns are shown/hidden by default when viewing eval results
+  defaultColumnVisibility: z
+    .object({
+      // Whether to show all variables by default ('visible') or hide them ('hidden')
+      variables: z.enum(['visible', 'hidden']).default('visible'),
+      // Whether to show all prompts by default ('visible') or hide them ('hidden')
+      prompts: z.enum(['visible', 'hidden']).default('visible'),
+      // Specific variable columns to hide (by variable name, e.g., 'context', 'system_prompt')
+      hideColumns: z.array(z.string()).optional(),
+      // Specific variable columns to show (only applies when variables: 'hidden')
+      showColumns: z.array(z.string()).optional(),
+    })
+    .optional(),
+
   // Tracing configuration
   tracing: z
     .object({
@@ -1108,6 +1123,16 @@ export const TestSuiteConfigSchema = z.object({
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+
+// Extract the column visibility schema for reuse
+export const DefaultColumnVisibilitySchema = z.object({
+  variables: z.enum(['visible', 'hidden']).default('visible'),
+  prompts: z.enum(['visible', 'hidden']).default('visible'),
+  hideColumns: z.array(z.string()).optional(),
+  showColumns: z.array(z.string()).optional(),
+});
+
+export type DefaultColumnVisibility = z.infer<typeof DefaultColumnVisibilitySchema>;
 
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
