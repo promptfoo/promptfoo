@@ -154,15 +154,21 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       <div className="flex flex-col gap-6">
         {/* Quick Start Section */}
         <Alert variant="info" className="[&>svg]:hidden">
-          <AlertDescription className="flex w-full items-center gap-3">
-            <Info className="h-4 w-4 shrink-0" />
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
-              <span className="min-w-[300px] flex-1 text-sm">
-                <strong>New to Promptfoo</strong> and want to see it in action? Load an example
-                configuration to get started immediately.
-              </span>
-              <LoadExampleButton />
+          <AlertDescription className="flex w-full flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <Info className="h-4 w-4 shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
+                <span className="min-w-[300px] flex-1 text-sm">
+                  <strong>New to Promptfoo</strong> and want to see it in action? Load an example
+                  configuration to get started immediately.
+                </span>
+                <LoadExampleButton />
+              </div>
             </div>
+            <p className="text-sm text-muted-foreground">
+              <strong>Have an existing YAML config?</strong> Use the <strong>"Load Config"</strong>{' '}
+              button in the sidebar to import it and pre-fill the form.
+            </p>
           </AlertDescription>
         </Alert>
 
