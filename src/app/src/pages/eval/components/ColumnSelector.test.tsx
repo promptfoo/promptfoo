@@ -92,11 +92,7 @@ describe('ColumnSelector', () => {
       const onChange = vi.fn();
 
       render(
-        <ColumnSelector
-          {...defaultProps}
-          selectedColumns={['Variable 1']}
-          onChange={onChange}
-        />,
+        <ColumnSelector {...defaultProps} selectedColumns={['Variable 1']} onChange={onChange} />,
       );
 
       openDialog();
@@ -251,11 +247,7 @@ describe('ColumnSelector', () => {
 
     it('should not show Reset button when hasPreferences is false', () => {
       render(
-        <ColumnSelector
-          {...defaultProps}
-          onResetAllPreferences={vi.fn()}
-          hasPreferences={false}
-        />,
+        <ColumnSelector {...defaultProps} onResetAllPreferences={vi.fn()} hasPreferences={false} />,
       );
 
       openDialog();
