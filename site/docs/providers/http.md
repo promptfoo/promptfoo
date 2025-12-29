@@ -1,4 +1,5 @@
 ---
+title: HTTP/HTTPS API
 sidebar_label: HTTP API
 description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---
@@ -1399,13 +1400,33 @@ Streaming responses typically use one of these formats:
 - **Chunked JSON**: Multiple JSON objects sent sequentially, often separated by newlines or delimiters.
 - **HTTP chunked transfer encoding**: Standard HTTP mechanism for streaming arbitrary data.
 
-Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md). However, synchronous REST/HTTP requests are often preferable for the following reasons:
+Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md).
 
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`.
-- Evals wait for the full response before scoring, so progressive tokens may not be surfaced.
-- Overall test duration is typically similar to non-streaming requests, so streaming does not provide a performance benefit.
+### Time to First Token (TTFT) Measurement
 
-If you need to evaluate a streaming endpoint, you will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+When `stream: true` is set in the request body, promptfoo automatically measures **Time to First Token (TTFT)** for performance evaluation:
+
+- **TTFT Measurement**: Track how quickly models start responding
+- **User-Perceived Performance**: Measure streaming responsiveness
+- **Model Comparison**: Compare streaming performance across providers
+- **Production Insights**: Test streaming implementations before deployment
+
+TTFT assertions can be added to your tests:
+
+```yaml
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000 # Fail if TTFT > 2 seconds
+    - type: latency
+      threshold: 10000 # Fail if total response > 10 seconds
+```
+
+When `stream: true` is enabled, response caching is automatically disabled to ensure live TTFT measurements.
+
+### Parsing Streaming Responses
+
+You will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
 
 **Example streaming response format:**
 

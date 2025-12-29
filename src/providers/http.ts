@@ -7,7 +7,7 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -23,6 +23,7 @@ import { safeResolve } from '../util/pathUtils';
 import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { fetchWithRetries, processStreamingResponse, type StreamingMetrics } from '../util/fetch';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -1456,6 +1457,76 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
+  /**
+   * Unified response fetching that handles both streaming and non-streaming cases
+   *
+   * When body.stream is true:
+   * - Uses fetchWithRetries to get raw Response object
+   * - Processes the response as a stream to capture TTFT metrics
+   * - Disables caching to ensure live measurements
+   *
+   * When body.stream is false or not set:
+   * - Uses existing fetchWithCache for standard behavior
+   * - Maintains backward compatibility and caching functionality
+   *
+   * @param url - The URL to fetch
+   * @param fetchOptions - Fetch options
+   * @param context - Optional call context for cache control
+   * @returns Object containing response data and optional streaming metrics
+   */
+  private async fetchResponse(
+    url: string,
+    fetchOptions: RequestInit,
+    context?: CallApiContextParams,
+    isStreaming?: boolean,
+  ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
+    // Use the explicitly passed streaming flag if available, otherwise check config
+    const shouldMeasureTTFT =
+      isStreaming ??
+      (this.config.body &&
+        typeof this.config.body === 'object' &&
+        (this.config.body as Record<string, any>).stream === true);
+
+    if (shouldMeasureTTFT) {
+      // Streaming path: Get raw response and process as stream
+      // Note: Caching is disabled for streaming responses to ensure live TTFT measurement
+      const requestStartTime = Date.now();
+      const rawResponse = await fetchWithRetries(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        this.config.maxRetries,
+      );
+
+      const streamingResponse = await processStreamingResponse(rawResponse, requestStartTime);
+      const latencyMs = Date.now() - requestStartTime;
+
+      const response: FetchWithCacheResult<string> = {
+        data: streamingResponse.text,
+        cached: false,
+        status: rawResponse.status,
+        statusText: rawResponse.statusText,
+        headers: Object.fromEntries(rawResponse.headers.entries()),
+        latencyMs,
+        deleteFromCache: async () => {}, // Streaming responses are not cached
+      };
+
+      return { response, streamingMetrics: streamingResponse.streamingMetrics };
+    } else {
+      // Non-streaming path: Use existing caching mechanism
+      const response = await fetchWithCache(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      );
+
+      return { response };
+    }
+  }
+
   id(): string {
     return this.url;
   }
@@ -1998,31 +2069,20 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    // Detect streaming from rendered body (supports dynamic/templated stream flags)
+    const isStreaming =
+      typeof renderedConfig.body === 'object' &&
+      renderedConfig.body !== null &&
+      (renderedConfig.body as Record<string, any>).stream === true;
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+    );
+
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2049,6 +2109,11 @@ export class HttpProvider implements ApiProvider {
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;
       ret.metadata.finalRequestBody = renderedConfig.body;
+    }
+
+    // Add streaming metrics if available
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
     }
 
     const rawText = data as string;

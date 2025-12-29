@@ -69,6 +69,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [ttft](#ttft)                                                   | Time to first token is below threshold (milliseconds)              |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
@@ -659,6 +660,43 @@ assert:
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
+### TTFT
+
+The `ttft` assertion measures Time to First Token (TTFT) for streaming responses and fails if it exceeds the specified threshold. Duration is specified in milliseconds.
+
+TTFT measures how quickly an AI model starts generating a response, which is crucial for user experience in streaming applications.
+
+Example:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      # TTFT measurement is automatically enabled when stream: true
+      # ... other config
+
+assert:
+  # Fail if the model takes longer than 2 seconds to start responding
+  - type: ttft
+    threshold: 2000
+```
+
+**Requirements:**
+
+- The provider must have `stream: true` in its request body
+- The API endpoint must support streaming responses
+- Caching is automatically disabled when streaming metrics are enabled
+
+**Use Cases:**
+
+- Measuring user-perceived responsiveness in chat applications
+- Comparing streaming performance across different models
+- Setting performance requirements for production deployments
+
+**See Also:**
+
+- [HTTP Provider Streaming Documentation](/docs/providers/http#streaming-responses)
 
 ### Levenshtein distance
 
