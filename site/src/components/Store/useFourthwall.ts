@@ -413,9 +413,7 @@ export function stripHtml(html: string): string {
     if (end === -1 || end - start > 10) break;
     const numStr = result.substring(start + 2, end);
     const isHex = numStr.toLowerCase().startsWith('x');
-    const num = isHex
-      ? Number.parseInt(numStr.substring(1), 16)
-      : Number.parseInt(numStr, 10);
+    const num = isHex ? Number.parseInt(numStr.substring(1), 16) : Number.parseInt(numStr, 10);
     if (!Number.isNaN(num) && num > 0 && num < 0x10ffff) {
       result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
     } else {
