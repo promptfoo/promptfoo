@@ -18,6 +18,7 @@ export function DataTablePagination<TData>({
   pageSize,
   pageCount,
   totalRows,
+  onPageSizeChange,
 }: DataTablePaginationProps<TData>) {
   const [pageInputValue, setPageInputValue] = useState<string>('');
 
@@ -63,7 +64,7 @@ export function DataTablePagination<TData>({
           <Select
             value={`${pageSize}`}
             onValueChange={(value) => {
-              table.setPageSize(Number(value));
+              onPageSizeChange(Number(value));
             }}
           >
             <SelectTrigger className="h-8 w-[70px]">

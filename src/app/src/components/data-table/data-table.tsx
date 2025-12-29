@@ -422,6 +422,11 @@ export function DataTable<TData, TValue = unknown>({
             pageSize={pagination.pageSize}
             pageCount={table.getPageCount()}
             totalRows={table.getFilteredRowModel().rows.length}
+            onPageSizeChange={(newPageSize) => {
+              startTransition(() => {
+                setPagination((prev) => ({ ...prev, pageSize: newPageSize, pageIndex: 0 }));
+              });
+            }}
           />
         </div>
       )}

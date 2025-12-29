@@ -62,6 +62,7 @@ export interface DataTablePaginationProps<TData> {
   pageSize: number;
   pageCount: number;
   totalRows: number;
+  onPageSizeChange: (pageSize: number) => void;
 }
 
 export interface DataTableColumnToggleProps<TData> {
