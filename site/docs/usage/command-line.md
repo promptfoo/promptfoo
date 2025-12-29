@@ -366,13 +366,28 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Login to Promptfoo Cloud or Enterprise.
+
+By default, this command opens your browser to complete authentication. A device code is displayed in the terminal—verify it matches the code shown in your browser before signing in.
 
 | Option                | Description                                                                |
 | --------------------- | -------------------------------------------------------------------------- |
 | `-o, --org <orgId>`   | The organization ID to log in to                                           |
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
+| `-k, --api-key <key>` | Log in directly using an API key (skips browser authentication)            |
+
+**Examples:**
+
+```sh
+# Browser-based login (recommended for interactive use)
+promptfoo auth login
+
+# Login to a self-hosted instance
+promptfoo auth login --host https://promptfoo.your-company.com
+
+# API key login (for CI/CD or automation)
+promptfoo auth login --api-key YOUR_API_KEY
+```
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
