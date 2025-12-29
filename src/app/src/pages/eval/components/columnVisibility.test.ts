@@ -179,6 +179,68 @@ describe('columnVisibility', () => {
         // showColumns is checked before hideColumns in the resolution logic
         expect(result.columnVisibility['Variable 2']).toBe(true); // context - showColumns wins
       });
+
+      it('should hide description via hideColumns', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          configDefaults: { hideColumns: ['description'] },
+        });
+
+        expect(result.columnVisibility['description']).toBe(false);
+      });
+
+      it('should show description via showColumns even when variables are hidden', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          configDefaults: { variables: 'hidden', showColumns: ['description'] },
+        });
+
+        expect(result.columnVisibility['description']).toBe(true);
+      });
+
+      it('should prioritize showColumns over hideColumns for description', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          configDefaults: { hideColumns: ['description'], showColumns: ['description'] },
+        });
+
+        // showColumns is checked before hideColumns
+        expect(result.columnVisibility['description']).toBe(true);
+      });
+
+      it('should hide description when config sets variables to hidden', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          configDefaults: { variables: 'hidden' },
+        });
+
+        // Description follows variable visibility rules
+        expect(result.columnVisibility['description']).toBe(false);
+      });
+
+      it('should show description using global default when no config is set', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          globalColumnDefaults: { showAllVariables: true, showAllPrompts: true },
+        });
+
+        expect(result.columnVisibility['description']).toBe(true);
+      });
+
+      it('should hide description using global default when showAllVariables is false', () => {
+        const result = resolveColumnVisibility({
+          ...defaultParams,
+          hasDescription: true,
+          globalColumnDefaults: { showAllVariables: false, showAllPrompts: true },
+        });
+
+        expect(result.columnVisibility['description']).toBe(false);
+      });
     });
 
     describe('per-eval column state (legacy)', () => {

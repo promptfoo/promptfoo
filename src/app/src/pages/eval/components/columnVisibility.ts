@@ -115,15 +115,21 @@ export function resolveColumnVisibility(
 
   // Handle description column
   if (hasDescription) {
-    allColumns.push('description');
-    // Description follows variable visibility rules
-    visibility['description'] =
-      namePrefs['description'] ??
-      (configHiddenColumns.has('description')
-        ? false
-        : configShownColumns.has('description')
-          ? true
-          : configShowVars && defaults.showAllVariables);
+    const descKey = 'description';
+    allColumns.push(descKey);
+    // Description follows the same precedence as variable columns:
+    // name prefs > config showColumns > config hideColumns > config.variables > global default
+    if (namePrefs[descKey] !== undefined) {
+      visibility[descKey] = namePrefs[descKey];
+    } else if (configShownColumns.has(descKey)) {
+      visibility[descKey] = true;
+    } else if (configHiddenColumns.has(descKey)) {
+      visibility[descKey] = false;
+    } else if (configDefaults?.variables !== undefined) {
+      visibility[descKey] = configShowVars;
+    } else {
+      visibility[descKey] = defaults.showAllVariables;
+    }
   }
 
   // Handle variable columns
