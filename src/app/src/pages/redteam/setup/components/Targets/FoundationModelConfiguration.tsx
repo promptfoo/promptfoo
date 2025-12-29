@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
@@ -120,7 +121,9 @@ const FoundationModelConfiguration = ({
 
   return (
     <div className="mt-4">
-      <h3 className="mb-4 text-lg font-semibold">{providerInfo.name} Configuration</h3>
+      <Typography variant="subtitle" as="h3" className="mb-4">
+        {providerInfo.name} Configuration
+      </Typography>
 
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">

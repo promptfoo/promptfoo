@@ -21,6 +21,7 @@ import {
 } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { getIssueFilePath, getSeverityLabel, isCriticalSeverity } from '../utils';
 import ChecksSection from './ChecksSection';
@@ -163,10 +164,10 @@ export default function ResultsTab({
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-semibold">
+        <Typography variant="subtitle" as="h2">
           Findings
           <span className="ml-2 text-muted-foreground font-normal">({filteredIssues.length})</span>
-        </h2>
+        </Typography>
         <div className="flex-1" />
 
         <Select
@@ -206,11 +207,11 @@ export default function ResultsTab({
       {filteredIssues.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <CheckCircleIcon className="h-12 w-12 text-emerald-500 mb-3" />
-          <h3 className="text-lg font-medium text-emerald-700 dark:text-emerald-300">
+          <Typography variant="subtitle" as="h3" className="text-emerald-700 dark:text-emerald-300">
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues`
               : 'No issues found'}
-          </h3>
+          </Typography>
           <p className="text-sm text-muted-foreground mt-1">
             {selectedSeverity
               ? 'Try selecting a different severity filter.'

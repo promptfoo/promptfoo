@@ -12,6 +12,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
+import { Typography } from '@app/components/ui/typography';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
@@ -128,16 +129,18 @@ export default function LoginPage() {
           <div className="mb-8 flex flex-col items-center space-y-4 text-center">
             <div className="flex items-center gap-2">
               <img src={logoPanda} alt="Promptfoo" className="h-10 w-10" />
-              <h1 className="text-2xl font-semibold tracking-tight">promptfoo</h1>
+              <Typography variant="pageTitle" as="h1">
+                promptfoo
+              </Typography>
             </div>
 
-            <h2 className="text-xl text-foreground">
+            <Typography variant="title" as="h2">
               {new URLSearchParams(location.search).get('type') === 'report'
                 ? 'View Report'
                 : 'Welcome to Promptfoo'}
-            </h2>
+            </Typography>
 
-            <p className="max-w-sm text-sm text-muted-foreground">
+            <Typography variant="muted" className="max-w-sm">
               Enter your API token to authenticate.
               {!new URLSearchParams(location.search).get('type') && (
                 <>
@@ -153,7 +156,7 @@ export default function LoginPage() {
                   </a>
                 </>
               )}
-            </p>
+            </Typography>
           </div>
 
           {/* Form */}
@@ -205,9 +208,9 @@ export default function LoginPage() {
                   defaultValue="https://www.promptfoo.app"
                   disabled={isPending}
                 />
-                <p className="text-xs text-muted-foreground">
+                <Typography variant="small" className="text-muted-foreground">
                   Change this for private cloud or on-premise deployments
-                </p>
+                </Typography>
               </div>
 
               {/* Submit Button */}
@@ -227,7 +230,7 @@ export default function LoginPage() {
           {/* Help Section */}
           <div className="mt-8 border-t border-border pt-6">
             <div className="flex flex-col items-center space-y-2 text-center">
-              <p className="text-sm text-muted-foreground">Don't have an API key?</p>
+              <Typography variant="muted">Don't have an API key?</Typography>
 
               <a
                 href="https://promptfoo.app/welcome"

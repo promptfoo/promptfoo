@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router-dom';
 import type { StandaloneEval } from '@promptfoo/util/database';
@@ -249,8 +250,12 @@ export default function History({
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-2xl font-semibold">Evaluation History</h1>
-          <p className="text-sm text-muted-foreground mt-1">View and compare all evaluation runs</p>
+          <Typography variant="pageTitle" as="h1">
+            Evaluation History
+          </Typography>
+          <Typography variant="muted" className="mt-1">
+            View and compare all evaluation runs
+          </Typography>
         </div>
       </PageHeader>
       <div className="flex-1 min-h-0 flex flex-col p-6">
@@ -284,7 +289,9 @@ export default function History({
 
             <div className="space-y-2 py-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold">Full Prompt</h4>
+                <Typography variant="label" as="h4">
+                  Full Prompt
+                </Typography>
                 <CopyButton value={selectedPrompt.raw} />
               </div>
               <div className="p-3 rounded-lg bg-muted/50 border border-border max-h-96 overflow-y-auto">

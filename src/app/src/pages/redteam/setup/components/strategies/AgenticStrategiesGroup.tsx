@@ -1,4 +1,5 @@
 import { Button } from '@app/components/ui/button';
+import { Typography } from '@app/components/ui/typography';
 import { StrategyItem } from './StrategyItem';
 
 import type { StrategyCardData } from './types';
@@ -44,7 +45,9 @@ export function AgenticStrategiesGroup({
       {/* Parent header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Agentic Strategies</h3>
+          <Typography variant="subtitle" as="h3">
+            Agentic Strategies
+          </Typography>
           <p className="mt-1 text-sm text-muted-foreground">
             Advanced AI-powered strategies that dynamically adapt their attack patterns
           </p>
@@ -67,7 +70,9 @@ export function AgenticStrategiesGroup({
         {/* Single-turn only subsection */}
         {singleTurnStrategies.length > 0 && (
           <div className="mb-6">
-            <h4 className="mb-2 font-semibold">Single-turn Only</h4>
+            <Typography variant="label" as="h4" className="mb-2">
+              Single-turn Only
+            </Typography>
             <p className="mb-4 text-sm text-muted-foreground">
               These strategies work only for single-turn evaluations
             </p>
@@ -91,7 +96,9 @@ export function AgenticStrategiesGroup({
         {/* Single and multi-turn subsection */}
         {multiTurnStrategies.length > 0 && (
           <div>
-            <h4 className="mb-2 font-semibold">Single and Multi-turn</h4>
+            <Typography variant="label" as="h4" className="mb-2">
+              Single and Multi-turn
+            </Typography>
             <p className="mb-4 text-sm text-muted-foreground">
               These strategies can be used for both single and multi-turn evaluations
             </p>

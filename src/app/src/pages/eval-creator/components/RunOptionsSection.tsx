@@ -1,6 +1,7 @@
 import { Card } from '@app/components/ui/card';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 interface RunOptionsSectionProps {
@@ -112,7 +113,9 @@ export function RunOptionsSection({
       <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
         <div className="space-y-4">
           <div className="space-y-2">
-            <h3 className="text-lg font-semibold">Ready to run your evaluation?</h3>
+            <Typography variant="subtitle" as="h3">
+              Ready to run your evaluation?
+            </Typography>
             <p className="text-sm text-muted-foreground">
               {isReadyToRun
                 ? 'All required steps are complete. Click below to start your evaluation.'

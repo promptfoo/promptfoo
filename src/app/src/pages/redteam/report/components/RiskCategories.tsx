@@ -1,3 +1,4 @@
+import { Typography } from '@app/components/ui/typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 import RiskCard from './RiskCard';
@@ -30,7 +31,9 @@ const RiskCategories = ({
 
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-semibold">Risk Categories</h2>
+      <Typography variant="title" as="h2">
+        Risk Categories
+      </Typography>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];

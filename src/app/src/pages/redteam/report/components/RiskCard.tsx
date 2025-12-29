@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Gauge } from '@app/components/ui/gauge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
@@ -67,8 +68,12 @@ const RiskCard = ({
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 print:flex print:flex-row print:gap-8">
           {/* Left side - Title and Gauge */}
           <div className="flex flex-col items-center text-center print:flex-1">
-            <h2 className="text-xl font-bold">{title}</h2>
-            <p className="mb-4 text-sm text-muted-foreground">{subtitle}</p>
+            <Typography variant="title" as="h2" className="font-bold">
+              {title}
+            </Typography>
+            <Typography variant="muted" className="mb-4">
+              {subtitle}
+            </Typography>
 
             {/* Gauge */}
             <div className="relative mb-2 flex h-[100px] w-[100px] items-center justify-center">
@@ -83,9 +88,9 @@ const RiskCard = ({
             >
               {numTestsFailed} failed probes
             </p>
-            <p className="text-sm text-muted-foreground">
+            <Typography variant="muted">
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
-            </p>
+            </Typography>
           </div>
 
           {/* Right side - Test list */}

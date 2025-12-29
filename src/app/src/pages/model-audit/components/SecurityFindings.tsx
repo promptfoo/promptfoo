@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import {
   getIssueFilePath,
@@ -337,7 +338,9 @@ export default function SecurityFindings({
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold text-foreground">Security Findings</h2>
+        <Typography variant="title" as="h2">
+          Security Findings
+        </Typography>
         <div className="flex-1" />
 
         <Button variant="outline" size="sm" onClick={() => setGroupByFile(!groupByFile)}>
@@ -395,11 +398,11 @@ export default function SecurityFindings({
       {filteredIssues.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
           <CheckCircleIcon className="h-16 w-16 text-emerald-600 dark:text-emerald-400 mb-4" />
-          <h3 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">
+          <Typography variant="title" as="h3" className="text-emerald-700 dark:text-emerald-300">
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues found`
               : 'No security issues detected'}
-          </h3>
+          </Typography>
           <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
             Your models appear to be secure and ready for deployment.
           </p>

@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -116,7 +117,9 @@ const FrameworkCard = ({
       <CardContent className="pt-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">{FRAMEWORK_NAMES[framework]}</h3>
+            <Typography variant="subtitle" as="h3">
+              {FRAMEWORK_NAMES[framework]}
+            </Typography>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-muted-foreground opacity-70" />

@@ -3,6 +3,7 @@ import { Button } from '@app/components/ui/button';
 import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
@@ -93,7 +94,9 @@ export default function ConfigurationTab({
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold tracking-tight">Select Models</h2>
+        <Typography variant="pageTitle" as="h2" className="tracking-tight">
+          Select Models
+        </Typography>
         <Button variant="outline" onClick={onShowOptions}>
           <SettingsIcon className="h-4 w-4 mr-2" />
           Advanced Options

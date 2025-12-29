@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
+import { Typography } from '@app/components/ui/typography';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
@@ -140,9 +141,14 @@ export default function LauncherPage() {
       {/* Header section */}
       <div className="mb-8 flex w-full max-w-[600px] flex-col items-center sm:mb-10">
         <img src={logoPanda} alt="Promptfoo Logo" className="mb-6 h-16 w-16 lg:h-20 lg:w-20" />
-        <h1 className="mb-6 text-center text-2xl font-light sm:text-3xl md:text-4xl">
+        <Typography
+          variant="pageTitle"
+          weight="light"
+          as="h1"
+          className="mb-6 text-center sm:text-3xl md:text-4xl"
+        >
           Welcome to Promptfoo
-        </h1>
+        </Typography>
 
         <p
           className={cn(
@@ -170,9 +176,11 @@ export default function LauncherPage() {
         <Card className="border border-border bg-transparent p-6">
           <div className="mb-4 flex items-center gap-3">
             <TerminalIcon className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-light">Getting Started</h2>
+            <Typography variant="title" weight="light" as="h2">
+              Getting Started
+            </Typography>
           </div>
-          <p className="mb-4 leading-relaxed text-muted-foreground">
+          <Typography variant="muted" className="mb-4 leading-relaxed">
             This app will proxy requests to <code className="text-sm">localhost:15500</code> by
             default. You can also visit{' '}
             <a
@@ -184,7 +192,7 @@ export default function LauncherPage() {
               localhost:15500
             </a>{' '}
             directly.
-          </p>
+          </Typography>
           <ol className="list-decimal space-y-4 pl-5">
             <li className="leading-relaxed">
               Check our{' '}
@@ -198,7 +206,9 @@ export default function LauncherPage() {
               </a>
             </li>
             <li className="leading-relaxed">
-              <span className="mb-3 block text-muted-foreground">Run one of these commands:</span>
+              <Typography variant="muted" as="span" className="mb-3 block">
+                Run one of these commands:
+              </Typography>
               <div className="rounded-md bg-muted/50 p-4 font-mono text-sm leading-relaxed dark:bg-muted/20">
                 <div className="mb-1 text-muted-foreground">
                   # If you have promptfoo installed globally:
@@ -216,12 +226,14 @@ export default function LauncherPage() {
         <Card className="border border-border bg-transparent p-6">
           <div className="mb-4 flex items-center gap-3">
             <GlobeIcon className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-light">Using Safari or Brave?</h2>
+            <Typography variant="title" weight="light" as="h2">
+              Using Safari or Brave?
+            </Typography>
           </div>
-          <p className="mb-4 leading-relaxed text-muted-foreground">
+          <Typography variant="muted" className="mb-4 leading-relaxed">
             Safari and Brave block access to localhost by default. You need to install mkcert and
             generate self-signed certificate:
-          </p>
+          </Typography>
           <ol className="list-decimal space-y-4 pl-5">
             <li className="leading-relaxed">
               Follow the{' '}
@@ -235,19 +247,22 @@ export default function LauncherPage() {
               </a>
             </li>
             <li className="leading-relaxed">
-              Run <code className="text-sm">mkcert -install</code>
+              Run{' '}
+              <Typography variant="code" as="code">
+                mkcert -install
+              </Typography>
             </li>
             <li className="leading-relaxed">Restart your browser</li>
           </ol>
-          <p className="mt-6 border-t border-border pt-4 text-muted-foreground">
+          <Typography variant="muted" className="mt-6 border-t border-border pt-4">
             On Brave you can disable Brave Shields.
-          </p>
+          </Typography>
         </Card>
       </div>
 
       {/* Footer */}
       <div className="max-w-[600px] text-center">
-        <p className="text-muted-foreground/70">
+        <Typography variant="muted" className="opacity-70">
           Still experiencing issues? Feel free to{' '}
           <a
             href="https://github.com/promptfoo/promptfoo/issues"
@@ -266,7 +281,7 @@ export default function LauncherPage() {
           >
             Discord
           </a>
-        </p>
+        </Typography>
       </div>
     </div>
   );

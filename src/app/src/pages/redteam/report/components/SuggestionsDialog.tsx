@@ -8,6 +8,7 @@ import {
 } from '@app/components/ui/collapsible';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
@@ -230,9 +231,9 @@ export default function SuggestionsDialog({
           {suggestions.map((suggestion, index) => (
             <Card key={index}>
               <CardContent className="pt-6">
-                <h3 className="mb-2 text-lg font-semibold">
+                <Typography variant="subtitle" as="h3" className="mb-2">
                   {getActionTitle(suggestion.action || '')}
-                </h3>
+                </Typography>
                 {getExplanation(suggestion.type)}
                 {suggestion.action === 'note' ? (
                   <p>{suggestion.value}</p>

@@ -22,6 +22,7 @@ import { Label } from '@app/components/ui/label';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
@@ -603,7 +604,9 @@ export default function Review({
           />
         </div>
 
-        <h2 className="mb-6 text-xl font-semibold">Configuration Summary</h2>
+        <Typography variant="title" as="h2" className="mb-6">
+          Configuration Summary
+        </Typography>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Plugins Card */}
@@ -850,7 +853,9 @@ export default function Review({
             <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Info className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Application Details</h3>
+                <Typography variant="subtitle" as="h3">
+                  Application Details
+                </Typography>
                 {config.purpose && (
                   <Badge
                     variant="outline"
@@ -978,7 +983,9 @@ export default function Review({
 
                 {config.testGenerationInstructions && (
                   <div className="mt-4">
-                    <h4 className="mb-2 text-sm font-medium">Test Generation Instructions</h4>
+                    <Typography variant="bodyMedium" as="h4" className="mb-2">
+                      Test Generation Instructions
+                    </Typography>
                     <p
                       onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
                       className={cn(
@@ -1009,7 +1016,9 @@ export default function Review({
             <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Sliders className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Advanced Configuration</h3>
+                <Typography variant="subtitle" as="h3">
+                  Advanced Configuration
+                </Typography>
                 <Badge variant="outline" className="text-xs">
                   Optional
                 </Badge>
@@ -1037,7 +1046,9 @@ export default function Review({
             <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Play className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Run Options</h3>
+                <Typography variant="subtitle" as="h3">
+                  Run Options
+                </Typography>
               </div>
               <ChevronDown
                 className={cn(
@@ -1080,13 +1091,17 @@ export default function Review({
 
         <Separator className="my-8" />
 
-        <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>
+        <Typography variant="title" as="h2" className="mb-6">
+          Run Your Scan
+        </Typography>
 
         <EstimationsDisplay config={config} />
 
         <Card className="p-6">
           <div className="mb-8">
-            <h3 className="mb-2 text-lg font-semibold">Option 1: Save and Run via CLI</h3>
+            <Typography variant="subtitle" as="h3" className="mb-2">
+              Option 1: Save and Run via CLI
+            </Typography>
             <p className="mb-4 text-muted-foreground">
               Save your configuration and run it from the command line. Full control over the
               evaluation process, good for larger scans:
@@ -1107,7 +1122,9 @@ export default function Review({
           <Separator className="my-6" />
 
           <div>
-            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
+            <Typography variant="subtitle" as="h3" className="mb-2">
+              Option 2: Run Directly in Browser
+            </Typography>
             <p className="mb-4 text-muted-foreground">
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:

@@ -13,6 +13,7 @@ import {
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { CloudUpload, Eye, Plus, Trash2, Upload, X } from 'lucide-react';
@@ -389,7 +390,9 @@ export default function CustomIntentSection() {
             onClick={() => document.getElementById('file-upload-input')?.click()}
           >
             <CloudUpload className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Drop files here or click to upload</h3>
+            <Typography variant="subtitle" as="h3">
+              Drop files here or click to upload
+            </Typography>
             <p className="mt-1 text-sm text-muted-foreground">Supports .csv and .json files</p>
             <div className="mt-3 flex justify-center gap-2">
               <Badge variant="outline">CSV</Badge>

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@app/components/ui/card';
 import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
@@ -115,8 +116,10 @@ export default function ModelAuditSetupPage() {
               <SettingsIcon className="h-7 w-7 text-primary" />
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold tracking-tight">Model Audit Setup</h1>
-              <p className="text-sm text-muted-foreground mt-1.5">
+              <Typography variant="pageTitle" as="h1" weight="bold" className="tracking-tight">
+                Model Audit Setup
+              </Typography>
+              <Typography variant="muted" className="mt-1.5">
                 Configure and run a security scan on ML models.{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/model-audit/"
@@ -126,7 +129,7 @@ export default function ModelAuditSetupPage() {
                 >
                   Learn more
                 </a>
-              </p>
+              </Typography>
             </div>
 
             {/* Installation Status */}
@@ -212,7 +215,9 @@ export default function ModelAuditSetupPage() {
             {/* Inline Results */}
             {scanResults && (
               <div className="mt-10 pt-8 border-t">
-                <h2 className="text-2xl font-semibold tracking-tight mb-6">Scan Results</h2>
+                <Typography variant="pageTitle" as="h2" className="tracking-tight mb-6">
+                  Scan Results
+                </Typography>
                 <ResultsTab
                   scanResults={scanResults}
                   onShowFilesDialog={() => setShowFilesDialog(true)}

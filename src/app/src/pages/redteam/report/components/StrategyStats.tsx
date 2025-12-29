@@ -5,6 +5,7 @@ import { Card, CardContent } from '@app/components/ui/card';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Typography } from '@app/components/ui/typography';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
@@ -199,24 +200,24 @@ const DrawerContent = ({
 
   return (
     <div className="p-6">
-      <h2 className="mb-2 text-xl font-semibold">
+      <Typography variant="title" as="h2" className="mb-2">
         {displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
           selectedStrategy}
-      </h2>
-      <p className="mb-6 text-sm text-muted-foreground">
+      </Typography>
+      <Typography variant="muted" className="mb-6">
         {subCategoryDescriptions[selectedStrategy as keyof typeof subCategoryDescriptions] || ''}
-      </p>
+      </Typography>
 
       {/* Stats Grid */}
       <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4">
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
             <p className="text-2xl font-bold text-primary">{selectedStrategyStats.total}</p>
-            <p className="text-sm text-muted-foreground">Total Attempts</p>
+            <Typography variant="muted">Total Attempts</Typography>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-destructive">{selectedStrategyStats.pass}</p>
-            <p className="text-sm text-muted-foreground">Flagged Attempts</p>
+            <Typography variant="muted">Flagged Attempts</Typography>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold">
@@ -228,13 +229,15 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <p className="text-sm text-muted-foreground">Success Rate</p>
+            <Typography variant="muted">Success Rate</Typography>
           </div>
         </div>
       </div>
 
       {/* Plugin Performance Table */}
-      <h3 className="mb-3 text-lg font-semibold">Attack Performance by Plugin</h3>
+      <Typography variant="subtitle" as="h3" className="mb-3">
+        Attack Performance by Plugin
+      </Typography>
       <div className="mb-6 overflow-hidden rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
@@ -444,7 +447,9 @@ const StrategyStats = ({
         className="break-inside-avoid print:break-inside-avoid print:break-after-page"
       >
         <CardContent className="p-6">
-          <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
+          <Typography variant="title" as="h2" className="mb-4">
+            Attack Methods
+          </Typography>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
             {strategies.map(([strategy, { total, failCount }]) => {
               const asr = calculateAttackSuccessRate(total, failCount);
@@ -465,14 +470,14 @@ const StrategyStats = ({
                     'hover:bg-muted/50',
                   )}
                 >
-                  <p className="mb-2 font-semibold">
+                  <Typography variant="bodyMedium" className="mb-2">
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
-                  </p>
-                  <p className="mb-4 min-h-[40px] text-sm text-muted-foreground">
+                  </Typography>
+                  <Typography variant="muted" className="mb-4 min-h-[40px]">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
-                  </p>
+                  </Typography>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
                     <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-red-100 dark:bg-red-950/30">
@@ -488,9 +493,9 @@ const StrategyStats = ({
                       {formatASRForDisplay(asr)}%
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <Typography variant="small" className="text-muted-foreground">
                     {failCount} / {total} attacks succeeded
-                  </p>
+                  </Typography>
                 </div>
               );
             })}

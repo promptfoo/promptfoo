@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -419,7 +420,9 @@ export default function PluginsTab({
         <div className="min-w-0 flex-1">
           {/* Presets section */}
           <div className="mb-6">
-            <h3 className="mb-4 text-lg font-semibold">Presets</h3>
+            <Typography variant="subtitle" as="h3" className="mb-4">
+              Presets
+            </Typography>
 
             <div className="mb-6 grid auto-rows-fr grid-cols-[repeat(auto-fill,230px)] gap-3">
               {presets.map((preset) => {
@@ -698,9 +701,9 @@ export default function PluginsTab({
         {/* Selected Plugins Sidebar */}
         <div className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto">
           <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="mb-4 text-lg font-semibold">
+            <Typography variant="subtitle" as="h3" className="mb-4">
               Selected Plugins ({selectedPlugins.size})
-            </h3>
+            </Typography>
 
             {selectedPlugins.size === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">

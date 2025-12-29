@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@app/components/ui/card';
+import { Typography } from '@app/components/ui/typography';
 
 interface StepSectionProps {
   stepNumber: number;
@@ -27,8 +28,10 @@ export function StepSection({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold mb-2">{title}</h2>
-        <p className="text-muted-foreground">{description}</p>
+        <Typography variant="pageTitle" as="h2" weight="bold" className="mb-2">
+          {title}
+        </Typography>
+        <Typography variant="muted">{description}</Typography>
       </div>
 
       {/* Guidance */}

@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -218,7 +219,9 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         {/* Only show target type selection after user clicks to reveal it */}
         {showTargetTypeSection && (
           <div className="mt-6 space-y-4">
-            <h2 className="mt-6 text-xl font-bold">Select Target Type</h2>
+            <Typography variant="title" as="h2" weight="bold" className="mt-6">
+              Select Target Type
+            </Typography>
             <p className="text-base">
               Select the type that best matches your target. Don't see what you need? Try 'Custom
               Target' to access{' '}
