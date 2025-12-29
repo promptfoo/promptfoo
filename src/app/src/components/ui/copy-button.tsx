@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@app/lib/utils';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 
 interface CopyButtonProps {
   value: string;
@@ -11,6 +11,7 @@ interface CopyButtonProps {
 
 export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timeout on unmount
@@ -38,6 +39,16 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
       }, 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
+      setFailed(true);
+
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        setFailed(false);
+        timeoutRef.current = null;
+      }, 2000);
     }
   }, [value]);
 
@@ -48,10 +59,12 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
         'p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors',
         className,
       )}
-      aria-label={copied ? 'Copied' : 'Copy'}
+      aria-label={copied ? 'Copied' : failed ? 'Failed to copy' : 'Copy'}
     >
       {copied ? (
         <Check className={cn(iconSize, 'text-emerald-600 dark:text-emerald-400')} />
+      ) : failed ? (
+        <X className={cn(iconSize, 'text-red-600 dark:text-red-400')} />
       ) : (
         <Copy className={iconSize} />
       )}

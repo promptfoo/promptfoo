@@ -86,7 +86,7 @@ describe('CopyButton', () => {
     expect(icon).toHaveClass('h-6', 'w-6');
   });
 
-  it.skip('handles clipboard API errors gracefully', async () => {
+  it('shows failure state when clipboard API fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Override clipboard to make it fail for this test
@@ -113,8 +113,43 @@ describe('CopyButton', () => {
       { timeout: 1000 },
     );
 
-    // Button should not have changed to "Copied" state
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    // Button should show "Failed to copy" state
+    expect(screen.getByRole('button', { name: 'Failed to copy' })).toBeInTheDocument();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('reverts from failure state after 2 seconds', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Override clipboard to make it fail for this test
+    delete (navigator as any).clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error('Clipboard error')),
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    const user = userEvent.setup();
+    render(<CopyButton value="test text" />);
+    const button = screen.getByRole('button', { name: 'Copy' });
+
+    await user.click(button);
+
+    // Wait for failure state
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Failed to copy' })).toBeInTheDocument();
+    });
+
+    // Wait for button to revert to "Copy" after 2 seconds
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     consoleSpy.mockRestore();
   });
