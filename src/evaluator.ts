@@ -50,6 +50,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -1082,6 +1083,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1113,6 +1118,10 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {

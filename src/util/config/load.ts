@@ -38,6 +38,7 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { validateTestProviderReferences } from '../validateTestProviderReferences';
 
 /**
  * Type guard to check if a test case has vars property
@@ -733,6 +734,13 @@ export async function resolveConfigs(
   // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
   validateAssertions(
     testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
+
+  // Validate provider references in tests
+  validateTestProviderReferences(
+    testSuite.tests || [],
+    testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 

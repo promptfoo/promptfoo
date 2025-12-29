@@ -62,6 +62,64 @@ tests:
       difficulty: easy
 ```
 
+### Filtering Tests by Provider
+
+Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
+
+```yaml
+providers:
+  - id: openai:gpt-3.5-turbo
+    label: fast-model
+  - id: openai:gpt-4
+    label: smart-model
+
+tests:
+  # Only run on fast-model
+  - vars:
+      question: 'What is 2 + 2?'
+    providers:
+      - fast-model
+    assert:
+      - type: equals
+        value: '4'
+
+  # Only run on smart-model
+  - vars:
+      question: 'Explain quantum entanglement'
+    providers:
+      - smart-model
+    assert:
+      - type: llm-rubric
+        value: 'Provides accurate physics explanation'
+```
+
+**Matching syntax:**
+
+| Pattern        | Matches                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `fast-model`   | Exact label match                                                    |
+| `openai:gpt-4` | Exact provider ID match                                              |
+| `openai:*`     | Wildcard - any provider starting with `openai:`                      |
+| `openai`       | Legacy prefix - matches `openai:gpt-4`, `openai:gpt-3.5-turbo`, etc. |
+
+**Apply to all tests using `defaultTest`:**
+
+```yaml
+defaultTest:
+  providers:
+    - openai:* # All tests default to OpenAI providers only
+
+tests:
+  - vars:
+      question: 'Simple question'
+  - vars:
+      question: 'Complex question'
+    providers:
+      - smart-model # Override default for this test
+```
+
+Without the `providers` filter, each test runs against all providers, creating a cross-product of tests × providers.
+
 ## External Test Files
 
 For larger test suites, store tests in separate files:

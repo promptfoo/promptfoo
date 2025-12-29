@@ -530,6 +530,12 @@
                           }
                         ]
                       },
+                      "providers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "providerOutput": {
                         "anyOf": [
                           {
@@ -911,6 +917,9 @@
                         "provider": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
                         },
+                        "providers": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providers"
+                        },
                         "providerOutput": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
                         },
@@ -959,6 +968,9 @@
                 },
                 "provider": {
                   "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
+                },
+                "providers": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providers"
                 },
                 "providerOutput": {
                   "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
