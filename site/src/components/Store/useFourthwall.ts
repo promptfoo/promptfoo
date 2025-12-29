@@ -375,8 +375,9 @@ export function stripHtml(html: string): string {
   let result = html;
 
   // Remove script and style tags and their contents first
-  result = result.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  result = result.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  // Pattern handles variants like </script > or </script foo="bar">
+  result = result.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+  result = result.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '');
 
   // Remove all remaining HTML tags (loop handles nested/malformed HTML)
   let previous = '';

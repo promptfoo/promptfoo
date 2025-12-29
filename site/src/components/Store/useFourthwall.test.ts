@@ -44,8 +44,21 @@ describe('stripHtml', () => {
     expect(stripHtml('<p>Safe</p><script>alert("xss")</script><p>Text</p>')).toBe('SafeText');
   });
 
+  it('removes script tags with attributes', () => {
+    expect(stripHtml('<script type="text/javascript">evil()</script>OK')).toBe('OK');
+  });
+
+  it('removes script tags with whitespace in closing tag', () => {
+    // Edge case: </script > with trailing space
+    expect(stripHtml('<script>bad()</script >Safe')).toBe('Safe');
+  });
+
   it('removes style tags and content', () => {
     expect(stripHtml('<style>.red{color:red}</style><p>Text</p>')).toBe('Text');
+  });
+
+  it('removes style tags with whitespace in closing tag', () => {
+    expect(stripHtml('<style>.x{}</style >OK')).toBe('OK');
   });
 
   it('decodes HTML entities', () => {
