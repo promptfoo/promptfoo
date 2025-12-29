@@ -236,8 +236,10 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   try {
     return await readConfig(configPath);
   } catch (error) {
-    // If file doesn't exist, return undefined (same as before)
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    // If file doesn't exist, return undefined
+    // Handle both filesystem errors (ENOENT) and ESM import errors (ERR_MODULE_NOT_FOUND)
+    const errorCode = (error as NodeJS.ErrnoException).code;
+    if (errorCode === 'ENOENT' || errorCode === 'ERR_MODULE_NOT_FOUND') {
       return undefined;
     }
     throw error;
