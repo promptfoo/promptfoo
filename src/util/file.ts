@@ -163,14 +163,14 @@ export function maybeLoadFromExternalFile(
 
   // Original single file logic
   const finalPath = resolvedPath;
-  if (!fs.existsSync(finalPath)) {
-    throw new Error(`File does not exist: ${finalPath}`);
-  }
 
   let contents: string;
   try {
     contents = fs.readFileSync(finalPath, 'utf8');
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`File does not exist: ${finalPath}`);
+    }
     throw new Error(`Failed to read file ${finalPath}: ${error}`);
   }
   if (finalPath.endsWith('.json')) {
