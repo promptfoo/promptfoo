@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -15,7 +16,6 @@ import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/c
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { Plus, Trash2, X } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
-import { NumberInput } from '@app/components/ui/number-input';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {

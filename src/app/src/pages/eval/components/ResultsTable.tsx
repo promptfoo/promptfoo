@@ -33,7 +33,6 @@ import {
 } from '@tanstack/react-table';
 import yaml from 'js-yaml';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';

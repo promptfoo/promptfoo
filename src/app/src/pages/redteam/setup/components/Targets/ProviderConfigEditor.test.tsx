@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -35,7 +35,6 @@ vi.mock('./CommonConfigurationOptions', () => ({
     return <div data-testid="common-config" />;
   },
 }));
-
 
 describe('ProviderConfigEditor', () => {
   describe('validate method', () => {
@@ -279,18 +278,16 @@ describe('ProviderConfigEditor', () => {
     );
 
     rerender(
-      
-        <ProviderConfigEditor
-          provider={validGoProvider}
-          setProvider={mockSetProvider}
-          setError={mockSetError}
-          onValidate={mockOnValidate}
-          onValidationRequest={(validator) => {
-            validateFn = validator;
-          }}
-          providerType="custom"
-        />
-      ,
+      <ProviderConfigEditor
+        provider={validGoProvider}
+        setProvider={mockSetProvider}
+        setError={mockSetError}
+        onValidate={mockOnValidate}
+        onValidationRequest={(validator) => {
+          validateFn = validator;
+        }}
+        providerType="custom"
+      />,
     );
 
     const isValid = validateFn!();

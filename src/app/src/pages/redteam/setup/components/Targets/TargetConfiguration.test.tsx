@@ -1,9 +1,9 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, queryByRole, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, queryByRole, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetConfiguration from './TargetConfiguration';
 
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -57,13 +57,9 @@ vi.mock('../Prompts', () => ({
   default: () => <div data-testid="mock-prompts" />,
 }));
 
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  
-    <TooltipProvider>{children}</TooltipProvider>
-  
+const _AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
 );
-
 
 describe('TargetConfiguration', () => {
   let onNextMock: () => void;

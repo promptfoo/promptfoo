@@ -1,10 +1,10 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders } from '@app/utils/testutils';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -40,13 +40,9 @@ vi.mock('dedent', () => ({
   default: vi.fn((strings: TemplateStringsArray) => strings.join('')),
 }));
 
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  
-    <TooltipProvider>{children}</TooltipProvider>
-  
+const _AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
 );
-
 
 describe('HttpAdvancedConfiguration', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;

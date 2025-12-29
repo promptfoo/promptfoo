@@ -24,7 +24,6 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
   LatestScanSkeleton: () => <div data-testid="loading-skeleton" />,
 }));
 
-
 const createMockScan = (id: string, name: string) => ({
   id,
   createdAt: Date.now(),
@@ -56,9 +55,7 @@ describe('ModelAuditResultLatestPage', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          
-            <ModelAuditResultLatestPage />
-          
+          <ModelAuditResultLatestPage />
         </MemoryRouter>
       </TooltipProvider>,
     );

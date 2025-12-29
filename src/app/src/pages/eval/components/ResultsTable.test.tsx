@@ -1,9 +1,9 @@
 import { act } from 'react';
 
+import { TooltipProvider } from '@app/components/ui';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders } from '@app/utils/testutils';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
@@ -121,7 +121,7 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {

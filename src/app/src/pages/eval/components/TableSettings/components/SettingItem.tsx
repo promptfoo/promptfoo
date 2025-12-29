@@ -47,7 +47,7 @@ const SettingItem = ({
         {component === 'checkbox' ? (
           <Checkbox
             checked={checked}
-            onCheckedChange={(val) => !disabled && onChange(val)}
+            onCheckedChange={(val) => !disabled && onChange(Boolean(val))}
             disabled={disabled}
             aria-labelledby={labelId}
             className="shrink-0"

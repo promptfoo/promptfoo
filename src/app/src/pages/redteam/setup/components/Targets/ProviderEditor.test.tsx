@@ -1,9 +1,8 @@
 import React from 'react';
 
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
 import type { ProviderOptions } from '../../types';

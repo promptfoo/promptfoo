@@ -77,5 +77,6 @@
   animation:
     absoluteMadness 2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite,
     vibrate 0.3s linear infinite;
-  filter: hue-rotate(720deg) brightness(2) contrast(1.5) saturate(300%) drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
+  filter: hue-rotate(720deg) brightness(2) contrast(1.5) saturate(300%)
+    drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
 }

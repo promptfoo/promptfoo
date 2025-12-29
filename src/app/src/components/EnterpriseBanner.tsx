@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { cn } from '@app/lib/utils';

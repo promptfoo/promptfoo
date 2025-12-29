@@ -25,7 +25,6 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
   ResultPageSkeleton: () => <div data-testid="loading-skeleton" />,
 }));
 
-
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -88,11 +87,9 @@ describe('ModelAuditResult', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter initialEntries={[`/model-audit/${scanId}`]}>
-          
-            <Routes>
-              <Route path="/model-audit/:id" element={<ModelAuditResult />} />
-            </Routes>
-          
+          <Routes>
+            <Route path="/model-audit/:id" element={<ModelAuditResult />} />
+          </Routes>
         </MemoryRouter>
       </TooltipProvider>,
     );

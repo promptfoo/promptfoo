@@ -35,7 +35,6 @@ vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
   default: () => <div data-testid="files-dialog" />,
 }));
 
-
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -128,9 +127,7 @@ describe('ModelAuditSetupPage', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          
-            <ModelAuditSetupPage />
-          
+          <ModelAuditSetupPage />
         </MemoryRouter>
       </TooltipProvider>,
     );

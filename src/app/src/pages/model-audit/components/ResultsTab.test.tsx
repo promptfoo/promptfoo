@@ -12,7 +12,6 @@ vi.mock('./ChecksSection', () => ({
 
 const MockedChecksSection = vi.mocked(ChecksSection);
 
-
 describe('ResultsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,11 +30,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // Check heading with count
     expect(screen.getByText(/Findings/i)).toBeInTheDocument();
@@ -68,11 +63,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // All issues should be visible
     expect(screen.getByText('Critical issue')).toBeInTheDocument();
@@ -96,11 +87,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     const rawButton = screen.getByRole('button', { name: /Raw/i });
     await user.click(rawButton);
@@ -125,11 +112,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     expect(MockedChecksSection).toHaveBeenCalledTimes(1);
     expect(MockedChecksSection.mock.calls[0][0]).toMatchObject({
@@ -153,11 +136,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     const filesButton = screen.getByRole('button', { name: /Files/i });
     await user.click(filesButton);
@@ -176,9 +155,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -195,9 +172,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -217,11 +192,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      ,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // Critical and warning should be visible
     expect(screen.getByText('Critical issue')).toBeInTheDocument();

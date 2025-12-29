@@ -8,7 +8,6 @@ import ModelAuditHistory from './ModelAuditHistory';
 
 vi.mock('../model-audit/stores');
 
-
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -71,9 +70,7 @@ describe('ModelAuditHistory', () => {
     return render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          
-            <ModelAuditHistory />
-          
+          <ModelAuditHistory />
         </MemoryRouter>
       </TooltipProvider>,
     );

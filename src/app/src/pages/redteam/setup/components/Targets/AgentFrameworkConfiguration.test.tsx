@@ -1,8 +1,6 @@
-import React from 'react';
-
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -12,7 +10,6 @@ vi.mock('../../../hooks/useTelemetry', () => ({
     recordEvent: vi.fn(),
   }),
 }));
-
 
 describe('AgentFrameworkConfiguration', () => {
   it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', () => {

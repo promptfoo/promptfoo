@@ -11,7 +11,6 @@ vi.mock('./InstallationGuide', () => ({
   default: () => <div data-testid="installation-guide" />,
 }));
 
-
 describe('ConfigurationTab', () => {
   const defaultProps = {
     paths: [],
@@ -33,9 +32,7 @@ describe('ConfigurationTab', () => {
     const initialError = 'An error occurred';
     const { rerender } = render(
       <TooltipProvider delayDuration={0}>
-        
-          <ConfigurationTab {...defaultProps} error={initialError} />
-        
+        <ConfigurationTab {...defaultProps} error={initialError} />
       </TooltipProvider>,
     );
 
@@ -44,9 +41,7 @@ describe('ConfigurationTab', () => {
     await act(() => {
       rerender(
         <TooltipProvider delayDuration={0}>
-          
-            <ConfigurationTab {...defaultProps} error={null} />
-          
+          <ConfigurationTab {...defaultProps} error={null} />
         </TooltipProvider>,
       );
     });
@@ -57,13 +52,11 @@ describe('ConfigurationTab', () => {
   it('should show error state but remain clickable when installationStatus.installed is false', () => {
     render(
       <TooltipProvider delayDuration={0}>
-        
-          <ConfigurationTab
-            {...defaultProps}
-            installationStatus={{ checking: false, installed: false }}
-            paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
-          />
-        
+        <ConfigurationTab
+          {...defaultProps}
+          installationStatus={{ checking: false, installed: false }}
+          paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
+        />
       </TooltipProvider>,
     );
 
@@ -78,9 +71,7 @@ describe('ConfigurationTab', () => {
   it('should render PathSelector', () => {
     render(
       <TooltipProvider delayDuration={0}>
-        
-          <ConfigurationTab {...defaultProps} />
-        
+        <ConfigurationTab {...defaultProps} />
       </TooltipProvider>,
     );
 

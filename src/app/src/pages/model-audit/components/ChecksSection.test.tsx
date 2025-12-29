@@ -100,9 +100,7 @@ describe('ChecksSection', () => {
   });
 
   it('should filter out passed checks when the filter chip is clicked and restore all checks when toggled back', async () => {
-    render(
-      <ChecksSection checks={mockChecks} totalChecks={3} passedChecks={1} failedChecks={1} />,
-    );
+    render(<ChecksSection checks={mockChecks} totalChecks={3} passedChecks={1} failedChecks={1} />);
 
     // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('Insecure Deserialization')).toBeInTheDocument();
