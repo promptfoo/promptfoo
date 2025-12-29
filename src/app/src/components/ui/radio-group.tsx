@@ -1,117 +1,44 @@
 import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
+import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
+import { Circle } from 'lucide-react';
 
-interface RadioGroupContextValue {
-  name: string;
-  value: string;
-  onValueChange: (value: string) => void;
-}
+export interface RadioGroupProps
+  extends React.ComponentProps<typeof RadioGroupPrimitive.Root> {}
 
-const RadioGroupContext = React.createContext<RadioGroupContextValue | null>(null);
-
-function useRadioGroup() {
-  const context = React.useContext(RadioGroupContext);
-  if (!context) {
-    throw new Error('RadioGroupItem must be used within a RadioGroup');
-  }
-  return context;
-}
-
-export interface RadioGroupProps extends React.HTMLAttributes<HTMLDivElement> {
-  value?: string;
-  defaultValue?: string;
-  onValueChange?: (value: string) => void;
-  name?: string;
-}
-
-function RadioGroup({
-  className,
-  value,
-  defaultValue,
-  onValueChange,
-  name,
-  children,
-  ...props
-}: RadioGroupProps) {
-  const generatedName = React.useId();
-  const [internalValue, setInternalValue] = React.useState(defaultValue ?? '');
-
-  const currentValue = value ?? internalValue;
-
-  const handleValueChange = React.useCallback(
-    (newValue: string) => {
-      if (value === undefined) {
-        setInternalValue(newValue);
-      }
-      onValueChange?.(newValue);
-    },
-    [value, onValueChange],
-  );
-
+function RadioGroup({ className, ref, ...props }: RadioGroupProps) {
   return (
-    <RadioGroupContext.Provider
-      value={{
-        name: name ?? generatedName,
-        value: currentValue,
-        onValueChange: handleValueChange,
-      }}
-    >
-      <div role="radiogroup" className={cn('grid gap-2', className)} {...props}>
-        {children}
-      </div>
-    </RadioGroupContext.Provider>
+    <RadioGroupPrimitive.Root
+      ref={ref}
+      className={cn('grid gap-2', className)}
+      {...props}
+    />
   );
 }
 
 export interface RadioGroupItemProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
-  value: string;
-}
+  extends React.ComponentProps<typeof RadioGroupPrimitive.Item> {}
 
-function RadioGroupItem({
-  className,
-  value,
-  id,
-  disabled,
-  children,
-  ...props
-}: RadioGroupItemProps) {
-  const { name, value: groupValue, onValueChange } = useRadioGroup();
-  const isChecked = groupValue === value;
-
+function RadioGroupItem({ className, ref, ...props }: RadioGroupItemProps) {
   return (
-    <label htmlFor={id} className="relative inline-flex items-center gap-2 cursor-pointer">
-      <input
-        type="radio"
-        id={id}
-        name={name}
-        value={value}
-        checked={isChecked}
-        disabled={disabled}
-        className="peer sr-only"
-        onChange={() => onValueChange(value)}
-        {...props}
-      />
-      <div
-        className={cn(
-          'aspect-square h-4 w-4 shrink-0 rounded-full border border-border',
-          'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2',
-          'peer-disabled:cursor-not-allowed peer-disabled:opacity-50',
-          'hover:border-primary/50 hover:bg-muted/50',
-          'transition-colors',
-          isChecked && 'border-primary',
-          className,
-        )}
-      >
-        {isChecked && (
-          <span className="absolute inset-0 flex items-center justify-center">
-            <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-          </span>
-        )}
-      </div>
-      {children && <span>{children}</span>}
-    </label>
+    <RadioGroupPrimitive.Item
+      ref={ref}
+      className={cn(
+        'aspect-square h-4 w-4 shrink-0 rounded-full border border-border cursor-pointer',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        'data-[state=checked]:border-primary',
+        'hover:border-primary/50 hover:bg-muted/50',
+        'transition-colors',
+        className,
+      )}
+      {...props}
+    >
+      <RadioGroupPrimitive.Indicator className="flex items-center justify-center">
+        <Circle className="h-2.5 w-2.5 fill-primary text-primary" />
+      </RadioGroupPrimitive.Indicator>
+    </RadioGroupPrimitive.Item>
   );
 }
 

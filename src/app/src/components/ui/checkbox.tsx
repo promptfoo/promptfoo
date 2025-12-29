@@ -1,69 +1,69 @@
 import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
+import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import { Check, Minus } from 'lucide-react';
 
 export interface CheckboxProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
+  extends Omit<React.ComponentProps<typeof CheckboxPrimitive.Root>, 'onChange'> {
   indeterminate?: boolean;
-  ref?: React.Ref<HTMLInputElement>;
-  onCheckedChange?: (checked: boolean) => void;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  onChange?: (event: { target: { checked: boolean } }) => void;
 }
 
 function Checkbox({
   className,
   indeterminate,
   checked,
-  ref,
   onCheckedChange,
   onChange,
+  onClick,
+  ref,
   ...props
 }: CheckboxProps) {
-  const innerRef = React.useRef<HTMLInputElement>(null);
-  const resolvedRef = (ref as React.RefObject<HTMLInputElement>) || innerRef;
-
-  React.useEffect(() => {
-    if (resolvedRef.current) {
-      resolvedRef.current.indeterminate = indeterminate ?? false;
-    }
-  }, [resolvedRef, indeterminate]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange?.(e);
-    onCheckedChange?.(e.target.checked);
+  // Handle both onCheckedChange and onChange callbacks
+  const handleCheckedChange = (newChecked: boolean | 'indeterminate') => {
+    const isChecked = newChecked === true;
+    onCheckedChange?.(newChecked);
+    onChange?.({ target: { checked: isChecked } });
   };
 
+  // Stop propagation to prevent double-toggle in tables
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    onClick?.(e);
+  };
+
+  // Radix uses 'indeterminate' as a checked value
+  const checkedValue = indeterminate ? 'indeterminate' : checked;
+
   return (
-    <label className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
-      <input
-        type="checkbox"
-        ref={resolvedRef}
-        checked={checked}
-        className="peer sr-only"
-        onChange={handleChange}
-        {...props}
-      />
-      <div
-        className={cn(
-          'relative h-4 w-4 shrink-0 rounded border border-border cursor-pointer',
-          'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2',
-          'peer-disabled:cursor-not-allowed peer-disabled:opacity-50',
-          'peer-checked:bg-primary peer-checked:border-primary peer-checked:text-primary-foreground',
-          'hover:border-primary/50 hover:bg-muted/50',
-          'peer-checked:hover:bg-primary/90',
-          'transition-colors',
-          indeterminate && 'bg-primary border-primary text-primary-foreground',
-          className,
+    <CheckboxPrimitive.Root
+      ref={ref}
+      checked={checkedValue}
+      onCheckedChange={handleCheckedChange}
+      onClick={handleClick}
+      className={cn(
+        'peer h-4 w-4 shrink-0 rounded border border-border cursor-pointer',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        'data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground',
+        'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:text-primary-foreground',
+        'hover:border-primary/50 hover:bg-muted/50',
+        'data-[state=checked]:hover:bg-primary/90',
+        'data-[state=indeterminate]:hover:bg-primary/90',
+        'transition-colors',
+        className,
+      )}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator className="flex items-center justify-center">
+        {indeterminate ? (
+          <Minus className="h-3 w-3" />
+        ) : (
+          <Check className="h-3 w-3" />
         )}
-      >
-        {(indeterminate || checked) && (
-          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            {indeterminate ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-          </span>
-        )}
-      </div>
-    </label>
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
   );
 }
 

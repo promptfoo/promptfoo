@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { Check, Copy } from 'lucide-react';
@@ -11,12 +11,31 @@ interface CopyButtonProps {
 
 export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        timeoutRef.current = null;
+      }, 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
     }
