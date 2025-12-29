@@ -34,6 +34,7 @@ const PylonChat = () => {
           app_id: 'f8db82c2-b988-49b8-815a-c3c095722397',
           email: userContext.email,
           name: userContext.email,
+          ...(userContext.pylonEmailHash && { email_hash: userContext.pylonEmailHash }),
         },
       };
     } else {
@@ -43,7 +44,7 @@ const PylonChat = () => {
         },
       };
     }
-  }, [userContext?.email, userContext?.isLoading]);
+  }, [userContext?.email, userContext?.isLoading, userContext?.pylonEmailHash]);
 
   return null;
 };
