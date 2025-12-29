@@ -44,9 +44,13 @@ export function getLogFiles(logDir: string): LogFileInfo[] {
         path: filePath,
         mtime: stat.mtime,
       });
-    } catch {
+    } catch (error) {
       // File may have been deleted between readdir and stat (race condition)
-      // Skip this file and continue with others
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // Skip this file and continue with others
+        continue;
+      }
+      throw error;
     }
   }
 

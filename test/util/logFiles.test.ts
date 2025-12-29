@@ -141,7 +141,9 @@ describe('logFiles utilities', () => {
 
       vi.mocked(fs.statSync).mockImplementation((filePath: unknown) => {
         if ((filePath as string).includes('deleted')) {
-          throw new Error('ENOENT: no such file or directory');
+          const error = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+          error.code = 'ENOENT';
+          throw error;
         }
         return { mtime: new Date() } as fs.Stats;
       });
@@ -152,6 +154,18 @@ describe('logFiles utilities', () => {
       expect(result.map((f) => f.name)).toContain('promptfoo-exists.log');
       expect(result.map((f) => f.name)).toContain('promptfoo-also-exists.log');
       expect(result.map((f) => f.name)).not.toContain('promptfoo-deleted.log');
+    });
+
+    it('should rethrow non-ENOENT errors from statSync', () => {
+      vi.mocked(fs.readdirSync).mockReturnValue([createDirent('promptfoo-test.log')]);
+
+      vi.mocked(fs.statSync).mockImplementation(() => {
+        const error = new Error('Permission denied') as NodeJS.ErrnoException;
+        error.code = 'EACCES';
+        throw error;
+      });
+
+      expect(() => getLogFiles('/logs')).toThrow('Permission denied');
     });
 
     it('should return files with correct mtime', () => {
