@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: RAG eval with column visibility defaults
+
+prompts:
+  - |
+    System: {{system_prompt}}
+
+    Context: {{context}}
+
+    Question: {{question}}
+
+providers:
+  - openai:responses:gpt-5.1-mini
+
+# Hide verbose columns by default in the web viewer
+defaultColumnVisibility:
+  variables: visible
+  hideColumns:
+    - context
+    - system_prompt
+
+tests:
+  - vars:
+      system_prompt: You are a helpful assistant. Answer based only on the provided context.
+      context: |
+        The refund policy allows returns within 30 days of purchase.
+        Items must be unused and in original packaging.
+        Digital products are non-refundable.
+      question: What is the refund policy?
+    assert:
+      - type: contains
+        value: '30 days'
+
+  - vars:
+      system_prompt: You are a helpful assistant. Answer based only on the provided context.
+      context: |
+        Our support team is available Monday through Friday, 9am to 5pm EST.
+        For urgent issues, use the emergency hotline.
+        Average response time is 2 business hours.
+      question: When is support available?
+    assert:
+      - type: icontains
+        value: monday
+
+  - vars:
+      system_prompt: You are a helpful assistant. Answer based only on the provided context.
+      context: |
+        Premium plans include unlimited API calls.
+        Basic plans are limited to 1000 calls per month.
+        Enterprise plans include custom SLAs.
+      question: How many API calls does premium include?
+    assert:
+      - type: icontains
+        value: unlimited
