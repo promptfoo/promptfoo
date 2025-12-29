@@ -51,7 +51,7 @@ export function PromoCard() {
             outlineOffset: '2px',
           },
         }}
-        aria-label="Get PR contributor discount - click for details"
+        aria-label="Open source contributor perks - merge a PR to get a discount code"
       >
         {/* Animated background effect on hover */}
         <Box
@@ -98,11 +98,11 @@ export function PromoCard() {
             sx={{
               color: '#fff',
               fontWeight: 700,
-              fontSize: { xs: '0.85rem', sm: '1rem' },
+              fontSize: { xs: '0.9rem', sm: '1.1rem' },
               letterSpacing: '0.02em',
             }}
           >
-            Secret Discount
+            PRs → Perks
           </Typography>
 
           {/* Subtitle - code style */}
@@ -110,8 +110,8 @@ export function PromoCard() {
             component="code"
             sx={{
               display: 'block',
-              color: 'rgba(255,255,255,0.7)',
-              fontSize: { xs: '0.65rem', sm: '0.75rem' },
+              color: 'rgba(255,255,255,0.75)',
+              fontSize: { xs: '0.6rem', sm: '0.7rem' },
               fontFamily: 'monospace',
               backgroundColor: 'rgba(0,0,0,0.3)',
               px: 1,
@@ -119,19 +119,19 @@ export function PromoCard() {
               borderRadius: 0.5,
             }}
           >
-            if (pr.merged) discount()
+            git push origin swag
           </Box>
 
           {/* CTA hint */}
           <Typography
             variant="caption"
             sx={{
-              color: 'rgba(255,255,255,0.5)',
+              color: 'rgba(255,255,255,0.6)',
               fontSize: { xs: '0.6rem', sm: '0.7rem' },
               mt: 0.5,
             }}
           >
-            {isHovered ? 'click for details' : 'open a PR, get a code'}
+            {isHovered ? 'see how it works' : 'ship code, get merch'}
           </Typography>
         </Box>
 
@@ -141,7 +141,7 @@ export function PromoCard() {
             position: 'absolute',
             top: 8,
             right: 8,
-            backgroundColor: '#e94560',
+            backgroundColor: '#5865F2',
             color: '#fff',
             fontSize: { xs: '0.5rem', sm: '0.6rem' },
             fontWeight: 700,
@@ -152,10 +152,10 @@ export function PromoCard() {
             letterSpacing: '0.05em',
           }}
         >
-          Free*
+          OSS Perk
         </Box>
 
-        {/* Asterisk explanation */}
+        {/* Footer hint */}
         <Typography
           sx={{
             position: 'absolute',
@@ -163,11 +163,11 @@ export function PromoCard() {
             left: 0,
             right: 0,
             textAlign: 'center',
-            color: 'rgba(255,255,255,0.5)',
+            color: 'rgba(255,255,255,0.6)',
             fontSize: '0.5rem',
           }}
         >
-          *requires merged pull request
+          for open source contributors
         </Typography>
       </ButtonBase>
 
