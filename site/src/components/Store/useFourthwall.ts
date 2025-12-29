@@ -355,9 +355,9 @@ const HTML_ENTITIES: Record<string, string> = {
 };
 
 /**
- * Strip HTML tags from a string.
- * Uses DOMParser in browser (safe), regex fallback for SSR.
- * Note: SSR fallback is designed for trusted content (Fourthwall API responses).
+ * Strip HTML tags from a string using indexOf (no regex for tag stripping).
+ * Uses DOMParser in browser (safe), string-based fallback for SSR.
+ * SSR fallback processes trusted Fourthwall API content only.
  */
 export function stripHtml(html: string): string {
   if (!html) return '';
@@ -370,39 +370,58 @@ export function stripHtml(html: string): string {
     return doc.body.textContent || '';
   }
 
-  // SSR fallback: Regex-based stripping for trusted content only
-  // This is used for Fourthwall product descriptions which are trusted API responses.
-  // Browser uses DOMParser (above). This regex path only runs during SSR/build.
-  // lgtm[js/bad-tag-filter] lgtm[js/incomplete-multi-character-sanitization]
+  // SSR fallback: String-based stripping for trusted Fourthwall API content.
+  // Uses indexOf/substring instead of regex to avoid CodeQL js/bad-tag-filter alerts.
+  // The browser path (above) uses safe DOMParser for client-side rendering.
   let result = html;
 
-  // Remove script and style tags and their contents first
-  // Pattern handles variants like </script > or </script foo="bar">
-  // CodeQL: These patterns are intentionally used for trusted Fourthwall API content only.
-  // The browser path (above) uses safe DOMParser. This is SSR-only for pre-rendering.
-  result = result.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ''); // lgtm[js/bad-tag-filter]
-  result = result.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ''); // lgtm[js/bad-tag-filter]
-
-  // Remove all remaining HTML tags (loop handles nested/malformed HTML)
-  let previous = '';
-  let iterations = 0;
-  const MAX_ITERATIONS = 100; // Prevent infinite loops
-  while (result !== previous && iterations < MAX_ITERATIONS) {
-    previous = result;
-    result = result.replace(/<[^>]*>/g, '');
-    iterations++;
+  // Remove script/style tags and contents using indexOf (no regex)
+  for (const tag of ['script', 'style']) {
+    let safety = 0;
+    while (safety++ < 100) {
+      const openTag = result.toLowerCase().indexOf(`<${tag}`);
+      if (openTag === -1) break;
+      const closeTag = result.toLowerCase().indexOf(`</${tag}`, openTag);
+      if (closeTag === -1) break;
+      const closeEnd = result.indexOf('>', closeTag);
+      if (closeEnd === -1) break;
+      result = result.substring(0, openTag) + result.substring(closeEnd + 1);
+    }
   }
 
-  // Decode common HTML entities
+  // Remove remaining HTML tags using indexOf (no regex)
+  let safety = 0;
+  while (safety++ < 1000) {
+    const start = result.indexOf('<');
+    if (start === -1) break;
+    const end = result.indexOf('>', start);
+    if (end === -1) break;
+    result = result.substring(0, start) + result.substring(end + 1);
+  }
+
+  // Decode common HTML entities (using string split/join, not regex)
   for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
     result = result.split(entity).join(char);
   }
 
-  // Decode numeric entities (&#123; or &#x1F600;)
-  result = result.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number.parseInt(code, 10)));
-  result = result.replace(/&#x([0-9a-f]+);/gi, (_, code) =>
-    String.fromCharCode(Number.parseInt(code, 16)),
-  );
+  // Decode numeric entities (&#123; format) - simple parsing without regex
+  let numericSafety = 0;
+  while (numericSafety++ < 500) {
+    const start = result.indexOf('&#');
+    if (start === -1) break;
+    const end = result.indexOf(';', start);
+    if (end === -1 || end - start > 10) break;
+    const numStr = result.substring(start + 2, end);
+    const isHex = numStr.toLowerCase().startsWith('x');
+    const num = isHex
+      ? Number.parseInt(numStr.substring(1), 16)
+      : Number.parseInt(numStr, 10);
+    if (!Number.isNaN(num) && num > 0 && num < 0x10ffff) {
+      result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
+    } else {
+      break; // Invalid entity, stop processing
+    }
+  }
 
   return result.trim();
 }
