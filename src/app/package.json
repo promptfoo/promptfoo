@@ -16,7 +16,6 @@
     "test:ci": "vitest run"
   },
   "devDependencies": {
-    "babel-plugin-react-compiler": "^1.0.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@kurkle/color": "^0.4.0",
@@ -41,6 +40,7 @@
     "@vitest/coverage-v8": "^4.0.14",
     "ansi-to-html": "^0.7.2",
     "autoprefixer": "^10.4.23",
+    "babel-plugin-react-compiler": "^1.0.0",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -85,6 +85,8 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
-    "@radix-ui/react-tooltip": "^1.2.8"
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@tanstack/react-virtual": "^3.13.13",
+    "lightningcss": "^1.30.2"
   }
 }

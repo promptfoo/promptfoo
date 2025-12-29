@@ -41,7 +41,7 @@ describe('Textarea', () => {
   it('applies correct default styles', () => {
     render(<Textarea />);
     const textarea = screen.getByRole('textbox');
-    expect(textarea).toHaveClass('min-h-[80px]', 'rounded-md', 'border');
+    expect(textarea).toHaveClass('min-h-[80px]', 'rounded-lg', 'border');
   });
 
   it('forwards ref correctly', () => {
