@@ -4,17 +4,10 @@ import { cn } from '@app/lib/utils';
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
 import { Circle } from 'lucide-react';
 
-export interface RadioGroupProps
-  extends React.ComponentProps<typeof RadioGroupPrimitive.Root> {}
+export interface RadioGroupProps extends React.ComponentProps<typeof RadioGroupPrimitive.Root> {}
 
 function RadioGroup({ className, ref, ...props }: RadioGroupProps) {
-  return (
-    <RadioGroupPrimitive.Root
-      ref={ref}
-      className={cn('grid gap-2', className)}
-      {...props}
-    />
-  );
+  return <RadioGroupPrimitive.Root ref={ref} className={cn('grid gap-2', className)} {...props} />;
 }
 
 export interface RadioGroupItemProps

@@ -142,11 +142,11 @@ describe('ReportSettingsDialogButton', () => {
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    // Custom checkbox uses native input element
+    // Radix UI Checkbox uses data-state attribute instead of checked property
     const checkbox = screen.getByRole('checkbox', {
       name: 'Show percentages on risk cards',
-    }) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
   });
 
   it('should render the "Show percentages on risk cards" checkbox based on the store value (checked)', async () => {
@@ -162,10 +162,10 @@ describe('ReportSettingsDialogButton', () => {
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    // Custom checkbox uses native input element
+    // Radix UI Checkbox uses data-state attribute instead of checked property
     const checkbox = screen.getByRole('checkbox', {
       name: 'Show percentages on risk cards',
-    }) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'checked');
   });
 });

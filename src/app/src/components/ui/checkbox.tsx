@@ -57,11 +57,7 @@ function Checkbox({
       {...props}
     >
       <CheckboxPrimitive.Indicator className="flex items-center justify-center">
-        {indeterminate ? (
-          <Minus className="h-3 w-3" />
-        ) : (
-          <Check className="h-3 w-3" />
-        )}
+        {indeterminate ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

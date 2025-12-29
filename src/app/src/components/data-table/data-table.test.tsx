@@ -219,5 +219,27 @@ describe('DataTable', () => {
       expect(screen.getByText('Item 1')).toBeInTheDocument();
       expect(screen.getByText('Item 25')).toBeInTheDocument();
     });
+
+    it('should reset to first page when page size is changed', async () => {
+      const user = userEvent.setup();
+      const data = generateData(30);
+
+      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+
+      // Go to page 2
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      expect(screen.getByText(/Showing 11 to 20 of 30 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Item 11')).toBeInTheDocument();
+
+      // Change page size
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      // Should be back to first page showing items 1-25
+      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Item 25')).toBeInTheDocument();
+    });
   });
 });
