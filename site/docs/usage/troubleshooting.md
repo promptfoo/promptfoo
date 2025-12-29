@@ -280,14 +280,28 @@ When running evals, you may encounter timeout errors, especially when using loca
 - Handle custom providers or providers that get stuck
 - Prevent runaway costs from long-running evaluations
 
-You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
+### Default timeout behavior
 
-### Quick fixes
+Promptfoo provides layered timeout protection by default:
 
-**Set timeouts for individual requests and total evaluation time:**
+**Per-test timeout (`PROMPTFOO_EVAL_TIMEOUT_MS`):**
+
+- Defaults to 5× the HTTP request timeout (25 minutes with default settings)
+- Allows for multiple retry cycles and multi-turn strategies (e.g., redteam iterative, GOAT, Crescendo)
+- Set to `0` to disable per-test timeouts
+
+**Total evaluation timeout (`PROMPTFOO_MAX_EVAL_TIME_MS`):**
+
+- Automatically calculated based on your eval's size, concurrency, and whether it's a redteam eval
+- Acts as a safety net to prevent evaluations from running indefinitely
+- Set to `0` to disable the total evaluation timeout
+
+### Customizing timeouts
+
+**Override the defaults for stricter limits:**
 
 ```bash
-export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per test
 export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
 
 npx promptfoo eval
