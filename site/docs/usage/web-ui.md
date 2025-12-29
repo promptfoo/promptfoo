@@ -71,13 +71,13 @@ In the column selector dialog:
 
 ### How Preferences Work
 
-Column visibility is resolved in priority order:
+Column visibility is resolved in priority order (highest to lowest):
 
-1. **Config defaults** - Set in `promptfooconfig.yaml`
-2. **Saved preferences** - Stored locally in your browser
+1. **Saved preferences** - Your browser localStorage settings (override everything)
+2. **Config defaults** - Set in `promptfooconfig.yaml` (applies to all viewers)
 3. **Global defaults** - All columns visible
 
-When you hide a column like "context", it stays hidden across all evals that have a "context" variable.
+When you hide a column like "context", it stays hidden across all evals that have a "context" variable. Your personal preferences override config defaults, so you can customize the view even when the config specifies defaults.
 
 ### Config-Based Defaults
 
