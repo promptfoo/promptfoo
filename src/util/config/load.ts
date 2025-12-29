@@ -470,6 +470,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       return sharingConfig ? sharingConfig.sharing : undefined;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
+    defaultColumnVisibility: configs.find((config) => config.defaultColumnVisibility)
+      ?.defaultColumnVisibility,
   };
 
   return combinedConfig;
@@ -573,6 +575,8 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
+    defaultColumnVisibility:
+      fileConfig.defaultColumnVisibility || defaultConfig.defaultColumnVisibility,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
