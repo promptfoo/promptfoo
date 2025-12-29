@@ -35,7 +35,7 @@ function Checkbox({
   };
 
   return (
-    <label className="relative inline-flex items-center">
+    <label className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
       <input
         type="checkbox"
         ref={resolvedRef}
@@ -58,7 +58,7 @@ function Checkbox({
         )}
       >
         {(indeterminate || checked) && (
-          <span className="absolute inset-0 flex items-center justify-center">
+          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
             {indeterminate ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
           </span>
         )}

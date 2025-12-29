@@ -58,6 +58,10 @@ export interface DataTableToolbarProps<TData> {
 
 export interface DataTablePaginationProps<TData> {
   table: Table<TData>;
+  pageIndex: number;
+  pageSize: number;
+  pageCount: number;
+  totalRows: number;
 }
 
 export interface DataTableColumnToggleProps<TData> {

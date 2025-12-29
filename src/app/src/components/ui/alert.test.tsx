@@ -19,19 +19,19 @@ describe('Alert', () => {
   it('renders with warning variant', () => {
     render(<Alert variant="warning">Warning alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-yellow-500/50', 'bg-yellow-50');
+    expect(alert).toHaveClass('border-amber-200', 'bg-amber-50');
   });
 
   it('renders with success variant', () => {
     render(<Alert variant="success">Success alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-green-500/50', 'bg-green-50');
+    expect(alert).toHaveClass('border-emerald-200', 'bg-emerald-50');
   });
 
   it('renders with info variant', () => {
     render(<Alert variant="info">Info alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-blue-500/50', 'bg-blue-50');
+    expect(alert).toHaveClass('border-blue-200', 'bg-blue-50');
   });
 
   it('applies custom className', () => {

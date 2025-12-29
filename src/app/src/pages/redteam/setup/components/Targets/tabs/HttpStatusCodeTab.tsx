@@ -1,8 +1,5 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -29,28 +26,22 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
   selectedTarget,
   updateCustomTarget,
 }) => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
   return (
     <>
-      <Typography variant="body1" sx={{ mb: 2 }}>
+      <p className="mb-4">
         Customize which HTTP status codes are treated as successful responses. By default accepts
         200-299. See{' '}
-        <a href="https://www.promptfoo.dev/docs/providers/http/#error-handling" target="_blank">
+        <a
+          href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
           docs
         </a>{' '}
         for more details.
-      </Typography>
-      <Box
-        sx={{
-          border: 1,
-          borderColor: 'grey.300',
-          borderRadius: 1,
-          position: 'relative',
-          backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-        }}
-      >
+      </p>
+      <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
         <Editor
           value={selectedTarget.config.validateStatus || ''}
           onValueChange={(code) => updateCustomTarget('validateStatus', code)}
@@ -67,7 +58,7 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
             minHeight: '106px',
           }}
         />
-      </Box>
+      </div>
     </>
   );
 };

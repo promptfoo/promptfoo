@@ -2151,6 +2151,90 @@ describe('evaluator', () => {
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('should apply max-score to overall pass/fail and stats', async () => {
+    const maxScoreProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('max-score-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [maxScoreProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'max-score' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results
+      .filter((result) => result.testIdx === 0)
+      .sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].success).toBe(true);
+    expect(results[1].success).toBe(false);
+    expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.errors).toBe(0);
+  });
+
+  it('should apply select-best to overall pass/fail and stats', async () => {
+    // Mock matchesSelectBest to return deterministic results (first wins, second loses)
+    const matchers = await import('../src/matchers');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: false, score: 0, reason: 'Not selected' },
+    ]);
+
+    try {
+      const selectBestProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('select-best-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'hello world',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [selectBestProvider],
+        prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+        tests: [
+          {
+            assert: [
+              { type: 'contains', value: 'hello' },
+              { type: 'select-best', value: 'choose the best one' },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      const results = summary.results
+        .filter((result) => result.testIdx === 0)
+        .sort((a, b) => a.promptIdx - b.promptIdx);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].success).toBe(true);
+      expect(results[1].success).toBe(false);
+      expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.stats.successes).toBe(1);
+      expect(summary.stats.failures).toBe(1);
+      expect(summary.stats.errors).toBe(0);
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
+  });
+
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -2828,6 +2912,95 @@ describe('evaluator', () => {
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
+      }
+    }
+  });
+
+  it('should honor external abortSignal when timeoutMs is set', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+    let abortTimer: NodeJS.Timeout | null = null;
+    const abortController = new AbortController();
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 200);
+
+          abortTimer = setTimeout(() => {
+            abortController.abort();
+          }, 10);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            if (abortTimer) {
+              clearTimeout(abortTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        timeoutMs: 1000,
+        abortSignal: abortController.signal,
+      });
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('aborted'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+      if (abortTimer) {
+        clearTimeout(abortTimer);
       }
     }
   });
