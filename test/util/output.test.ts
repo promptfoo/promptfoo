@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
@@ -26,6 +26,15 @@ vi.mock('fs', async () => {
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
+  };
+});
+
+vi.mock('fs/promises', async () => {
+  return {
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    appendFile: vi.fn(),
+    mkdir: vi.fn(),
   };
 });
 
@@ -107,7 +116,8 @@ describe('writeOutput', () => {
     const shareableUrl = null;
     await writeOutput(outputPath, eval_, shareableUrl);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    // CSV uses writeFile for header (the batched results use appendFile but eval has no results)
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with JSON output', async () => {
@@ -115,7 +125,7 @@ describe('writeOutput', () => {
     const eval_ = new Eval({});
     await writeOutput(outputPath, eval_, null);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with YAML output', async () => {
@@ -123,7 +133,7 @@ describe('writeOutput', () => {
     const eval_ = new Eval({});
     await writeOutput(outputPath, eval_, null);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with XML output', async () => {
@@ -131,7 +141,7 @@ describe('writeOutput', () => {
     const eval_ = new Eval({});
     await writeOutput(outputPath, eval_, null);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with json and txt output', async () => {
@@ -140,7 +150,7 @@ describe('writeOutput', () => {
 
     await writeMultipleOutputs(outputPath, eval_, null);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
   });
 
   it('writeOutput with HTML template escapes special characters', async () => {
