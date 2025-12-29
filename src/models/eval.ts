@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { DEFAULT_QUERY_LIMIT } from '../constants';
+import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
@@ -627,6 +627,16 @@ export default class Eval {
       conditions.push(`success = 1`);
     } else if (mode === 'highlights') {
       conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+    } else if (mode === 'user-rated') {
+      // Check if componentResults array contains an entry with assertion.type = 'human'
+      // Uses EXISTS + json_each for accurate JSON querying (avoids false positives from LIKE)
+      conditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM json_each(grading_result, '$.componentResults')
+          WHERE json_extract(value, '$.assertion.type') = '${HUMAN_ASSERTION_TYPE}'
+        )
+      `);
     }
 
     // Add filters
