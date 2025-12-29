@@ -74,6 +74,13 @@ const allProviderOptions = [
     description: 'Test web apps via browser automation',
     tag: 'app',
   },
+  {
+    value: 'custom',
+    label: 'Custom Provider',
+    description: 'Other custom providers and implementations',
+    tag: 'app',
+    last: true,
+  },
 
   // ============================================
   // AGENT FRAMEWORKS - Popular agent SDKs
@@ -1175,9 +1182,18 @@ export default function ProviderTypeSelector({
                   </div>
                 )}
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleProviderTypeSelect(option.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleProviderTypeSelect(option.value);
+                    }
+                  }}
                   className={cn(
                     'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                     isSelected
                       ? 'border-2 border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',

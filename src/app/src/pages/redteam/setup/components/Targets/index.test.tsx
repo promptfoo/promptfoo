@@ -421,7 +421,7 @@ Content-Type: application/json
       fireEvent.click(changeButton);
 
       const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
+        .getByText('WebSocket')
         .closest('.cursor-pointer');
       fireEvent.click(websocketProviderCard!);
 
@@ -542,7 +542,7 @@ Content-Type: application/json
       fireEvent.click(changeButton);
 
       const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
+        .getByText('WebSocket')
         .closest('.cursor-pointer');
       fireEvent.click(websocketProviderCard!);
 
