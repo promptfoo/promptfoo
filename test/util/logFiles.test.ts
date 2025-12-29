@@ -7,7 +7,8 @@ import { getLogFiles } from '../../src/util/logFiles';
 vi.mock('fs');
 
 // Helper to create mock Dirent objects
-function createDirent(name: string, isFile: boolean = true): fs.Dirent {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createDirent(name: string, isFile: boolean = true): any {
   return {
     name,
     isFile: () => isFile,
@@ -19,7 +20,7 @@ function createDirent(name: string, isFile: boolean = true): fs.Dirent {
     isSocket: () => false,
     parentPath: '/logs',
     path: '/logs',
-  } as fs.Dirent;
+  };
 }
 
 describe('logFiles utilities', () => {
@@ -68,8 +69,8 @@ describe('logFiles utilities', () => {
         'promptfoo-debug-2024-01-03.log': new Date('2024-01-03'),
       };
 
-      vi.mocked(fs.statSync).mockImplementation((filePath: any) => {
-        const fileName = path.basename(filePath);
+      vi.mocked(fs.statSync).mockImplementation((filePath: unknown) => {
+        const fileName = path.basename(filePath as string);
         return { mtime: dates[fileName as keyof typeof dates] } as fs.Stats;
       });
 
@@ -138,8 +139,8 @@ describe('logFiles utilities', () => {
         createDirent('promptfoo-also-exists.log'),
       ]);
 
-      vi.mocked(fs.statSync).mockImplementation((filePath: any) => {
-        if (filePath.includes('deleted')) {
+      vi.mocked(fs.statSync).mockImplementation((filePath: unknown) => {
+        if ((filePath as string).includes('deleted')) {
           throw new Error('ENOENT: no such file or directory');
         }
         return { mtime: new Date() } as fs.Stats;

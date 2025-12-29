@@ -40,9 +40,9 @@ vi.mock('fs/promises', async () => {
   const fsMock = await import('fs');
   return {
     // fsPromises.readFile delegates to fs.readFileSync mock for shared test data
-    readFile: vi.fn((...args: unknown[]) => {
+    readFile: vi.fn((path: string, options?: BufferEncoding | { encoding?: BufferEncoding }) => {
       try {
-        return Promise.resolve(fsMock.readFileSync(...args));
+        return Promise.resolve(fsMock.readFileSync(path, options as BufferEncoding));
       } catch (error) {
         return Promise.reject(error);
       }
