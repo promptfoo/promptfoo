@@ -35,6 +35,23 @@ vi.mock('@apidevtools/json-schema-ref-parser', () => ({
 
 vi.mock('fs');
 
+vi.mock('fs/promises', async () => {
+  // Get the fs mock to share read behavior
+  const fsMock = await import('fs');
+  return {
+    // fsPromises.readFile delegates to fs.readFileSync mock for shared test data
+    readFile: vi.fn((...args: unknown[]) => {
+      try {
+        return Promise.resolve(fsMock.readFileSync(...args));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+  };
+});
+
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
   return {

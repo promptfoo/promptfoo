@@ -124,7 +124,17 @@ export function maybeLoadFromExternalFile(
     // Load all matched files and combine their contents
     const allContents: any[] = [];
     for (const matchedFile of matchedFiles) {
-      const contents = fs.readFileSync(matchedFile, 'utf8');
+      let contents: string;
+      try {
+        contents = fs.readFileSync(matchedFile, 'utf8');
+      } catch (error) {
+        // File may have been deleted between glob and read (race condition)
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
+          continue;
+        }
+        throw error;
+      }
       if (matchedFile.endsWith('.json')) {
         const parsed = JSON.parse(contents);
         if (Array.isArray(parsed)) {
