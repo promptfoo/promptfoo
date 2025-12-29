@@ -412,25 +412,23 @@ export default function ResultsView({
     [head.prompts, currentColumnState.columnVisibility],
   );
 
-  // Note: updateColumnVisibility no longer writes to per-eval columnStates.
-  // Column visibility is now managed through name-based preferences (columnVisibilityByName)
-  // which are set by ColumnSelector's onSaveColumnPreference callback.
-  // Per-eval columnStates are treated as legacy read-only data for backwards compatibility.
-  const updateColumnVisibility = React.useCallback((_columns: string[]) => {
-    // Intentionally empty - column visibility updates are handled by name-based preferences
-    // set through the ColumnSelector's onSaveColumnPreference callback.
-    // This function is kept for API compatibility with ColumnSelector's onChange.
+  // Column visibility onChange handler for ColumnSelector.
+  //
+  // ARCHITECTURE NOTE: This handler is intentionally a no-op.
+  //
+  // Column visibility is managed through two separate callbacks in ColumnSelector:
+  // 1. onSaveColumnPreference - saves individual column visibility by semantic name
+  // 2. onSetGlobalVariableVisibility/onSetGlobalPromptVisibility - sets global defaults
+  //
+  // The onChange prop exists because ColumnSelector was originally designed to emit
+  // the full list of visible columns on every change. Now that we use name-based
+  // preferences with priority resolution, the selected columns are computed from
+  // the preference state rather than being stored directly.
+  //
+  // This empty handler maintains API compatibility with ColumnSelector's onChange prop.
+  const handleColumnSelectorChange = React.useCallback((_event: SelectChangeEvent<string[]>) => {
+    // No-op: visibility is managed via onSaveColumnPreference and global defaults
   }, []);
-
-  const handleChange = React.useCallback(
-    (event: SelectChangeEvent<string[]>) => {
-      const newSelectedColumns =
-        typeof event.target.value === 'string' ? event.target.value.split(',') : event.target.value;
-
-      updateColumnVisibility(newSelectedColumns);
-    },
-    [updateColumnVisibility],
-  );
 
   const handleSaveEvalName = React.useCallback(
     async (newName: string) => {
@@ -916,7 +914,7 @@ export default function ResultsView({
                 <ColumnSelector
                   columnData={columnData}
                   selectedColumns={currentColumnState.selectedColumns}
-                  onChange={handleChange}
+                  onChange={handleColumnSelectorChange}
                   columnVisibilityByName={columnVisibilityByName}
                   onSaveColumnPreference={setColumnVisibilityByName}
                   onClearColumnPreference={clearColumnVisibilityByName}

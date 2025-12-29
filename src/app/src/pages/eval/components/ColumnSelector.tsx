@@ -101,6 +101,12 @@ export const ColumnSelector = ({
   };
 
   const handleShowAll = () => {
+    // Clear all name-based preferences first so global defaults can take effect.
+    // Without this, hidden columns would stay hidden because name-based preferences
+    // have higher priority than global defaults.
+    if (onResetAllPreferences) {
+      onResetAllPreferences();
+    }
     onChange(createSelectEvent(columnData.map((col) => col.value)));
     // When showing all, also update the global defaults for both variables and prompts
     if (onSetGlobalVariableVisibility) {
@@ -157,18 +163,13 @@ export const ColumnSelector = ({
       onChange(createSelectEvent(newSelected));
     }
 
-    // Save the global variable visibility preference
+    // Only update the global variable visibility preference.
+    // We don't create individual column preferences here because:
+    // 1. It pollutes the persistence store with explicit overrides for every variable
+    // 2. The global default is sufficient for group-level visibility control
+    // 3. Individual column preferences should only be created when toggling individual columns
     if (onSetGlobalVariableVisibility) {
       onSetGlobalVariableVisibility(newVariablesVisible);
-    }
-
-    // Also save individual column preferences
-    if (onSaveColumnPreference) {
-      variableColumns.forEach((col) => {
-        if (col.semanticName) {
-          onSaveColumnPreference(col.semanticName, newVariablesVisible);
-        }
-      });
     }
   };
 
