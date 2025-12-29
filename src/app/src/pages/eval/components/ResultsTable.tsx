@@ -19,7 +19,7 @@ import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
