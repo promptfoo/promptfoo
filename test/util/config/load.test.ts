@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -14,6 +15,7 @@ import { type UnifiedConfig } from '../../../src/types/index';
 import {
   combineConfigs,
   dereferenceConfig,
+  maybeReadConfig,
   readConfig,
   resolveConfigs,
 } from '../../../src/util/config/load';
@@ -49,6 +51,7 @@ vi.mock('fs/promises', async () => {
     }),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
+    access: vi.fn(),
   };
 });
 
@@ -1861,6 +1864,115 @@ describe('readConfig', () => {
       prompts: ['{{prompt}}'],
     });
     expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
+  });
+
+  it('should normalize ERR_MODULE_NOT_FOUND to ENOENT when JS config file does not exist', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // Mock importModule to throw ERR_MODULE_NOT_FOUND (what ESM does for missing files)
+    const esmError = new Error("Cannot find module '/path/to/config.js'") as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    // Mock fsPromises.access to throw ENOENT (file doesn't exist)
+    const accessError = new Error('ENOENT') as NodeJS.ErrnoException;
+    accessError.code = 'ENOENT';
+    vi.mocked(fsPromises.access).mockRejectedValue(accessError);
+
+    // Should throw ENOENT, not ERR_MODULE_NOT_FOUND
+    await expect(readConfig('config.js')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('should preserve ERR_MODULE_NOT_FOUND when error is about a missing dependency (file exists)', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // Mock importModule to throw ERR_MODULE_NOT_FOUND for a missing dependency
+    const esmError = new Error(
+      "Cannot find module 'non-existent-package'",
+    ) as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    // Mock fsPromises.access to succeed (file exists, error is about a dependency)
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+
+    // Should throw original ERR_MODULE_NOT_FOUND since the file exists
+    await expect(readConfig('config.js')).rejects.toMatchObject({
+      code: 'ERR_MODULE_NOT_FOUND',
+      message: expect.stringContaining('non-existent-package'),
+    });
+  });
+});
+
+describe('maybeReadConfig', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  it('should return undefined for ENOENT error', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
+    enoentError.code = 'ENOENT';
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw enoentError;
+    });
+
+    const result = await maybeReadConfig('nonexistent.yaml');
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined for normalized ERR_MODULE_NOT_FOUND (missing JS file)', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    const esmError = new Error("Cannot find module '/path/to/config.js'") as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    const accessError = new Error('ENOENT') as NodeJS.ErrnoException;
+    accessError.code = 'ENOENT';
+    vi.mocked(fsPromises.access).mockRejectedValue(accessError);
+
+    const result = await maybeReadConfig('nonexistent.js');
+    expect(result).toBeUndefined();
+  });
+
+  it('should throw for ERR_MODULE_NOT_FOUND when it is about a missing dependency', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    const esmError = new Error(
+      "Cannot find module 'missing-dependency'",
+    ) as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    // File exists, so error is about a dependency
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+
+    await expect(maybeReadConfig('config.js')).rejects.toMatchObject({
+      code: 'ERR_MODULE_NOT_FOUND',
+    });
+  });
+
+  it('should return config when file exists and is valid', async () => {
+    const mockConfig = {
+      providers: ['openai:gpt-4'],
+      prompts: ['Test prompt'],
+    };
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+    const result = await maybeReadConfig('config.yaml');
+    expect(result).toEqual(mockConfig);
   });
 });
 

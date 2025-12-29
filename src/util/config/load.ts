@@ -180,7 +180,30 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     }
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
-    const imported = await importModule(configPath);
+    let imported;
+    try {
+      imported = await importModule(configPath);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      // ESM throws ERR_MODULE_NOT_FOUND when a module doesn't exist.
+      // We normalize to ENOENT only if the config file itself doesn't exist
+      // (not if a dependency inside the config is missing).
+      if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
+        try {
+          await fsPromises.access(configPath);
+          // File exists - the error is about a missing dependency, not the config file
+        } catch {
+          // File doesn't exist - normalize to ENOENT for consistency with YAML/JSON
+          const enoentError = new Error(
+            `ENOENT: no such file or directory, open '${configPath}'`,
+          ) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          enoentError.path = configPath;
+          throw enoentError;
+        }
+      }
+      throw error;
+    }
     const validationResult = UnifiedConfigSchema.safeParse(imported);
     if (!validationResult.success) {
       logger.warn(
@@ -237,9 +260,8 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
     return await readConfig(configPath);
   } catch (error) {
     // If file doesn't exist, return undefined
-    // Handle both filesystem errors (ENOENT) and ESM import errors (ERR_MODULE_NOT_FOUND)
-    const errorCode = (error as NodeJS.ErrnoException).code;
-    if (errorCode === 'ENOENT' || errorCode === 'ERR_MODULE_NOT_FOUND') {
+    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return undefined;
     }
     throw error;
