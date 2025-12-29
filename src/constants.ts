@@ -36,7 +36,7 @@ export const TERMINAL_MAX_WIDTH =
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
-export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+// FILE_METADATA_KEY is exported from ./providers/constants (browser-safe)
 
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
