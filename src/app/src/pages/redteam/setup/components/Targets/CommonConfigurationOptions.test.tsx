@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,9 +11,17 @@ vi.mock('./ExtensionEditor', () => ({
   default: () => <div data-testid="mock-extension-editor" />,
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
+const AllProviders = ({ children }: { children: React.ReactNode }) => {
   const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+  return (
+    <ThemeProvider theme={theme}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </ThemeProvider>
+  );
+};
+
+const renderWithTheme = (ui: React.ReactElement) => {
+  return render(ui, { wrapper: AllProviders });
 };
 
 describe('CommonConfigurationOptions', () => {
@@ -69,6 +78,7 @@ describe('CommonConfigurationOptions', () => {
 
   it('should handle undefined/null values from BaseNumberInput onChange', async () => {
     const updateCustomTarget = vi.fn();
+    // When delay is set, the Collapsible starts expanded, no need to click the button
     const initialTarget: ProviderOptions = { id: 'test-provider', delay: 100, config: {} };
 
     renderWithTheme(
@@ -78,9 +88,7 @@ describe('CommonConfigurationOptions', () => {
       />,
     );
 
-    const accordionButton = screen.getByRole('button', { name: /delay/i });
-    fireEvent.click(accordionButton);
-
+    // The delay input should already be visible since delay is set
     const delayInput = await screen.findByDisplayValue('100');
 
     fireEvent.change(delayInput, { target: { value: '' } });

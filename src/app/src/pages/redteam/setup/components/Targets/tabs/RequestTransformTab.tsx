@@ -1,12 +1,9 @@
 import React from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { callApi } from '@app/utils/api';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
+import { Play } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import TransformTestDialog from '../TransformTestDialog';
@@ -35,9 +32,6 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   updateCustomTarget,
   defaultRequestTransform,
 }) => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
   // Test dialog states
   const [testOpen, setTestOpen] = React.useState(false);
   const [testInput, setTestInput] = React.useState('What is the capital of France?');
@@ -98,22 +92,20 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   return (
     <>
-      <Typography variant="body1" sx={{ mb: 2 }}>
+      <p className="mb-4">
         Transform the prompt into a specific structure required by your API before sending. See{' '}
-        <a href="https://www.promptfoo.dev/docs/providers/http/#request-transform" target="_blank">
+        <a
+          href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
           docs
         </a>{' '}
         for more information.
-      </Typography>
-      <Box sx={{ position: 'relative' }}>
-        <Box
-          sx={{
-            border: 1,
-            borderColor: 'grey.300',
-            borderRadius: 1,
-            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-          }}
-        >
+      </p>
+      <div className="relative">
+        <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
             value={selectedTarget.config?.transformRequest || defaultRequestTransform || ''}
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
@@ -122,7 +114,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
             placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API.
 
                       Example: { messages: [{ role: 'user', content: prompt }] }
-                      
+
                       Leave empty to send the prompt as-is.
                     `}
             style={{
@@ -131,22 +123,17 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
               minHeight: '100px',
             }}
           />
-        </Box>
+        </div>
         <Button
-          variant="outlined"
-          size="small"
-          startIcon={<PlayArrowIcon />}
+          variant="outline"
+          size="sm"
           onClick={() => setTestOpen(true)}
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            zIndex: 1,
-          }}
+          className="absolute right-2 top-2 z-10"
         >
+          <Play className="mr-1 h-4 w-4" />
           Test
         </Button>
-      </Box>
+      </div>
 
       <TransformTestDialog
         open={testOpen}

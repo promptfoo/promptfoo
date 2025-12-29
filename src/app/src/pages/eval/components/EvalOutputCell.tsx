@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
@@ -20,10 +20,10 @@ import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -153,10 +153,34 @@ function EvalOutputCell({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-  const toggleLightbox = (url?: string) => {
-    setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+
+  // Memoized to maintain stable reference across renders, preventing
+  // unnecessary re-renders of markdown components that use this callback.
+  // Uses functional update to avoid stale closure issues.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const toggleLightbox = useCallback((url?: string) => {
+    setLightboxImage(url ?? null);
+    setLightboxOpen((prev) => !prev);
+  }, []);
+
+  // Memoized components object for ReactMarkdown to prevent re-renders.
+  // Creating this inline would cause ReactMarkdown to re-render on every
+  // parent render, even when content hasn't changed.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <img
+          loading="lazy"
+          src={src}
+          alt={alt}
+          onClick={() => toggleLightbox(src)}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
+    }),
+    [toggleLightbox],
+  );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
@@ -342,22 +366,14 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      // Use stable constants and memoized components to prevent unnecessary
+      // re-renders when parent re-renders due to layout changes.
+      // @see https://github.com/promptfoo/promptfoo/issues/969
       node = (
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          // Allow data: URIs for inline images (e.g., from Gemini image generation)
-          urlTransform={(url) => url}
-          components={{
-            img: ({ src, alt }) => (
-              <img
-                loading="lazy"
-                src={src}
-                alt={alt}
-                onClick={() => toggleLightbox(src)}
-                style={{ cursor: 'pointer' }}
-              />
-            ),
-          }}
+          remarkPlugins={REMARK_PLUGINS}
+          urlTransform={IDENTITY_URL_TRANSFORM}
+          components={markdownComponents}
         >
           {normalizedText}
         </ReactMarkdown>
@@ -365,16 +381,13 @@ function EvalOutputCell({
     }
   }
 
-  const handleRating = React.useCallback(
-    (isPass: boolean) => {
-      const newRating = activeRating === isPass ? null : isPass;
-      setActiveRating(newRating);
-      onRating(newRating, undefined, output.gradingResult?.comment);
-    },
-    [activeRating, onRating, output.gradingResult?.comment],
-  );
+  const handleRating = (isPass: boolean) => {
+    const newRating = activeRating === isPass ? null : isPass;
+    setActiveRating(newRating);
+    onRating(newRating, undefined, output.gradingResult?.comment);
+  };
 
-  const handleSetScore = React.useCallback(() => {
+  const handleSetScore = () => {
     const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
       const parsedScore = Number.parseFloat(score);
@@ -384,10 +397,10 @@ function EvalOutputCell({
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
     }
-  }, [onRating, output.score, output.gradingResult?.comment]);
+  };
 
   const [linked, setLinked] = React.useState(false);
-  const handleRowShareLink = React.useCallback(() => {
+  const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
 
@@ -400,13 +413,20 @@ function EvalOutputCell({
       .catch((error) => {
         console.error('Failed to copy link to clipboard:', error);
       });
-  }, [rowIndex]);
+  };
 
   const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    navigator.clipboard.writeText(output.text);
-    setCopied(true);
-  }, [output.text]);
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy output to clipboard:', error);
+      });
+  };
 
   let tokenUsageDisplay;
   let latencyDisplay;
@@ -487,26 +507,18 @@ function EvalOutputCell({
     }
   }
 
-  const cellStyle = useMemo(() => {
-    const base = output.gradingResult?.comment?.startsWith('!highlight')
-      ? {
-          backgroundColor: 'var(--cell-highlight-color)',
-        }
-      : {};
-
-    return {
-      ...base,
-      '--max-image-width': `${maxImageWidth}px`,
-      '--max-image-height': `${maxImageHeight}px`,
-    } as CSSPropertiesWithCustomVars;
-  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+  const cellStyle: CSSPropertiesWithCustomVars = {
+    ...(output.gradingResult?.comment?.startsWith('!highlight')
+      ? { backgroundColor: 'var(--cell-highlight-color)' }
+      : {}),
+    '--max-image-width': `${maxImageWidth}px`,
+    '--max-image-height': `${maxImageHeight}px`,
+  };
 
   // Style for main content area when highlighted
-  const contentStyle = useMemo(() => {
-    return output.gradingResult?.comment?.startsWith('!highlight')
-      ? { color: 'var(--cell-highlight-text-color)' }
-      : {};
-  }, [output.gradingResult?.comment]);
+  const contentStyle = output.gradingResult?.comment?.startsWith('!highlight')
+    ? { color: 'var(--cell-highlight-text-color)' }
+    : {};
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -587,32 +599,27 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
-  const providerOverride = useMemo(() => {
-    const provider = output.testCase?.provider;
-    let testCaseProvider: string | null = null;
-
-    if (!provider) {
-      return null;
-    }
-
-    if (typeof provider === 'string') {
-      testCaseProvider = provider;
-    } else if (typeof provider === 'object' && 'id' in provider) {
-      const id = provider.id;
-      if (typeof id === 'string') {
-        testCaseProvider = id;
-      }
-    }
-
-    if (testCaseProvider) {
-      return (
+  // Compute provider override badge for test case-level model overrides
+  let providerOverride: React.ReactNode = null;
+  const testCaseProvider = output.testCase?.provider;
+  if (testCaseProvider) {
+    const providerId: string | null =
+      typeof testCaseProvider === 'string'
+        ? testCaseProvider
+        : typeof testCaseProvider === 'object' &&
+            testCaseProvider !== null &&
+            'id' in testCaseProvider &&
+            typeof testCaseProvider.id === 'string'
+          ? testCaseProvider.id
+          : null;
+    if (providerId) {
+      providerOverride = (
         <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider pill">{testCaseProvider}</span>
+          <span className="provider pill">{providerId}</span>
         </Tooltip>
       );
     }
-    return null;
-  }, [output]);
+  }
 
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
     ? output.gradingResult.comment.slice('!highlight'.length).trim()

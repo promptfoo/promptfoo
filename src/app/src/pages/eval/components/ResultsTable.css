@@ -153,9 +153,12 @@ table.results-table,
 
 .results-table tr .cell-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
   position: absolute;
   top: 1rem;
+  left: 0;
   right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
@@ -495,7 +498,7 @@ table.results-table,
 .results-table-sticky {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 10;
   transition: transform 0.2s ease-out;
 }
 
@@ -508,7 +511,7 @@ table.results-table,
   top: 8px;
   right: 8px;
   cursor: pointer;
-  z-index: 101;
+  z-index: 11;
   padding: 4px;
   border-radius: 100%;
   background: #eee;
@@ -675,4 +678,236 @@ thead .header-dismiss {
   color: var(--ifm-color-emphasis-700);
   line-height: 1.4;
   white-space: pre-wrap;
+}
+
+/* Compact markdown styling for table cells (Issue #1657)
+ * When "Render Markdown" is enabled, these styles make the rendered
+ * content more compact and suitable for table cell display.
+ */
+
+/* Headings - reduced sizes and margins for compact display */
+.results-table tr .cell h1,
+.results-table tr .cell h2,
+.results-table tr .cell h3,
+.results-table tr .cell h4,
+.results-table tr .cell h5,
+.results-table tr .cell h6 {
+  margin: 0.4em 0 0.2em 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.results-table tr .cell h1 {
+  font-size: 1.15em;
+}
+
+.results-table tr .cell h2 {
+  font-size: 1.1em;
+}
+
+.results-table tr .cell h3 {
+  font-size: 1.05em;
+}
+
+.results-table tr .cell h4,
+.results-table tr .cell h5,
+.results-table tr .cell h6 {
+  font-size: 1em;
+}
+
+/* First heading in cell should have no top margin */
+.results-table tr .cell h1:first-child,
+.results-table tr .cell h2:first-child,
+.results-table tr .cell h3:first-child,
+.results-table tr .cell h4:first-child,
+.results-table tr .cell h5:first-child,
+.results-table tr .cell h6:first-child {
+  margin-top: 0;
+}
+
+/* Paragraphs - reduced margins */
+.results-table tr .cell p {
+  margin: 0.3em 0;
+}
+
+.results-table tr .cell p:first-child {
+  margin-top: 0;
+}
+
+.results-table tr .cell p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lists - compact styling with visible bullets */
+.results-table tr .cell ul,
+.results-table tr .cell ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+  list-style-position: outside;
+}
+
+.results-table tr .cell ul {
+  list-style-type: disc;
+}
+
+.results-table tr .cell ol {
+  list-style-type: decimal;
+}
+
+.results-table tr .cell li {
+  margin: 0.15em 0;
+  display: list-item;
+}
+
+/* Nested lists */
+.results-table tr .cell li ul,
+.results-table tr .cell li ol {
+  margin: 0.1em 0;
+}
+
+/* Blockquotes - compact styling with left border */
+.results-table tr .cell blockquote {
+  margin: 0.4em 0;
+  padding: 0.2em 0 0.2em 0.6em;
+  border-left: 3px solid var(--border-color);
+  color: var(--text-color);
+  opacity: 0.85;
+}
+
+.results-table tr .cell blockquote p {
+  margin: 0.2em 0;
+}
+
+/* Inline code - compact styling */
+.results-table tr .cell code:not(pre code) {
+  font-size: 0.85em;
+  padding: 0.1em 0.3em;
+  background: var(--variable-background-color);
+  border-radius: 3px;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* Code blocks - compact styling */
+.results-table tr .cell pre {
+  margin: 0.4em 0;
+  padding: 0.5em;
+  font-size: 0.85em;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  background: var(--variable-background-color);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.results-table tr .cell pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+/* Horizontal rules */
+.results-table tr .cell hr {
+  margin: 0.5em 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Links in markdown content */
+.results-table tr .cell a {
+  color: var(--link-color, #0969da);
+  text-decoration: none;
+}
+
+.results-table tr .cell a:hover {
+  text-decoration: underline;
+}
+
+[data-theme='dark'] .results-table tr .cell a {
+  color: var(--link-color, #58a6ff);
+}
+
+/* Tables in markdown content */
+.results-table tr .cell table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.9em;
+  width: auto;
+}
+
+.results-table tr .cell th,
+.results-table tr .cell td {
+  border: 1px solid var(--border-color);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.results-table tr .cell th {
+  background: rgba(0, 0, 0, 0.04);
+  font-weight: 600;
+}
+
+.results-table tr .cell tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Dark mode table styles */
+[data-theme='dark'] .results-table tr .cell th {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='dark'] .results-table tr .cell tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Dark mode code blocks - clean, high contrast */
+[data-theme='dark'] .results-table tr .cell pre {
+  background: #0d1117;
+  border: none;
+  border-radius: 6px;
+  color: #e6edf3;
+  padding: 0.75em 1em;
+}
+
+[data-theme='dark'] .results-table tr .cell pre code {
+  color: #e6edf3;
+  text-shadow: none; /* Override Prism.js white text-shadow */
+}
+
+/* Also override for any language-specific code */
+[data-theme='dark'] .results-table tr .cell pre code[class*='language-'],
+[data-theme='dark'] .results-table tr .cell code[class*='language-'] {
+  text-shadow: none;
+}
+
+/* Dark mode inline code - subtle but readable */
+[data-theme='dark'] .results-table tr .cell code:not(pre code) {
+  background: rgba(110, 118, 129, 0.4);
+  border: none;
+  border-radius: 6px;
+  color: #e6edf3;
+  padding: 0.2em 0.4em;
+}
+
+/* Dark mode blockquote - subtle but visible */
+[data-theme='dark'] .results-table tr .cell blockquote {
+  border-left-color: #4a9eff;
+  background: rgba(74, 158, 255, 0.08);
+  color: #b0b0b0;
+}
+
+/* Dark mode table improvements */
+[data-theme='dark'] .results-table tr .cell table {
+  border-color: #3e3e3e;
+}
+
+[data-theme='dark'] .results-table tr .cell th,
+[data-theme='dark'] .results-table tr .cell td {
+  border-color: #3e3e3e;
+}
+
+/* Dark mode strong/bold text */
+[data-theme='dark'] .results-table tr .cell strong {
+  color: #ffffff;
 }

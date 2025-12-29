@@ -117,6 +117,7 @@ export async function doGenerateRedteam(
   const outputPath = options.output || 'redteam.yaml';
   let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
+  let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -172,6 +173,7 @@ export async function doGenerateRedteam(
     redteamConfig = resolved.config.redteam;
     resolvedConfigMetadata = resolved.config.metadata;
     commandLineOptions = resolved.commandLineOptions;
+    resolvedConfig = resolved.config;
 
     await checkCloudPermissions(resolved.config);
 
@@ -396,9 +398,25 @@ export async function doGenerateRedteam(
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
-  const targetLabels = testSuite.providers
-    .map((provider: ApiProvider) => provider?.label)
-    .filter(Boolean);
+  // Extract target IDs from the config providers (targets get rewritten to providers)
+  // IDs are used for retry strategy to match failed tests by target ID
+  const targetIds: string[] =
+    (Array.isArray(resolvedConfig?.providers)
+      ? resolvedConfig.providers
+          .filter((target) => typeof target !== 'function')
+          .map((target) => {
+            if (typeof target === 'string') {
+              return target; // Use the provider string as ID
+            }
+            const providerObj = target as { id?: string };
+            return providerObj.id;
+          })
+          .filter((id): id is string => typeof id === 'string')
+      : []) ?? [];
+
+  logger.debug(
+    `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
+  );
 
   // Extract MCP tools information and add to purpose
   let enhancedPurpose = parsedConfig.data.purpose || '';
@@ -442,7 +460,7 @@ export async function doGenerateRedteam(
         maxConcurrency: config.maxConcurrency,
         delay: config.delay,
         abortSignal: options.abortSignal,
-        targetLabels,
+        targetIds,
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: augmentedTestGenerationInstructions,
       } as SynthesizeOptions);
@@ -489,7 +507,7 @@ export async function doGenerateRedteam(
       maxConcurrency: config.maxConcurrency,
       delay: config.delay,
       abortSignal: options.abortSignal,
-      targetLabels,
+      targetIds,
       showProgressBar: options.progressBar !== false,
       testGenerationInstructions: augmentedTestGenerationInstructions,
     } as SynthesizeOptions);

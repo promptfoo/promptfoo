@@ -241,8 +241,8 @@ describe('StrategySection', () => {
         />,
       );
 
-      // Look for the grid container with special styling
-      const gridContainer = container.querySelector('[class*="MuiBox-root"]');
+      // Look for the grid container with highlighted styling (Tailwind classes)
+      const gridContainer = container.querySelector('.border-primary\\/10');
       expect(gridContainer).toBeInTheDocument();
     });
 

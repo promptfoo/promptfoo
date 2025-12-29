@@ -4,7 +4,7 @@ import fs from 'fs';
 import { glob } from 'glob';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
-import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
+import { FILE_METADATA_KEY } from '../src/constants';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -16,7 +16,6 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { strategyDisplayNames } from '../src/redteam/constants/metadata';
 import {
   type ApiProvider,
   type Prompt,
@@ -420,87 +419,6 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
-  });
-
-  it('runs Simba test cases after other providers during evaluate', async () => {
-    const callOrder: string[] = [];
-
-    const normalProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('normal-provider'),
-      label: 'Normal provider',
-      delay: 0,
-      callApi: vi.fn().mockImplementation(async () => {
-        callOrder.push('normal');
-        return {
-          output: 'normal output',
-          tokenUsage: {
-            total: 1,
-            prompt: 1,
-            completion: 0,
-            cached: 0,
-            numRequests: 1,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          },
-        };
-      }),
-    };
-
-    const runResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: {
-          raw: 'Test prompt',
-          label: strategyDisplayNames.simba,
-        },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 5,
-        namedScores: {},
-      },
-    ];
-
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: vi.fn().mockImplementation(async () => {
-        callOrder.push('simba');
-        return runResults.map((result) => ({ ...result }));
-      }),
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const testSuite: TestSuite = {
-      providers: [normalProvider, agentProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const addResultSpy = vi.spyOn(evalRecord, 'addResult');
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
-
-    expect(callOrder).toEqual(['normal', 'simba']);
-    expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(agentProvider.runSimba as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
-    expect(agentProvider.callApi as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
-    expect(addResultSpy).toHaveBeenCalledTimes(2);
-    expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
-    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -2233,6 +2151,90 @@ describe('evaluator', () => {
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('should apply max-score to overall pass/fail and stats', async () => {
+    const maxScoreProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('max-score-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [maxScoreProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'max-score' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results
+      .filter((result) => result.testIdx === 0)
+      .sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].success).toBe(true);
+    expect(results[1].success).toBe(false);
+    expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.errors).toBe(0);
+  });
+
+  it('should apply select-best to overall pass/fail and stats', async () => {
+    // Mock matchesSelectBest to return deterministic results (first wins, second loses)
+    const matchers = await import('../src/matchers');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: false, score: 0, reason: 'Not selected' },
+    ]);
+
+    try {
+      const selectBestProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('select-best-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'hello world',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [selectBestProvider],
+        prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+        tests: [
+          {
+            assert: [
+              { type: 'contains', value: 'hello' },
+              { type: 'select-best', value: 'choose the best one' },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      const results = summary.results
+        .filter((result) => result.testIdx === 0)
+        .sort((a, b) => a.promptIdx - b.promptIdx);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].success).toBe(true);
+      expect(results[1].success).toBe(false);
+      expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.stats.successes).toBe(1);
+      expect(summary.stats.failures).toBe(1);
+      expect(summary.stats.errors).toBe(0);
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
+  });
+
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -2914,6 +2916,95 @@ describe('evaluator', () => {
     }
   });
 
+  it('should honor external abortSignal when timeoutMs is set', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+    let abortTimer: NodeJS.Timeout | null = null;
+    const abortController = new AbortController();
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 200);
+
+          abortTimer = setTimeout(() => {
+            abortController.abort();
+          }, 10);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            if (abortTimer) {
+              clearTimeout(abortTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        timeoutMs: 1000,
+        abortSignal: abortController.signal,
+      });
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('aborted'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+      if (abortTimer) {
+        clearTimeout(abortTimer);
+      }
+    }
+  });
+
   it('should abort when exceeding maxEvalTimeMs', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -3456,6 +3547,14 @@ describe('isAllowedPrompt', () => {
     expect(isAllowedPrompt(prompt2, ['group1'])).toBe(true);
   });
 
+  it('should return true if allowedPrompts includes a wildcard prefix', () => {
+    expect(isAllowedPrompt(prompt2, ['group1:*'])).toBe(true);
+  });
+
+  it('should return false if a wildcard prefix does not match the prompt label', () => {
+    expect(isAllowedPrompt(prompt3, ['group1:*'])).toBe(false);
+  });
+
   it('should return false if allowedPrompts does not include the prompt label or any matching start label with a colon', () => {
     expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
   });
@@ -3811,189 +3910,6 @@ describe('runEval', () => {
 
     expect(results[0].success).toBe(true);
     expect(results[0].response?.output).toBe('original-provider-test');
-  });
-
-  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const options = {
-      ...defaultOptions,
-      testIdx: 5,
-      promptIdx: 2,
-      evaluateOptions: { maxConcurrency: 7 },
-      concurrency: 99,
-    };
-
-    const results = await runEval({
-      ...options,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.objectContaining({ vars: {} }),
-        options: undefined,
-        concurrency: 7,
-      }),
-    );
-    expect(agentProvider.callApi as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0].promptIdx).toBe(2);
-    expect(results[0].testIdx).toBe(5);
-    expect(results[0].success).toBe(true);
-  });
-
-  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const results = await runEval({
-      ...defaultOptions,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.any(Object),
-        options: undefined,
-        concurrency: DEFAULT_MAX_CONCURRENCY,
-      }),
-    );
-    expect(results[0].promptIdx).toBe(defaultOptions.promptIdx);
-    expect(results[0].testIdx).toBe(defaultOptions.testIdx);
-  });
-
-  it('assigns sequential test indices when runSimba returns multiple results', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-1',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 10,
-        namedScores: {},
-      },
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-2',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 0.5,
-        latencyMs: 20,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const results = await runEval({
-      ...defaultOptions,
-      testIdx: 10,
-      promptIdx: 3,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(results).toHaveLength(2);
-    expect(results[0].testIdx).toBe(10);
-    expect(results[0].promptIdx).toBe(3);
-    expect(results[1].testIdx).toBe(11);
-    expect(results[1].promptIdx).toBe(3);
   });
 
   it('should accumulate token usage correctly', async () => {

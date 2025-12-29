@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCard from './RiskCard';
 import { useReportStore } from './store';
@@ -64,10 +65,9 @@ describe('RiskCard', () => {
       subtitle: 'Analysis of potential vulnerabilities',
       progressValue: 75.5,
     });
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     expect(screen.getByText('Security Risks')).toBeInTheDocument();
-
     expect(screen.getByText('Analysis of potential vulnerabilities')).toBeInTheDocument();
 
     const expectedGaugeText = `${Math.round(props.progressValue)}%`;
@@ -81,7 +81,7 @@ describe('RiskCard', () => {
         { name: 'ssrf', categoryPassed: true, numPassed: 0, numFailed: 0 },
       ],
     });
-    const { container } = render(<RiskCard {...props} />);
+    const { container } = renderWithProviders(<RiskCard {...props} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -92,7 +92,7 @@ describe('RiskCard', () => {
       numTestsPassed: numTestsPassed,
       numTestsFailed: numTestsFailed,
     });
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     expect(screen.getByText(`${numTestsFailed} failed probes`)).toBeInTheDocument();
     expect(
@@ -106,14 +106,14 @@ describe('RiskCard', () => {
       { name: 'ssrf', categoryPassed: false, numPassed: 3, numFailed: 7 },
     ];
 
-    render(<RiskCard {...createTestProps({ testTypes })} />);
+    renderWithProviders(<RiskCard {...createTestProps({ testTypes })} />);
 
     expect(screen.getByText('SQL Injection')).toBeInTheDocument();
     expect(screen.getByText('SSRF Vulnerability')).toBeInTheDocument();
   });
 
   it('should open the RiskCategoryDrawer with the correct category and test data when a test type list item is clicked', () => {
-    render(<RiskCard {...defaultProps} />);
+    renderWithProviders(<RiskCard {...defaultProps} />);
 
     const listItem = screen.getByText('SQL Injection');
     fireEvent.click(listItem);
@@ -144,7 +144,7 @@ describe('RiskCard', () => {
       { name: 'ssrf', categoryPassed: true, numPassed: 7, numFailed: 3 },
     ];
 
-    render(<RiskCard {...createTestProps({ testTypes })} />);
+    renderWithProviders(<RiskCard {...createTestProps({ testTypes })} />);
 
     const expectedSqlInjectionPercentage = `${Math.round((2 / (2 + 8)) * 100)}%`;
     const expectedSsrfPercentage = `${Math.round((7 / (7 + 3)) * 100)}%`;
@@ -153,7 +153,7 @@ describe('RiskCard', () => {
     expect(screen.getByText(expectedSsrfPercentage)).toBeInTheDocument();
   });
 
-  it("should apply 'risk-card-percentage-high' class when percentage is greater than or equal to 0.8 and showPercentagesOnRiskCards is true", () => {
+  it('should apply correct color class when percentage is >= 0.8 and showPercentagesOnRiskCards is true', () => {
     mockUseReportStore.mockReturnValue({
       showPercentagesOnRiskCards: true,
       pluginPassRateThreshold: 1.0,
@@ -165,30 +165,19 @@ describe('RiskCard', () => {
       testTypes: [{ name: 'sql-injection', categoryPassed: true, numPassed: 8, numFailed: 2 }],
     });
 
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     const percentageElement = screen.getByText('80%');
-    expect(percentageElement).toHaveClass('risk-card-percentage-high');
+    // Check for emerald color class (success color)
+    expect(percentageElement.className).toMatch(/text-emerald/);
   });
 
   it('should display "-" when progressValue is NaN', () => {
     const props = createTestProps({
       progressValue: NaN,
     });
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
     expect(screen.getByText('-')).toBeInTheDocument();
-  });
-
-  it('should display the default tooltip when a test type name is not found in subCategoryDescriptions', () => {
-    const props = createTestProps({
-      testTypes: [{ name: 'unknown-test-type', categoryPassed: false, numPassed: 0, numFailed: 1 }],
-    });
-
-    render(<RiskCard {...props} />);
-
-    const tooltipElement = screen.getByLabelText('Click to view details');
-
-    expect(tooltipElement).toBeInTheDocument();
   });
 
   it("should handle strategyStats containing strategies that don't match any testType names", () => {
@@ -198,7 +187,7 @@ describe('RiskCard', () => {
       },
     });
 
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     expect(screen.getByText('Default Title')).toBeInTheDocument();
   });
@@ -211,7 +200,7 @@ describe('RiskCard', () => {
       failuresByPlugin: {},
       passesByPlugin: { [longTestTypeName]: [] },
     });
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     // The component should render the display name from displayNameOverrides: "Disinformation Campaigns"
     const listItem = screen.getByText('Disinformation Campaigns');
@@ -224,7 +213,7 @@ describe('RiskCard', () => {
       passesByPlugin: {},
     });
 
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
     expect(screen.getByText(props.title)).toBeInTheDocument();
     expect(screen.getByText(props.subtitle)).toBeInTheDocument();
@@ -236,15 +225,16 @@ describe('RiskCard', () => {
       failuresByPlugin: {},
       passesByPlugin: { rbac: [] },
     });
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
-    const listItem = screen.getByText('RBAC Implementation').closest('li');
-    fireEvent.click(listItem as Element);
+    // Find the button containing "RBAC Implementation" text
+    const listItem = screen.getByRole('button', { name: /RBAC Implementation/i });
+    fireEvent.click(listItem);
 
     expect(screen.getByTestId('mock-risk-category-drawer')).toBeInTheDocument();
   });
 
-  it('should render CheckCircleIcon with success color when showPercentagesOnRiskCards is false and pass rate is above pluginPassRateThreshold', () => {
+  it('should render CheckCircle icon when showPercentagesOnRiskCards is false and pass rate is above pluginPassRateThreshold', () => {
     mockUseReportStore.mockReturnValue({
       showPercentagesOnRiskCards: false,
       pluginPassRateThreshold: 0.6,
@@ -256,14 +246,14 @@ describe('RiskCard', () => {
       testTypes: [{ name: 'sql-injection', categoryPassed: true, numPassed: 7, numFailed: 3 }],
     });
 
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
-    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    // Look for lucide CheckCircle icon by class (Lucide uses circle-check-big internally)
+    const checkCircleIcon = document.querySelector('.lucide-circle-check-big');
     expect(checkCircleIcon).toBeInTheDocument();
-    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
   });
 
-  it('should render CancelIcon with error color when showPercentagesOnRiskCards is false and pass rate is below pluginPassRateThreshold', () => {
+  it('should render XCircle icon when showPercentagesOnRiskCards is false and pass rate is below pluginPassRateThreshold', () => {
     mockUseReportStore.mockReturnValue({
       showPercentagesOnRiskCards: false,
       pluginPassRateThreshold: 0.8,
@@ -275,14 +265,14 @@ describe('RiskCard', () => {
       testTypes: [{ name: 'sql-injection', categoryPassed: false, numPassed: 4, numFailed: 6 }],
     });
 
-    render(<RiskCard {...props} />);
+    renderWithProviders(<RiskCard {...props} />);
 
-    const cancelIcon = screen.getByTestId('CancelIcon');
-    expect(cancelIcon).toBeInTheDocument();
-    expect(cancelIcon).toHaveClass('MuiSvgIcon-colorError');
+    // Look for lucide XCircle icon by class (Lucide uses circle-x internally)
+    const xCircleIcon = document.querySelector('.lucide-circle-x');
+    expect(xCircleIcon).toBeInTheDocument();
   });
 
-  it('should display CheckCircleIcon when test pass rate equals pluginPassRateThreshold', () => {
+  it('should display CheckCircle icon when test pass rate equals pluginPassRateThreshold', () => {
     const threshold = 0.75;
     mockUseReportStore.mockReturnValue({
       showPercentagesOnRiskCards: false,
@@ -295,14 +285,13 @@ describe('RiskCard', () => {
       { name: 'threshold-test', categoryPassed: true, numPassed: 3, numFailed: 1 },
     ];
 
-    render(<RiskCard {...createTestProps({ testTypes })} />);
+    renderWithProviders(<RiskCard {...createTestProps({ testTypes })} />);
 
-    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    const checkCircleIcon = document.querySelector('.lucide-circle-check-big');
     expect(checkCircleIcon).toBeInTheDocument();
-    expect(checkCircleIcon).toHaveClass('risk-card-icon-passed');
   });
 
-  it('should display CheckCircleIcon with color="success" when pluginPassRateThreshold is 0.5 and pass rate is between 0.5 and 1.0', () => {
+  it('should display CheckCircle icon when pluginPassRateThreshold is 0.5 and pass rate is between 0.5 and 1.0', () => {
     mockUseReportStore.mockReturnValue({
       showPercentagesOnRiskCards: false,
       pluginPassRateThreshold: 0.5,
@@ -312,10 +301,9 @@ describe('RiskCard', () => {
 
     const testTypes = [{ name: 'test-type', categoryPassed: true, numPassed: 3, numFailed: 1 }];
 
-    render(<RiskCard {...createTestProps({ testTypes })} />);
+    renderWithProviders(<RiskCard {...createTestProps({ testTypes })} />);
 
-    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    const checkCircleIcon = document.querySelector('.lucide-circle-check-big');
     expect(checkCircleIcon).toBeInTheDocument();
-    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
   });
 });

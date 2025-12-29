@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
@@ -18,7 +19,7 @@ import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
@@ -33,18 +34,21 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import yaml from 'js-yaml';
-import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
-import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import VariableMarkdownCell from './VariableMarkdownCell';
+import type {
+  CellContext,
+  ColumnDef,
+  ColumnSizingState,
+  VisibilityState,
+} from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -169,7 +173,7 @@ function TableHeader({
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
-                <Link to={`/prompts/?id=${resourceId}`} target="_blank">
+                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank">
                   <OpenInNewIcon fontSize="small" />
                 </Link>
               </span>
@@ -326,6 +330,10 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  // Persist column sizing state to prevent header resize flicker during pagination.
+  // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
 
   /**
    * Reset the pagination state when the filtered results count changes.
@@ -550,7 +558,8 @@ function ResultsTable({
   }, [filters.values]);
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
+    // Use functional update to avoid stale closure over pagination state
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
@@ -560,7 +569,8 @@ function ResultsTable({
   // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
-      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      // Use functional update to avoid stale closure over pagination state
+      setPagination((prev) => ({ pageIndex: 0, pageSize: prev.pageSize }));
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -756,13 +766,11 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
+                // Use memoized VariableMarkdownCell to prevent re-renders when
+                // table layout changes (e.g., column visibility toggles).
+                // @see https://github.com/promptfoo/promptfoo/issues/969
                 const cellContent = renderMarkdown ? (
-                  <MarkdownErrorBoundary fallback={value}>
-                    <TruncatedText
-                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
-                      maxLength={maxTextLength}
-                    />
-                  </MarkdownErrorBoundary>
+                  <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
@@ -1244,8 +1252,10 @@ function ResultsTable({
     pageCount,
     state: {
       columnVisibility,
+      columnSizing,
       pagination,
     },
+    onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
 
@@ -1439,7 +1449,7 @@ function ResultsTable({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
-            zIndex: 1000,
+            zIndex: 20,
             opacity: isFetching ? 1 : 0,
             pointerEvents: isFetching ? 'auto' : 'none',
             transition: 'opacity 0.3s ease-in-out',
@@ -1567,7 +1577,7 @@ function ResultsTable({
         sx={{
           position: 'sticky',
           bottom: 0,
-          zIndex: 1000,
+          zIndex: 10,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
