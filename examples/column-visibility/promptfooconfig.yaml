@@ -10,7 +10,7 @@ prompts:
     Question: {{question}}
 
 providers:
-  - openai:responses:gpt-5.1-mini
+  - openai:gpt-4o-mini
 
 # Hide verbose columns by default in the web viewer
 defaultColumnVisibility:
