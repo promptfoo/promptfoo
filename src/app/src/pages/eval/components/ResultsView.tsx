@@ -938,7 +938,7 @@ export default function ResultsView({
                   onSetGlobalVariableVisibility={(visible) =>
                     setGlobalColumnDefaults({ showAllVariables: visible })
                   }
-                  hasPreferences={Object.keys(columnVisibilityByName).length > 0}
+                  hasPreferences={Object.keys(columnVisibilityByName ?? {}).length > 0}
                 />
                 <Tooltip title="Edit table view settings" placement="bottom">
                   <Button

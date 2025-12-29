@@ -105,17 +105,25 @@ export function resolveColumnVisibility(
   const configHiddenColumns = new Set(configDefaults?.hideColumns ?? []);
   const configShownColumns = new Set(configDefaults?.showColumns ?? []);
 
+  // Ensure columnVisibilityByName is an object (handles undefined/null from tests)
+  const namePrefs = columnVisibilityByName ?? {};
+  // Ensure globalColumnDefaults has proper defaults (handles undefined from tests)
+  const defaults = {
+    showAllVariables: globalColumnDefaults?.showAllVariables ?? true,
+    showAllPrompts: globalColumnDefaults?.showAllPrompts ?? true,
+  };
+
   // Handle description column
   if (hasDescription) {
     allColumns.push('description');
     // Description follows variable visibility rules
     visibility['description'] =
-      columnVisibilityByName['description'] ??
+      namePrefs['description'] ??
       (configHiddenColumns.has('description')
         ? false
         : configShownColumns.has('description')
           ? true
-          : configShowVars && globalColumnDefaults.showAllVariables);
+          : configShowVars && defaults.showAllVariables);
   }
 
   // Handle variable columns
@@ -130,9 +138,9 @@ export function resolveColumnVisibility(
     // 4. Config variables visibility
     // 5. Global default
 
-    if (columnVisibilityByName[varName] !== undefined) {
+    if (namePrefs[varName] !== undefined) {
       // User has a specific preference for this variable name
-      visibility[colId] = columnVisibilityByName[varName];
+      visibility[colId] = namePrefs[varName];
     } else if (configShownColumns.has(varName)) {
       // Config explicitly shows this column
       visibility[colId] = true;
@@ -144,7 +152,7 @@ export function resolveColumnVisibility(
       visibility[colId] = configShowVars;
     } else {
       // Fall back to global default
-      visibility[colId] = globalColumnDefaults.showAllVariables;
+      visibility[colId] = defaults.showAllVariables;
     }
   });
 
@@ -157,7 +165,7 @@ export function resolveColumnVisibility(
     if (configDefaults?.prompts !== undefined) {
       visibility[colId] = configShowPrompts;
     } else {
-      visibility[colId] = globalColumnDefaults.showAllPrompts;
+      visibility[colId] = defaults.showAllPrompts;
     }
   }
 
