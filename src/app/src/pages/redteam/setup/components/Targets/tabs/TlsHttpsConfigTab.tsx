@@ -529,7 +529,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </div>
 
                 <SensitiveTextField
-                  fullWidth
                   label="Keystore Password"
                   placeholder="Enter keystore password"
                   value={selectedTarget.config.tls?.passphrase || ''}
@@ -732,7 +731,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 <SensitiveTextField
-                  fullWidth
                   label="PFX Passphrase"
                   placeholder="Enter passphrase for PFX"
                   value={selectedTarget.config.tls?.passphrase || ''}

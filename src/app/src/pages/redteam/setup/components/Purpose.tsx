@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import Code from '@app/components/Code';
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import { Code } from '@app/components/ui/code';
 import {
   Collapsible,
   CollapsibleContent,

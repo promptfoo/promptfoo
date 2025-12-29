@@ -138,11 +138,7 @@ export function StrategyItem({
         <Checkbox
           checked={isSelected}
           disabled={isDisabled}
-          onCheckedChange={(checked) => {
-            if (checked !== 'indeterminate') {
-              handleToggle();
-            }
-          }}
+          onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
         />
       </div>
