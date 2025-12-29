@@ -118,4 +118,43 @@ describe('CopyButton', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('handles rapid clicks by clearing previous timeouts', async () => {
+    const user = userEvent.setup();
+    render(<CopyButton value="test text" />);
+    const button = screen.getByRole('button', { name: 'Copy' });
+
+    await user.click(button);
+    await user.click(button);
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+      },
+      { timeout: 2500 },
+    );
+  });
+
+  it('clears copy timeout on unmount if copy operation was triggered', async () => {
+    const user = userEvent.setup();
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+
+    const { unmount } = render(<CopyButton value="test text" />);
+    const button = screen.getByRole('button', { name: 'Copy' });
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    });
+
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
 });

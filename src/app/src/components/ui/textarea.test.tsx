@@ -88,4 +88,16 @@ describe('Textarea', () => {
     const textarea = screen.getByRole('textbox');
     expect(textarea).toHaveAttribute('maxLength', '100');
   });
+
+  it('applies border-input class by default and hover:border-primary/50 on hover', async () => {
+    const user = userEvent.setup();
+    render(<Textarea />);
+    const textarea = screen.getByRole('textbox');
+
+    expect(textarea).toHaveClass('border-input');
+
+    await user.hover(textarea);
+
+    expect(textarea).toHaveClass('hover:border-primary/50');
+  });
 });

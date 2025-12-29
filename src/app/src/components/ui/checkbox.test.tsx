@@ -116,4 +116,77 @@ describe('Checkbox', () => {
     expect(checkboxChangeHandler).toHaveBeenCalledTimes(1);
     expect(parentClickHandler).not.toHaveBeenCalled();
   });
+
+  it('renders checkbox with indeterminate state when both indeterminate and checked are true', () => {
+    const { container } = render(<Checkbox indeterminate checked />);
+    const minusIcon = container.querySelector('svg');
+    expect(minusIcon).toBeInTheDocument();
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toHaveAttribute('data-state', 'indeterminate');
+  });
+
+  it('calls both onCheckedChange and onChange when transitioning from indeterminate to checked', async () => {
+    const user = userEvent.setup();
+    const handleCheckedChange = vi.fn();
+    const handleChange = vi.fn();
+    render(
+      <Checkbox indeterminate onCheckedChange={handleCheckedChange} onChange={handleChange} />,
+    );
+    const checkbox = screen.getByRole('checkbox');
+
+    await user.click(checkbox);
+
+    expect(handleCheckedChange).toHaveBeenCalledTimes(1);
+    expect(handleCheckedChange).toHaveBeenCalledWith(true);
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith({ target: { checked: true } });
+
+    expect(handleCheckedChange.mock.invocationCallOrder[0]).toBeLessThan(
+      handleChange.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('renders in unchecked state with no icon when checked=false and indeterminate=false', () => {
+    const { container } = render(<Checkbox checked={false} indeterminate={false} />);
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
+    const icon = container.querySelector('svg');
+    expect(icon).toBeNull();
+  });
+
+  it('does not call onClick when disabled', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<Checkbox disabled onClick={handleClick} />);
+    const checkbox = screen.getByRole('checkbox');
+
+    await user.click(checkbox);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('calls both onClick and onCheckedChange when clicked', async () => {
+    const user = userEvent.setup();
+    const onClickHandler = vi.fn();
+    const onCheckedChangeHandler = vi.fn();
+
+    render(<Checkbox onClick={onClickHandler} onCheckedChange={onCheckedChangeHandler} />);
+    const checkbox = screen.getByRole('checkbox');
+
+    await user.click(checkbox);
+
+    expect(onClickHandler).toHaveBeenCalledTimes(1);
+    expect(onCheckedChangeHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClick prop when clicked', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<Checkbox onClick={handleClick} />);
+    const checkbox = screen.getByRole('checkbox');
+
+    await user.click(checkbox);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
 });
