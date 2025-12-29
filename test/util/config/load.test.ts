@@ -150,12 +150,17 @@ vi.mock('../../../src/providers', async () => {
   };
 });
 
-vi.mock('../../../src/util/templates', () => ({
-  extractVariablesFromTemplate: vi.fn().mockReturnValue([]),
-  getNunjucksEngine: vi.fn().mockReturnValue({
-    renderString: vi.fn().mockImplementation((str) => str),
-  }),
-}));
+vi.mock('../../../src/util/templates', () => {
+  // Create a real nunjucks environment for proper template rendering
+  const nunjucks = require('nunjucks');
+  const env = nunjucks.configure({ autoescape: false });
+  env.addGlobal('env', process.env);
+
+  return {
+    extractVariablesFromTemplate: vi.fn().mockReturnValue([]),
+    getNunjucksEngine: vi.fn().mockReturnValue(env),
+  };
+});
 
 vi.mock('../../../src/prompts', () => ({
   readPrompts: vi.fn().mockImplementation(async (prompts) => {
@@ -1918,5 +1923,279 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: inlineDefaultTest.vars,
       }),
     );
+  });
+});
+
+describe('readConfig with environment variable substitution', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    // Reset path.parse to use actual implementation
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Clean up environment variables
+    delete process.env.TEST_PROMPT_PATH;
+    delete process.env.TEST_PROVIDER_PATH;
+    delete process.env.TEST_ASSERTION_PATH;
+    delete process.env.MY_API_KEY;
+  });
+
+  it('should substitute environment variables in prompts paths', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in providers paths', async () => {
+    process.env.TEST_PROVIDER_PATH = '/custom/providers';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['{{ env.TEST_PROVIDER_PATH }}/custom_provider.js'],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.providers).toEqual(['/custom/providers/custom_provider.js']);
+  });
+
+  it('should substitute environment variables in nested config values', async () => {
+    process.env.MY_API_KEY = 'sk-test-12345';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: [
+        {
+          id: 'openai:gpt-4o',
+          config: {
+            apiKey: '{{ env.MY_API_KEY }}',
+          },
+        },
+      ],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
+  });
+
+  it('should substitute environment variables in assertion paths', async () => {
+    process.env.TEST_ASSERTION_PATH = '/custom/assertions';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          vars: { input: 'test' },
+          assert: [
+            {
+              type: 'python',
+              value: 'file://{{ env.TEST_ASSERTION_PATH }}/custom_assert.py',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.tests as any)[0].assert[0].value).toEqual(
+      'file:///custom/assertions/custom_assert.py',
+    );
+  });
+
+  it('should preserve runtime templates like {{ vars.x }}', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with mixed templates',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+      tests: [
+        {
+          vars: { question: 'What is AI?' },
+          assert: [
+            {
+              type: 'contains',
+              value: '{{ vars.question }}',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Env var should be substituted
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+    // Runtime template should be preserved
+    expect((result.tests as any)[0].assert[0].value).toEqual('{{ vars.question }}');
+  });
+
+  it('should preserve undefined environment variable templates', async () => {
+    // Intentionally NOT setting UNDEFINED_VAR
+    const mockConfig = {
+      description: 'Test config with undefined env var',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.UNDEFINED_VAR }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Undefined env vars should be preserved (not rendered)
+    expect(result.prompts).toEqual(['{{ env.UNDEFINED_VAR }}/prompt.txt']);
+  });
+
+  it('should substitute environment variables with default filter', async () => {
+    // Intentionally NOT setting OPTIONAL_PATH
+    const mockConfig = {
+      description: 'Test config with default filter',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env.OPTIONAL_PATH | default('./prompts') }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Should use default value when env var is not set
+    expect(result.prompts).toEqual(['./prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in JavaScript config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/js/prompts';
+    const mockConfig = {
+      description: 'JS config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect(result.prompts).toEqual(['/js/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in YAML config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/yaml/prompts';
+    const mockConfig = {
+      description: 'YAML config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result.prompts).toEqual(['/yaml/prompts/prompt.txt']);
+  });
+
+  it('should substitute multiple environment variables in a single string', async () => {
+    process.env.TEST_BASE_PATH = '/base';
+    process.env.TEST_SUB_PATH = 'prompts';
+    const mockConfig = {
+      description: 'Test config with multiple env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_BASE_PATH }}/{{ env.TEST_SUB_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/base/prompts/prompt.txt']);
+    delete process.env.TEST_BASE_PATH;
+    delete process.env.TEST_SUB_PATH;
+  });
+
+  it('should substitute environment variables using bracket notation', async () => {
+    process.env['TEST-PATH-WITH-DASHES'] = '/dashed/path';
+    const mockConfig = {
+      description: 'Test config with bracket notation',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env['TEST-PATH-WITH-DASHES'] }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/dashed/path/prompt.txt']);
+    delete process.env['TEST-PATH-WITH-DASHES'];
+  });
+
+  it('should substitute environment variables in defaultTest options', async () => {
+    process.env.TEST_GRADER_PROVIDER = 'openai:gpt-4-turbo';
+    const mockConfig = {
+      description: 'Test config with env vars in defaultTest',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      defaultTest: {
+        options: {
+          provider: '{{ env.TEST_GRADER_PROVIDER }}',
+        },
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.defaultTest as any).options.provider).toEqual('openai:gpt-4-turbo');
+    delete process.env.TEST_GRADER_PROVIDER;
+  });
+
+  it('should substitute environment variables in env config field', async () => {
+    process.env.EXTERNAL_API_KEY = 'external-key-123';
+    const mockConfig = {
+      description: 'Test config with env vars in env field',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      env: {
+        API_KEY: '{{ env.EXTERNAL_API_KEY }}',
+        STATIC_VAR: 'static-value',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.env).toEqual({
+      API_KEY: 'external-key-123',
+      STATIC_VAR: 'static-value',
+    });
+    delete process.env.EXTERNAL_API_KEY;
   });
 });
