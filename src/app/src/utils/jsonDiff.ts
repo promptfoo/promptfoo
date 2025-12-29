@@ -14,11 +14,7 @@ export interface JsonDiff {
  * Recursively compute differences between two JSON values
  * Returns an array of path-based differences
  */
-export function computeJsonDiff(
-  expected: unknown,
-  actual: unknown,
-  path: string = '',
-): JsonDiff[] {
+export function computeJsonDiff(expected: unknown, actual: unknown, path: string = ''): JsonDiff[] {
   const diffs: JsonDiff[] = [];
 
   // Handle null/undefined

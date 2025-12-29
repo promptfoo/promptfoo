@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  computeJsonDiff,
-  formatDiffValue,
-  isJsonAssertion,
-  tryParseJson,
-} from './jsonDiff';
+import { computeJsonDiff, formatDiffValue, isJsonAssertion, tryParseJson } from './jsonDiff';
 import type { GradingResult } from '@promptfoo/types';
 
 describe('computeJsonDiff', () => {

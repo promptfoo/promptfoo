@@ -8,11 +8,7 @@ import {
 } from '@app/components/ui/collapsible';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { cn } from '@app/lib/utils';
-import {
-  computeJsonDiff,
-  formatDiffValue,
-  type JsonDiff,
-} from '@app/utils/jsonDiff';
+import { computeJsonDiff, formatDiffValue, type JsonDiff } from '@app/utils/jsonDiff';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface JsonDiffViewProps {
@@ -153,13 +149,9 @@ function DiffRow({ diff }: { diff: JsonDiff }) {
     <div className="flex flex-wrap items-start gap-x-3 gap-y-1 py-0.5">
       <span className="text-muted-foreground min-w-[100px] shrink-0">{path}</span>
       {type === 'added' ? (
-        <span className="text-green-600 dark:text-green-400">
-          added: {formatDiffValue(actual)}
-        </span>
+        <span className="text-green-600 dark:text-green-400">added: {formatDiffValue(actual)}</span>
       ) : type === 'removed' ? (
-        <span className="text-red-600 dark:text-red-400">
-          removed: {formatDiffValue(expected)}
-        </span>
+        <span className="text-red-600 dark:text-red-400">removed: {formatDiffValue(expected)}</span>
       ) : (
         <>
           <span className="text-red-600 dark:text-red-400">
@@ -177,13 +169,7 @@ function DiffRow({ diff }: { diff: JsonDiff }) {
 /**
  * Renders a unified diff view showing the full JSON with highlighted changes
  */
-function UnifiedDiff({
-  expected,
-  actual,
-}: {
-  expected: unknown;
-  actual: unknown;
-}) {
+function UnifiedDiff({ expected, actual }: { expected: unknown; actual: unknown }) {
   // For the unified view, we'll show the actual JSON with annotations
   const expectedStr = JSON.stringify(expected, null, 2);
   const actualStr = JSON.stringify(actual, null, 2);
@@ -221,8 +207,10 @@ function UnifiedDiff({
           key={index}
           className={cn(
             'px-1 -mx-1',
-            line.type === 'removed' && 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-            line.type === 'added' && 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+            line.type === 'removed' &&
+              'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+            line.type === 'added' &&
+              'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
           )}
         >
           <span className="select-none text-muted-foreground mr-2">
