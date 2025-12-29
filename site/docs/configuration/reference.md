@@ -41,6 +41,7 @@ Here is the main structure of the promptfoo configuration file:
 | extensions                      | string[]                                                                                         | No       | List of [extension files](#extension-hooks) to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                                       |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
+| defaultColumnVisibility         | [DefaultColumnVisibility](#defaultcolumnvisibility)                                              | No       | Default column visibility settings for the web viewer. See [column visibility](/docs/usage/web-ui#column-visibility).                                                                                                           |
 
 ### Test Case
 
@@ -177,6 +178,30 @@ npx promptfoo eval
 # Overrides maxConcurrency to 5
 npx promptfoo eval --max-concurrency 5
 ```
+
+### DefaultColumnVisibility
+
+Configure default column visibility for the web viewer. These defaults apply to all users viewing the eval.
+
+| Property      | Type                    | Description                                              |
+| ------------- | ----------------------- | -------------------------------------------------------- |
+| variables     | `'visible' \| 'hidden'` | Default visibility for all variable columns              |
+| prompts       | `'visible' \| 'hidden'` | Default visibility for all prompt columns                |
+| hideColumns   | `string[]`              | List of column names to hide by default                  |
+| showColumns   | `string[]`              | List of column names to always show (overrides hideColumns) |
+
+#### Example
+
+```yaml title="promptfooconfig.yaml"
+defaultColumnVisibility:
+  variables: visible
+  prompts: visible
+  hideColumns:
+    - context
+    - system_prompt
+```
+
+See [column visibility](/docs/usage/web-ui#column-visibility) for details on how preferences are resolved.
 
 ### AssertionValueFunctionContext
 

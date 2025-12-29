@@ -56,3 +56,54 @@ sharing:
 Or configure via **API Settings** in the viewer's top-right menu.
 
 See [sharing documentation](/docs/usage/sharing) for authentication, enterprise options, and CI/CD setup.
+
+## Column Visibility
+
+The web viewer lets you hide columns to focus on what matters. Your preferences persist across evals with matching column names.
+
+### Quick Actions
+
+In the column selector dialog:
+
+- **Show All** - Display all columns
+- **Variables** - Toggle all variable columns at once
+- **Reset** - Clear saved preferences
+
+### How Preferences Work
+
+Column visibility is resolved in priority order:
+
+1. **Config defaults** - Set in `promptfooconfig.yaml`
+2. **Saved preferences** - Stored locally in your browser
+3. **Global defaults** - All columns visible
+
+When you hide a column like "context", it stays hidden across all evals that have a "context" variable.
+
+### Config-Based Defaults
+
+Set default column visibility in your config:
+
+```yaml title="promptfooconfig.yaml"
+defaultColumnVisibility:
+  # Hide all variables by default
+  variables: hidden
+
+  # Or selectively hide specific columns
+  hideColumns:
+    - context
+    - system_prompt
+
+  # Or show only specific columns (overrides hideColumns)
+  showColumns:
+    - question
+    - expected
+```
+
+| Property      | Type                    | Description                                        |
+| ------------- | ----------------------- | -------------------------------------------------- |
+| `variables`   | `'visible' \| 'hidden'` | Default visibility for all variable columns        |
+| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns          |
+| `hideColumns` | `string[]`              | List of column names to hide by default            |
+| `showColumns` | `string[]`              | List of column names to show (overrides hideColumns) |
+
+Config defaults apply to all users viewing this eval, while browser preferences are personal.
