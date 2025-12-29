@@ -225,6 +225,7 @@ function ResultsTableHeader({
   setStickyHeader: (sticky: boolean) => void;
   zoom: number;
 }) {
+  'use no memo';
   return (
     <table
       className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
@@ -295,6 +296,7 @@ function ResultsTable({
   onFailureFilterToggle,
   zoom,
 }: ResultsTableProps) {
+  'use no memo';
   const {
     evalId,
     table,
@@ -859,7 +861,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
+  }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, config]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -1201,6 +1203,7 @@ function ResultsTable({
     getMetrics,
     getOutput,
     handleRating,
+    head,
     head.prompts,
     maxTextLength,
     metricTotals,
@@ -1243,6 +1246,7 @@ function ResultsTable({
   }, [descriptionColumn, variableColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
+
   const reactTable = useReactTable({
     data: tableBody,
     columns,
