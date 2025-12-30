@@ -18,13 +18,6 @@ import { storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sleep } from '../../util/time';
 import {
-  AZURE_SORA_COST_PER_SECOND,
-  AZURE_VIDEO_DIMENSIONS,
-  AZURE_VIDEO_DURATIONS,
-  DEFAULT_AZURE_VIDEO_API_VERSION,
-} from './defaults';
-import { AzureGenericProvider } from './generic';
-import {
   buildStorageRefUrl,
   checkVideoCache,
   createValidator,
@@ -32,9 +25,15 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   formatVideoOutput,
   generateVideoCacheKey,
-  readCacheMapping,
   storeCacheMapping,
 } from '../video';
+import {
+  AZURE_SORA_COST_PER_SECOND,
+  AZURE_VIDEO_DIMENSIONS,
+  AZURE_VIDEO_DURATIONS,
+  DEFAULT_AZURE_VIDEO_API_VERSION,
+} from './defaults';
+import { AzureGenericProvider } from './generic';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -350,7 +349,6 @@ export class AzureVideoProvider extends AzureGenericProvider {
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
-      const mapping = readCacheMapping(cacheKey);
       const videoUrl = buildStorageRefUrl(cachedVideoKey);
 
       const output = formatVideoOutput(prompt, videoUrl);
