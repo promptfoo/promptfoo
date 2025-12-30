@@ -2,17 +2,17 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AZURE_SORA_COST_PER_SECOND,
+  AZURE_VIDEO_DIMENSIONS,
+  AZURE_VIDEO_DURATIONS,
+} from '../../../src/providers/azure/defaults';
+import {
   AzureVideoProvider,
   calculateAzureVideoCost,
   validateAzureVideoDimensions,
   validateAzureVideoDuration,
 } from '../../../src/providers/azure/video';
-import {
-  AZURE_SORA_COST_PER_SECOND,
-  AZURE_VIDEO_DIMENSIONS,
-  AZURE_VIDEO_DURATIONS,
-} from '../../../src/providers/azure/defaults';
-import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { generateVideoCacheKey } from '../../../src/providers/video';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
