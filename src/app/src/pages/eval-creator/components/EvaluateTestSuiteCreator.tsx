@@ -446,13 +446,12 @@ const EvaluateTestSuiteCreator = () => {
                         <InfoBox variant="info">
                           <strong>Variables detected:</strong>{' '}
                           {varsList.map((v, i) => (
-                            <code
-                              key={v}
-                              className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs ml-1"
-                            >
-                              {v}
-                              {i < varsList.length - 1 ? ',' : ''}
-                            </code>
+                            <span key={v}>
+                              <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs">
+                                {v}
+                              </code>
+                              {i < varsList.length - 1 ? ', ' : ''}
+                            </span>
                           ))}
                           <p className="mt-2">
                             These variables will need values in your test cases below. Each test
@@ -536,13 +535,12 @@ const EvaluateTestSuiteCreator = () => {
                           <strong>Required variables:</strong> Each test case must provide values
                           for{' '}
                           {varsList.map((v, i) => (
-                            <code
-                              key={v}
-                              className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs ml-1"
-                            >
-                              {v}
-                              {i < varsList.length - 1 ? ',' : ''}
-                            </code>
+                            <span key={v}>
+                              <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs">
+                                {v}
+                              </code>
+                              {i < varsList.length - 1 ? ', ' : ''}
+                            </span>
                           ))}
                           <p className="mt-2">
                             Add assertions to automatically check if responses meet your quality

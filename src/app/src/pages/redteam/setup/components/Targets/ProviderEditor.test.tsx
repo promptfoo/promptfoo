@@ -124,18 +124,14 @@ describe('ProviderEditor', () => {
     const configEditor = screen.getByTestId('provider-config-editor');
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
 
-    // Component starts in collapsed view showing the selected provider, click Change to expand
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    // Now we can find the OpenAI provider in the expanded view
-    const openAiProviderCard = screen.getByText('OpenAI').closest('.cursor-pointer');
+    // Provider list is always expanded - find and click OpenAI
+    const openAiProviderCard = screen.getByText('OpenAI').closest('[role="button"]');
     expect(openAiProviderCard).toBeInTheDocument();
     fireEvent.click(openAiProviderCard!);
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-4o',
+      id: 'openai:gpt-5.2',
       config: {},
       label: 'My Test Provider',
     };

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -88,7 +88,7 @@ export default function PageWrapper({
   }, []);
 
   const nextButton = (
-    <Button onClick={onNext} disabled={nextDisabled} className="px-6 py-2 mr-[72px]">
+    <Button onClick={onNext} disabled={nextDisabled} className="mr-[72px] px-6 py-2">
       {nextLabel}
       <ChevronRight className="ml-1 h-4 w-4" />
     </Button>
@@ -127,7 +127,7 @@ export default function PageWrapper({
 
       {/* Content */}
       <div ref={contentRef} className="relative h-0 flex-1 overflow-auto">
-        <div className="mb-[200px] p-6">{children}</div>
+        <div className="p-6 pb-48">{children}</div>
       </div>
 
       {/* Navigation */}

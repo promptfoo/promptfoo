@@ -61,7 +61,8 @@ function SheetContent({
       <SheetOverlay />
       <DialogPrimitive.Content
         ref={ref}
-        className={cn(sheetVariants({ side }), 'z-[var(--z-modal)]', className)}
+        aria-describedby={undefined}
+        className={cn(sheetVariants({ side }), 'z-(--z-modal)', className)}
         {...props}
       >
         {children}

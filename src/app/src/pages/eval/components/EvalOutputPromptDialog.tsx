@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@app/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Check, Copy, X } from 'lucide-react';
@@ -378,6 +384,9 @@ export default function EvalOutputPromptDialog({
         {/* Header with title and close button */}
         <SheetHeader className="flex flex-row items-center justify-between p-4 border-b border-border space-y-0">
           <SheetTitle>Details{provider && `: ${provider}`}</SheetTitle>
+          <SheetDescription className="sr-only">
+            View prompt, output, evaluation results, and metadata details
+          </SheetDescription>
           <Button
             variant="ghost"
             size="icon"
