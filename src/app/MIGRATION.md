@@ -785,16 +785,17 @@ zIndex: 'var(--z-banner)',
 
 #### Z-Index Stacking Order
 
-| Layer          | CSS Variable         | Value | Components                    |
-| -------------- | -------------------- | ----- | ----------------------------- |
+| Layer          | CSS Variable         | Value | Components                      |
+| -------------- | -------------------- | ----- | ------------------------------- |
 | Banner         | `--z-banner`         | 1100  | UpdateBanner, notification bars |
-| App Bar        | `--z-appbar`         | 1200  | Navigation header (sticky)    |
-| Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                |
-| Modal Content  | `--z-modal`          | 1310  | Dialog content                |
-| Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu |
-| Tooltips       | `--z-tooltip`        | 1500  | Tooltip                       |
+| App Bar        | `--z-appbar`         | 1200  | Navigation header (sticky)      |
+| Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                  |
+| Modal Content  | `--z-modal`          | 1310  | Dialog content                  |
+| Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu   |
+| Tooltips       | `--z-tooltip`        | 1500  | Tooltip                         |
 
 **Key insights**:
+
 - **Banner < AppBar**: The sticky header (and its dropdown menus) must appear above notification banners
 - **Dropdowns (1400) > Modals (1310)**: Nested dropdowns inside modals work correctly
 - **Tooltip highest**: Tooltips should always be visible, even over dropdowns
