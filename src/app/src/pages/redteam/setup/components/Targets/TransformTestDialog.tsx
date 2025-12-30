@@ -7,7 +7,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -159,6 +165,9 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
             <Code2 className="h-5 w-5 text-primary" />
             {title}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Test and apply transform functions to modify input/output behavior
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-1 flex-col gap-0 overflow-hidden md:flex-row">
@@ -173,33 +182,30 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   onOpenChange={setTestInputExpanded}
                   className="rounded-lg border border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-t-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted">
-                    <span className="text-sm text-muted-foreground">Test input</span>
-                    <div className="flex items-center gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label="Format JSON"
-                            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              formatJson();
-                            }}
-                          >
-                            <AlignLeft className="h-4 w-4" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Format JSON</TooltipContent>
-                      </Tooltip>
+                  <div className="flex items-center justify-between rounded-t-lg bg-muted/50 px-3 py-2">
+                    <CollapsibleTrigger className="flex flex-1 items-center justify-between text-left transition-colors hover:text-foreground">
+                      <span className="text-sm text-muted-foreground">Test input</span>
                       <ChevronDown
                         className={cn(
                           'h-4 w-4 text-muted-foreground transition-transform',
                           testInputExpanded && 'rotate-180',
                         )}
                       />
-                    </div>
-                  </CollapsibleTrigger>
+                    </CollapsibleTrigger>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Format JSON"
+                          className="ml-2 rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                          onClick={formatJson}
+                        >
+                          <AlignLeft className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Format JSON</TooltipContent>
+                    </Tooltip>
+                  </div>
                   <CollapsibleContent>
                     {formatError && (
                       <Alert variant="destructive" className="m-3 mb-0">

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CopyButton } from './copy-button';
@@ -54,24 +54,25 @@ describe('CopyButton', () => {
   });
 
   it('reverts to copy icon after 2 seconds', async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
 
     await user.click(button);
 
-    // Wait for the copied state to appear
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    // Verify the copied state appears
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    // Fast-forward 2 seconds and let React process state updates
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
     });
 
-    // Wait for button to revert to "Copy" after 2 seconds
-    await waitFor(
-      () => {
-        expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-      },
-      { timeout: 3000 },
-    );
+    // Button should revert to "Copy"
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+
+    vi.useRealTimers();
   });
 
   it('applies custom className', () => {

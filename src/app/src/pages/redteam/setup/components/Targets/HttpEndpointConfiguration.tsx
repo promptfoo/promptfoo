@@ -674,38 +674,37 @@ ${exampleRequest}`;
 
         {/* Response Transform Section - Common for both modes */}
         <p className="mb-2 mt-6 font-medium">Response Parser</p>
-        <p className="mb-4 text-sm text-muted-foreground">
-          This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
-          with the actual response nested inside - this parser helps find the right part. Leave
-          empty if your API returns plain text. See{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            docs
-          </a>{' '}
-          for examples.
-          <span className="mt-2 block">
-            <details>
-              <summary className="cursor-pointer">Examples</summary>
-              <ol className="ml-4 mt-2 list-decimal space-y-1">
-                <li>
-                  A JavaScript object path: <code>json.choices[0].message.content</code>
-                </li>
-                <li>
-                  A function:{' '}
-                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>
-                </li>
-                <li>
-                  With guardrails:{' '}
-                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
-                </li>
-              </ol>
-            </details>
-          </span>
-        </p>
+        <div className="mb-4 text-sm text-muted-foreground">
+          <p>
+            This tells promptfoo how to extract the AI's response from your API. Most APIs return
+            JSON with the actual response nested inside - this parser helps find the right part.
+            Leave empty if your API returns plain text. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              docs
+            </a>{' '}
+            for examples.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Examples</summary>
+            <ol className="ml-4 mt-2 list-decimal space-y-1">
+              <li>
+                A JavaScript object path: <code>json.choices[0].message.content</code>
+              </li>
+              <li>
+                A function: <code>{`(json, text) => json.choices[0].message.content || text`}</code>
+              </li>
+              <li>
+                With guardrails:{' '}
+                <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+              </li>
+            </ol>
+          </details>
+        </div>
         <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
             value={selectedTarget.config.transformResponse || ''}

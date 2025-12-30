@@ -144,7 +144,7 @@ export default function LauncherPage() {
           Welcome to Promptfoo
         </h1>
 
-        <p
+        <div
           className={cn(
             'flex items-center gap-2 text-base',
             isConnecting ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-500',
@@ -161,7 +161,7 @@ export default function LauncherPage() {
               Connected to Promptfoo successfully!
             </>
           )}
-        </p>
+        </div>
       </div>
 
       {/* Info cards */}
