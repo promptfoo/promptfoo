@@ -193,7 +193,11 @@ export function sanitizePromptForOutput(prompt: string): string {
  * @param maxLength - Maximum length for ellipsized prompt (default: 50)
  * @returns Markdown formatted output string
  */
-export function formatVideoOutput(prompt: string, videoUrl: string, maxLength: number = 50): string {
+export function formatVideoOutput(
+  prompt: string,
+  videoUrl: string,
+  maxLength: number = 50,
+): string {
   const sanitizedPrompt = sanitizePromptForOutput(prompt);
   const ellipsizedPrompt = ellipsize(sanitizedPrompt, maxLength);
   return `[Video: ${ellipsizedPrompt}](${videoUrl})`;
