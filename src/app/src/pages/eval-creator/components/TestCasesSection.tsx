@@ -9,7 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
+import {
+  AlertTriangleIcon,
+  ContentCopyIcon,
+  DeleteIcon,
+  EditIcon,
+  UploadIcon,
+} from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -288,79 +294,110 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                 </td>
               </tr>
             ) : (
-              testCases.map((testCase, index) => (
-                <tr
-                  key={index}
-                  onClick={() => {
-                    setEditingTestCaseIndex(index);
-                    setTestCaseDialogOpen(true);
-                  }}
-                  className={cn(
-                    'border-b border-border cursor-pointer',
-                    'hover:bg-muted/50 transition-colors',
-                  )}
-                >
-                  <td className="px-4 py-3 text-sm">
-                    {testCase.description || `Test Case #${index + 1}`}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {testCase.assert?.length || 0} assertions
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground font-mono text-xs">
-                    {Object.entries(testCase.vars || {})
-                      .map(([k, v]) => `${k}=${v}`)
-                      .join(', ')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingTestCaseIndex(index);
-                              setTestCaseDialogOpen(true);
-                            }}
-                          >
-                            <EditIcon className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit</TooltipContent>
-                      </Tooltip>
+              testCases.map((testCase, index) => {
+                const testCaseVars = Object.keys(testCase.vars || {});
+                const missingVars = varsList.filter((v) => !testCaseVars.includes(v));
+                const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(event) => handleDuplicateTestCase(event, index)}
-                            aria-label="Duplicate test case"
-                          >
-                            <ContentCopyIcon className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Duplicate</TooltipContent>
-                      </Tooltip>
+                return (
+                  <tr
+                    key={index}
+                    onClick={() => {
+                      setEditingTestCaseIndex(index);
+                      setTestCaseDialogOpen(true);
+                    }}
+                    className={cn(
+                      'border-b border-border cursor-pointer',
+                      'hover:bg-muted/50 transition-colors',
+                      hasMissingVars && 'bg-amber-50/50 dark:bg-amber-950/20',
+                    )}
+                  >
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        {hasMissingVars && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertTriangleIcon className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Missing variables: {missingVars.join(', ')}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {testCase.description || (
+                          <span className="text-muted-foreground italic">
+                            Test Case #{index + 1}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {testCase.assert?.length ? (
+                        `${testCase.assert.length} assertion${testCase.assert.length === 1 ? '' : 's'}`
+                      ) : (
+                        <span className="text-muted-foreground/60">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-mono text-xs">
+                      {Object.keys(testCase.vars || {}).length > 0 ? (
+                        Object.entries(testCase.vars || {})
+                          .map(([k, v]) => `${k}=${v}`)
+                          .join(', ')
+                      ) : (
+                        <span className="font-sans text-muted-foreground/60">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTestCaseIndex(index);
+                                setTestCaseDialogOpen(true);
+                              }}
+                            >
+                              <EditIcon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit</TooltipContent>
+                        </Tooltip>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(event) => handleRemoveTestCase(event, index)}
-                            aria-label="Delete test case"
-                          >
-                            <DeleteIcon className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(event) => handleDuplicateTestCase(event, index)}
+                              aria-label="Duplicate test case"
+                            >
+                              <ContentCopyIcon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Duplicate</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(event) => handleRemoveTestCase(event, index)}
+                              aria-label="Delete test case"
+                            >
+                              <DeleteIcon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
