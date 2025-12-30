@@ -91,7 +91,9 @@ describe('RunOptionsContent', () => {
       expect(delayInput).toBeDisabled();
 
       // Check for the wrapper div with title attribute for native tooltip
-      const wrapperWithTooltip = container.querySelector('div[title="Set concurrent requests to 1 to enable delay"]');
+      const wrapperWithTooltip = container.querySelector(
+        'div[title="Set concurrent requests to 1 to enable delay"]',
+      );
       expect(wrapperWithTooltip).toBeInTheDocument();
     });
 
@@ -110,7 +112,9 @@ describe('RunOptionsContent', () => {
       expect(maxConcurrencyInput).toBeDisabled();
 
       // Check for the wrapper div with title attribute for native tooltip
-      const wrapperWithTooltip = container.querySelector('div[title="Set delay to 0 to enable concurrency"]');
+      const wrapperWithTooltip = container.querySelector(
+        'div[title="Set delay to 0 to enable concurrency"]',
+      );
       expect(wrapperWithTooltip).toBeInTheDocument();
     });
 
@@ -133,9 +137,7 @@ describe('RunOptionsContent', () => {
         expect(numTestsInput).toBeInTheDocument();
         expect(Number(numTestsInput.value)).toBe(largeValue);
 
-        const delayInput = screen.getByLabelText(
-          'Delay between API calls',
-        ) as HTMLInputElement;
+        const delayInput = screen.getByLabelText('Delay between API calls') as HTMLInputElement;
         expect(delayInput).toBeInTheDocument();
         expect(Number(delayInput.value)).toBe(largeValue);
 
@@ -299,7 +301,9 @@ describe('DelayBetweenAPICallsInput', () => {
       <DelayBetweenAPICallsInput {...baseProps} canSetDelay={false} />,
     );
     // Check for the wrapper div with title attribute for native tooltip
-    const wrapperWithTooltip = container.querySelector('div[title="Set concurrent requests to 1 to enable delay"]');
+    const wrapperWithTooltip = container.querySelector(
+      'div[title="Set concurrent requests to 1 to enable delay"]',
+    );
     expect(wrapperWithTooltip).toBeInTheDocument();
   });
 

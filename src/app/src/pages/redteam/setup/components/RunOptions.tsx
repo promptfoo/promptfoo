@@ -128,7 +128,9 @@ export const DelayBetweenAPICallsInput = ({
   const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
   const isDisabled = !canSetDelay || readOnly;
   const disabledReason = 'Set concurrent requests to 1 to enable delay';
-  const helperText = !canSetDelay ? disabledReason : error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper;
+  const helperText = canSetDelay
+    ? error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper
+    : disabledReason;
 
   const input = (
     <NumberInput
@@ -193,9 +195,9 @@ export const MaxNumberOfConcurrentRequestsInput = ({
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
   const isDisabled = !canSetMaxConcurrency || readOnly;
   const disabledReason = 'Set delay to 0 to enable concurrency';
-  const helperText = !canSetMaxConcurrency
-    ? disabledReason
-    : error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper;
+  const helperText = canSetMaxConcurrency
+    ? error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper
+    : disabledReason;
 
   const input = (
     <NumberInput
