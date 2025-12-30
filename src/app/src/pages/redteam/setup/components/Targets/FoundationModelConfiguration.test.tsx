@@ -22,6 +22,7 @@ describe('FoundationModelConfiguration', () => {
       max_tokens: 1024,
       top_p: 0.9,
       apiKey: 'test-key-123',
+      apiBaseUrl: 'https://custom.api.example.com/v1',
     },
   };
 
@@ -45,11 +46,13 @@ describe('FoundationModelConfiguration', () => {
     const maxTokensInput = screen.getByLabelText('Max Tokens');
     const topPInput = screen.getByLabelText('Top P');
     const apiKeyInput = screen.getByLabelText('API Key');
+    const apiBaseUrlInput = screen.getByLabelText('API Base URL');
 
     expect(temperatureInput).toHaveValue(0.7);
     expect(maxTokensInput).toHaveValue(1024);
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
+    expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
 
     fireEvent.change(temperatureInput, { target: { value: '0.8' } });
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0.8);
@@ -62,6 +65,12 @@ describe('FoundationModelConfiguration', () => {
 
     fireEvent.change(apiKeyInput, { target: { value: 'new-api-key' } });
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiKey', 'new-api-key');
+
+    fireEvent.change(apiBaseUrlInput, { target: { value: 'https://new.api.example.com/v2' } });
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'apiBaseUrl',
+      'https://new.api.example.com/v2',
+    );
   });
 
   it('should display the initial Model ID from selectedTarget.id when rendered', () => {
@@ -135,6 +144,25 @@ describe('FoundationModelConfiguration', () => {
     const temperatureInput = screen.getByLabelText('Temperature');
     fireEvent.change(temperatureInput, { target: { value: '' } });
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
+  });
+
+  it('should call updateCustomTarget with undefined when API Base URL field is cleared', () => {
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
+    fireEvent.click(accordionSummary);
+
+    const apiBaseUrlInput = screen.getByLabelText('API Base URL');
+    expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
+
+    fireEvent.change(apiBaseUrlInput, { target: { value: '' } });
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiBaseUrl', undefined);
   });
 
   it('should display the correct Model ID placeholder for the azure provider', () => {

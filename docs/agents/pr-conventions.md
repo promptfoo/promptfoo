@@ -11,19 +11,33 @@ PR titles follow Conventional Commits format. They become squash-merge commit me
 
 ## Types
 
-| Type       | Use For                                       |
-| ---------- | --------------------------------------------- |
-| `feat`     | New feature or capability                     |
-| `fix`      | Bug fix                                       |
-| `chore`    | Maintenance, upgrades, non-breaking refactors |
-| `refactor` | Code refactoring without behavior change      |
-| `docs`     | Documentation only                            |
-| `test`     | Test additions or changes                     |
-| `ci`       | CI/CD changes                                 |
-| `revert`   | Revert previous change                        |
-| `perf`     | Performance improvement                       |
+| Type       | Use For                                               |
+| ---------- | ----------------------------------------------------- |
+| `feat`     | New feature or capability                             |
+| `fix`      | Bug fix in application code                           |
+| `chore`    | Maintenance, upgrades, non-breaking refactors         |
+| `refactor` | Code refactoring without behavior change              |
+| `docs`     | Documentation only                                    |
+| `test`     | Test-only changes (new tests, test fixes, test infra) |
+| `ci`       | CI/CD changes                                         |
+| `revert`   | Revert previous change                                |
+| `perf`     | Performance improvement                               |
 
 **Breaking changes:** Add `!` after scope: `feat(api)!:`, `chore(deps)!:`
+
+### Test vs Fix
+
+Use `test:` when the PR **only** contains test changes:
+
+- Adding new tests
+- Fixing broken/flaky tests
+- Fixing lint errors in test files
+- Test infrastructure changes
+
+Use `fix:` when fixing bugs in **application code** (even if tests are included):
+
+- Bug fix in `src/` with accompanying test changes → `fix:`
+- Lint error in test file only → `test:`
 
 ## Scope Selection (Priority Order)
 
@@ -111,6 +125,8 @@ chore(deps): update Material-UI monorepo to v8 (major)
 fix(deps): update dependency better-sqlite3 to v12.4.6
 feat(api)!: simplify provider interface
 chore: bump version 0.119.11
+test: add smoke tests for CLI commands
+test(redteam): fix flaky plugin integration tests
 ```
 
 ❌ **Bad:**
@@ -120,7 +136,24 @@ feat: add new redteam thing      # Missing (redteam) scope
 fix(webui): red team checkbox    # Should be fix(redteam)
 chore(webui): update dependency  # Should be chore(deps)
 feat: stuff                      # Too vague
+fix(test): resolve lint errors   # Should be test: (test-only changes)
 ```
+
+## Draft Mode Required
+
+**Always open PRs in draft mode.** Use the `--draft` flag:
+
+```bash
+gh pr create --draft --title "feat(scope): description"
+```
+
+This allows maintainers to review and provide feedback before the PR is marked ready for merge.
+
+## GitHub Interaction Rules
+
+- **NEVER comment on GitHub issues** - Only create PRs to address issues
+- **NEVER close issues** - Let maintainers close issues after PR merge
+- Focus on creating high-quality PRs that fully address the issue
 
 ## Checklist Before Creating PR
 
@@ -129,3 +162,4 @@ feat: stuff                      # Too vague
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
+6. **Open the PR in draft mode** (`--draft`)

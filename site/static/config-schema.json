@@ -1153,6 +1153,32 @@
               },
               "description": "Names of people, brands, or organizations related to your LLM application"
             },
+            "contexts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique identifier for the context"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "description": "Purpose/context for this context - used for generation and grading"
+                  },
+                  "vars": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Variables passed to provider (e.g., context_file, user_role)"
+                  }
+                },
+                "required": ["id", "purpose"],
+                "additionalProperties": false
+              },
+              "description": "Security contexts for testing multiple states - each context has its own purpose"
+            },
             "plugins": {
               "type": "array",
               "items": {
@@ -1697,7 +1723,6 @@
                           "prompt-injection",
                           "retry",
                           "rot13",
-                          "simba",
                           "video"
                         ]
                       },
@@ -1726,7 +1751,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1925,6 +1950,9 @@
             },
             "isRedteam": {
               "type": "boolean"
+            },
+            "silent": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -2071,6 +2099,12 @@
                   }
                 }
               ]
+            },
+            "extension": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false

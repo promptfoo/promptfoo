@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule, isCjsInEsmError, resolvePackageEntryPoint } from '../src/esm';
 import logger from '../src/logger';
 
@@ -108,10 +108,14 @@ describe('ESM utilities', () => {
       expect(result.testFunction()).toBe('js default test result');
     });
 
-    it('throws error for non-existent module', async () => {
+    it('throws ENOENT error for non-existent module (normalized from ERR_MODULE_NOT_FOUND)', async () => {
       const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
 
-      await expect(importModule(nonExistentPath)).rejects.toThrow();
+      // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
+      const error = await importModule(nonExistentPath).catch((e) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as NodeJS.ErrnoException).code).toBe('ENOENT');
+      expect((error as NodeJS.ErrnoException).path).toBe(nonExistentPath);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
     });
 

@@ -1,7 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
-import { describe, expect, it } from 'vitest';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',

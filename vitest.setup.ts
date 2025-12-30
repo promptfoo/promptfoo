@@ -4,7 +4,7 @@
  * This file configures the test environment for all tests in the test/ directory.
  */
 
-import { afterEach, afterAll, vi } from 'vitest';
+import { afterAll, afterEach, vi } from 'vitest';
 
 const TEST_CONFIG_DIR = './.local/vitest/config';
 

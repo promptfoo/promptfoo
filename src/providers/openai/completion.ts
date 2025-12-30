@@ -10,12 +10,12 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {

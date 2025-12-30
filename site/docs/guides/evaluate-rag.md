@@ -123,7 +123,7 @@ Instead of using an external script provider, we'll use the built-in functionali
 First, let's set up our prompt by creating a `prompt1.txt` file:
 
 ```txt title="prompt1.txt"
-You are a corporate intranet chat assistant.  The user has asked the following:
+You are a corporate intranet chat assistant. The user has asked the following:
 
 <QUERY>
 {{ query }}
@@ -226,7 +226,7 @@ The `promptfoo eval` command will run the evaluation and check if your tests are
 Suppose we're not happy with the performance of the prompt above and we want to compare it with another prompt. Maybe we want to require citations. Let's create `prompt2.txt`:
 
 ```txt title="prompt2.txt"
-You are a corporate intranet researcher.  The user has asked the following:
+You are a corporate intranet researcher. The user has asked the following:
 
 <QUERY>
 {{ query }}
@@ -238,7 +238,7 @@ You have retrieved some documents to assist in your response:
 {{ documents }}
 </DOCUMENTS>
 
-Think carefully and respond to the user concisely and accurately. For each statement of fact in your response, output a numeric citation in brackets [0].  At the bottom of your response, list the document names for each citation.
+Think carefully and respond to the user concisely and accurately. For each statement of fact in your response, output a numeric citation in brackets [0]. At the bottom of your response, list the document names for each citation.
 ```
 
 Now, update the config to list multiple prompts:

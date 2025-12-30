@@ -1,9 +1,12 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -18,12 +21,12 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -31,7 +34,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
+import { alpha, styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -42,8 +45,8 @@ import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
-import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import ConfigModal from './ConfigModal';
+import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
@@ -190,6 +193,7 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -213,7 +217,7 @@ export default function ResultsView({
 
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
-      setSearchParams((prev) => ({ ...prev, search: text }));
+      setSearchParams((prev) => ({ ...prev, search: text }), { replace: true });
       setSearchText(text);
     },
     [setSearchParams],
@@ -253,6 +257,9 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
+  // Valid evalId for navigation (no fallback to 'default')
+  const validEvalId = evalId || defaultEvalId;
+
   // Handle menu close
   const handleMenuClose = () => {
     setAnchorEl(null);
@@ -276,8 +283,9 @@ export default function ResultsView({
   const handleShare = async (id: string): Promise<string> => {
     try {
       if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, just return the URL directly
-        return `${window.location.host}/eval/?evalId=${id}`;
+        // For non-local instances, include base path in the URL
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
       }
 
       const response = await callApi('/results/share', {
@@ -448,7 +456,7 @@ export default function ResultsView({
         const { id: newEvalId, distinctTestCount } = await response.json();
 
         // Open in new tab (Google Docs pattern)
-        window.open(`/eval/${newEvalId}`, '_blank');
+        window.open(EVAL_ROUTES.DETAIL(newEvalId), '_blank');
 
         // Show success toast
         showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');
@@ -613,7 +621,7 @@ export default function ResultsView({
 
   return (
     <>
-      <Box px={2} pt={2}>
+      <Box px={2} pt={2} sx={{ isolation: 'isolate' }}>
         <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
@@ -648,7 +656,6 @@ export default function ResultsView({
                   setEvalSelectorDialogOpen(false);
                   onRecentEvalSelected(evalId);
                 }}
-                title="Select an Eval"
                 focusedEvalId={evalId ?? undefined}
               />
             </Box>
@@ -854,6 +861,28 @@ export default function ResultsView({
                 }}
               />
             )}
+            {(() => {
+              const formattedDuration =
+                stats?.durationMs != null ? formatDuration(stats.durationMs) : null;
+              return formattedDuration ? (
+                <Tooltip title="Total evaluation duration (wall-clock time)" placement="bottom">
+                  <Chip
+                    size="small"
+                    icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
+                    label={formattedDuration}
+                    sx={(theme) => ({
+                      backgroundColor: alpha(theme.palette.success.main, 0.08),
+                      color: theme.palette.success.main,
+                      border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                      fontWeight: 500,
+                      '& .MuiChip-icon': {
+                        color: theme.palette.success.main,
+                      },
+                    })}
+                  />
+                </Tooltip>
+              ) : null;
+            })()}
             <Box flexGrow={1} />
             <Box display="flex" justifyContent="flex-end">
               <ResponsiveStack direction="row" spacing={2}>
@@ -915,6 +944,7 @@ export default function ResultsView({
                     <CompareEvalMenuItem
                       initialEvals={recentEvals}
                       onComparisonEvalSelected={handleComparisonEvalSelected}
+                      onMenuClose={handleMenuClose}
                     />
                     <Tooltip title="View the configuration that defines this eval" placement="left">
                       <MenuItem onClick={() => setConfigModalOpen(true)}>
@@ -961,13 +991,13 @@ export default function ResultsView({
                   </Menu>
                 )}
                 {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-                {(config?.redteam || config?.metadata?.redteam) && (
+                {(config?.redteam || config?.metadata?.redteam) && validEvalId && (
                   <Tooltip title="View vulnerability scan report" placement="bottom">
                     <Button
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
                     >
                       Vulnerability Report
                     </Button>
@@ -984,6 +1014,7 @@ export default function ResultsView({
           )}
         </Box>
         <ResultsTable
+          key={currentEvalId}
           maxTextLength={maxTextLength}
           columnVisibility={currentColumnState.columnVisibility}
           wordBreak={wordBreak}

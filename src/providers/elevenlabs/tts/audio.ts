@@ -1,8 +1,10 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+
+import logger from '../../../logger';
+
 import type { AudioData } from '../types';
 import type { OutputFormat } from './types';
-import logger from '../../../logger';
 
 /**
  * Encode audio buffer to base64 and wrap in AudioData structure

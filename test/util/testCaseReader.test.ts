@@ -1,18 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
+import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
-import { importModule } from '../../src/esm';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -47,16 +47,28 @@ vi.mock('../../src/providers', () => ({
 }));
 vi.mock('../../src/util/fetch/index.ts');
 
+const mockReadFileSync = vi.hoisted(() => vi.fn());
+
 vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
+  readFileSync: mockReadFileSync,
   writeFileSync: vi.fn(),
   statSync: vi.fn(),
   readdirSync: vi.fn(),
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
-  promises: {
-    readFile: vi.fn(),
-  },
+}));
+
+vi.mock('fs/promises', () => ({
+  // Delegate to fs.readFileSync mock for shared test data
+  readFile: vi.fn((...args: unknown[]) => {
+    try {
+      return Promise.resolve(mockReadFileSync(...args));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
 }));
 
 vi.mock('../../src/database', () => ({

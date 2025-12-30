@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
 
@@ -11,12 +12,13 @@ import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
-import { loadApiProviders } from '../../providers/index';
+import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -30,12 +32,12 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { readFilters } from '../../util/index';
-import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { readFilters } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 
 /**
@@ -164,7 +166,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
@@ -178,6 +180,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     }
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
+    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
     const validationResult = UnifiedConfigSchema.safeParse(imported);
     if (!validationResult.success) {
@@ -231,10 +234,16 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
-    return undefined;
+  try {
+    return await readConfig(configPath);
+  } catch (error) {
+    // If file doesn't exist, return undefined
+    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
   }
-  return readConfig(configPath);
 }
 
 /**
@@ -567,7 +576,10 @@ export async function resolveConfigs(
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extensions: fileConfig.extensions || defaultConfig.extensions || [],
+    extensions: [
+      ...(cmdObj.extension || []),
+      ...(fileConfig.extensions || defaultConfig.extensions || []),
+    ],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
@@ -608,9 +620,33 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Resolve provider configs: loads file:// references while preserving non-file providers.
+  // This enables:
+  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 2. Filtering by resolved provider ids/labels (not just file paths)
+  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
+  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
+  // Pass filtered resolved configs to avoid re-reading files
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
@@ -661,7 +697,13 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
+  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
+  // This ensures that `prompts` filters from external provider files are respected (#1307)
+  // and that the map is consistent with the filtered providers
+  const parsedProviderPromptMap = readProviderPromptMap(
+    { providers: filteredProviderConfigs },
+    parsedPrompts,
+  );
 
   if (parsedPrompts.length === 0) {
     logger.error('No prompts found');

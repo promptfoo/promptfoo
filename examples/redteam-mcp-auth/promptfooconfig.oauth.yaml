@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: MCP Server with OAuth Authentication
+
+targets:
+  - id: mcp
+    label: MCP Example
+    config:
+      enabled: true
+      server:
+        url: https://example-app.promptfoo.app/mcp/minnow?auth_type=bearer
+        auth:
+          type: oauth
+          grantType: client_credentials
+          clientId: '{{env.PROMPTFOO_TARGET_CLIENT_ID}}'
+          clientSecret: '{{env.PROMPTFOO_TARGET_CLIENT_SECRET}}'
+          tokenUrl: https://example-app.promptfoo.app/oauth/token
+          scopes: []
+
+redteam:
+  purpose: Friendly AI assistant that can help with tasks and answer questions.
+  plugins:
+    - mcp
+    - sql-injection
+    - pii
+    - bfla
+    - bola
+    - rbac
+  numTests: 5
+  strategies:
+    - basic

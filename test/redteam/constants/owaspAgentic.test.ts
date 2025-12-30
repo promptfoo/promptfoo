@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
   OWASP_AGENTIC_NAMES,
   OWASP_AGENTIC_TOP_10_MAPPING,
-  ALIASED_PLUGINS,
-  ALIASED_PLUGIN_MAPPINGS,
 } from '../../../src/redteam/constants/frameworks';
 import { ALL_PLUGINS } from '../../../src/redteam/constants/plugins';
 
