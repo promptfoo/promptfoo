@@ -1,8 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
@@ -168,10 +171,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
-    // Load response_format from external file if needed, similar to chat provider
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     let textFormat;
     if (responseFormat) {
@@ -184,13 +188,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            responseFormat.schema || responseFormat.json_schema?.schema,
-            context?.vars,
-          ),
-        );
-
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 

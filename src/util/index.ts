@@ -6,6 +6,8 @@ export { filterRuntimeVars, resultIsForTestCase, varsMatch } from './comparison'
 export { setupEnv } from './env';
 // File operations
 export {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   readFilters,

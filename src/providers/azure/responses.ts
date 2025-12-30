@@ -1,8 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
@@ -121,10 +124,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     const instructions = config.instructions;
 
-    // Load response_format from external file if needed
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     let textFormat;
     if (responseFormat) {
@@ -135,7 +139,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           },
         };
       } else if (responseFormat.type === 'json_schema') {
-        // Don't double-load the schema - it's already loaded above
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
         const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
@@ -144,7 +148,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           format: {
             type: 'json_schema',
             name: schemaName,
-            schema: schema, // Use the already-loaded schema
+            schema,
             strict: true,
           },
         };
@@ -224,7 +228,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       (this.config.response_format as string).startsWith('file://')
     ) {
       try {
-        maybeLoadFromExternalFile(this.config.response_format);
+        // Validate that the file can be loaded (will throw if file doesn't exist)
+        maybeLoadResponseFormatFromExternalFile(this.config.response_format, {});
       } catch (error) {
         throw new Error(
           `Failed to load response_format file: ${this.config.response_format}\n` +

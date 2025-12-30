@@ -1036,6 +1036,23 @@ The external file should contain the complete `response_format` configuration ob
 }
 ```
 
+You can also use nested file references for the schema itself, which is useful for sharing schemas across multiple response formats:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": "file://./schemas/event-schema.json"
+}
+```
+
+Variable rendering is supported in file paths using Nunjucks syntax:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
+```
+
 For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
 
 ```bash
