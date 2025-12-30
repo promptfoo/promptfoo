@@ -576,7 +576,10 @@ export async function resolveConfigs(
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extensions: fileConfig.extensions || defaultConfig.extensions || [],
+    extensions: [
+      ...(cmdObj.extension || []),
+      ...(fileConfig.extensions || defaultConfig.extensions || []),
+    ],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,

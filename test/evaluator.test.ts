@@ -1786,6 +1786,96 @@ describe('evaluator', () => {
     );
   });
 
+  it('evaluator should correctly count named scores with template metric variables', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for template metrics')],
+      tests: [
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{metricCategory}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScores: expect.objectContaining({
+              Accuracy: expect.any(Number),
+            }),
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 3, // 2 assertions in first test + 1 in second
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should handle mixed static and template metrics correctly', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test mixed metrics')],
+      tests: [
+        {
+          vars: { category: 'Dynamic' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{category}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Static',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Dynamic: 1,
+              Static: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

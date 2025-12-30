@@ -475,7 +475,7 @@ const StrategyStats = ({
                   </p>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
-                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-red-100 dark:bg-red-950/30">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',

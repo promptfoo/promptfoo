@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -1307,9 +1308,12 @@ class Evaluator {
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
 
           // Count assertions contributing to this named score
+          // Note: We need to render template variables in assertion metrics before comparing
+          const testVars = row.testCase?.vars || {};
           let contributingAssertions = 0;
           row.gradingResult?.componentResults?.forEach((result) => {
-            if (result.assertion?.metric === key) {
+            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
+            if (renderedMetric === key) {
               contributingAssertions++;
             }
           });
@@ -1912,11 +1916,25 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
-      suite: testSuite,
-    });
+    // Only load results from database if there are extensions to run
+    if (testSuite.extensions?.length) {
+      // Load results from database for extensions (results may not be in memory for persisted evals)
+      const allResults = await this.evalRecord.getResults();
+
+      // Convert EvalResult model instances to plain EvaluateResult objects for extensions
+      const resultsForExtension: EvaluateResult[] = allResults.map(
+        (result): EvaluateResult =>
+          'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+      );
+
+      await runExtensionHook(testSuite.extensions, 'afterAll', {
+        prompts: this.evalRecord.prompts,
+        results: resultsForExtension,
+        suite: testSuite,
+        evalId: this.evalRecord.id,
+        config: this.evalRecord.config,
+      });
+    }
 
     // Calculate additional metrics for telemetry
     const endTime = Date.now();
