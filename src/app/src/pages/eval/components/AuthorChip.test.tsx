@@ -123,11 +123,7 @@ describe('AuthorChip', () => {
         /Setting an email address will also set the default author for future evals./,
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /It is changeable with `promptfoo config set email <your-email@example.com>`/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/It is changeable with `promptfoo auth login`/)).toBeInTheDocument();
   });
 
   it('does not show warning message when currentUserEmail is set', async () => {
@@ -265,6 +261,22 @@ describe('AuthorChip', () => {
       await waitFor(() => {
         expect(screen.queryByText('This eval has no author assigned.')).not.toBeInTheDocument();
       });
+    });
+
+    it('shows "currently attributed to" message when claiming from another user', async () => {
+      render(<AuthorChip {...cloudProps} author="other@example.com" editable={true} />);
+      await userEvent.click(screen.getByText('other@example.com'));
+      expect(
+        screen.getByText('This eval is currently attributed to other@example.com.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Claim as mine/i })).toBeInTheDocument();
+    });
+
+    it('can claim eval from another user', async () => {
+      render(<AuthorChip {...cloudProps} author="other@example.com" editable={true} />);
+      await userEvent.click(screen.getByText('other@example.com'));
+      await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
+      expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
     });
   });
 

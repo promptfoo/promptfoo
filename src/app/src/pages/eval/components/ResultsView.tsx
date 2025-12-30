@@ -593,7 +593,7 @@ export default function ResultsView({
   };
 
   // Determine if the current user can edit the author field
-  // When cloud is enabled, only allow claiming unclaimed evals (no removing your name)
+  // When cloud is enabled, allow editing unless it's already claimed by the current user
   // When cloud is disabled, allow editing (no identity system to verify ownership)
   const canEditAuthor = React.useMemo(() => {
     // While cloud config is loading, default to not editable to prevent race condition
@@ -609,10 +609,19 @@ export default function ResultsView({
     if (!cloudConfig?.isEnabled) {
       return true;
     }
-    // Cloud is enabled - only allow editing if no author (claiming unclaimed evals)
-    // Once an eval has an author (even yourself), it's read-only
-    return !author;
-  }, [isCloudConfigLoading, cloudConfigError, cloudConfig?.isEnabled, author]);
+    // Cloud is enabled:
+    // - No author: editable (anyone can claim)
+    // - Author differs from current user: editable (can claim from someone else)
+    // - Author matches current user: not editable (already yours, no self-removal)
+    if (!author) {
+      return true;
+    }
+    if (currentUserEmail === null) {
+      // Still loading current user email - be conservative
+      return false;
+    }
+    return author !== currentUserEmail;
+  }, [isCloudConfigLoading, cloudConfigError, cloudConfig?.isEnabled, author, currentUserEmail]);
 
   const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
     (event) => {

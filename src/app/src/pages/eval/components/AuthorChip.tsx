@@ -100,7 +100,7 @@ export const AuthorChip = ({
       return `This eval belongs to ${author}`;
     }
     if (isCloudEnabled) {
-      // In cloud mode, editable=true only when no author (claiming)
+      // In cloud mode, editable=true when no author OR author is someone else
       return 'Click to claim this eval';
     }
     return author ? 'Click to edit author' : 'Click to set author';
@@ -108,11 +108,13 @@ export const AuthorChip = ({
 
   const renderPopoverContent = () => {
     if (isCloudEnabled) {
-      // Cloud mode: only shows claim UI (popover only opens for unclaimed evals)
+      // Cloud mode: shows claim UI (popover opens for unclaimed evals or evals claimed by others)
       return (
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            This eval has no author assigned.
+            {author
+              ? `This eval is currently attributed to ${author}.`
+              : 'This eval has no author assigned.'}
           </Typography>
           <Button
             variant="contained"
@@ -160,7 +162,7 @@ export const AuthorChip = ({
             <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
             <Typography variant="caption">
               {`Setting an email address will also set the default author for future evals.
-                It is changeable with \`promptfoo config set email <your-email@example.com>\``}
+                It is changeable with \`promptfoo auth login\``}
             </Typography>
           </Box>
         )}
