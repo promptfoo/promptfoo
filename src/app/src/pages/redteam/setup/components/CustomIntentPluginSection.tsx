@@ -14,7 +14,6 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
 import { CloudUpload, Eye, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { PluginConfig } from '@promptfoo/redteam/types';
@@ -229,6 +228,7 @@ export default function CustomIntentSection() {
       }
     } else if (filename.endsWith('.csv')) {
       try {
+        const { parse } = await import('csv-parse/browser/esm/sync');
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,

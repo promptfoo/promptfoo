@@ -209,8 +209,8 @@ describe('TestCasesSection', () => {
         { question: 'Capital of France?', expected: 'Paris' },
       ];
 
-      // Mock the dynamic import for csv-parse/sync
-      vi.doMock('csv-parse/sync', () => ({
+      // Mock the dynamic import for csv-parse/browser/esm/sync
+      vi.doMock('csv-parse/browser/esm/sync', () => ({
         parse: vi.fn().mockReturnValue(mockCsvData),
       }));
 

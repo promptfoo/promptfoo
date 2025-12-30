@@ -761,7 +761,7 @@ We define z-index values as CSS custom properties in `index.css`:
 
 #### Usage in Components
 
-Use the `z-[var(--z-*)]` syntax in Tailwind classes:
+Use the semantic z-index tokens (e.g., `z-[var(--z-dropdown)]`) in Tailwind classes:
 
 ```tsx
 // dialog.tsx

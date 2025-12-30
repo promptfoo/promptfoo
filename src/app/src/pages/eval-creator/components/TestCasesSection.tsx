@@ -108,7 +108,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
 
           if (fileName.endsWith('.csv')) {
             // Handle CSV files
-            const { parse: parseCsv } = await import('csv-parse/sync');
+            const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
             const rows: CsvRow[] = parseCsv(text, { columns: true });
             newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
           } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
