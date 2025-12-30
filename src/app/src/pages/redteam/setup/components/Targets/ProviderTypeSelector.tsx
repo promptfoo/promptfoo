@@ -992,6 +992,15 @@ export default function ProviderTypeSelector({
         },
         'generic-agent',
       );
+    } else if (value === 'custom') {
+      setProvider(
+        {
+          id: '',
+          label: currentLabel,
+          config: {},
+        },
+        'custom',
+      );
     } else {
       setProvider(
         {
