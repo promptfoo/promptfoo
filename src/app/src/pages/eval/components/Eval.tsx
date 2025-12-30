@@ -114,6 +114,9 @@ export default function Eval({ fetchId }: EvalOptions) {
           setFailed(true);
           return false;
         }
+        // Reset failure state on successful load - handles case where previous load failed
+        // but a subsequent load (e.g., fallback to recent evals) succeeds
+        setFailed(false);
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
