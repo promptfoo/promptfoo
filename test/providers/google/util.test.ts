@@ -1036,11 +1036,10 @@ describe('util', () => {
         ']';
       const context_vars = {};
 
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      // existsSync no longer called due to TOCTOU fix
       vi.spyOn(fs, 'readFileSync').mockReturnValue(tools);
       const result = loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
     });
   });

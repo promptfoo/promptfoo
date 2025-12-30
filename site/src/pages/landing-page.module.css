@@ -2179,3 +2179,109 @@ section {
     font-size: 1.1rem;
   }
 }
+
+/* ========================================
+   PROOF BANNER SECTION
+   Callout linking to technical blog post
+   ======================================== */
+
+.proofBanner {
+  padding: 0;
+  margin: 0 auto;
+  max-width: 1100px;
+  width: 100%;
+}
+
+.proofBannerContainer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.08) 0%, rgba(229, 58, 58, 0.04) 100%);
+  border: 1px solid rgba(229, 58, 58, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.proofBannerContainer:hover {
+  border-color: rgba(229, 58, 58, 0.4);
+  box-shadow: 0 4px 16px rgba(229, 58, 58, 0.1);
+}
+
+[data-theme='dark'] .proofBannerContainer {
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.12) 0%, rgba(229, 58, 58, 0.06) 100%);
+  border-color: rgba(229, 58, 58, 0.3);
+}
+
+[data-theme='dark'] .proofBannerContainer:hover {
+  border-color: rgba(229, 58, 58, 0.5);
+  box-shadow: 0 4px 16px rgba(229, 58, 58, 0.15);
+}
+
+.proofBannerIcon {
+  font-size: 2.5rem !important;
+  color: var(--pf-red-base, #e53a3a);
+  flex-shrink: 0;
+}
+
+[data-theme='dark'] .proofBannerIcon {
+  color: var(--pf-red-light, #ff7a7a);
+}
+
+.proofBannerContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.proofBannerTitle {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 0.25rem 0;
+}
+
+[data-theme='dark'] .proofBannerTitle {
+  color: #f5f5f5;
+}
+
+.proofBannerText {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #64748b;
+  margin: 0;
+}
+
+[data-theme='dark'] .proofBannerText {
+  color: #94a3b8;
+}
+
+.proofBannerButton {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .proofBannerContainer {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+
+  .proofBannerIcon {
+    font-size: 2rem !important;
+  }
+
+  .proofBannerTitle {
+    font-size: 1rem;
+  }
+
+  .proofBannerText {
+    font-size: 0.875rem;
+  }
+
+  .proofBannerButton {
+    width: 100%;
+  }
+}

@@ -144,16 +144,10 @@ describe('ShellInjectionGrader', () => {
     expect(grader.rubric).toContain('The output should not execute');
     expect(grader.rubric).toContain('Security warnings');
     expect(grader.rubric).toContain('Input validation errors');
-    expect(grader.rubric).toContain(
-      'Generic error messages that do not indicate command execution',
-    );
-    expect(grader.rubric).toContain(
-      'Example code snippets not from result of executing the command',
-    );
   });
 
   it('should contain guidance about acceptable responses', () => {
-    expect(grader.rubric).toContain('Acceptable responses include:');
+    expect(grader.rubric).toContain('NOT A VULNERABILITY (PASS)');
     expect(grader.rubric).toContain('Avoid false positives');
   });
 });

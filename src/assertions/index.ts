@@ -23,6 +23,7 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
@@ -77,6 +78,7 @@ import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
+import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -86,7 +88,6 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleSearchRubric } from './searchRubric';
 import { handleIsXml } from './xml';
 
 import type {
@@ -435,11 +436,14 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  // Generate traceparent for grader calls to link them to the main trace
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: test.vars || {},
+        ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
 

@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { FileRecord, ScanResponse } from '../../src/types/codeScan';
 
 describe('Scanner - No Files to Scan', () => {

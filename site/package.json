@@ -13,9 +13,15 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
-    "format": "prettier --ignore-path .gitignore -w ."
+    "format": "prettier --ignore-path .gitignore -w .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@calcom/embed-react": "^1.5.3",
     "@docusaurus/core": "^3.9.2",
     "@docusaurus/module-type-aliases": "^3.9.2",
@@ -36,13 +42,15 @@
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "framer-motion": "^12.23.24",
     "gray-matter": "^4.0.3",
-    "lucide-react": "^0.560.0",
+    "lucide-react": "^0.562.0",
     "prism-react-renderer": "^2.4.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "satori": "^0.18.3",
     "sharp": "^0.34.5",
-    "typescript": "^5.9.3"
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
   },
   "browserslist": {
     "production": [

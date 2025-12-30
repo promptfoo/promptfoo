@@ -1,12 +1,11 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
+import { Switch } from '@app/components/ui/switch';
+import { TagInput } from '@app/components/ui/tag-input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
-import { FormControlLabel, Switch, Autocomplete, TextField, Chip } from '@mui/material';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
@@ -33,10 +32,14 @@ export const RUNOPTIONS_TEXT = {
     placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
 } as const;
+
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
-    <Tooltip title={tooltip}>
-      <span style={{ textDecoration: 'underline dotted' }}>{label}</span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help underline decoration-dotted">{label}</span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );
 };
@@ -81,7 +84,7 @@ export const NumberOfTestCasesInput = ({
 }: NumberOfTestCasesInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.numberOfTests.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label="Number of test cases"
       value={value}
@@ -103,9 +106,7 @@ export const NumberOfTestCasesInput = ({
         updateConfig('numTests', safe);
         setValue(String(safe));
       }}
-      slotProps={{
-        input: { readOnly },
-      }}
+      readOnly={readOnly}
       helperText={error ? error : RUNOPTIONS_TEXT.numberOfTests.helper}
       error={Boolean(error)}
     />
@@ -138,7 +139,7 @@ export const DelayBetweenAPICallsInput = ({
 }: DelayBetweenAPICallsInputProps) => {
   const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label={
         canSetDelay ? (
@@ -171,16 +172,8 @@ export const DelayBetweenAPICallsInput = ({
         setMaxConcurrencyValue('1');
       }}
       min={0}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">ms</Typography>
-            </Box>
-          ),
-        },
-      }}
+      readOnly={readOnly}
+      endAdornment={<span className="text-xs text-muted-foreground">ms</span>}
       helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
       error={Boolean(error)}
     />
@@ -206,7 +199,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
 }: MaxNumberOfConcurrentRequestsInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label={
         canSetMaxConcurrency ? (
@@ -239,16 +232,8 @@ export const MaxNumberOfConcurrentRequestsInput = ({
         updateRunOption('delay', 0);
         setDelayValue('0');
       }}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">requests</Typography>
-            </Box>
-          ),
-        },
-      }}
+      readOnly={readOnly}
+      endAdornment={<span className="text-xs text-muted-foreground">requests</span>}
       helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
       error={Boolean(error)}
     />
@@ -277,7 +262,7 @@ export const RunOptionsContent = ({
     runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
   );
 
-  // Normalize language to array for Autocomplete
+  // Normalize language to array
   const languageArray = useMemo<string[]>(() => {
     if (!language) {
       return [];
@@ -285,18 +270,13 @@ export const RunOptionsContent = ({
     return Array.isArray(language) ? language : [language];
   }, [language]);
 
-  // Handler for language changes
-  const handleLanguageChange = useCallback(
-    (_event: unknown, newValue: string[]) => {
-      // Normalize all language inputs (converts ISO codes to full names)
-      const normalized = newValue.map((lang) => normalizeLanguage(lang));
-      updateConfig('language', normalized.length > 0 ? normalized : undefined);
-    },
-    [updateConfig],
-  );
+  // Handle language changes
+  const handleLanguageChange = (newLanguages: string[]) => {
+    updateConfig('language', newLanguages.length > 0 ? newLanguages : undefined);
+  };
 
   return (
-    <Stack spacing={3}>
+    <div className="flex flex-col gap-6">
       <NumberOfTestCasesInput
         value={numTestsInput}
         setValue={setNumTestsInput}
@@ -326,43 +306,35 @@ export const RunOptionsContent = ({
         canSetMaxConcurrency={canSetMaxConcurrency}
         setDelayValue={setDelayInput}
       />
-      <FormControlLabel
-        control={
-          <Switch
-            checked={runOptions?.verbose}
-            onChange={(e) => updateRunOption('verbose', e.target.checked)}
-          />
-        }
-        label={
-          <Box>
-            <Typography variant="body1">Debug mode</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Show additional debug information in logs
-            </Typography>
-          </Box>
-        }
-      />
-      <Autocomplete
-        multiple
-        freeSolo
-        options={COMMON_LANGUAGE_NAMES}
-        value={languageArray}
-        onChange={handleLanguageChange}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => {
-            const { key, ...tagProps } = getTagProps({ index });
-            return <Chip key={key} label={option} {...tagProps} />;
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={RUNOPTIONS_TEXT.languages.label}
-            placeholder={RUNOPTIONS_TEXT.languages.placeholder}
-            helperText={RUNOPTIONS_TEXT.languages.helper}
-          />
-        )}
-      />
-    </Stack>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="debug-mode"
+          checked={runOptions?.verbose ?? false}
+          onCheckedChange={(checked) => updateRunOption('verbose', checked)}
+        />
+        <div className="flex flex-col">
+          <Label htmlFor="debug-mode" className="cursor-pointer">
+            Debug mode
+          </Label>
+          <span className="text-sm text-muted-foreground">
+            Show additional debug information in logs
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{RUNOPTIONS_TEXT.languages.label}</Label>
+        <TagInput
+          value={languageArray}
+          onChange={handleLanguageChange}
+          suggestions={COMMON_LANGUAGE_NAMES}
+          placeholder={RUNOPTIONS_TEXT.languages.placeholder}
+          normalizeValue={normalizeLanguage}
+          aria-label={RUNOPTIONS_TEXT.languages.label}
+        />
+        <span className="text-sm text-muted-foreground">{RUNOPTIONS_TEXT.languages.helper}</span>
+      </div>
+    </div>
   );
 };

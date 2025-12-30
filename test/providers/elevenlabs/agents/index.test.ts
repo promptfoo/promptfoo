@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
