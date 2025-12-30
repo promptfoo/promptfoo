@@ -445,10 +445,18 @@ describe('EvalOutputCell', () => {
   });
 
   it('renders video player when video data is present', () => {
+    const videoProvider = 'google:video:veo-3.1-generate-preview';
     const propsWithVideo: MockEvalOutputCellProps = {
       ...defaultProps,
+      maxTextLength: 0, // Disable truncation for video output test
+      firstOutput: {
+        ...defaultProps.firstOutput,
+        provider: videoProvider,
+      },
       output: {
         ...defaultProps.output,
+        text: '', // Video takes precedence over text rendering
+        provider: videoProvider,
         video: {
           url: '/api/output/video/test-uuid/video.mp4',
           format: 'mp4',
