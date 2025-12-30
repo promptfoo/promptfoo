@@ -9,8 +9,10 @@ interface CopyButtonProps {
   iconSize?: string;
 }
 
+type CopyState = 'idle' | 'copied' | 'failed';
+
 export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<CopyState>('idle');
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timeout on unmount
@@ -23,23 +25,27 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
   }, []);
 
   const handleCopy = useCallback(async () => {
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(true);
-
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      timeoutRef.current = setTimeout(() => {
-        setCopied(false);
-        timeoutRef.current = null;
-      }, 2000);
+      setCopyState('copied');
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
+      setCopyState('failed');
     }
+
+    timeoutRef.current = setTimeout(() => {
+      setCopyState('idle');
+      timeoutRef.current = null;
+    }, 2000);
   }, [value]);
+
+  const ariaLabel =
+    copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Failed to copy' : 'Copy';
 
   return (
     <button
@@ -48,10 +54,12 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
         'p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors',
         className,
       )}
-      aria-label={copied ? 'Copied' : 'Copy'}
+      aria-label={ariaLabel}
     >
-      {copied ? (
+      {copyState === 'copied' ? (
         <Check className={cn(iconSize, 'text-emerald-600 dark:text-emerald-400')} />
+      ) : copyState === 'failed' ? (
+        <X className={cn(iconSize, 'text-red-600 dark:text-red-400')} />
       ) : (
         <Copy className={iconSize} />
       )}
