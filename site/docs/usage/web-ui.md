@@ -1,10 +1,11 @@
 ---
+title: Using the Web Viewer
 sidebar_position: 30
 sidebar_label: Web viewer
-description: Compare LLM outputs side-by-side, rate responses for training data, and share evaluations with promptfoo's web viewer.
+description: Compare LLM outputs side-by-side, rate responses for training data, share evaluations, and analyze results with Promptfoo's interactive web viewer.
 ---
 
-# Web Viewer
+# Using the web viewer
 
 After [running an eval](/docs/getting-started), view results in your browser:
 
@@ -140,6 +141,6 @@ Viewer state syncs to the URL—bookmark or share filtered views:
 | `filterMode` | `all`, `failures`, `passes`, `errors`, `different`, `highlights` |
 | `search` | Any text |
 
-```
+```text
 /eval/abc123?filterMode=failures&search=timeout
 ```
