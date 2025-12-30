@@ -94,6 +94,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             id: result.response.audio.id,
             expiresAt: result.response.audio.expiresAt,
             data: result.response.audio.data,
+            blobRef: result.response.audio.blobRef,
             transcript: result.response.audio.transcript,
             format: result.response.audio.format,
           }

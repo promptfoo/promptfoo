@@ -71,15 +71,15 @@ export function isImageProvider(provider: string | undefined): boolean {
 /**
  * Detects if the provider is a video generation provider.
  * Video providers follow patterns like:
- * - 'openai:video:sora-2' (OpenAI Sora)
- * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
+ * - 'google:video:veo-3.1-generate-preview' (Google Veo)
+ * - 'google:video:veo-2-generate' (Google Veo 2)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
   if (!provider) {
     return false;
   }
-  // Check for :video: namespace (OpenAI Sora)
+  // Check for :video: namespace (Google Veo)
   return provider.includes(':video:');
 }
 

@@ -1495,12 +1495,12 @@ describe('isImageProvider helper function', () => {
 });
 
 describe('isVideoProvider helper function', () => {
-  it('should return true for Sora 2 provider', () => {
-    expect(isVideoProvider('openai:video:sora-2')).toBe(true);
+  it('should return true for Google Veo 3.1 provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Sora 2 Pro provider', () => {
-    expect(isVideoProvider('openai:video:sora-2-pro')).toBe(true);
+  it('should return true for Google Veo 2 provider', () => {
+    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {
