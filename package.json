@@ -76,6 +76,7 @@
     "test:vitest:watch": "vitest",
     "test:watch": "vitest",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "test": "vitest run",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
