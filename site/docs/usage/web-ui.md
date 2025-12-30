@@ -19,11 +19,11 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+K` / `Cmd+K` | Open eval selector |
-| `Esc` | Clear search |
-| `Shift` (hold) | Show extra cell actions |
+| Shortcut           | Action                  |
+| ------------------ | ----------------------- |
+| `Ctrl+K` / `Cmd+K` | Open eval selector      |
+| `Esc`              | Clear search            |
+| `Shift` (hold)     | Show extra cell actions |
 
 ## Toolbar
 
@@ -49,16 +49,16 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
 Hover to reveal actions. Hold `Shift` for more:
 
-| | Action | Description |
-|-|--------|-------------|
-| 🔍 | Details | Full output, prompt, variables, grading results |
-| 👍 | Pass | Mark as passed (score = 1.0) |
-| 👎 | Fail | Mark as failed (score = 0.0) |
-| 🔢 | Score | Set custom score (0-1) |
-| ✏️ | Comment | Add notes |
-| ⭐ | Highlight | Mark for review (`Shift`) |
-| 📋 | Copy | Copy to clipboard (`Shift`) |
-| 🔗 | Share | Link to this output (`Shift`) |
+|     | Action    | Description                                     |
+| --- | --------- | ----------------------------------------------- |
+| 🔍  | Details   | Full output, prompt, variables, grading results |
+| 👍  | Pass      | Mark as passed (score = 1.0)                    |
+| 👎  | Fail      | Mark as failed (score = 0.0)                    |
+| 🔢  | Score     | Set custom score (0-1)                          |
+| ✏️  | Comment   | Add notes                                       |
+| ⭐  | Highlight | Mark for review (`Shift`)                       |
+| 📋  | Copy      | Copy to clipboard (`Shift`)                     |
+| 🔗  | Share     | Link to this output (`Shift`)                   |
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
 
@@ -72,14 +72,14 @@ Ratings and comments persist and are included in exports—use them to build tra
 - **View YAML** - Show config
 - **Download** - Opens export dialog:
 
-| Export | Use case |
-|--------|----------|
-| YAML config | Re-run the eval |
-| Failed tests only | Debug failures |
-| CSV / JSON | Analysis, reporting |
-| DPO JSON | Preference training data |
-| Human Eval YAML | Human labeling workflows |
-| Burp payloads | Security testing (red team only) |
+| Export            | Use case                         |
+| ----------------- | -------------------------------- |
+| YAML config       | Re-run the eval                  |
+| Failed tests only | Debug failures                   |
+| CSV / JSON        | Analysis, reporting              |
+| DPO JSON          | Preference training data         |
+| Human Eval YAML   | Human labeling workflows         |
+| Burp payloads     | Security testing (red team only) |
 
 - **Copy** - Duplicate eval
 - **Share** - Generate URL (see [Sharing](#sharing))
@@ -136,10 +136,10 @@ Or set via **API Settings** in the top-right menu. See [sharing docs](/docs/usag
 
 Viewer state syncs to the URL—bookmark or share filtered views:
 
-| Parameter | Values |
-|-----------|--------|
+| Parameter    | Values                                                           |
+| ------------ | ---------------------------------------------------------------- |
 | `filterMode` | `all`, `failures`, `passes`, `errors`, `different`, `highlights` |
-| `search` | Any text |
+| `search`     | Any text                                                         |
 
 ```text
 /eval/abc123?filterMode=failures&search=timeout
