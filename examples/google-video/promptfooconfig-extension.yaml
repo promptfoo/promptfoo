@@ -7,9 +7,10 @@ prompts:
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      # Provide your own source video path here
-      sourceVideo: file://assets/source.mp4
-      duration: 5
+      # Use the operation ID from a previous Veo video generation
+      # This is returned in metadata.operationName of the generation response
+      extendVideoId: projects/YOUR_PROJECT/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/YOUR_OPERATION_ID
+      durationSeconds: 6 # Valid: 4, 6, 8 for Veo 3.x
 
 tests:
   - vars:
@@ -21,7 +22,8 @@ tests:
     assert:
       - type: is-valid-video
 
-# Note: Video extension is only supported by Veo 3.1 models
-# You need to create an assets/ directory with your source video
-# mkdir assets
-# cp /path/to/your/video.mp4 assets/source.mp4
+# Note: Video extension requires an operation ID from a previous Veo generation.
+# To use this:
+# 1. First generate a video using promptfooconfig.yaml
+# 2. Get the operation ID from the results (metadata.operationName field)
+# 3. Replace YOUR_PROJECT and YOUR_OPERATION_ID above with your values

@@ -256,16 +256,21 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Handle reference images (Veo 3.1 only, up to 3)
+    // Accepts either string[] (file paths) or object[] with { image, referenceType }
     if (config.referenceImages && config.referenceImages.length > 0) {
       const refs = [];
       for (const ref of config.referenceImages.slice(0, 3)) {
-        const { data: imageData, error } = this.loadImageData(ref.image);
+        // Support both string format and object format
+        const imagePath = typeof ref === 'string' ? ref : ref.image;
+        const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
+
+        const { data: imageData, error } = this.loadImageData(imagePath);
         if (error) {
           return { error };
         }
         refs.push({
           image: { imageBytes: imageData, mimeType: 'image/png' },
-          referenceType: ref.referenceType || 'asset',
+          referenceType,
         });
       }
       instance.referenceImages = refs;
@@ -436,25 +441,31 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Check for project ID (required for Vertex AI)
-    const projectId =
+    // Validate prompt first
+    if (!prompt || prompt.trim() === '') {
+      return {
+        error: 'Prompt is required for video generation',
+      };
+    }
+
+    // Check for project ID - try to resolve from ADC if not explicitly configured
+    let projectId =
       this.config.projectId ||
       getEnvString('GOOGLE_PROJECT_ID') ||
       getEnvString('VERTEX_PROJECT_ID') ||
       this.env?.GOOGLE_PROJECT_ID ||
       this.env?.VERTEX_PROJECT_ID;
 
+    // If no explicit project ID, try to resolve from ADC credentials
     if (!projectId) {
-      return {
-        error:
-          'Google Veo video generation requires Vertex AI. Set GOOGLE_PROJECT_ID environment variable or add `projectId` to the provider config, then run "gcloud auth application-default login".',
-      };
-    }
-
-    if (!prompt || prompt.trim() === '') {
-      return {
-        error: 'Prompt is required for video generation',
-      };
+      try {
+        projectId = await resolveProjectId(this.config, this.env);
+      } catch {
+        return {
+          error:
+            'Google Veo video generation requires Vertex AI. Set GOOGLE_PROJECT_ID environment variable or add `projectId` to the provider config, then run "gcloud auth application-default login".',
+        };
+      }
     }
 
     const config: GoogleVideoOptions = {
@@ -465,7 +476,8 @@ export class GoogleVideoProvider implements ApiProvider {
     const model = config.model || this.modelName;
     const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = config.resolution || DEFAULT_RESOLUTION;
-    const durationSeconds = config.durationSeconds || DEFAULT_DURATION;
+    // Support both 'durationSeconds' and 'duration' (alias)
+    const durationSeconds = config.durationSeconds || config.duration || DEFAULT_DURATION;
 
     // Validate aspect ratio
     const ratioValidation = validateAspectRatio(aspectRatio);

@@ -23,10 +23,11 @@ vi.mock('../../../src/blobs', () => ({
 }));
 
 vi.mock('fs');
+const mockResolveProjectId = vi.fn().mockResolvedValue('test-project');
 vi.mock('../../../src/providers/google/util', () => ({
   getGoogleClient: () => mockGetGoogleClient(),
   loadCredentials: vi.fn((creds) => creds),
-  resolveProjectId: vi.fn().mockResolvedValue('test-project'),
+  resolveProjectId: (...args: unknown[]) => mockResolveProjectId(...args),
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -43,6 +44,8 @@ describe('GoogleVideoProvider', () => {
     vi.clearAllMocks();
     mockRequest.mockReset();
     mockStoreBlob.mockReset();
+    mockResolveProjectId.mockReset();
+    mockResolveProjectId.mockResolvedValue('test-project');
     process.env.GOOGLE_PROJECT_ID = 'test-project';
     delete process.env.VERTEX_PROJECT_ID;
 
@@ -62,6 +65,9 @@ describe('GoogleVideoProvider', () => {
   afterEach(() => {
     delete process.env.GOOGLE_PROJECT_ID;
     delete process.env.VERTEX_PROJECT_ID;
+    // Reset fs mocks to prevent leakage between tests
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
   });
 
   describe('constructor and id', () => {
@@ -194,15 +200,47 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('callApi', () => {
-    it('should return error when project ID is missing', async () => {
+    it('should return error when project ID is missing and ADC fails', async () => {
       delete process.env.GOOGLE_PROJECT_ID;
       delete process.env.VERTEX_PROJECT_ID;
+      // Mock ADC resolution to fail (simulating no credentials configured)
+      mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Google Veo video generation requires Vertex AI');
       expect(result.error).toContain('GOOGLE_PROJECT_ID');
+    });
+
+    it('should resolve project ID from ADC when not explicitly set', async () => {
+      delete process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
+      // ADC can resolve the project ID
+      mockResolveProjectId.mockResolvedValue('adc-resolved-project');
+
+      const operationName =
+        'projects/adc-resolved-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: { name: operationName, done: false },
+      });
+      // Mock polling - done with video
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: { videos: [{ bytesBase64Encoded: base64Video }] },
+        },
+      });
+
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(mockResolveProjectId).toHaveBeenCalled();
     });
 
     it('should return error when prompt is empty', async () => {

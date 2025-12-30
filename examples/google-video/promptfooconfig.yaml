@@ -9,7 +9,7 @@ providers:
     config:
       aspectRatio: '16:9'
       resolution: '720p'
-      duration: 5
+      durationSeconds: 6 # Valid: 4, 6, 8 for Veo 3.x
 
 tests:
   - vars:

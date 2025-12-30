@@ -386,6 +386,7 @@ export interface GoogleVideoOptions {
   aspectRatio?: GoogleVideoAspectRatio;
   resolution?: GoogleVideoResolution;
   durationSeconds?: GoogleVideoDuration;
+  duration?: GoogleVideoDuration; // Alias for durationSeconds
 
   // Content guidance
   negativePrompt?: string;
@@ -398,11 +399,12 @@ export interface GoogleVideoOptions {
   lastImage?: string; // Alias for lastFrame
 
   // Reference images (Veo 3.1 only, up to 3)
-  referenceImages?: GoogleVideoReferenceImage[];
+  // Can be string[] (file paths) or GoogleVideoReferenceImage[] (objects with referenceType)
+  referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  extendVideoId?: string; // Previous Veo video operation ID
-  sourceVideo?: string; // Alias for extendVideoId
+  extendVideoId?: string; // Operation ID from previous Veo generation
+  sourceVideo?: string; // Alias for extendVideoId (must be Veo operation ID, not file path)
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;
