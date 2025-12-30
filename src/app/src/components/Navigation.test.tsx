@@ -36,6 +36,44 @@ const renderNavigation = (
   );
 };
 
+const renderWithModal = (navigationProps: { onToggleDarkMode?: () => void } = {}) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  const Modal = () => (
+    <div
+      data-testid="modal"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        zIndex: 1300,
+      }}
+    >
+      Modal Content
+    </div>
+  );
+
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <Navigation onToggleDarkMode={navigationProps.onToggleDarkMode || (() => {})} />
+          <Modal />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </TooltipProvider>,
+  );
+};
+
 describe('Navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,6 +91,12 @@ describe('Navigation', () => {
     expect(screen.getByText('Prompts')).toBeInTheDocument();
     expect(screen.getByText('Datasets')).toBeInTheDocument();
     expect(screen.getByText('History')).toBeInTheDocument();
+  });
+
+  it('should have the correct z-index class', () => {
+    renderNavigation();
+    const header = screen.getByRole('banner');
+    expect(header).toHaveClass('z-[var(--z-appbar)]');
   });
 
   it('shows the Model Audit item in the Create dropdown', () => {
@@ -338,5 +382,12 @@ describe('Navigation', () => {
 
     expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();
     expect(screen.getByText('View findings from red teams')).toBeInTheDocument();
+  });
+
+  it('renders a modal above the Navigation component', () => {
+    renderWithModal();
+    const modal = screen.getByTestId('modal');
+    expect(modal).toBeInTheDocument();
+    expect(modal).toHaveStyle('zIndex: 1300;');
   });
 });
