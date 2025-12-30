@@ -361,6 +361,13 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle Luma Ray video model
+      if (modelType === 'video' || modelType.includes('luma.ray')) {
+        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
+        const videoModelName = modelName || 'luma.ray-v2:0';
+        return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
       // Handle Bedrock Agents
       if (modelType === 'agents') {
         const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');

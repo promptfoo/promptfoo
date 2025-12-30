@@ -413,6 +413,72 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
       };
 }
 
+// =============================================================================
+// Luma Ray 2 Video Generation Types
+// =============================================================================
+
+export type LumaRayAspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '21:9' | '9:21';
+export type LumaRayDuration = '5s' | '9s';
+export type LumaRayResolution = '540p' | '720p';
+
+export interface LumaRayKeyframeSource {
+  type: 'base64';
+  media_type: 'image/jpeg' | 'image/png';
+  data: string;
+}
+
+export interface LumaRayKeyframe {
+  type: 'image';
+  source: LumaRayKeyframeSource;
+}
+
+export interface LumaRayKeyframes {
+  frame0?: LumaRayKeyframe;
+  frame1?: LumaRayKeyframe;
+}
+
+export interface LumaRayVideoOptions extends BedrockOptions {
+  /** Required: S3 bucket URI for video output */
+  s3OutputUri: string;
+
+  /** Aspect ratio of output video (default: "16:9") */
+  aspectRatio?: LumaRayAspectRatio;
+  /** Video duration: "5s" or "9s" (default: "5s") */
+  duration?: LumaRayDuration;
+  /** Output resolution: "540p" or "720p" (default: "720p") */
+  resolution?: LumaRayResolution;
+  /** Whether to loop the video (default: false) */
+  loop?: boolean;
+
+  /** Keyframes for image-to-video generation */
+  keyframes?: LumaRayKeyframes;
+  /** Convenience: Start frame image (file:// path or base64) */
+  startImage?: string;
+  /** Convenience: End frame image (file:// path or base64) */
+  endImage?: string;
+
+  /** Polling interval in milliseconds (default: 10000) */
+  pollIntervalMs?: number;
+  /** Maximum polling time in milliseconds (default: 600000 = 10 min) */
+  maxPollTimeMs?: number;
+
+  /** Whether to download video from S3 to blob storage (default: true) */
+  downloadFromS3?: boolean;
+}
+
+export interface LumaRayInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  failureMessage?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig?: {
+      s3Uri: string;
+    };
+  };
+}
+
 export interface IBedrockModel {
   params: (
     config: BedrockOptions,
