@@ -10,6 +10,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Path to the built CLI binary
@@ -647,7 +648,7 @@ describe('Output Flag Tests', () => {
     const configPath = path.join(CONFIGS_DIR, 'basic.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'no-write-output.json');
 
-    const { exitCode, stdout } = runCli(
+    const { exitCode } = runCli(
       ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--no-write'],
       { cwd: CONFIGS_DIR },
     );
@@ -656,9 +657,6 @@ describe('Output Flag Tests', () => {
 
     // The eval should still complete and write to the output file
     expect(fs.existsSync(outputPath)).toBe(true);
-
-    // Check that stdout doesn't mention storing to database
-    // (This is a soft check - the main thing is it doesn't error)
   });
 });
 

@@ -6,9 +6,10 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Path to the built CLI binary
