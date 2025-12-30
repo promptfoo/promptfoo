@@ -16,7 +16,7 @@ import { AwsBedrockGenericProvider } from './base';
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
-import type { NovaReelVideoOptions, NovaReelInvocationResponse } from './index';
+import type { NovaReelInvocationResponse, NovaReelVideoOptions } from './index';
 
 // =============================================================================
 // Constants
@@ -258,7 +258,8 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
               status: 'Completed',
               submitTime: invocation.submitTime?.toISOString(),
               endTime: invocation.endTime?.toISOString(),
-              outputDataConfig: invocation.outputDataConfig as NovaReelInvocationResponse['outputDataConfig'],
+              outputDataConfig:
+                invocation.outputDataConfig as NovaReelInvocationResponse['outputDataConfig'],
             },
           };
         }
@@ -304,7 +305,9 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       });
 
       // Nova Reel outputs to {s3Uri}/output.mp4
-      const videoKey = keyPrefix.endsWith('/') ? `${keyPrefix}output.mp4` : `${keyPrefix}/output.mp4`;
+      const videoKey = keyPrefix.endsWith('/')
+        ? `${keyPrefix}output.mp4`
+        : `${keyPrefix}/output.mp4`;
 
       logger.debug('[Nova Reel] Downloading video from S3', { bucket, key: videoKey });
 
@@ -350,8 +353,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {
       return {
-        error:
-          'Nova Reel requires s3OutputUri in provider config. Example: s3://my-bucket/videos',
+        error: 'Nova Reel requires s3OutputUri in provider config. Example: s3://my-bucket/videos',
       };
     }
 

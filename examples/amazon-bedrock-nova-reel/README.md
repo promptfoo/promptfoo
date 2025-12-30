@@ -41,13 +41,13 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option            | Description                               | Default    |
-| ----------------- | ----------------------------------------- | ---------- |
-| `s3OutputUri`     | S3 bucket URI for video output (required) | -          |
+| Option            | Description                                            | Default    |
+| ----------------- | ------------------------------------------------------ | ---------- |
+| `s3OutputUri`     | S3 bucket URI for video output (required)              | -          |
 | `taskType`        | TEXT_VIDEO, MULTI_SHOT_AUTOMATED, or MULTI_SHOT_MANUAL | TEXT_VIDEO |
-| `durationSeconds` | Video duration in seconds                 | 6          |
-| `seed`            | Random seed for reproducibility           | -          |
-| `image`           | Starting frame image path                 | -          |
+| `durationSeconds` | Video duration in seconds                              | 6          |
+| `seed`            | Random seed for reproducibility                        | -          |
+| `image`           | Starting frame image path                              | -          |
 
 ## Task Types
 
