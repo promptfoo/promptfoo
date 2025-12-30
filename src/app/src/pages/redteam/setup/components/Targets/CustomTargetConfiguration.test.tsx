@@ -1,16 +1,14 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 
 import type { ProviderOptions } from '../../types';
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const render = (ui: React.ReactElement) => {
+  return rtlRender(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
 };
 
 describe('CustomTargetConfiguration', () => {
@@ -23,7 +21,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -47,7 +45,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -71,7 +69,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -95,7 +93,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -119,7 +117,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -143,7 +141,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -165,7 +163,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -189,7 +187,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -216,7 +214,7 @@ describe('CustomTargetConfiguration', () => {
         config: {},
       };
 
-      renderWithTheme(
+      render(
         <CustomTargetConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}

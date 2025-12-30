@@ -1,7 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 
 // Mock the useRedTeamConfig hook
@@ -157,7 +155,7 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should show BOLA-specific field
       expect(screen.getByText(/Broken Object Level Authorization/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Target System 1/)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Target System 1/)).toBeInTheDocument();
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
@@ -176,7 +174,7 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should show BFLA-specific field
       expect(screen.getByText(/Broken Function Level Authorization/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Target Identifier 1/)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Target Identifier 1/)).toBeInTheDocument();
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
@@ -234,7 +232,9 @@ describe('PluginConfigDialog - OSS', () => {
         />,
       );
 
-      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+      // There are multiple Close buttons (footer button + X button with sr-only text)
+      const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+      expect(closeButtons.length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
 
@@ -255,7 +255,9 @@ describe('PluginConfigDialog - OSS', () => {
         />,
       );
 
-      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+      // There are multiple Close buttons (footer button + X button with sr-only text)
+      const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+      expect(closeButtons.length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
   });

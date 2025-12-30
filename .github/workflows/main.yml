@@ -179,18 +179,13 @@ jobs:
         run: |
           npm ci
 
-      - name: Lint Project
+      - name: Run Biome CI
         run: |
-          npm run lint
+          npm run lint:ci
 
-      - name: Lint UI
-        working-directory: src/app
+      - name: Run Prettier Check
         run: |
-          npm run lint
-
-      - name: Run Style Check
-        run: |
-          npm run format:check
+          npm run format:check:prettier
 
       - name: Check Dependency Versions
         run: |
@@ -315,6 +310,32 @@ jobs:
         working-directory: site
         run: npm run build
 
+  site-tests:
+    name: Site tests
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Run Site Tests
+        working-directory: site
+        run: npm test
+
   webui:
     name: webui tests
     timeout-minutes: 5
@@ -378,6 +399,7 @@ jobs:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -435,6 +457,7 @@ jobs:
   redteam:
     name: Redteam (Production API)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -460,6 +483,7 @@ jobs:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

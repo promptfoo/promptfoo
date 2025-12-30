@@ -1,15 +1,14 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 
+import { storeBlob } from '../../blobs';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getConfigDirectoryPath } from '../../util/config/manage';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
+import type { BlobRef } from '../../blobs';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -44,27 +43,14 @@ const DEFAULT_DURATION: GoogleVideoDuration = 8;
 const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
 
-/**
- * Video output subdirectory within .promptfoo
- */
-const VIDEO_OUTPUT_SUBDIR = 'output/video';
-
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
-function getVideoOutputDir(): string {
-  return path.join(getConfigDirectoryPath(true), VIDEO_OUTPUT_SUBDIR);
-}
-
-export function getVideoFilePath(uuid: string): string {
-  return path.join(getVideoOutputDir(), uuid, 'video.mp4');
-}
-
-export function getVideoApiPath(uuid: string): string {
-  return `/api/output/video/${uuid}/video.mp4`;
-}
-
+/**
+ * Generate a cache key for video generation based on input parameters.
+ * This is used for display purposes and deduplication hints.
+ */
 export function generateVideoCacheKey(
   prompt: string,
   model: string,
@@ -86,20 +72,6 @@ export function generateVideoCacheKey(
 
   const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-}
-
-export function checkVideoCache(cacheKey: string): boolean {
-  const videoPath = getVideoFilePath(cacheKey);
-  return fs.existsSync(videoPath);
-}
-
-function createVideoOutputDirectory(cacheKey?: string): string {
-  const uuid = cacheKey || uuidv4();
-  const outputDir = path.join(getVideoOutputDir(), uuid);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-  return uuid;
 }
 
 export function validateAspectRatio(ratio: string): { valid: boolean; message?: string } {
@@ -401,12 +373,9 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   /**
-   * Download video from URI
+   * Download video from URI and store to blob storage
    */
-  private async downloadVideo(
-    videoUri: string,
-    outputUuid: string,
-  ): Promise<{ filePath?: string; apiPath?: string; error?: string }> {
+  private async downloadVideoToBlob(videoUri: string): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const client = await this.getClientWithCredentials();
 
@@ -418,13 +387,15 @@ export class GoogleVideoProvider implements ApiProvider {
       });
 
       const buffer = Buffer.from(response.data as ArrayBuffer);
-      const filePath = getVideoFilePath(outputUuid);
-      fs.writeFileSync(filePath, buffer);
 
-      const apiPath = getVideoApiPath(outputUuid);
-      logger.debug(`[Google Video] Downloaded video to ${filePath} (API: ${apiPath})`);
+      // Store to blob storage
+      const { ref } = await storeBlob(buffer, 'video/mp4', {
+        kind: 'video',
+        location: 'response.video',
+      });
 
-      return { filePath, apiPath };
+      logger.debug(`[Google Video] Stored video to blob storage: ${ref.uri}`);
+      return { blobRef: ref };
     } catch (err) {
       const error = err as { message?: string };
       return {
@@ -434,21 +405,20 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   /**
-   * Save base64 encoded video to file
+   * Store base64 encoded video to blob storage
    */
-  private saveBase64Video(
-    base64Data: string,
-    outputUuid: string,
-  ): { filePath?: string; apiPath?: string; error?: string } {
+  private async storeBase64VideoToBlob(base64Data: string): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const buffer = Buffer.from(base64Data, 'base64');
-      const filePath = getVideoFilePath(outputUuid);
-      fs.writeFileSync(filePath, buffer);
 
-      const apiPath = getVideoApiPath(outputUuid);
-      logger.debug(`[Google Video] Saved base64 video to ${filePath} (API: ${apiPath})`);
+      // Store to blob storage
+      const { ref, deduplicated } = await storeBlob(buffer, 'video/mp4', {
+        kind: 'video',
+        location: 'response.video',
+      });
 
-      return { filePath, apiPath };
+      logger.debug(`[Google Video] Stored video to blob storage: ${ref.uri} (deduplicated: ${deduplicated})`);
+      return { blobRef: ref };
     } catch (err) {
       const error = err as { message?: string };
       return {
@@ -507,57 +477,6 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: resolutionValidation.message };
     }
 
-    // Generate cache key (skip for video extension)
-    const cacheKey = config.extendVideoId
-      ? undefined
-      : generateVideoCacheKey(
-          prompt,
-          model,
-          aspectRatio,
-          resolution,
-          durationSeconds,
-          config.image,
-          config.negativePrompt,
-        );
-
-    // Check cache
-    if (cacheKey && checkVideoCache(cacheKey)) {
-      logger.info(`[Google Video] Cache hit for video: ${cacheKey}`);
-
-      const videoApiPath = getVideoApiPath(cacheKey);
-      const sanitizedPrompt = prompt
-        .replace(/\r?\n|\r/g, ' ')
-        .replace(/\[/g, '(')
-        .replace(/\]/g, ')');
-      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-      const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
-
-      return {
-        output,
-        cached: true,
-        latencyMs: 0,
-        cost: 0,
-        video: {
-          uuid: cacheKey,
-          url: videoApiPath,
-          format: 'mp4',
-          size: resolution,
-          duration: durationSeconds,
-          model,
-          aspectRatio,
-          resolution,
-        },
-        metadata: {
-          cached: true,
-          cacheKey,
-          model,
-          aspectRatio,
-          resolution,
-          durationSeconds,
-        },
-      };
-    }
-
     const startTime = Date.now();
 
     // Step 1: Create video job
@@ -590,23 +509,18 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: pollError || 'Polling failed' };
     }
 
-    // Step 3: Create output directory
-    const outputUuid = createVideoOutputDirectory(cacheKey);
-    logger.debug(`[Google Video] Created video output directory: ${outputUuid}`);
-
-    let videoApiPath: string | undefined;
-    let videoPath: string | undefined;
+    // Step 3: Store video to blob storage
+    let blobRef: BlobRef | undefined;
 
     // Check for base64 encoded video (new format)
     const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
     if (base64Video) {
-      logger.debug(`[Google Video] Saving base64 encoded video...`);
-      const { apiPath, filePath, error } = this.saveBase64Video(base64Video, outputUuid);
+      logger.debug(`[Google Video] Storing base64 encoded video to blob storage...`);
+      const { blobRef: ref, error } = await this.storeBase64VideoToBlob(base64Video);
       if (error) {
         return { error };
       }
-      videoApiPath = apiPath;
-      videoPath = filePath;
+      blobRef = ref;
     } else {
       // Fallback to URI format (legacy)
       const videoUri =
@@ -616,41 +530,34 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error: 'No video data in response' };
       }
 
-      const {
-        apiPath,
-        filePath,
-        error: downloadError,
-      } = await this.downloadVideo(videoUri, outputUuid);
+      const { blobRef: ref, error: downloadError } = await this.downloadVideoToBlob(videoUri);
       if (downloadError) {
         return { error: downloadError };
       }
-      videoApiPath = apiPath;
-      videoPath = filePath;
+      blobRef = ref;
     }
 
-    if (!videoApiPath) {
-      return { error: 'Failed to save video' };
+    if (!blobRef) {
+      return { error: 'Failed to store video' };
     }
 
     const latencyMs = Date.now() - startTime;
 
-    // Format output
+    // Format output with blob URI
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
+    const output = `[Video: ${ellipsizedPrompt}](${blobRef.uri})`;
 
     return {
       output,
       cached: false,
       latencyMs,
-      // Cost calculation would need pricing info - placeholder for now
       video: {
         id: operationName,
-        uuid: outputUuid,
-        url: videoApiPath,
+        blobRef,
         format: 'mp4',
         size: resolution,
         duration: durationSeconds,
@@ -660,12 +567,11 @@ export class GoogleVideoProvider implements ApiProvider {
       },
       metadata: {
         operationName,
-        outputUuid,
         model,
         aspectRatio,
         resolution,
         durationSeconds,
-        localPath: videoPath,
+        blobHash: blobRef.hash,
       },
     };
   }

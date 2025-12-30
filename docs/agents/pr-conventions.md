@@ -122,6 +122,16 @@ chore(webui): update dependency  # Should be chore(deps)
 feat: stuff                      # Too vague
 ```
 
+## Draft Mode Required
+
+**Always open PRs in draft mode.** Use the `--draft` flag:
+
+```bash
+gh pr create --draft --title "feat(scope): description"
+```
+
+This allows maintainers to review and provide feedback before the PR is marked ready for merge.
+
 ## Checklist Before Creating PR
 
 1. Is this redteam-related? → Use `(redteam)` scope
@@ -129,3 +139,4 @@ feat: stuff                      # Too vague
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
+6. **Open the PR in draft mode** (`--draft`)

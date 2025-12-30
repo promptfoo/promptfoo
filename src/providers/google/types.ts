@@ -208,10 +208,12 @@ export interface CompletionOptions {
       proactiveAudio?: boolean;
     };
 
-    // Thinking configuration
+    // Thinking configuration for Gemini 2.5+ models
+    // Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+    // Gemini 3 Pro supports: LOW, HIGH
     thinkingConfig?: {
       thinkingBudget?: number;
-      thinkingLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
     };
   };
 
@@ -275,6 +277,18 @@ export interface CompletionOptions {
    * Note: Model Armor floor settings only work with the non-streaming API.
    */
   streaming?: boolean;
+
+  /**
+   * Control Vertex AI express mode (API key authentication).
+   *
+   * Express mode is AUTOMATIC when an API key is available and no explicit
+   * projectId or credentials are configured. Set to `false` to force OAuth
+   * authentication even when an API key is present.
+   *
+   * @default undefined (automatic detection)
+   * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
+   */
+  expressMode?: boolean;
 }
 
 // Claude API interfaces

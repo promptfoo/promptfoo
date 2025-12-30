@@ -3,9 +3,6 @@ import * as fs from 'fs';
 import {
   GoogleVideoProvider,
   generateVideoCacheKey,
-  checkVideoCache,
-  getVideoApiPath,
-  getVideoFilePath,
   validateAspectRatio,
   validateDuration,
   validateResolution,
@@ -18,15 +15,17 @@ const mockGetGoogleClient = vi.fn().mockResolvedValue({
   projectId: 'test-project',
 });
 
+// Mock blob storage
+const mockStoreBlob = vi.fn();
+vi.mock('../../../src/blobs', () => ({
+  storeBlob: (...args: unknown[]) => mockStoreBlob(...args),
+}));
+
 vi.mock('fs');
 vi.mock('../../../src/providers/google/util', () => ({
   getGoogleClient: () => mockGetGoogleClient(),
   loadCredentials: vi.fn((creds) => creds),
   resolveProjectId: vi.fn().mockResolvedValue('test-project'),
-}));
-
-vi.mock('../../../src/util/config/manage', () => ({
-  getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/.promptfoo'),
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -42,13 +41,21 @@ describe('GoogleVideoProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequest.mockReset();
+    mockStoreBlob.mockReset();
     process.env.GOOGLE_PROJECT_ID = 'test-project';
     delete process.env.VERTEX_PROJECT_ID;
 
-    // Default mock for fs.existsSync - no cache
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+    // Default mock for blob storage
+    mockStoreBlob.mockResolvedValue({
+      ref: {
+        uri: 'promptfoo://blob/abc123def456',
+        hash: 'abc123def456',
+        mimeType: 'video/mp4',
+        sizeBytes: 1024,
+        provider: 'filesystem',
+      },
+      deduplicated: false,
+    });
   });
 
   afterEach(() => {
@@ -185,35 +192,6 @@ describe('GoogleVideoProvider', () => {
     });
   });
 
-  describe('checkVideoCache', () => {
-    it('should return true when video file exists', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      expect(checkVideoCache('test-uuid')).toBe(true);
-    });
-
-    it('should return false when video file does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      expect(checkVideoCache('test-uuid')).toBe(false);
-    });
-  });
-
-  describe('getVideoFilePath', () => {
-    it('should return correct file path', () => {
-      const filePath = getVideoFilePath('test-uuid');
-      // Use regex to handle both Unix (/) and Windows (\) path separators
-      expect(filePath).toMatch(
-        /[/\\]mock[/\\]\.promptfoo[/\\]output[/\\]video[/\\]test-uuid[/\\]video\.mp4$/,
-      );
-    });
-  });
-
-  describe('getVideoApiPath', () => {
-    it('should return correct API path', () => {
-      const path = getVideoApiPath('test-uuid');
-      expect(path).toBe('/api/output/video/test-uuid/video.mp4');
-    });
-  });
-
   describe('callApi', () => {
     it('should return error when project ID is missing', async () => {
       delete process.env.GOOGLE_PROJECT_ID;
@@ -258,21 +236,7 @@ describe('GoogleVideoProvider', () => {
       expect(result.error).toContain('Invalid duration');
     });
 
-    it('should return cached result when video exists', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.cached).toBe(true);
-      expect(result.cost).toBe(0);
-      expect(result.latencyMs).toBe(0);
-      expect(result.output).toContain('[Video:');
-      expect(result.video).toBeDefined();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it('should create video job and poll for completion', async () => {
+    it('should create video job, poll for completion, and store to blob storage', async () => {
       const operationName =
         'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
       // Base64 encoded MP4 header (simplified for test)
@@ -319,11 +283,21 @@ describe('GoogleVideoProvider', () => {
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);
       expect(result.output).toContain('[Video:');
+      expect(result.output).toContain('promptfoo://blob/');
       expect(result.video).toBeDefined();
       expect(result.video?.format).toBe('mp4');
       expect(result.video?.model).toBe('veo-3.1-generate-preview');
+      expect(result.video?.blobRef).toBeDefined();
+      expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
       // 3 requests: job creation, 2 polls (one in progress, one done)
       expect(mockRequest).toHaveBeenCalledTimes(3);
+      // Blob storage called once
+      expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+      expect(mockStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'video/mp4',
+        expect.objectContaining({ kind: 'video' }),
+      );
     });
 
     it('should handle API error on job creation', async () => {
@@ -505,15 +479,7 @@ describe('GoogleVideoProvider', () => {
       expect(body.instances[0].seed).toBe(12345);
     });
 
-    it('should skip cache for video extension', async () => {
-      // Reset mocks and set up for this specific test
-      vi.mocked(fs.existsSync).mockReset();
-
-      // When extendVideoId is set, cache is skipped entirely
-      // existsSync will be called for:
-      // 1. Creating output directory - return false so it creates it
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
+    it('should include video extension in request', async () => {
       const operationName =
         'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
       const base64Video = Buffer.from('fake video').toString('base64');
@@ -546,7 +512,6 @@ describe('GoogleVideoProvider', () => {
 
       const result = await provider.callApi('Continue the video');
 
-      // Should NOT return cached result - request should have been called
       expect(mockRequest).toHaveBeenCalled();
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);
@@ -555,6 +520,54 @@ describe('GoogleVideoProvider', () => {
       const firstCallOptions = mockRequest.mock.calls[0][0];
       const body = JSON.parse(firstCallOptions.body);
       expect(body.instances[0].video).toEqual({ operationName: 'previous-operation-id' });
+    });
+
+    it('should handle blob storage deduplication', async () => {
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock deduplicated blob storage response
+      mockStoreBlob.mockResolvedValueOnce({
+        ref: {
+          uri: 'promptfoo://blob/existinghash123',
+          hash: 'existinghash123',
+          mimeType: 'video/mp4',
+          sizeBytes: 1024,
+          provider: 'filesystem',
+        },
+        deduplicated: true,
+      });
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
+      });
+
+      // Mock polling - done
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
+      });
+
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          pollIntervalMs: 10,
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.video?.blobRef?.hash).toBe('existinghash123');
     });
   });
 
@@ -678,16 +691,13 @@ describe('GoogleVideoProvider', () => {
 
     it('should limit reference images to 3', async () => {
       vi.mocked(fs.existsSync).mockReset();
-      // Return true only for the reference image file paths, false for cache check
+      // Return true only for the reference image file paths
       vi.mocked(fs.existsSync).mockImplementation((path) => {
         const pathStr = path.toString();
         if (pathStr.includes('/path/to/ref')) {
           return true; // Reference image files exist
         }
-        if (pathStr.includes('video.mp4')) {
-          return false; // No cache hit
-        }
-        return false; // Output directory doesn't exist
+        return false;
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
 

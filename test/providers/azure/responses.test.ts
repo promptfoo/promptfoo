@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
-import { fetchWithCache } from '../../../src/cache';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
+import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import type { Mocked, MockedFunction } from 'vitest';
 
 // Mock external dependencies
@@ -274,6 +273,52 @@ describe('AzureResponsesProvider', () => {
       await expect(provider.callApi('test')).rejects.toThrow(
         /Azure API authentication failed.*AZURE_API_KEY/,
       );
+    });
+
+    it('should accept Entra ID authentication with Authorization header', async () => {
+      const mockResponse = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Hello from Entra ID auth!',
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 8,
+        },
+      };
+
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      // Mock ensureInitialized to set authHeaders with Authorization (Entra ID)
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { Authorization: 'Bearer test-entra-token' };
+      });
+
+      const result = await provider.callApi('Hello');
+
+      // Verify the call succeeded (no error about missing authentication)
+      expect(result).toMatchObject({
+        output: 'Hello from Entra ID auth!',
+        cached: false,
+      });
+
+      // Verify the API was called (auth check passed)
+      expect(mockFetchWithCache).toHaveBeenCalled();
     });
 
     it('should validate external response_format files', async () => {

@@ -2,10 +2,10 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useState,
   useEffect,
-  useRef,
   useMemo,
+  useRef,
+  useState,
 } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -17,15 +17,16 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import type { ConversationMessage } from '@promptfoo/redteam/types';
+import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
+import type { ConversationMessage } from '@promptfoo/redteam/types';
+
 import type {
   GeneratedTestCase,
-  TargetResponse,
   TargetPlugin,
+  TargetResponse,
   TargetStrategy,
 } from './testCaseGenerationTypes';
-import { type Config } from '../types';
 
 // Re-export types for backward compatibility
 export type { GeneratedTestCase, TargetResponse, TargetPlugin, TargetStrategy };

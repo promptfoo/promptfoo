@@ -1,6 +1,7 @@
-import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import { useReportStore } from './store';
 
@@ -23,7 +24,7 @@ describe('ReportSettingsDialogButton', () => {
 
   it("should open the settings dialog with the title 'Report Settings' when the icon button is clicked", async () => {
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
@@ -44,15 +45,15 @@ describe('ReportSettingsDialogButton', () => {
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
     const slider = screen.getByRole('slider');
 
-    await user.click(slider);
-    await user.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}');
+    // Simulate changing the slider value directly via fireEvent
+    fireEvent.change(slider, { target: { value: '0.75' } });
 
     expect(mockSetPluginPassRateThreshold).toHaveBeenCalled();
     const calls = mockSetPluginPassRateThreshold.mock.calls;
@@ -66,18 +67,20 @@ describe('ReportSettingsDialogButton', () => {
 
   it('should close the settings dialog when the Close button is clicked', async () => {
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const dialog = screen.getByRole('dialog');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    const closeButton = screen.getByRole('button', { name: 'Close' });
-    await user.click(closeButton);
+    // Get the Close button in the dialog footer (there's also an X close button)
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    // The footer Close button is the one with text, not the X icon
+    const closeButton = closeButtons.find((btn) => btn.textContent === 'Close');
+    await user.click(closeButton!);
 
-    await waitForElementToBeRemoved(dialog);
-
+    // Dialog should be closed after clicking Close
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -91,7 +94,7 @@ describe('ReportSettingsDialogButton', () => {
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
 
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
@@ -99,10 +102,9 @@ describe('ReportSettingsDialogButton', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
 
-    const label = within(dialog).getByText(
-      `Plugin Pass Rate Threshold: ${(threshold * 100).toFixed(0)}%`,
-    );
-    expect(label).toBeInTheDocument();
+    // Label and value are now in separate elements
+    expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
+    expect(within(dialog).getByText(`${(threshold * 100).toFixed(0)}%`)).toBeInTheDocument();
   });
 
   it('should display "NaN%" when pluginPassRateThreshold is NaN', async () => {
@@ -114,7 +116,7 @@ describe('ReportSettingsDialogButton', () => {
     });
 
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
@@ -122,8 +124,9 @@ describe('ReportSettingsDialogButton', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
 
-    const label = within(dialog).getByText(/Plugin Pass Rate Threshold/);
-    expect(label).toHaveTextContent('Plugin Pass Rate Threshold: NaN%');
+    // Label and value are now in separate elements
+    expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
+    expect(within(dialog).getByText('NaN%')).toBeInTheDocument();
   });
 
   it('should render the "Show percentages on risk cards" checkbox based on the store value (unchecked)', async () => {
@@ -134,13 +137,16 @@ describe('ReportSettingsDialogButton', () => {
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const checkbox = screen.getByLabelText('Show percentages on risk cards') as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    // Radix UI Checkbox uses data-state attribute instead of checked property
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show percentages on risk cards',
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
   });
 
   it('should render the "Show percentages on risk cards" checkbox based on the store value (checked)', async () => {
@@ -151,12 +157,15 @@ describe('ReportSettingsDialogButton', () => {
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const checkbox = screen.getByLabelText('Show percentages on risk cards') as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    // Radix UI Checkbox uses data-state attribute instead of checked property
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show percentages on risk cards',
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'checked');
   });
 });

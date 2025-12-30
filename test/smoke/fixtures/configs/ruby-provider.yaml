@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.5.2: Ruby provider works after ESM migration
+# Bug #6506: Ruby provider wrapper failed in 0.120.0
+description: 'Regression test - Ruby provider'
+
+providers:
+  - file://../providers/echo-ruby.rb
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: RubyTest
+    assert:
+      - type: contains
+        value: 'Ruby Echo:'
+      - type: contains
+        value: RubyTest
