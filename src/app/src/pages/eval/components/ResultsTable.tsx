@@ -232,17 +232,15 @@ function ResultsTableHeader({
   'use no memo';
   return (
     <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
-      {stickyHeader && (
-        <div className="header-dismiss">
-          <button
-            type="button"
-            onClick={() => setStickyHeader(false)}
-            className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
+        <button
+          type="button"
+          onClick={() => setStickyHeader(false)}
+          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
