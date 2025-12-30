@@ -2710,6 +2710,11 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     vi.clearAllMocks();
   });
 
+  // Note: Testing rerender() behavior with mocked Zustand stores doesn't work well because
+  // React's useMemo caches persist across rerenders. The actual fix uses key={evalId} on
+  // ResultsTable in ResultsView.tsx, which forces a complete remount and clears all caches.
+  // The tests below use unmount/remount to simulate this key-based remounting behavior.
+
   it('should show correct column headers after remount with different eval (simulates key={evalId})', () => {
     // First eval: NAICS classifier with location-based variables
     const firstEvalTable = {
