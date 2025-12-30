@@ -2710,7 +2710,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     vi.clearAllMocks();
   });
 
-  it('should update column headers when switching between evals with different variable columns', () => {
+  it('should show correct column headers after remount with different eval (simulates key={evalId})', () => {
     // First eval: NAICS classifier with location-based variables
     const firstEvalTable = {
       body: [
@@ -2747,7 +2747,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     expect(screen.getByText('city')).toBeInTheDocument();
     expect(screen.getByText('state')).toBeInTheDocument();
 
-    // Unmount to simulate component being removed (like when key changes)
+    // Unmount simulates what happens when key={evalId} changes in ResultsView
     unmount();
 
     // Second eval: Customer support with different variables
@@ -2779,7 +2779,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    // Re-render with new eval data (simulates what happens when key={evalId} changes)
+    // Fresh mount with new eval data (simulates what happens when key={evalId} changes)
     render(<ResultsTable {...defaultProps} />);
 
     // Verify second eval's column headers are present
@@ -2792,7 +2792,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     expect(screen.queryByText('state')).not.toBeInTheDocument();
   });
 
-  it('should update prompt column headers when switching between evals with different prompts', () => {
+  it('should show correct prompt column headers after remount (simulates key={evalId})', () => {
     // First eval: Single prompt
     const firstEvalTable = {
       body: [
@@ -2885,7 +2885,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     expect(screen.queryByText('GPT-4 Classifier')).not.toBeInTheDocument();
   });
 
-  it('should handle switching from eval with many columns to eval with few columns', () => {
+  it('should handle column count changes after remount (simulates key={evalId})', () => {
     // First eval: Many variable columns
     const manyColumnsTable = {
       body: [
