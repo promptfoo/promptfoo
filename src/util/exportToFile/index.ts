@@ -41,14 +41,14 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     video: result.response?.video
       ? {
           id: result.response.video.id,
-          uuid: result.response.video.uuid,
+          blobRef: result.response.video.blobRef,
           url: result.response.video.url,
           format: result.response.video.format,
           size: result.response.video.size,
           duration: result.response.video.duration,
-          thumbnail: result.response.video.thumbnail,
-          spritesheet: result.response.video.spritesheet,
           model: result.response.video.model,
+          aspectRatio: result.response.video.aspectRatio,
+          resolution: result.response.video.resolution,
         }
       : undefined,
   };

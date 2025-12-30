@@ -327,15 +327,15 @@ export interface EvaluateTableOutput {
     format?: string;
   };
   video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID)
-    uuid?: string; // Local storage UUID
-    url?: string; // API path to serve video (e.g., /api/output/video/{uuid}/video.mp4)
+    id?: string; // Provider video ID (e.g., Veo operation name)
+    blobRef?: import('../blobs/types').BlobRef; // Blob storage reference for video data
+    url?: string; // Legacy: API path to serve video (deprecated, use blobRef)
     format?: string; // 'mp4'
     size?: string; // '1280x720' or '720x1280'
     duration?: number; // Seconds
-    thumbnail?: string; // API path to thumbnail
-    spritesheet?: string; // API path to spritesheet
-    model?: string; // Model used (e.g., 'sora-2', 'sora-2-pro')
+    model?: string; // Model used (e.g., 'veo-3.1-generate-preview')
+    aspectRatio?: string; // '16:9' or '9:16'
+    resolution?: string; // '720p' or '1080p'
   };
 }
 
