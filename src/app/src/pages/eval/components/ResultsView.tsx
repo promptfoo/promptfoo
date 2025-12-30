@@ -1014,6 +1014,7 @@ export default function ResultsView({
           )}
         </Box>
         <ResultsTable
+          key={currentEvalId}
           maxTextLength={maxTextLength}
           columnVisibility={currentColumnState.columnVisibility}
           wordBreak={wordBreak}
