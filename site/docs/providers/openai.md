@@ -647,14 +647,16 @@ providers:
 
 ### Configuration Options
 
-| Parameter              | Description                               | Default    |
-| ---------------------- | ----------------------------------------- | ---------- |
-| `size`                 | Video dimensions                          | `1280x720` |
-| `seconds`              | Duration in seconds (4, 8, or 12)         | `8`        |
-| `poll_interval_ms`     | Polling interval for job status           | `10000`    |
-| `max_poll_time_ms`     | Maximum time to wait for video generation | `600000`   |
-| `download_thumbnail`   | Download thumbnail preview                | `true`     |
-| `download_spritesheet` | Download spritesheet preview              | `true`     |
+| Parameter              | Description                                       | Default    |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| `size`                 | Video dimensions                                  | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                 | `8`        |
+| `input_reference`      | Base64 image data or file path for image-to-video | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix              | -          |
+| `poll_interval_ms`     | Polling interval for job status                   | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation         | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                        | `true`     |
+| `download_spritesheet` | Download spritesheet preview                      | `true`     |
 
 ### Example Configuration
 
@@ -678,6 +680,43 @@ tests:
   - vars:
       scene: waves crashing on a beach at sunset
 ```
+
+### Image-to-Video Generation
+
+Generate videos starting from a source image using `input_reference`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      input_reference: file://assets/start-image.png
+      seconds: 4
+
+prompts:
+  - 'Animate this image: the character slowly walks forward'
+```
+
+The `input_reference` accepts either a `file://` path or base64-encoded image data.
+
+### Video Remixing
+
+Remix an existing Sora video with a new prompt using `remix_video_id`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      remix_video_id: video_abc123def456
+
+prompts:
+  - 'Make the scene more dramatic with stormy weather'
+```
+
+The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
+
+:::note
+Remixed videos are not cached since each remix produces unique results even with the same prompt.
+:::
 
 ### Viewing Generated Videos
 

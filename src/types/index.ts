@@ -337,7 +337,6 @@ export interface EvaluateTableOutput {
     id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
     blobRef?: BlobRef; // Blob storage reference for video data (Veo)
     storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    uuid?: string; // Local storage UUID (Sora)
     url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
     size?: string; // '1280x720' or '720x1280'

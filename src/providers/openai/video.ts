@@ -222,7 +222,7 @@ export function calculateVideoCost(
  * - Video remixing (with remix_video_id)
  *
  * Videos are generated asynchronously via polling, then downloaded
- * to ~/.promptfoo/output/video/{uuid}/ and served via API routes.
+ * to ~/.promptfoo/media/video/ and served via API routes.
  */
 export class OpenAiVideoProvider extends OpenAiGenericProvider {
   config: OpenAiVideoOptions;
