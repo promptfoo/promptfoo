@@ -111,7 +111,12 @@ export default function Eval({ fetchId }: EvalOptions) {
         });
 
         if (!data) {
-          setFailed(true);
+          // Only set failed state for user-initiated loads, not background updates.
+          // Background updates (e.g., socket events) will fall back to recent evals,
+          // so we don't want to flash the "404 Eval not found" error during the fallback.
+          if (!isBackgroundUpdate) {
+            setFailed(true);
+          }
           return false;
         }
         // Reset failure state on successful load - handles case where previous load failed
@@ -120,7 +125,10 @@ export default function Eval({ fetchId }: EvalOptions) {
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        // Only set failed state for user-initiated loads
+        if (!isBackgroundUpdate) {
+          setFailed(true);
+        }
         return false;
       }
     },
@@ -285,7 +293,14 @@ export default function Eval({ fetchId }: EvalOptions) {
             const fallbackId = recentEvals[0].evalId;
             setDefaultEvalId(fallbackId);
             setEvalId(fallbackId);
-            await loadEvalById(fallbackId, true);
+            const fallbackSuccess = await loadEvalById(fallbackId, true);
+            // Only set failed if both primary and fallback loads failed
+            if (!fallbackSuccess) {
+              setFailed(true);
+            }
+          } else {
+            // No recent evals available and primary load failed - this is a true failure
+            setFailed(true);
           }
         }
 
