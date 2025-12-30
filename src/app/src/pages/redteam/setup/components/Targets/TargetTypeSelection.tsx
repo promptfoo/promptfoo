@@ -4,7 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import { getProviderType } from './helpers';
@@ -27,12 +27,12 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   );
 
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(() => {
-    // If we have a complete saved config, use it. Otherwise start fresh without a label
+    // If we have a complete saved config, use it. Otherwise start fresh with empty selection
     if (hasCompleteSavedConfig) {
       return config.target!;
     }
-    // Clear the label if we don't have a complete config to ensure consistent state
-    return { ...(config.target || DEFAULT_HTTP_TARGET), label: '' };
+    // Start with empty target - no default provider selected
+    return { id: '', label: '', config: {} };
   });
 
   // Only show target type section if we have a complete saved configuration
@@ -49,9 +49,14 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   }, []);
 
   const handleProviderChange = (provider: ProviderOptions, providerType: string) => {
-    setSelectedTarget(provider);
+    // Preserve the user's entered label when switching providers
+    const updatedProvider = {
+      ...provider,
+      label: provider.label || selectedTarget.label,
+    };
+    setSelectedTarget(updatedProvider);
     setProviderType(providerType);
-    updateConfig('target', provider);
+    updateConfig('target', updatedProvider);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
@@ -83,7 +88,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
   const isValidSelection = () => {
     // For custom providers, we allow empty id since it will be configured in the next step
-    if (selectedTarget.id === '' && selectedTarget.label?.trim()) {
+    // But only if providerType is explicitly set to 'custom'
+    if (providerType === 'custom' && selectedTarget.label?.trim()) {
       return true; // Custom provider with a label is valid
     }
     return selectedTarget.id && selectedTarget.id.trim() !== '';
@@ -93,7 +99,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
   const getNextButtonText = () => {
-    return 'Next: Configure Target';
+    return 'Next';
   };
 
   const isNextButtonDisabled = () => {
@@ -137,20 +143,23 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     >
       <div className="flex flex-col gap-6">
         {/* Quick Start */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted px-4 py-3">
+          <p className="text-sm text-foreground">
+            New to red teaming? Load an example to explore the setup.
+          </p>
           <LoadExampleButton />
-          <span className="text-sm text-muted-foreground">New to Promptfoo? Try a demo</span>
         </div>
 
         {/* Target Name */}
-        <div className="max-w-md space-y-2">
-          <Label htmlFor="target-name" className="text-sm font-medium">
+        <div className="space-y-2">
+          <Label htmlFor="target-name" className="text-sm font-semibold">
             Target Name <span className="text-destructive">*</span>
           </Label>
           <Input
             id="target-name"
+            className="max-w-md"
             value={selectedTarget?.label ?? ''}
-            placeholder="e.g. onboarding-agent"
+            placeholder="e.g. support-agent or booking-assistant"
             onChange={(e) => {
               const newTarget = { ...selectedTarget, label: e.target.value };
               setSelectedTarget(newTarget);
@@ -166,10 +175,6 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
             }}
             autoFocus
           />
-          <p className="text-xs text-muted-foreground">
-            e.g. <code className="rounded bg-muted px-1 py-0.5">support-agent</code> or{' '}
-            <code className="rounded bg-muted px-1 py-0.5">rag-chatbot</code>
-          </p>
         </div>
 
         {/* Continue button - shown before target type is revealed */}
@@ -190,8 +195,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
         {/* Target Type Selection */}
         {showTargetTypeSection && (
-          <section className="space-y-4 border-t border-border pt-6">
-            <h2 className="text-base font-semibold text-foreground">Select Target Type</h2>
+          <section className="space-y-4">
+            <Label className="text-sm font-semibold">Select Target Type</Label>
 
             <ProviderTypeSelector
               provider={selectedTarget}

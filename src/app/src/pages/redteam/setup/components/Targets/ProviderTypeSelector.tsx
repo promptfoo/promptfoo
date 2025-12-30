@@ -398,7 +398,7 @@ const allProviderOptions = [
     return 1;
   }
 
-  // Recommended items come next
+  // Popular items come next
   if (a.recommended && !b.recommended) {
     return -1;
   }
@@ -431,7 +431,7 @@ export default function ProviderTypeSelector({
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
-  const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
+  const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
   // Tag filter options - 4 categories based on user intent
   type TagKey = 'app' | 'agents' | 'providers' | 'local';
@@ -453,31 +453,9 @@ export default function ProviderTypeSelector({
     });
   };
 
-  useEffect(() => {
-    if (!provider?.id) {
-      // Preserve the label when defaulting to HTTP
-      setProvider(
-        {
-          id: 'http',
-          label: provider?.label,
-          config: {
-            url: '',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: '{{prompt}}',
-            }),
-          },
-        },
-        'http',
-      );
-    }
-  }, [provider?.id, setProvider]);
-
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {
     setSelectedProviderType(value);
-    setIsExpanded(false); // Collapse after selection
 
     const currentLabel = provider?.label;
 
@@ -1060,7 +1038,7 @@ export default function ProviderTypeSelector({
               <p className="font-semibold text-primary">{selectedOption.label}</p>
               {selectedOption.recommended && (
                 <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
-                  Recommended
+                  Popular
                 </span>
               )}
             </div>
@@ -1113,57 +1091,59 @@ export default function ProviderTypeSelector({
   // Show expanded view (original full list)
   return (
     <div className="space-y-4">
-      {/* Search - own line */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search providers..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9 pr-9"
-        />
-        {searchTerm && (
+      {/* Filter bar - chips on left, search on right */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Filter toggles - segmented control style */}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => setSelectedTag(undefined)}
-          className={cn(
-            'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-            selectedTag === undefined
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
-          )}
-        >
-          All ({getTagCount(undefined)})
-        </button>
-        {tagFilters.map((filter) => (
-          <button
-            key={filter.key}
-            type="button"
-            onClick={() => handleTagToggle(filter.key)}
+            onClick={() => setSelectedTag(undefined)}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              selectedTag === filter.key
+              selectedTag === undefined
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
             )}
           >
-            {filter.label} ({getTagCount(filter.key)})
+            All ({getTagCount(undefined)})
           </button>
-        ))}
+          {tagFilters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => handleTagToggle(filter.key)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                selectedTag === filter.key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+              )}
+            >
+              {filter.label} ({getTagCount(filter.key)})
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative w-64 shrink-0">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search providers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Provider list */}
@@ -1220,7 +1200,7 @@ export default function ProviderTypeSelector({
                       </p>
                       {option.recommended && (
                         <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
-                          Recommended
+                          Popular
                         </span>
                       )}
                     </div>
