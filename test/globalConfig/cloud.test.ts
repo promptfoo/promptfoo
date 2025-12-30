@@ -246,4 +246,54 @@ describe('CloudConfig', () => {
       expect(config.isEnabled()).toBe(false);
     });
   });
+
+  describe('getApiHost with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_CLOUD_API_URL;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.PROMPTFOO_CLOUD_API_URL = originalEnv;
+      } else {
+        delete process.env.PROMPTFOO_CLOUD_API_URL;
+      }
+    });
+
+    it('should return API host from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return API host from PROMPTFOO_CLOUD_API_URL env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://env-host.example.com');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return default API_HOST when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe(API_HOST);
+    });
+  });
 });
