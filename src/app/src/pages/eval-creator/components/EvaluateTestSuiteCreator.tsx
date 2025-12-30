@@ -200,7 +200,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(1)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 1 && 'ring-2 ring-primary',
                       normalizedProviders.length > 0
@@ -238,7 +238,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(2)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 2 && 'ring-2 ring-primary',
                       normalizedPrompts.length > 0
@@ -276,7 +276,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(3)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 3 && 'ring-2 ring-primary',
                       testCount > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-background',
@@ -312,7 +312,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(4)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 4 && 'ring-2 ring-primary',
                       config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
