@@ -54,6 +54,7 @@ import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
+import { GoogleVideoProvider } from './google/video';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -1200,6 +1201,9 @@ export const providerMap: ProviderFactory[] = [
         } else if (serviceType === 'image') {
           // This is an Imagen image generation request
           return new GoogleImageProvider(modelName, providerOptions);
+        } else if (serviceType === 'video') {
+          // This is a Veo video generation request
+          return new GoogleVideoProvider(modelName, providerOptions);
         }
       }
 

@@ -121,6 +121,40 @@ export function resolveImageSource(
   return undefined;
 }
 
+/**
+ * Resolves video source from a video object with optional blob reference.
+ * Returns a source URL and MIME type suitable for HTML video elements.
+ */
+export function resolveVideoSource(
+  video?: { format?: string; blobRef?: BlobLike; url?: string } | null,
+): { src: string; type?: string } | null {
+  if (!video) {
+    return null;
+  }
+
+  // Try blob reference first
+  const blobUrl = resolveBlobRef(video.blobRef);
+  if (blobUrl) {
+    return {
+      src: blobUrl,
+      type: `video/${video.format || 'mp4'}`,
+    };
+  }
+
+  // Fall back to direct URL (legacy format)
+  if (video.url) {
+    const resolvedUrl = resolveBlobUri(video.url);
+    if (resolvedUrl) {
+      return {
+        src: resolvedUrl,
+        type: `video/${video.format || 'mp4'}`,
+      };
+    }
+  }
+
+  return null;
+}
+
 export function normalizeMediaText(text: string): string {
   return text
     .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
