@@ -243,8 +243,9 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Handle last frame (interpolation, Veo 3.1 only)
-    if (config.lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(config.lastFrame);
+    const lastFrame = config.lastFrame || config.lastImage;
+    if (lastFrame) {
+      const { data: lastFrameData, error } = this.loadImageData(lastFrame);
       if (error) {
         return { error };
       }
@@ -271,8 +272,9 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Handle video extension (Veo 3.1 only)
-    if (config.extendVideoId) {
-      instance.video = { operationName: config.extendVideoId };
+    const extendVideoId = config.extendVideoId || config.sourceVideo;
+    if (extendVideoId) {
+      instance.video = { operationName: extendVideoId };
     }
 
     const body = {

@@ -796,5 +796,74 @@ describe('GoogleVideoProvider', () => {
       expect(body.instances[0].image).toBeDefined();
       expect(body.instances[0].lastFrame).toBeDefined();
     });
+
+    it('should support lastImage alias for interpolation', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        if (path === '/path/to/first.png' || path === '/path/to/last.png') {
+          return true;
+        }
+        return false;
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('frame-data'));
+
+      const operationName = 'test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      mockRequest.mockResolvedValueOnce({
+        data: { name: operationName, done: false },
+      });
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: { videos: [{ bytesBase64Encoded: base64Video }] },
+        },
+      });
+
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          image: 'file:///path/to/first.png',
+          lastImage: 'file:///path/to/last.png',
+          pollIntervalMs: 10,
+        },
+      });
+
+      await provider.callApi('Interpolate');
+
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
+
+      expect(body.instances[0].lastFrame).toBeDefined();
+    });
+
+    it('should support sourceVideo alias for extension', async () => {
+      const operationName = 'test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      mockRequest.mockResolvedValueOnce({
+        data: { name: operationName, done: false },
+      });
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: { videos: [{ bytesBase64Encoded: base64Video }] },
+        },
+      });
+
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          sourceVideo: 'previous-op-id',
+          pollIntervalMs: 10,
+        },
+      });
+
+      await provider.callApi('Extend');
+
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
+
+      expect(body.instances[0].video).toEqual({ operationName: 'previous-op-id' });
+    });
   });
 });

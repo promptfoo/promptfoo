@@ -395,12 +395,14 @@ export interface GoogleVideoOptions {
 
   // Interpolation: last frame (Veo 3.1 only, requires image)
   lastFrame?: string; // Base64 or file:// path
+  lastImage?: string; // Alias for lastFrame
 
   // Reference images (Veo 3.1 only, up to 3)
   referenceImages?: GoogleVideoReferenceImage[];
 
   // Video extension (Veo 3.1 only)
   extendVideoId?: string; // Previous Veo video operation ID
+  sourceVideo?: string; // Alias for extendVideoId
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;
