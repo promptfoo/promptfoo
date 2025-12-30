@@ -179,10 +179,15 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             </DialogFooter>
           </>
         ) : (
-          <div className="flex items-center gap-3 py-4">
-            <Spinner size="sm" />
-            <p className="text-muted-foreground">Generating share link...</p>
-          </div>
+          <>
+            <DialogHeader>
+              <DialogTitle>Share Evaluation</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center gap-3 py-4">
+              <Spinner size="sm" />
+              <p className="text-muted-foreground">Generating share link...</p>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

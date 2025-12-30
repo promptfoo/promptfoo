@@ -122,7 +122,7 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2054,7 +2054,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2282,7 +2282,7 @@ describe('ResultsTable Pass Rate Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2412,7 +2412,7 @@ describe('ResultsTable Pass Rate Highlighting', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2561,7 +2561,7 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2713,7 +2713,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<TooltipProvider>{ui}</TooltipProvider>);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {

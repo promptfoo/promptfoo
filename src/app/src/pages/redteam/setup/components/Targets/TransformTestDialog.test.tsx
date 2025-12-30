@@ -157,9 +157,9 @@ describe('TransformTestDialog', () => {
   });
 
   it('should display an error message when Format JSON button is clicked with invalid JSON and clear it after a timeout', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const testInput = 'invalid json';
     const onTestInputChange = vi.fn();
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
     renderWithTooltipProvider(
       <TransformTestDialog
@@ -172,20 +172,20 @@ describe('TransformTestDialog', () => {
     const formatButton = screen.getByRole('button', { name: /format json/i });
     fireEvent.click(formatButton);
 
-    // Error should appear immediately
     const alert = screen.getByRole('alert');
     expect(alert).toBeInTheDocument();
     expect(alert).toHaveTextContent(/invalid json/i);
 
-    // Fast-forward 3 seconds and let React process state updates
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+    const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 3000);
+    const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    // Error should be cleared
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-
-    vi.useRealTimers();
+    setTimeoutSpy.mockRestore();
   });
 
   it('should display deeply nested JSON objects in the test result output', async () => {
