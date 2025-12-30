@@ -9,6 +9,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Path to the built CLI binary
@@ -59,7 +60,7 @@ describe('Eval Smoke Tests', () => {
   describe('1.4 Eval Command', () => {
     it('1.4.1 - runs basic eval with echo provider', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
-      const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
+      const { stdout, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
 
       // Should complete successfully
       expect(exitCode).toBe(0);

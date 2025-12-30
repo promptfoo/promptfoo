@@ -5,7 +5,7 @@
  * This is a grader that always passes.
  */
 
-module.exports = async function (prompt, context) {
+module.exports = async function (_prompt, context) {
   // Simple grader that checks if output contains expected content
   const output = context.vars?.output || '';
   const pass = output.length > 0;
