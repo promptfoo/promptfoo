@@ -6,7 +6,7 @@ import { getCache, isCacheEnabled } from '../../src/cache';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { getEnvInt } from '../../src/python/pythonUtils';
+import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import type { Mock } from 'vitest';
 
@@ -68,6 +68,7 @@ describe('PythonProvider', () => {
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockGetEnvInt = vi.mocked(getEnvInt);
+  const mockGetConfiguredPythonPath = vi.mocked(getConfiguredPythonPath);
   const mockPoolInstance = workerPoolMocks.mockPoolInstance as {
     initialize: Mock;
     execute: Mock;
@@ -90,6 +91,10 @@ describe('PythonProvider', () => {
     // Reset getEnvInt mock implementation (clears mockReturnValueOnce queue)
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
+
+    // Reset getConfiguredPythonPath mock - default to passthrough behavior
+    mockGetConfiguredPythonPath.mockReset();
+    mockGetConfiguredPythonPath.mockImplementation((configPath) => configPath);
 
     // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
@@ -519,6 +524,9 @@ describe('PythonProvider', () => {
       mockGetEnvInt.mockReset();
       mockGetEnvInt.mockReturnValue(undefined);
 
+      // Mock getConfiguredPythonPath to return the config value
+      mockGetConfiguredPythonPath.mockReturnValue('/usr/bin/python3');
+
       const provider = new PythonProvider('script.py', {
         config: {
           basePath: process.cwd(),
@@ -527,11 +535,93 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3');
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
         1,
         '/usr/bin/python3',
+        undefined,
+      );
+    });
+
+    it('should use PROMPTFOO_PYTHON when config.pythonExecutable is not set', async () => {
+      // Reset mocks
+      mockGetEnvInt.mockReset();
+      mockGetEnvInt.mockReturnValue(undefined);
+
+      // Mock getConfiguredPythonPath to return the env var value when config is undefined
+      mockGetConfiguredPythonPath.mockReturnValue('/venv/bin/python3');
+
+      const provider = new PythonProvider('script.py', {
+        config: {
+          basePath: process.cwd(),
+          // Note: pythonExecutable is NOT set
+        },
+      });
+      await provider.initialize();
+
+      // getConfiguredPythonPath should be called with undefined (no config)
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      // Worker pool should receive the env var value from getConfiguredPythonPath
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        '/venv/bin/python3', // from PROMPTFOO_PYTHON via getConfiguredPythonPath
+        undefined,
+      );
+    });
+
+    it('should prioritize config.pythonExecutable over PROMPTFOO_PYTHON', async () => {
+      // Reset mocks
+      mockGetEnvInt.mockReset();
+      mockGetEnvInt.mockReturnValue(undefined);
+
+      // Mock getConfiguredPythonPath to return the config value (simulating priority)
+      mockGetConfiguredPythonPath.mockReturnValue('/config/python3');
+
+      const provider = new PythonProvider('script.py', {
+        config: {
+          basePath: process.cwd(),
+          pythonExecutable: '/config/python3',
+        },
+      });
+      await provider.initialize();
+
+      // getConfiguredPythonPath should be called with the config value
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3');
+      // Worker pool should receive the config value
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        '/config/python3',
+        undefined,
+      );
+    });
+
+    it('should pass undefined to worker pool when neither config nor env var is set', async () => {
+      // Reset mocks
+      mockGetEnvInt.mockReset();
+      mockGetEnvInt.mockReturnValue(undefined);
+
+      // Mock getConfiguredPythonPath to return undefined (neither config nor env var set)
+      mockGetConfiguredPythonPath.mockReturnValue(undefined);
+
+      const provider = new PythonProvider('script.py', {
+        config: {
+          basePath: process.cwd(),
+        },
+      });
+      await provider.initialize();
+
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined, // Falls back to default in worker
         undefined,
       );
     });

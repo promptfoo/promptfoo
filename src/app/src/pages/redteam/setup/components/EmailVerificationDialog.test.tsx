@@ -1,6 +1,5 @@
 import type { ComponentProps } from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,8 +25,6 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 describe('EmailVerificationDialog', () => {
-  const theme = createTheme();
-
   const mockProps: ComponentProps<typeof EmailVerificationDialog> = {
     open: true,
     onClose: vi.fn(),
@@ -35,11 +32,7 @@ describe('EmailVerificationDialog', () => {
   };
 
   const renderComponent = (props: ComponentProps<typeof EmailVerificationDialog> = mockProps) => {
-    return render(
-      <ThemeProvider theme={theme}>
-        <EmailVerificationDialog {...props} />
-      </ThemeProvider>,
-    );
+    return render(<EmailVerificationDialog {...props} />);
   };
 
   beforeEach(() => {

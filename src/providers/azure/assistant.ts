@@ -1,6 +1,7 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
@@ -110,14 +111,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error('Azure API key must be set.');
-    }
+    await this.ensureInitialized();
+    invariant(this.authHeaders, 'auth headers are not initialized');
 
     const apiBaseUrl = this.getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error('Azure API host must be set.');
+    }
+
+    if (!this.authHeaders['api-key'] && !this.authHeaders.Authorization) {
+      throw new Error(
+        'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
+          'You can also use Microsoft Entra ID authentication.',
+      );
     }
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';

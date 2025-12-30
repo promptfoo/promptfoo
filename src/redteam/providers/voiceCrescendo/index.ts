@@ -23,7 +23,12 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../ut
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from '../shared';
+import {
+  externalizeResponseForRedteamHistory,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from '../shared';
 
 import type {
   ApiProvider,
@@ -344,8 +349,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
    */
   private async textToAudio(text: string): Promise<string> {
     try {
-      const audioBase64 = await textToAudio(text, this.config.language || 'en');
-      return audioBase64;
+      const audio = await textToAudio(text, this.config.language || 'en');
+      return audio.base64;
     } catch (error) {
       logger.error(`[VoiceCrescendo] Failed to convert text to audio: ${error}`);
       throw error;
@@ -371,7 +376,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
       transcript: textPrompt,
     });
 
-    return getTargetResponse(targetProvider, prompt, context);
+    const response = await getTargetResponse(targetProvider, prompt, context);
+    return externalizeResponseForRedteamHistory(response, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
   }
 
   /**

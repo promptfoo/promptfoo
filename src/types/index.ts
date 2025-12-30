@@ -78,6 +78,9 @@ export const CommandLineOptionsSchema = z.object({
   retryErrors: z.boolean().optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
+
+  // Extension hooks
+  extension: z.array(z.string()).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -204,6 +207,11 @@ const EvaluateOptionsSchema = z.object({
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),
+  /**
+   * When true, suppresses informational output like "Starting evaluation" messages.
+   * Useful for internal evaluations like provider validation.
+   */
+  silent: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -317,6 +325,7 @@ export interface EvaluateTableOutput {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: import('../blobs/types').BlobRef;
     transcript?: string;
     format?: string;
   };

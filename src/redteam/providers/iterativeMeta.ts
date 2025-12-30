@@ -20,6 +20,7 @@ import {
 import { Strategies } from '../strategies';
 import {
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -219,7 +220,7 @@ export async function runMetaAgentRedteam({
     }
 
     if (agentResp.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
+      logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
       continue;
@@ -306,11 +307,19 @@ export async function runMetaAgentRedteam({
 
     // Execute attack against target
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
+    );
+    const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
+      initialTargetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

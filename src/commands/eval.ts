@@ -4,12 +4,13 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import ora from 'ora';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -23,11 +24,10 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { checkCloudPermissions } from '../util/cloud';
+import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { formatDuration } from '../util/formatDuration';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -35,6 +35,7 @@ import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
@@ -44,7 +45,6 @@ import type {
   EvaluateOptions,
   Scenario,
   TestSuite,
-  TokenUsage,
   UnifiedConfig,
 } from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
@@ -55,6 +55,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
   // resume: z.union([z.string(), z.boolean()]).optional(),
@@ -75,35 +76,6 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       `,
     );
   }
-}
-
-/**
- * Format token usage for display in CLI output
- */
-export function formatTokenUsage(usage: Partial<TokenUsage>): string {
-  const parts = [];
-
-  if (usage.total !== undefined) {
-    parts.push(`${usage.total.toLocaleString()} total`);
-  }
-
-  if (usage.prompt !== undefined) {
-    parts.push(`${usage.prompt.toLocaleString()} prompt`);
-  }
-
-  if (usage.completion !== undefined) {
-    parts.push(`${usage.completion.toLocaleString()} completion`);
-  }
-
-  if (usage.cached !== undefined) {
-    parts.push(`${usage.cached.toLocaleString()} cached`);
-  }
-
-  if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-  }
-
-  return parts.join(' / ');
 }
 
 export async function doEval(
@@ -532,7 +504,7 @@ export async function doEval(
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(
-        `» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`,
+        `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
       );
       printBorder();
       return ret;
@@ -542,13 +514,13 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
+    // Check for explicit disable signals first
+    const hasExplicitDisable =
+      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
     // Determine sharing with explicit precedence handling
     let wantsToShare: boolean;
-    if (
-      cmdObj.share === false ||
-      cmdObj.noShare === true ||
-      getEnvBool('PROMPTFOO_DISABLE_SHARING')
-    ) {
+    if (hasExplicitDisable) {
       // Explicit disable via CLI or env var takes highest priority
       wantsToShare = false;
     } else if (cmdObj.share === true) {
@@ -570,13 +542,14 @@ export async function doEval(
     logger.debug(`Wants to share: ${wantsToShare}`);
     logger.debug(`Can share eval: ${canShareEval}`);
 
-    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
-
-    logger.debug(`Shareable URL: ${shareableUrl}`);
-
-    if (shareableUrl) {
-      evalRecord.shared = true;
+    // Start sharing in background (don't await yet) - this allows us to show results immediately
+    const willShare = wantsToShare && canShareEval;
+    let sharePromise: Promise<string | null> | null = null;
+    if (willShare) {
+      // Start the share operation in background with silent mode (no progress bar)
+      sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
+
     let successes = 0;
     let failures = 0;
     let errors = 0;
@@ -598,6 +571,7 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
+    // Output results table immediately (before share completes)
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
@@ -626,186 +600,103 @@ export async function doEval(
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
+
+    const isRedteam = Boolean(config.redteam);
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const tracker = TokenUsageTracker.getInstance();
+
+    // Generate and display summary immediately (before share completes)
+    const summaryLines = generateEvalSummary({
+      evalId: evalRecord.id,
+      isRedteam,
+      writeToDatabase: cmdObj.write !== false,
+      shareableUrl: null, // Not available yet if sharing in background
+      wantsToShare,
+      hasExplicitDisable,
+      cloudEnabled: cloudConfig.isEnabled(),
+      activelySharing: willShare,
+      tokenUsage,
+      successes,
+      failures,
+      errors,
+      duration,
+      maxConcurrency,
+      tracker,
+    });
+
+    // Special case: show cloud signup instructions when user wants to share but can't
+    if (cmdObj.write && wantsToShare && !canShareEval) {
+      logger.info(summaryLines[0]); // Show just the completion message
+      notCloudEnabledShareInstructions();
+      // Skip the guidance lines and show the rest
+      for (let i = 1; i < summaryLines.length; i++) {
+        if (summaryLines[i].includes('View results:')) {
+          // Skip guidance section
+          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
+            i++;
+          }
+          i--; // Back up one so the for loop increment works
+        } else {
+          logger.info(summaryLines[i]);
+        }
+      }
+    } else {
+      // Normal case: show all summary lines
+      for (const line of summaryLines) {
+        logger.info(line);
+      }
+    }
+
+    // Now wait for share to complete and show spinner (as the last output)
+    let shareableUrl: string | null = null;
+    if (sharePromise) {
+      // Determine org context for spinner text
+      const orgContext = await getOrgContext();
+      const orgSuffix = orgContext
+        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+        : '';
+
+      // Only show spinner in TTY (not CI)
+      if (process.stdout.isTTY && !isCI()) {
+        const spinner = ora({
+          text: `Sharing${orgSuffix}...`,
+          prefixText: chalk.dim('»'),
+          spinner: 'dots',
+        }).start();
+
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            spinner.succeed(shareableUrl);
+          } else {
+            spinner.fail(chalk.red('Share failed'));
+          }
+        } catch (error) {
+          spinner.fail(chalk.red('Share failed'));
+          logger.debug(`Share error: ${error}`);
+        }
+      } else {
+        // CI mode - just await and log result
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+          }
+        } catch (error) {
+          logger.debug(`Share error: ${error}`);
+        }
+      }
+    }
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
+    // Write outputs after share completes (so we can include shareableUrl)
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
-
-    printBorder();
-    if (cmdObj.write) {
-      if (shareableUrl) {
-        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
-        notCloudEnabledShareInstructions();
-      } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
-        logger.info(
-          `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
-        );
-        if (cloudConfig.isEnabled()) {
-          logger.info(
-            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
-          );
-        } else {
-          logger.info(
-            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
-          );
-        }
-
-        logger.info(
-          `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://promptfoo.dev/feedback',
-          )}`,
-        );
-      }
-    } else {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
-    }
-
-    printBorder();
-
-    // Format and display duration
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    const durationDisplay = formatDuration(duration);
-
-    const isRedteam = Boolean(config.redteam);
-    const tracker = TokenUsageTracker.getInstance();
-
-    // Handle token usage display
-    if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
-      const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
-      const evalTokens = {
-        prompt: tokenUsage.prompt || 0,
-        completion: tokenUsage.completion || 0,
-        total: tokenUsage.total || combinedTotal,
-        cached: tokenUsage.cached || 0,
-        completionDetails: tokenUsage.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
-
-      logger.info(chalk.bold('Token Usage Summary:'));
-
-      if (isRedteam) {
-        logger.info(
-          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
-        );
-      }
-
-      // Eval tokens
-      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
-      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
-      logger.info(
-        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
-      );
-      logger.info(
-        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
-      );
-      if (evalTokens.cached > 0) {
-        logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
-        );
-      }
-      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
-        logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
-        );
-      }
-
-      // Provider breakdown
-
-      const providerIds = tracker.getProviderIds();
-      if (providerIds.length > 1) {
-        logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
-
-        // Sort providers by total token usage (descending)
-        const sortedProviders = providerIds
-          .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
-          .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
-
-        for (const { id, usage } of sortedProviders) {
-          if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
-            const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
-            // Extract just the provider ID part (remove class name in parentheses)
-            const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
-            logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
-            );
-
-            // Show breakdown if there are individual components
-            if (usage.prompt || usage.completion || usage.cached) {
-              const details = [];
-              if (usage.prompt) {
-                details.push(`${usage.prompt.toLocaleString()} prompt`);
-              }
-              if (usage.completion) {
-                details.push(`${usage.completion.toLocaleString()} completion`);
-              }
-              if (usage.cached) {
-                details.push(`${usage.cached.toLocaleString()} cached`);
-              }
-              if (usage.completionDetails?.reasoning) {
-                details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-              }
-              if (details.length > 0) {
-                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
-              }
-            }
-          }
-        }
-      }
-
-      // Grading tokens
-      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
-        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
-        logger.info(
-          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.prompt) {
-          logger.info(
-            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.completion) {
-          logger.info(
-            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
-          logger.info(
-            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
-          );
-        }
-        if (
-          tokenUsage.assertions.completionDetails?.reasoning &&
-          tokenUsage.assertions.completionDetails.reasoning > 0
-        ) {
-          logger.info(
-            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
-          );
-        }
-      }
-
-      // Grand total
-      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
-      logger.info(
-        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
-      );
-      printBorder();
-    }
-
-    logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    printBorder();
 
     telemetry.record('command_used', {
       name: 'eval',
@@ -1058,6 +949,10 @@ export function evalCommand(
       'Generate N new prompts and append them to the prompt list',
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option(
+      '-x, --extension <paths...>',
+      'Extension hooks to run (e.g., file://handler.js:afterAll)',
+    )
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')

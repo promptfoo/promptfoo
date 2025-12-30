@@ -1,3 +1,5 @@
+import { isBlobStorageEnabled } from '../../../blobs/extractor';
+import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -21,6 +23,7 @@ import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
 import {
   buildGraderResultAssertion,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   isValidChatMessageArray,
   type Message,
@@ -90,6 +93,26 @@ interface HydraConfig {
    * Set by the layer strategy when used as: layer: { steps: [hydra, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+}
+
+function scrubOutputForHistory(output: string): string {
+  if (typeof output !== 'string') {
+    return output;
+  }
+
+  // Look for OpenAI-style JSON with b64_json fields
+  const b64Match = output.match(/"b64_json"\s*:\s*"([^"]{200,})"/);
+  if (b64Match) {
+    return `[binary output redacted; b64_json length=${b64Match[1].length}]`;
+  }
+
+  // Generic base64-ish heuristic
+  const compact = output.replace(/\s+/g, '');
+  if (compact.length > 2000 && /^[A-Za-z0-9+/=]+$/.test(compact)) {
+    return `[binary output redacted; length≈${compact.length}]`;
+  }
+
+  return output;
 }
 
 export class HydraProvider implements ApiProvider {
@@ -319,7 +342,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (agentResp.error) {
-        logger.error('[Hydra] Agent provider error', {
+        logger.debug('[Hydra] Agent provider error', {
           turn,
           testRunId,
           error: agentResp.error,
@@ -481,7 +504,7 @@ export class HydraProvider implements ApiProvider {
 
       // Get target response
       const iterationStart = Date.now();
-      const targetResponse = await getTargetResponse(
+      let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
         context,
@@ -556,10 +579,41 @@ export class HydraProvider implements ApiProvider {
         sessionIds.push(targetResponse.sessionId);
       }
 
+      // Externalize blobs to avoid token bloat in Hydra/meta prompts
+      if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
+        const beforeOutput = targetResponse.output;
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
+        if (targetResponse.output !== beforeOutput) {
+          logger.debug('[Hydra] Externalized binary output', {
+            turn,
+            beforeLength: beforeOutput?.length,
+            afterLength: targetResponse.output?.length,
+            blobUris:
+              targetResponse.metadata && 'blobUris' in targetResponse.metadata
+                ? targetResponse.metadata.blobUris
+                : undefined,
+          });
+        } else if (typeof targetResponse.output === 'string') {
+          logger.debug('[Hydra] Binary output not externalized (using in-band)', {
+            turn,
+            responseLength: targetResponse.output.length,
+          });
+        }
+      }
+
+      const historyOutput =
+        isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
+          ? scrubOutputForHistory(targetResponse.output)
+          : targetResponse.output;
+
       // Add response to conversation history
       this.conversationHistory.push({
         role: 'assistant',
-        content: targetResponse.output,
+        content: historyOutput,
       });
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
@@ -650,7 +704,7 @@ export class HydraProvider implements ApiProvider {
         prompt: nextMessage,
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
-        output: targetResponse.output,
+        output: historyOutput,
         outputAudio: targetResponse.audio
           ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
           : undefined,

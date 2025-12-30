@@ -47,16 +47,28 @@ vi.mock('../../src/providers', () => ({
 }));
 vi.mock('../../src/util/fetch/index.ts');
 
+const mockReadFileSync = vi.hoisted(() => vi.fn());
+
 vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
+  readFileSync: mockReadFileSync,
   writeFileSync: vi.fn(),
   statSync: vi.fn(),
   readdirSync: vi.fn(),
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
-  promises: {
-    readFile: vi.fn(),
-  },
+}));
+
+vi.mock('fs/promises', () => ({
+  // Delegate to fs.readFileSync mock for shared test data
+  readFile: vi.fn((...args: unknown[]) => {
+    try {
+      return Promise.resolve(mockReadFileSync(...args));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
 }));
 
 vi.mock('../../src/database', () => ({

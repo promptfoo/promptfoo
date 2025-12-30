@@ -21,6 +21,7 @@ import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts'
 import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   redteamProviderManager,
@@ -873,7 +874,12 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(

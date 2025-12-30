@@ -45,6 +45,8 @@ const createJsonResponse = <T,>(data: T): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
+
 callApiMock.mockImplementation((path, options) => {
   if (path === '/redteam/generate-test') {
     const body = options?.body ? JSON.parse(options.body as string) : {};
@@ -58,7 +60,7 @@ callApiMock.mockImplementation((path, options) => {
     }
 
     if (strategyId === 'image') {
-      prompt = 'fake-image-base64';
+      prompt = FAKE_IMAGE_DATA_URL;
     } else if (strategyId === 'video') {
       prompt = 'fake-video-base64';
     } else if (strategyId === 'audio') {
@@ -291,7 +293,7 @@ describe('TestCaseGenerationProvider', () => {
       const imageComponent = within(testCaseDialogComponent).getByTestId('image');
       expect(imageComponent).toBeInTheDocument();
       expect(imageComponent).toHaveStyle({
-        backgroundImage: 'url(data:image/png;base64,fake-image-base64)',
+        backgroundImage: `url(${FAKE_IMAGE_DATA_URL})`,
       });
     });
 
@@ -470,13 +472,13 @@ describe('TestCaseGenerationProvider', () => {
       });
 
       // Ensure calls were made
-      // 2 generations + 2 executions = 4 calls
+      // Each turn = 1 generation + 1 execution
       // Note: DEFAULT_MULTI_TURN_MAX_TURNS is typically 5, but our test stops naturally or if we mock limits.
       // Since we didn't mock maxTurns specifically in the provider (it uses constant),
       // we rely on the mock API behavior. However, without a stop condition or maxTurns limit in the test setup,
       // it might go on. But the loop logic relies on state updates.
-      // Let's check at least 2 turns occurred.
-      expect(callApi).toHaveBeenCalledTimes(4);
+      // Let's check at least 2 turns occurred (minimum 4 calls).
+      expect(callApiMock.mock.calls.length).toBeGreaterThanOrEqual(4);
     });
   });
 
