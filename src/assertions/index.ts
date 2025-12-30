@@ -203,7 +203,7 @@ const nunjucks = getNunjucksEngine();
  * @param vars - The test variables to use for rendering
  * @returns The rendered metric name, or the original if rendering fails
  */
-function renderMetricName(
+export function renderMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
 ): string | undefined {

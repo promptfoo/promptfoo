@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertions } from '../../src/assertions/index';
+import { renderMetricName, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -815,5 +815,42 @@ describe('runAssertions', () => {
     expect(result.namedScores).toEqual({
       StaticMetric: 1,
     });
+  });
+});
+
+describe('renderMetricName', () => {
+  it('should be exported and callable', () => {
+    expect(renderMetricName).toBeDefined();
+    expect(typeof renderMetricName).toBe('function');
+  });
+
+  it('should render template variables', () => {
+    expect(renderMetricName('{{foo}}', { foo: 'bar' })).toBe('bar');
+  });
+
+  it('should render multiple template variables', () => {
+    expect(
+      renderMetricName('{{category}}_{{version}}', { category: 'accuracy', version: 'v2' }),
+    ).toBe('accuracy_v2');
+  });
+
+  it('should return undefined for undefined input', () => {
+    expect(renderMetricName(undefined, {})).toBeUndefined();
+  });
+
+  it('should return original on render error', () => {
+    expect(renderMetricName('{{invalid syntax', {})).toBe('{{invalid syntax');
+  });
+
+  it('should handle empty string metric', () => {
+    expect(renderMetricName('', {})).toBe('');
+  });
+
+  it('should handle metric without template syntax', () => {
+    expect(renderMetricName('StaticMetric', { foo: 'bar' })).toBe('StaticMetric');
+  });
+
+  it('should handle undefined variable by rendering to empty string', () => {
+    expect(renderMetricName('{{undefinedVar}}', {})).toBe('');
   });
 });

@@ -6,6 +6,7 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -1265,9 +1266,12 @@ class Evaluator {
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
 
           // Count assertions contributing to this named score
+          // Note: We need to render template variables in assertion metrics before comparing
+          const testVars = row.testCase?.vars || {};
           let contributingAssertions = 0;
           row.gradingResult?.componentResults?.forEach((result) => {
-            if (result.assertion?.metric === key) {
+            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
+            if (renderedMetric === key) {
               contributingAssertions++;
             }
           });
