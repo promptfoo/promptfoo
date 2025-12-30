@@ -95,7 +95,10 @@ vi.mock('./TableSettings/TableSettingsModal', () => ({
 }));
 
 vi.mock('./DownloadMenu', () => ({
-  default: () => <div>Download Menu</div>,
+  DownloadMenuItem: ({ onClick }: { onClick: () => void }) => (
+    <button onClick={onClick}>Download</button>
+  ),
+  DownloadDialog: () => <div>Download Dialog</div>,
 }));
 
 vi.mock('./CompareEvalMenuItem', () => ({

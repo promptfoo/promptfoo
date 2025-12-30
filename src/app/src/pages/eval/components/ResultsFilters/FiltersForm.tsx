@@ -84,10 +84,12 @@ function DebouncedInput({
 function FilterRow({
   filter,
   index,
+  totalFilters,
   onRemove,
 }: {
   filter: ResultsFilter;
   index: number;
+  totalFilters: number;
   onRemove: () => void;
 }) {
   const [metadataValueInput, setMetadataValueInput] = useState(filter.value);
@@ -338,10 +340,10 @@ function FilterRow({
 
   return (
     <div className="flex items-center gap-1.5">
-      {/* AND/OR selector (hidden spacer for first filter) */}
-      {index === 0 ? (
+      {/* AND/OR selector (spacer for first filter only when multiple filters exist) */}
+      {index === 0 && totalFilters > 1 ? (
         <span className="w-[70px] shrink-0" />
-      ) : (
+      ) : index > 0 ? (
         <Select
           value={displayLogicOperator}
           onValueChange={(v) => handleLogicOperatorChange(v as ResultsFilter['logicOperator'])}
@@ -355,7 +357,7 @@ function FilterRow({
             <SelectItem value="or">or</SelectItem>
           </SelectContent>
         </Select>
-      )}
+      ) : null}
 
       {/* Type selector */}
       <Select
@@ -612,6 +614,7 @@ export default function FiltersForm() {
                   key={filter.id}
                   filter={filter}
                   index={index}
+                  totalFilters={filterList.length}
                   onRemove={() => handleRemoveFilter(filter.id)}
                 />
               ))}

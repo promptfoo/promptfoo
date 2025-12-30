@@ -22,6 +22,12 @@ const CompactToggle = ({
 }: CompactToggleProps) => {
   const labelId = `compact-toggle-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
+  const handleClick = () => {
+    if (!disabled) {
+      onChange(!checked);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -29,6 +35,7 @@ const CompactToggle = ({
         disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-muted/50',
       )}
       role="listitem"
+      onClick={handleClick}
     >
       <Checkbox
         checked={checked}
@@ -36,6 +43,7 @@ const CompactToggle = ({
         disabled={disabled}
         className="mr-2"
         aria-labelledby={labelId}
+        onClick={(e) => e.stopPropagation()}
       />
       <span
         id={labelId}

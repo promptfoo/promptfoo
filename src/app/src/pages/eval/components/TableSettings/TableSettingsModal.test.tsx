@@ -51,7 +51,7 @@ describe('TableSettingsModal', () => {
 
   it('should call the onClose callback when the close button is clicked', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-    const closeButton = screen.getByRole('button', { name: 'close' });
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -96,7 +96,7 @@ describe('TableSettingsModal', () => {
 
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
-    const closeButton = screen.getByRole('button', { name: 'close' });
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);

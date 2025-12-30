@@ -1,13 +1,6 @@
 import React from 'react';
 
-import { Button } from '@app/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@app/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import yaml from 'js-yaml';
@@ -58,7 +51,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <div className="flex justify-between items-center">
             <DialogTitle className="flex-1">Config</DialogTitle>
@@ -90,22 +83,17 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
             </div>
           </div>
         </DialogHeader>
-        <div>
+        <div className="flex-1 min-h-0">
           <textarea
             ref={textareaRef}
             readOnly
             value={yamlConfig}
             className={cn(
-              'w-full min-h-[400px] font-mono text-sm p-3 rounded border border-border',
-              'bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring',
+              'w-full h-full min-h-[500px] font-mono text-sm p-3 rounded border border-border',
+              'bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring resize-none',
             )}
           />
         </div>
-        <DialogFooter>
-          <Button onClick={handleClose} variant="outline">
-            Close
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

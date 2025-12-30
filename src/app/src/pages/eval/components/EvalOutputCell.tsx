@@ -428,7 +428,10 @@ function EvalOutputCell({
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
-    onRating(newRating, undefined, output.gradingResult?.comment);
+    // Defer the API call to allow the UI to update first
+    queueMicrotask(() => {
+      onRating(newRating, undefined, output.gradingResult?.comment);
+    });
   };
 
   const handleSetScore = () => {

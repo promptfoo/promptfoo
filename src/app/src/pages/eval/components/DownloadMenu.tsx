@@ -12,15 +12,35 @@ import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/us
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
+interface DownloadMenuItemProps {
+  onClick: () => void;
+}
+
 /**
- * Renders a "Download" menu item and a modal dialog that lets users export evaluation data
- * (configuration files, table exports, and advanced formats), copy related CLI commands, and track downloaded files.
- *
- * @returns A React element containing the menu item and the download options dialog with controls for exporting files and copying commands.
+ * Menu item that triggers the download dialog.
  */
-function DownloadMenu() {
+export function DownloadMenuItem({ onClick }: DownloadMenuItemProps) {
+  return (
+    <DropdownMenuItem onSelect={onClick}>
+      <DropdownMenuItemIcon>
+        <Download className="h-4 w-4" />
+      </DropdownMenuItemIcon>
+      Download
+    </DropdownMenuItem>
+  );
+}
+
+interface DownloadDialogProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+/**
+ * Dialog that lets users export evaluation data (configuration files, table exports, and advanced formats),
+ * copy related CLI commands, and track downloaded files.
+ */
+export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const { table, config, evalId } = useResultsViewStore();
-  const [open, setOpen] = React.useState(false);
   const [downloadedFiles, setDownloadedFiles] = React.useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
@@ -45,7 +65,7 @@ function DownloadMenu() {
   };
 
   const handleClose = () => {
-    setOpen(false);
+    onClose();
     // Reset download states when dialog is closed
     setDownloadedFiles(new Set());
   };
@@ -260,10 +280,6 @@ function DownloadMenu() {
     handleClose();
   };
 
-  const handleOpen = () => {
-    setOpen(true);
-  };
-
   // Generate the command text based on filename
   const getCommandText = (fileName: string) => {
     return `promptfoo eval -c ${fileName}`;
@@ -303,144 +319,123 @@ function DownloadMenu() {
   };
 
   return (
-    <>
-      <DropdownMenuItem
-        onSelect={(event) => {
-          // Prevent the dropdown from closing so the dialog can open
-          event.preventDefault();
-          handleOpen();
-        }}
-      >
-        <DropdownMenuItemIcon>
-          <Download className="h-4 w-4" />
-        </DropdownMenuItemIcon>
-        Download
-      </DropdownMenuItem>
-      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
-              <DialogTitle className="text-xl font-semibold">Download Options</DialogTitle>
-              <Button onClick={handleClose} variant="outline" size="sm">
-                Close
-              </Button>
-            </div>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            {/* Configuration Files Section */}
-            <Card className="border">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Configuration Files</h3>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-semibold">Download Options</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-6 py-4">
+          {/* Configuration Files Section */}
+          <Card className="border">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Configuration Files</h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="h-full">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Complete configuration file for this evaluation
-                    </p>
-                    <Button onClick={downloadConfig} className="w-full mb-2">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download YAML Config
-                    </Button>
-                    {evalId && (
-                      <CommandBlock
-                        fileName={getFilename('config.yaml')}
-                        helpText="Run this command to execute the eval again:"
-                      />
-                    )}
-                  </div>
-
-                  <div className="h-full">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Configuration with only failed tests for focused debugging
-                    </p>
-                    <Button
-                      onClick={downloadFailedTestsConfig}
-                      variant="outline"
-                      className="w-full mb-2"
-                      disabled={
-                        !table ||
-                        !table.body ||
-                        table.body.every((row) => row.outputs.every((output) => output?.pass))
-                      }
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Failed Tests
-                    </Button>
-                    {evalId && (
-                      <CommandBlock
-                        fileName={getFilename('failed-tests.yaml')}
-                        helpText="Run this command to re-run just the failed tests:"
-                      />
-                    )}
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="h-full">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Complete configuration file for this evaluation
+                  </p>
+                  <Button onClick={downloadConfig} className="w-full mb-2">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download YAML Config
+                  </Button>
+                  {evalId && (
+                    <CommandBlock
+                      fileName={getFilename('config.yaml')}
+                      helpText="Run this command to execute the eval again:"
+                    />
+                  )}
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Table Data Section */}
-            <Card className="border">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-2">Export Results</h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Export evaluation results in standard formats for further analysis or reporting.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="h-full">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Configuration with only failed tests for focused debugging
+                  </p>
                   <Button
-                    onClick={downloadCsv}
+                    onClick={downloadFailedTestsConfig}
                     variant="outline"
-                    className="h-12"
-                    disabled={isLoadingCsv}
+                    className="w-full mb-2"
+                    disabled={
+                      !table ||
+                      !table.body ||
+                      table.body.every((row) => row.outputs.every((output) => output?.pass))
+                    }
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
+                    Download Failed Tests
                   </Button>
-
-                  <Button
-                    onClick={downloadTable}
-                    variant="outline"
-                    className="h-12"
-                    disabled={isLoadingJson}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
-                  </Button>
+                  {evalId && (
+                    <CommandBlock
+                      fileName={getFilename('failed-tests.yaml')}
+                      helpText="Run this command to re-run just the failed tests:"
+                    />
+                  )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Advanced Options Section */}
-            <Card className="border">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-2">Advanced Exports</h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Specialized formats for security testing, machine learning training, and human
-                  evaluation workflows.
-                </p>
+          {/* Table Data Section */}
+          <Card className="border">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-2">Export Results</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Export evaluation results in standard formats for further analysis or reporting.
+              </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Button onClick={downloadBurpPayloads} variant="outline" className="h-12">
-                    <Download className="h-4 w-4 mr-2" />
-                    Burp Payloads
-                  </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button
+                  onClick={downloadCsv}
+                  variant="outline"
+                  className="h-12"
+                  disabled={isLoadingCsv}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
+                </Button>
 
-                  <Button onClick={downloadDpoJson} variant="outline" className="h-12">
-                    <Download className="h-4 w-4 mr-2" />
-                    DPO JSON
-                  </Button>
+                <Button
+                  onClick={downloadTable}
+                  variant="outline"
+                  className="h-12"
+                  disabled={isLoadingJson}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-                  <Button onClick={downloadHumanEvalTestCases} variant="outline" className="h-12">
-                    <Download className="h-4 w-4 mr-2" />
-                    Human Eval YAML
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+          {/* Advanced Options Section */}
+          <Card className="border">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-2">Advanced Exports</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Specialized formats for security testing, machine learning training, and human
+                evaluation workflows.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Button onClick={downloadBurpPayloads} variant="outline" className="h-12">
+                  <Download className="h-4 w-4 mr-2" />
+                  Burp Payloads
+                </Button>
+
+                <Button onClick={downloadDpoJson} variant="outline" className="h-12">
+                  <Download className="h-4 w-4 mr-2" />
+                  DPO JSON
+                </Button>
+
+                <Button onClick={downloadHumanEvalTestCases} variant="outline" className="h-12">
+                  <Download className="h-4 w-4 mr-2" />
+                  Human Eval YAML
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-export default DownloadMenu;

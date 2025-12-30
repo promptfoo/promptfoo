@@ -51,7 +51,7 @@ import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
-import DownloadMenu from './DownloadMenu';
+import { DownloadDialog, DownloadMenuItem } from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
@@ -177,6 +177,9 @@ export default function ResultsView({
 
   // State for compare eval dialog
   const [compareDialogOpen, setCompareDialogOpen] = React.useState(false);
+
+  // State for download dialog
+  const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
@@ -658,7 +661,7 @@ export default function ResultsView({
                         <Eye className="h-4 w-4 mr-2" />
                         View YAML
                       </DropdownMenuItem>
-                      <DownloadMenu />
+                      <DownloadMenuItem onClick={() => setDownloadDialogOpen(true)} />
                       <DropdownMenuItem onClick={() => setCopyDialogOpen(true)}>
                         <Copy className="h-4 w-4 mr-2" />
                         Copy
@@ -891,6 +894,7 @@ export default function ResultsView({
         focusedEvalId={currentEvalId}
         filterByDatasetId
       />
+      <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}
