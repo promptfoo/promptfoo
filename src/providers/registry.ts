@@ -361,6 +361,13 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle Nova Reel video model
+      if (modelType === 'video' || modelType.includes('amazon.nova-reel')) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
+      }
+
       // Handle Bedrock Agents
       if (modelType === 'agents') {
         const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');

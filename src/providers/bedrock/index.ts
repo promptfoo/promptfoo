@@ -413,6 +413,116 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
       };
 }
 
+// =============================================================================
+// Video Generation Types (Nova Reel)
+// =============================================================================
+
+/**
+ * Nova Reel task types
+ */
+export type NovaReelTaskType = 'TEXT_VIDEO' | 'MULTI_SHOT_AUTOMATED' | 'MULTI_SHOT_MANUAL';
+
+/**
+ * Nova Reel video dimension (only 1280x720 supported)
+ */
+export type NovaReelDimension = '1280x720';
+
+/**
+ * Nova Reel video FPS (only 24 supported)
+ */
+export type NovaReelFPS = 24;
+
+/**
+ * Image source for Nova Reel image-to-video
+ */
+export interface NovaReelImageSource {
+  format: 'png' | 'jpeg';
+  source: {
+    bytes: string; // base64 encoded
+  };
+}
+
+/**
+ * Shot definition for multi-shot manual mode
+ */
+export interface NovaReelShot {
+  text: string;
+  image?: NovaReelImageSource;
+}
+
+/**
+ * Video generation configuration
+ */
+export interface NovaReelVideoGenerationConfig {
+  durationSeconds: number; // 6 for single shot, 12-120 (multiples of 6) for multi-shot
+  fps: NovaReelFPS;
+  dimension: NovaReelDimension;
+  seed?: number; // 0-2,147,483,646
+}
+
+/**
+ * Configuration options for Nova Reel video generation
+ */
+export interface NovaReelVideoOptions extends BedrockOptions {
+  // Task type selection
+  taskType?: NovaReelTaskType;
+
+  // S3 output configuration (required)
+  s3OutputUri: string; // e.g., "s3://my-bucket/videos"
+
+  // Video generation parameters
+  durationSeconds?: number; // Default: 6
+  seed?: number;
+
+  // For TEXT_VIDEO task type
+  image?: string; // file:// path or base64 for image-to-video
+
+  // For MULTI_SHOT_MANUAL task type
+  shots?: NovaReelShot[];
+
+  // Polling configuration
+  pollIntervalMs?: number; // Default: 10000 (10 seconds)
+  maxPollTimeMs?: number; // Default: 900000 (15 minutes for 2-min videos)
+
+  // Download configuration
+  downloadFromS3?: boolean; // Default: true - download and store to blob storage
+}
+
+/**
+ * Nova Reel async invoke response
+ */
+export interface NovaReelInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig: {
+      s3Uri: string;
+    };
+  };
+  failureMessage?: string;
+}
+
+/**
+ * Video generation status from S3
+ */
+export interface NovaReelGenerationStatus {
+  schemaVersion: string;
+  shots: Array<{
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  }>;
+  fullVideo: {
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  };
+}
+
 export interface IBedrockModel {
   params: (
     config: BedrockOptions,
