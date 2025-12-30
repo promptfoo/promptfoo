@@ -56,12 +56,30 @@ describe('FilterChips', () => {
     return render(<TooltipProvider>{ui}</TooltipProvider>);
   };
 
+  it('renders the "Filter by metric" label', () => {
+    renderWithTooltip(<FilterChips />);
+
+    expect(screen.getByText('Filter by metric')).toBeInTheDocument();
+  });
+
   it('renders metric chips for redteam evals', () => {
     renderWithTooltip(<FilterChips />);
 
     expect(screen.getByText('harmful-content')).toBeInTheDocument();
     expect(screen.getByText('prompt-injection')).toBeInTheDocument();
     expect(screen.getByText('data-leakage')).toBeInTheDocument();
+  });
+
+  it('sorts metrics by pass rate (lowest first)', () => {
+    renderWithTooltip(<FilterChips />);
+
+    const buttons = screen.getAllByRole('button');
+    // First chip should be prompt-injection (30% pass rate - lowest)
+    expect(buttons[0]).toHaveTextContent('prompt-injection');
+    // Second should be harmful-content (80% pass rate)
+    expect(buttons[1]).toHaveTextContent('harmful-content');
+    // Third should be data-leakage (100% pass rate - highest)
+    expect(buttons[2]).toHaveTextContent('data-leakage');
   });
 
   it('displays pass/test counts for each metric', () => {
@@ -246,5 +264,115 @@ describe('FilterChips visibility', () => {
     );
 
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe('FilterChips expand/collapse', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const createManyMetrics = () => {
+    const namedScores: Record<string, number> = {};
+    const namedScoresCount: Record<string, number> = {};
+    // Create 12 metrics to trigger the expand/collapse behavior (default visible is 8)
+    for (let i = 1; i <= 12; i++) {
+      namedScores[`metric-${i}`] = i;
+      namedScoresCount[`metric-${i}`] = 10;
+    }
+    return { namedScores, namedScoresCount };
+  };
+
+  it('shows expand button when more than 8 metrics exist', () => {
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [{ metrics: createManyMetrics() }],
+          },
+        },
+      }) as any,
+    );
+
+    render(
+      <TooltipProvider>
+        <FilterChips />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('+4 more')).toBeInTheDocument();
+  });
+
+  it('expands to show all metrics when clicking expand button', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [{ metrics: createManyMetrics() }],
+          },
+        },
+      }) as any,
+    );
+
+    render(
+      <TooltipProvider>
+        <FilterChips />
+      </TooltipProvider>,
+    );
+
+    // Initially, metric-12 should not be visible (it's beyond the first 8)
+    // Note: metrics are sorted by pass rate, so metric-1 (10%) is first, metric-12 is likely hidden
+    expect(screen.queryByText('metric-12')).not.toBeInTheDocument();
+
+    // Click expand button
+    await user.click(screen.getByText('+4 more'));
+
+    // Now all metrics should be visible
+    expect(screen.getByText('metric-12')).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+  });
+
+  it('collapses back when clicking "Show less"', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [{ metrics: createManyMetrics() }],
+          },
+        },
+      }) as any,
+    );
+
+    render(
+      <TooltipProvider>
+        <FilterChips />
+      </TooltipProvider>,
+    );
+
+    // Expand first
+    await user.click(screen.getByText('+4 more'));
+    expect(screen.getByText('metric-12')).toBeInTheDocument();
+
+    // Collapse
+    await user.click(screen.getByText('Show less'));
+
+    // Should show expand button again
+    expect(screen.getByText('+4 more')).toBeInTheDocument();
+    expect(screen.queryByText('metric-12')).not.toBeInTheDocument();
+  });
+
+  it('does not show expand button when 8 or fewer metrics', () => {
+    vi.mocked(useTableStore).mockReturnValue(createMockStore() as any);
+
+    render(
+      <TooltipProvider>
+        <FilterChips />
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Show less')).not.toBeInTheDocument();
   });
 });

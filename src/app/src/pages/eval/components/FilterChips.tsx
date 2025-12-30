@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
@@ -8,7 +8,10 @@ import {
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useTableStore } from './store';
+
+const DEFAULT_VISIBLE_COUNT = 8;
 
 /**
  * Renders toggleable filter chips for metrics.
@@ -17,6 +20,7 @@ import { useTableStore } from './store';
 export function FilterChips() {
   const { filters, addFilter, removeFilter, config, table } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Extract metrics from table with aggregated pass/test counts
   const metricsWithCounts = useMemo(() => {
@@ -39,9 +43,19 @@ export function FilterChips() {
       }
     });
 
-    return Array.from(metricMap.entries())
-      .map(([metric, counts]) => ({ metric, ...counts }))
-      .sort((a, b) => a.metric.localeCompare(b.metric));
+    return (
+      Array.from(metricMap.entries())
+        .map(([metric, counts]) => ({ metric, ...counts }))
+        // Sort by pass rate (lowest first) so most concerning metrics appear first when collapsed
+        .sort((a, b) => {
+          const rateA = a.testCount > 0 ? a.passCount / a.testCount : 1;
+          const rateB = b.testCount > 0 ? b.passCount / b.testCount : 1;
+          if (rateA !== rateB) {
+            return rateA - rateB;
+          }
+          return a.metric.localeCompare(b.metric);
+        })
+    );
   }, [table]);
 
   // Get display name for a metric (handles policy metrics)
@@ -104,6 +118,13 @@ export function FilterChips() {
     return null;
   }
 
+  // Determine which chips to show
+  const hasMoreChips = metricsWithCounts.length > DEFAULT_VISIBLE_COUNT;
+  const visibleMetrics = isExpanded
+    ? metricsWithCounts
+    : metricsWithCounts.slice(0, DEFAULT_VISIBLE_COUNT);
+  const hiddenCount = metricsWithCounts.length - DEFAULT_VISIBLE_COUNT;
+
   const handleClick = (metric: string) => {
     const activeFilterId = getActiveFilterId(metric);
     if (activeFilterId) {
@@ -120,33 +141,57 @@ export function FilterChips() {
   };
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {metricsWithCounts.map(({ metric, passCount, testCount }) => {
-        const isActive = getActiveFilterId(metric) !== null;
-        const passRate = testCount > 0 ? Math.round((passCount / testCount) * 100) : 0;
-        return (
-          <Tooltip key={`metric-${metric}`}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => handleClick(metric)}
-                className={cn(
-                  'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
-                  getPassRateStyles(passCount, testCount, isActive),
-                )}
-              >
-                {getDisplayName(metric)}
-                <span className="opacity-70">
-                  ({passCount}/{testCount})
-                </span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isActive ? 'Click to remove filter' : `${passRate}% pass rate — Click to filter`}
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">Filter by metric</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {visibleMetrics.map(({ metric, passCount, testCount }) => {
+          const isActive = getActiveFilterId(metric) !== null;
+          const passRate = testCount > 0 ? Math.round((passCount / testCount) * 100) : 0;
+          return (
+            <Tooltip key={`metric-${metric}`}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => handleClick(metric)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
+                    getPassRateStyles(passCount, testCount, isActive),
+                  )}
+                >
+                  {getDisplayName(metric)}
+                  <span className="opacity-70">
+                    ({passCount}/{testCount})
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isActive ? 'Click to remove filter' : `${passRate}% pass rate — Click to filter`}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+        {hasMoreChips && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
+              'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="h-3 w-3" />
+                Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3" />+{hiddenCount} more
+              </>
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
