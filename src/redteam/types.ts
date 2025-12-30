@@ -215,7 +215,7 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
-  targetLabels: string[];
+  targetIds: string[];
   showProgressBar?: boolean;
 }
 
@@ -236,6 +236,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  description?: string;
 
   // Used by webui
   liveRedteamConfig?: any;

@@ -20,14 +20,13 @@ import {
   type Prompt,
   type TestCase,
   type TestSuite,
+  type UnifiedConfig,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
-
-import type EvalResult from './models/evalResult';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
@@ -501,27 +500,69 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-type BeforeAllExtensionHookContext = {
+/**
+ * Context passed to beforeAll extension hooks.
+ * Called once before the evaluation starts.
+ */
+export type BeforeAllExtensionHookContext = {
+  /** The test suite configuration (mutable) */
   suite: TestSuite;
 };
 
-type BeforeEachExtensionHookContext = {
+/**
+ * Context passed to beforeEach extension hooks.
+ * Called before each test case is evaluated.
+ */
+export type BeforeEachExtensionHookContext = {
+  /** The test case about to be evaluated (mutable) */
   test: TestCase;
 };
 
-type AfterEachExtensionHookContext = {
+/**
+ * Context passed to afterEach extension hooks.
+ * Called after each test case is evaluated.
+ */
+export type AfterEachExtensionHookContext = {
+  /** The test case that was evaluated */
   test: TestCase;
+  /** The result of the evaluation */
   result: EvaluateResult;
 };
 
-type AfterAllExtensionHookContext = {
+/**
+ * Context passed to afterAll extension hooks.
+ * Called once after all evaluations complete.
+ *
+ * @example
+ * ```javascript
+ * // extension.js
+ * module.exports = {
+ *   afterAll: async (context) => {
+ *     console.log(`Eval ${context.evalId} completed`);
+ *     console.log(`Results: ${context.results.length} tests`);
+ *     // Send to monitoring, database, etc.
+ *   }
+ * };
+ * ```
+ */
+export type AfterAllExtensionHookContext = {
+  /** The test suite configuration */
   suite: TestSuite;
-  results: EvalResult[];
+  /** All evaluation results as plain data objects */
+  results: EvaluateResult[];
+  /** Completed prompts with metrics */
   prompts: CompletedPrompt[];
+  /** Unique identifier for this evaluation run */
+  evalId: string;
+  /** The full evaluation configuration */
+  config: Partial<UnifiedConfig>;
 };
 
-// Maps hook names to their context types.
-type HookContextMap = {
+/**
+ * Maps hook names to their context types.
+ * Used for type-safe extension hook invocation.
+ */
+export type ExtensionHookContextMap = {
   beforeAll: BeforeAllExtensionHookContext;
   beforeEach: BeforeEachExtensionHookContext;
   afterEach: AfterEachExtensionHookContext;
@@ -539,11 +580,28 @@ type HookContextMap = {
  *  - The updated context object, if the extension hook returns a valid context object. The updated context,
  *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook<HookName extends keyof HookContextMap>(
+/**
+ * Extracts the hook name from an extension path.
+ * Format: file://path/to/file.js:hookName or file://path/to/file.py:hook_name
+ * @returns The hook name or undefined if not specified
+ */
+function getExtensionHookName(extension: string): string | undefined {
+  if (!extension.startsWith('file://')) {
+    return undefined;
+  }
+  const lastColonIndex = extension.lastIndexOf(':');
+  // Check if colon is part of Windows drive letter (position 8 after file://) or not present
+  if (lastColonIndex > 8) {
+    return extension.slice(lastColonIndex + 1);
+  }
+  return undefined;
+}
+
+export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
-  context: HookContextMap[HookName],
-): Promise<HookContextMap[HookName]> {
+  context: ExtensionHookContextMap[HookName],
+): Promise<ExtensionHookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return context;
   }
@@ -552,13 +610,24 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     feature: 'extension_hook',
   });
 
-  let updatedContext: HookContextMap[HookName] = { ...context };
+  let updatedContext: ExtensionHookContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
+
+    // Only run extensions that match the current hook name
+    // Extension format: file://path/to/file.js:hookName
+    const extensionHookName = getExtensionHookName(extension);
+    if (extensionHookName && extensionHookName !== hookName) {
+      logger.debug(
+        `Skipping extension ${extension} for hook ${hookName} (extension is for ${extensionHookName})`,
+      );
+      continue;
+    }
+
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
 
-    const extensionReturnValue = await transform(extension, hookName, context, false);
+    const extensionReturnValue = await transform(extension, context, { hookName }, false);
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
     // This also provides backwards compatibility for extension hooks that do not return a value.

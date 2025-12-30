@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - JavaScript file assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'This is a test message with some content: {{topic}}'
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: javascript
+        value: file://../assertions/check-length.js
+        config:
+          minLength: 10

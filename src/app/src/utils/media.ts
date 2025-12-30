@@ -153,6 +153,7 @@ export function resolveImageSource(
 /**
  * Resolve video source from a video object with url, blobRef, or storageRef.
  * Handles both legacy API paths and new blob/storage patterns.
+ * Supports both Google Veo (blobRef) and OpenAI Sora (storageRef, thumbnail) patterns.
  */
 export function resolveVideoSource(
   video?: {

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -603,7 +604,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
-          window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
+          window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },
     };
@@ -637,11 +638,16 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 
 function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   const theme = useTheme();
-  Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
   ] = useState(false);
+
+  // Update Chart.js defaults when theme changes
+  // useLayoutEffect ensures defaults are set before charts render
+  useLayoutEffect(() => {
+    Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
+  }, [theme.palette.mode]);
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
   // non-null.

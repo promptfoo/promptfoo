@@ -92,14 +92,9 @@ describe('AdvancedOptionsDialog', () => {
       </ThemeProvider>,
     );
     expect(screen.getByText('pattern1')).toBeInTheDocument();
-    // Find the Chip component containing 'pattern1' and trigger its delete
-    const pattern1Text = screen.getByText('pattern1');
-    const chipContainer = pattern1Text.closest('[role="button"]');
-    // Look for the delete icon within the chip (MUI uses a cancel/close icon)
-    const deleteIcon = chipContainer?.querySelector('svg');
-    if (deleteIcon) {
-      fireEvent.click(deleteIcon);
-    }
+    // Find the delete button for pattern1 using the aria-label
+    const deleteButton = screen.getByRole('button', { name: 'Remove pattern1' });
+    fireEvent.click(deleteButton);
     expect(screen.queryByText('pattern1')).not.toBeInTheDocument();
     expect(screen.getByText('pattern2')).toBeInTheDocument();
   });

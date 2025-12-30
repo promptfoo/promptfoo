@@ -115,7 +115,8 @@ describe('EvalOutputPromptDialog', () => {
     });
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
-    expect(screen.getByText('✅')).toBeInTheDocument();
+    // CircleCheck icon is an SVG with emerald color indicating pass (use document.body because Sheet uses portals)
+    expect(document.body.querySelector('svg.text-emerald-600')).toBeInTheDocument();
   });
 
   it('does not display metrics column when no metrics are present', async () => {
@@ -162,20 +163,24 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    // Find the prompt content box and trigger hover to make copy button visible
-    const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
-    expect(promptBox).toBeInTheDocument();
+    // Find the prompt section - the outer container that has the hover handler
+    const promptText = screen.getByText('Test prompt');
+    const promptContainer = promptText.closest('.relative');
+    expect(promptContainer).toBeInTheDocument();
 
-    fireEvent.mouseEnter(promptBox!);
+    // Trigger hover to make copy button visible
+    fireEvent.mouseEnter(promptContainer!);
 
-    // Find all copy buttons and select the first one (for the prompt)
-    const copyIcons = screen.getAllByTestId('ContentCopyIcon');
-    const copyButton = copyIcons[0].closest('button');
+    // Wait for the copy button to appear after hover
+    const copyButton = await screen.findByRole('button', { name: /^copy\s*$/i });
     expect(copyButton).toBeInTheDocument();
-    await userEvent.click(copyButton!);
+    await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
-    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+    // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
+    await waitFor(() => {
+      expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
+    });
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
@@ -201,7 +206,10 @@ describe('EvalOutputPromptDialog', () => {
     await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
-    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+    // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
+    await waitFor(() => {
+      expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
+    });
   });
 
   it('expands truncated values when clicked', async () => {
@@ -384,23 +392,23 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
+    // Use the module-level mock - vi.clearAllMocks() doesn't reset mockResolvedValue
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
 
     // Wait for traces tab to be available
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /traces/i })).toBeInTheDocument();
+      expect(screen.getByText('Traces')).toBeInTheDocument();
     });
 
-    const tracesTab = screen.getByRole('tab', { name: /traces/i });
-    await act(async () => {
-      fireEvent.click(tracesTab);
-    });
+    const tracesTab = screen.getByText('Traces');
+    await userEvent.click(tracesTab);
 
     const debuggingPanel = screen.getByTestId('mock-debugging-panel');
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
   });
 
   it('passes promptIndex to DebuggingPanel when testIndex is undefined', async () => {
+    // Use the module-level mock - vi.clearAllMocks() doesn't reset mockResolvedValue
     const promptIndex = 1;
     render(
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
@@ -412,9 +420,7 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     const tracesTab = screen.getByText('Traces');
-    await act(async () => {
-      fireEvent.click(tracesTab);
-    });
+    await userEvent.click(tracesTab);
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({

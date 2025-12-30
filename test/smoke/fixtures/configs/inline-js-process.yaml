@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.1.3: Inline JS with process.mainModule shim
+# Bug #6606: Inline transforms using process.mainModule.require broke in 0.120.0
+#
+# After ESM migration, process.mainModule is undefined. The fix adds a shim
+# that provides process.mainModule.require via createRequire().
+description: 'Regression test - inline JS with process access'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test {{value}}'
+
+tests:
+  - vars:
+      value: ProcessTest
+    assert:
+      - type: javascript
+        value: |
+          // Test that process object is accessible in inline JS
+          // This broke in 0.120.0 because process.mainModule was undefined
+          // Note: 'output' is already defined in the context, use it directly
+          const hasProcess = typeof process !== 'undefined';
+          const hasEnv = hasProcess && typeof process.env !== 'undefined';
+          // The assertion should pass if process is accessible
+          return output.includes('ProcessTest') && hasProcess && hasEnv;

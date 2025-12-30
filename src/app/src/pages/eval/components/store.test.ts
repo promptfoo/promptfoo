@@ -112,7 +112,7 @@ describe('useTableStore', () => {
   });
 
   describe('extractUniqueStrategyIds', () => {
-    it('should handle strategies with special characters and long IDs', () => {
+    it('should handle strategies with special characters and long IDs', async () => {
       const strategies = [
         'strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters',
         's'.repeat(200),
@@ -120,20 +120,22 @@ describe('useTableStore', () => {
         { id: 's'.repeat(200) },
       ];
 
-      useTableStore.getState().setTableFromResultsFile({
-        version: 4,
-        config: {
-          redteam: {
-            strategies: strategies,
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile({
+          version: 4,
+          config: {
+            redteam: {
+              strategies: strategies,
+            },
           },
-        },
-        results: {
-          results: [],
-        },
-        prompts: [],
-        createdAt: '2024-01-01T00:00:00.000Z',
-        author: 'test',
-      } as any);
+          results: {
+            results: [],
+          },
+          prompts: [],
+          createdAt: '2024-01-01T00:00:00.000Z',
+          author: 'test',
+        } as any);
+      });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual([
@@ -515,7 +517,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual([]);
     });
 
-    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', () => {
+    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -530,8 +532,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -540,7 +542,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toBeUndefined();
     });
 
-    it('should populate strategy options when setTableFromResultsFile receives redteam config', () => {
+    it('should populate strategy options when setTableFromResultsFile receives redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -557,12 +559,13 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      // 'retry' is intentionally filtered out - it's not user-facing in the UI
+      expect(state.filters.options.strategy).toEqual(['multilingual', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
 
@@ -1511,7 +1514,7 @@ describe('useTableStore', () => {
   });
 
   describe('setTableFromResultsFile', () => {
-    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", () => {
+    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1527,15 +1530,15 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['basic']);
     });
 
-    it('should deduplicate strategy IDs in filters.options.strategy when resultsFile contains duplicate strategy IDs', () => {
+    it('should deduplicate strategy IDs in filters.options.strategy when resultsFile contains duplicate strategy IDs', async () => {
       const resultsFile: ResultsFile = {
         version: 3,
         config: {
@@ -1552,15 +1555,15 @@ describe('useTableStore', () => {
         prompts: [],
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(resultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(resultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
 
-    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', () => {
+    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1581,8 +1584,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1594,7 +1597,7 @@ describe('useTableStore', () => {
       ]);
     });
 
-    it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', () => {
+    it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 3,
         config: {
@@ -1616,8 +1619,8 @@ describe('useTableStore', () => {
         prompts: [],
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1903,7 +1906,7 @@ describe('useTableStore', () => {
       });
     });
 
-    it('should return a sorted array of unique severity values when plugins have defined severities', () => {
+    it('should return a sorted array of unique severity values when plugins have defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1925,8 +1928,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1935,7 +1938,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual(expectedSeverities);
     });
 
-    it('should return the correct severities based on the default riskCategorySeverityMap when given an array of plugin IDs (strings) without explicit severity overrides', () => {
+    it('should return the correct severities based on the default riskCategorySeverityMap when given an array of plugin IDs (strings) without explicit severity overrides', async () => {
       const pluginIds = ['pii', 'jailbreak', 'prompt-injection'];
       const mockResultsFile: ResultsFile = {
         version: 4,
@@ -1952,8 +1955,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1961,7 +1964,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual(expectedSeverities);
     });
 
-    it('should handle case-insensitive severity values correctly', () => {
+    it('should handle case-insensitive severity values correctly', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1977,8 +1980,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2003,7 +2006,7 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
     });
 
-    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', () => {
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
@@ -2013,14 +2016,14 @@ describe('useTableStore', () => {
         author: 'test',
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
     });
 
-    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', () => {
+    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', async () => {
       // This test documents that metadata filtering (field/value pairs) is separate
       // from redteam filtering (predefined types). Users can still filter on metadata
       // fields named "plugin", "strategy", or "severity" using metadata filters.
@@ -2033,8 +2036,8 @@ describe('useTableStore', () => {
         author: 'test',
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();

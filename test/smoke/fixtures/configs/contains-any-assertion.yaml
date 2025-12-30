@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing contains-any assertion
+description: 'Smoke test - contains-any assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'The quick brown fox'
+
+tests:
+  - assert:
+      # At least one value must be present
+      - type: contains-any
+        value:
+          - elephant
+          - fox
+          - giraffe

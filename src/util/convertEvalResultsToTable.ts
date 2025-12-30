@@ -94,13 +94,19 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             id: result.response.audio.id,
             expiresAt: result.response.audio.expiresAt,
             data: result.response.audio.data,
+            blobRef: result.response.audio.blobRef,
             transcript: result.response.audio.transcript,
             format: result.response.audio.format,
+            sampleRate: result.response.audio.sampleRate,
+            channels: result.response.audio.channels,
+            duration: result.response.audio.duration,
           }
         : undefined,
       video: result.response?.video
         ? {
             id: result.response.video.id,
+            blobRef: result.response.video.blobRef,
+            storageRef: result.response.video.storageRef,
             url: result.response.video.url,
             format: result.response.video.format,
             size: result.response.video.size,
@@ -108,6 +114,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             thumbnail: result.response.video.thumbnail,
             spritesheet: result.response.video.spritesheet,
             model: result.response.video.model,
+            aspectRatio: result.response.video.aspectRatio,
+            resolution: result.response.video.resolution,
           }
         : undefined,
     };
