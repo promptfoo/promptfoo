@@ -1,7 +1,8 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -17,9 +18,8 @@ vi.mock('../../../utils/crypto', () => ({
   validatePrivateKey: vi.fn(() => ({ valid: true, error: null })),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const renderWithTooltipProvider = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
 };
 
 describe('DigitalSignatureAuthTab', () => {
@@ -40,7 +40,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should update signatureValidityMs when a valid number is entered', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -60,7 +60,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should update signatureRefreshBufferMs in selectedTarget.config.signatureAuth when a valid number is entered', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -80,7 +80,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should update signatureRefreshBufferMs when set to 0', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -98,7 +98,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should update signatureValidityMs when a negative value is entered', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -118,7 +118,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should handle extremely large values for signatureValidityMs without errors', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -138,7 +138,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   it('should handle decimal values entered in Signature Validity (ms)', () => {
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -169,7 +169,7 @@ describe('DigitalSignatureAuthTab', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -194,7 +194,7 @@ describe('DigitalSignatureAuthTab', () => {
       config: {},
     };
 
-    renderWithTheme(
+    renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -212,7 +212,7 @@ describe('DigitalSignatureAuthTab', () => {
         config: {},
       };
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -230,7 +230,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should disable signatureAuth when toggle is turned off', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -245,20 +245,22 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('Certificate Type Selection', () => {
-    it('should update certificate type to JKS when selected', () => {
-      renderWithTheme(
+    it('should update certificate type to JKS when selected', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const certificateTypeSelect = comboboxes[0];
+      // Find the Select trigger button and click it to open dropdown
+      const selectTrigger = screen.getByRole('combobox');
+      await user.click(selectTrigger);
 
-      fireEvent.mouseDown(certificateTypeSelect);
-      const jksOption = screen.getByRole('option', { name: 'JKS' });
-      fireEvent.click(jksOption);
+      // Find the JKS option in the dropdown and click it
+      const jksOption = screen.getByText('JKS');
+      await user.click(jksOption);
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -278,20 +280,22 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update certificate type to PFX when selected', () => {
-      renderWithTheme(
+    it('should update certificate type to PFX when selected', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const certificateTypeSelect = comboboxes[0];
+      // Find the Select trigger button and click it to open dropdown
+      const selectTrigger = screen.getByRole('combobox');
+      await user.click(selectTrigger);
 
-      fireEvent.mouseDown(certificateTypeSelect);
-      const pfxOption = screen.getByRole('option', { name: /PFX/ });
-      fireEvent.click(pfxOption);
+      // Find the PFX option in the dropdown and click it
+      const pfxOption = screen.getByText(/PFX/);
+      await user.click(pfxOption);
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -314,18 +318,18 @@ describe('DigitalSignatureAuthTab', () => {
 
   describe('PEM Key Input Type Selection', () => {
     it('should update keyInputType to path when File Path option is clicked', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      // Find the Paper component containing "File Path" text and click it
+      // Find the clickable div containing "File Path" text and click it
       const filePathText = screen.getByText('File Path');
-      const filePathPaper = filePathText.closest('[class*="MuiPaper-root"]');
-      if (filePathPaper) {
-        fireEvent.click(filePathPaper);
+      const filePathCard = filePathText.closest('.cursor-pointer');
+      if (filePathCard) {
+        fireEvent.click(filePathCard);
       }
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -336,18 +340,18 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update keyInputType to base64 when Base64 Key String option is clicked', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      // Find the Paper component containing "Base64 Key String" text and click it
+      // Find the clickable div containing "Base64 Key String" text and click it
       const base64Text = screen.getByText('Base64 Key String');
-      const base64Paper = base64Text.closest('[class*="MuiPaper-root"]');
-      if (base64Paper) {
-        fireEvent.click(base64Paper);
+      const base64Card = base64Text.closest('.cursor-pointer');
+      if (base64Card) {
+        fireEvent.click(base64Card);
       }
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -372,14 +376,14 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update keystorePath when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const keystorePathInput = screen.getByLabelText('Keystore Path');
+      const keystorePathInput = screen.getByLabelText('Keystore File');
       fireEvent.change(keystorePathInput, { target: { value: '/path/to/keystore.jks' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -395,7 +399,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update keystorePassword when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -413,7 +417,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update keyAlias when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -445,14 +449,14 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update pfxPath when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const pfxPathInput = screen.getByLabelText('PFX File Path');
+      const pfxPathInput = screen.getByLabelText('PFX/P12 Certificate File');
       fireEvent.change(pfxPathInput, { target: { value: '/path/to/cert.pfx' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -471,7 +475,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update pfxPassword when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -489,7 +493,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update pfxMode to separate when Separate CRT/KEY Files is selected', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -520,14 +524,14 @@ describe('DigitalSignatureAuthTab', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const certPathInput = screen.getByLabelText('Certificate File Path');
+      const certPathInput = screen.getByLabelText('Certificate File (CRT)');
       fireEvent.change(certPathInput, { target: { value: '/path/to/cert.crt' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -559,14 +563,14 @@ describe('DigitalSignatureAuthTab', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
 
-      const keyPathInput = screen.getByLabelText('Private Key File Path');
+      const keyPathInput = screen.getByLabelText('Private Key File (KEY)');
       fireEvent.change(keyPathInput, { target: { value: '/path/to/private.key' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -591,7 +595,7 @@ describe('DigitalSignatureAuthTab', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -628,7 +632,7 @@ describe('DigitalSignatureAuthTab', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -662,7 +666,7 @@ describe('DigitalSignatureAuthTab', () => {
 
   describe('Signature Configuration Fields', () => {
     it('should update signatureDataTemplate when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -682,7 +686,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
 
     it('should update signatureAlgorithm when value is entered', () => {
-      renderWithTheme(
+      renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}

@@ -45,4 +45,16 @@ describe('Separator', () => {
     const separator = container.firstChild;
     expect(separator).toHaveClass('custom-separator');
   });
+
+  it('applies bg-border class for horizontal orientation', () => {
+    const { container } = render(<Separator orientation="horizontal" />);
+    const separator = container.firstChild;
+    expect(separator).toHaveClass('bg-border');
+  });
+
+  it('applies bg-border class for vertical orientation', () => {
+    const { container } = render(<Separator orientation="vertical" />);
+    const separator = container.firstChild;
+    expect(separator).toHaveClass('bg-border');
+  });
 });

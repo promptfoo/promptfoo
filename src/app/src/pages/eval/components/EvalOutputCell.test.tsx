@@ -1791,3 +1791,150 @@ describe('EvalOutputCell pass reasons setting', () => {
     expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Tests for lightbox functionality with inline images.
+ * These tests verify the fix for issue #969 (markdown re-rendering)
+ * by testing that the lightbox toggle works correctly with useCallback.
+ * @see https://github.com/promptfoo/promptfoo/issues/969
+ */
+describe('EvalOutputCell inline image lightbox', () => {
+  const mockOnRating = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('opens lightbox when clicking on inline image and closes when clicking lightbox', async () => {
+    // Use a data URI which triggers the inline image rendering path (not markdown)
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 1000,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [],
+          pass: true,
+          reason: 'Test passed',
+          score: 1.0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: dataUri,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+
+    // Open lightbox
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Close lightbox
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
+    // Use a data URI which triggers the inline image rendering path
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 1000,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [],
+          pass: true,
+          reason: 'Test passed',
+          score: 1.0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: dataUri,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const imgElement = screen.getByRole('img');
+
+    // Toggle open
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Toggle closed
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+
+    // Toggle open again (tests useCallback stability with functional update)
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Toggle closed again
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+
+    // Toggle once more to ensure the pattern continues to work
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+});

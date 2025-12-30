@@ -55,6 +55,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
   // resume: z.union([z.string(), z.boolean()]).optional(),
@@ -948,6 +949,10 @@ export function evalCommand(
       'Generate N new prompts and append them to the prompt list',
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option(
+      '-x, --extension <paths...>',
+      'Extension hooks to run (e.g., file://handler.js:afterAll)',
+    )
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')

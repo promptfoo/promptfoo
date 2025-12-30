@@ -41,7 +41,7 @@ describe('Textarea', () => {
   it('applies correct default styles', () => {
     render(<Textarea />);
     const textarea = screen.getByRole('textbox');
-    expect(textarea).toHaveClass('min-h-[80px]', 'rounded-md', 'border');
+    expect(textarea).toHaveClass('min-h-[80px]', 'rounded-lg', 'border');
   });
 
   it('forwards ref correctly', () => {
@@ -87,5 +87,17 @@ describe('Textarea', () => {
     render(<Textarea maxLength={100} />);
     const textarea = screen.getByRole('textbox');
     expect(textarea).toHaveAttribute('maxLength', '100');
+  });
+
+  it('applies border-input class by default and hover:border-primary/50 on hover', async () => {
+    const user = userEvent.setup();
+    render(<Textarea />);
+    const textarea = screen.getByRole('textbox');
+
+    expect(textarea).toHaveClass('border-input');
+
+    await user.hover(textarea);
+
+    expect(textarea).toHaveClass('hover:border-primary/50');
   });
 });

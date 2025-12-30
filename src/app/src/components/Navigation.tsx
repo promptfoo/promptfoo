@@ -92,8 +92,8 @@ function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
                 <Link
                   to={item.href}
                   className={cn(
-                    'block select-none rounded-lg px-3 py-2.5 outline-none transition-colors',
-                    'hover:bg-accent',
+                    'block select-none rounded-lg px-3 py-2.5 outline-none transition-colors no-underline',
+                    'hover:bg-accent hover:no-underline',
                     'focus:bg-accent',
                     index !== items.length - 1 && 'mb-0.5',
                   )}

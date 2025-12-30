@@ -10,10 +10,19 @@ function Textarea({ className, ref, ...props }: TextareaProps) {
   return (
     <textarea
       className={cn(
-        'flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
-        'placeholder:text-muted-foreground',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'disabled:cursor-not-allowed disabled:opacity-50',
+        // Base layout and sizing
+        'flex min-h-[80px] w-full rounded-lg border bg-background px-4 py-3',
+        // Typography
+        'text-sm leading-relaxed',
+        // Border styling - consistent with input
+        'border-input hover:border-primary/50',
+        // Placeholder
+        'placeholder:text-muted-foreground/60',
+        // Focus state - subtle ring with smooth transition
+        'transition-colors duration-150',
+        'focus-visible:outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20',
+        // Disabled state
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input',
         className,
       )}
       ref={ref}

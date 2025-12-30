@@ -249,6 +249,12 @@ export default class Eval {
   durationMs?: number;
 
   /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
+
+  /**
    * Get the ID of the most recent eval without loading the full object.
    * Use this when you only need the ID (e.g., for socket.io notifications).
    */

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 
+import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
@@ -131,14 +129,19 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     <PageWrapper
       title="Target Setup"
       description={
-        <Typography variant="body1">
+        <span className="text-base">
           A target is the AI system you want to red team. It could be an API endpoint, a language
           model, a custom script, or any other{' '}
-          <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+          <a
+            href="https://www.promptfoo.dev/docs/providers/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             supported provider
-          </Link>
+          </a>
           . Choose a descriptive name to identify your target throughout the testing process.
-        </Typography>
+        </span>
       }
       onNext={shouldShowFooterButton() ? handleNext : undefined}
       onBack={onBack}
@@ -148,134 +151,123 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         shouldShowFooterButton() && isNextButtonDisabled() ? getNextButtonTooltip() : undefined
       }
     >
-      <Stack direction="column" spacing={4}>
+      <div className="flex flex-col gap-6">
         {/* Quick Start Section */}
-        <Alert
-          severity="info"
-          sx={{
-            alignItems: 'center',
-            '& .MuiAlert-icon': {
-              mt: 0.25,
-            },
-            '& .MuiAlert-message': {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-              gap: 2,
-              flexWrap: 'wrap',
-            },
-          }}
-        >
-          <Box
-            sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', width: '100%' }}
-          >
-            <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
-              <strong>New to Promptfoo</strong> and want to see it in action? Load an example
-              configuration to get started immediately.
-            </Typography>
-            <LoadExampleButton />
-          </Box>
+        <Alert variant="info" className="[&>svg]:hidden">
+          <AlertDescription className="flex w-full flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <Info className="h-4 w-4 shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
+                <span className="min-w-[300px] flex-1 text-sm">
+                  <strong>New to Promptfoo</strong> and want to see it in action? Load an example
+                  configuration to get started immediately.
+                </span>
+                <LoadExampleButton />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <strong>Have an existing YAML config?</strong> Use the <strong>"Load Config"</strong>{' '}
+              button in the sidebar to import it and pre-fill the form.
+            </p>
+          </AlertDescription>
         </Alert>
 
         {/* Provider Name Field */}
-        <TextField
-          sx={{ width: '360px' }}
-          value={selectedTarget?.label ?? ''}
-          label="Target Name"
-          placeholder="e.g. 'customer-service-agent'"
-          onChange={(e) => {
-            const newTarget = { ...selectedTarget, label: e.target.value };
-            setSelectedTarget(newTarget);
-            updateConfig('target', newTarget);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {
-              setShowTargetTypeSection(true);
-              recordEvent('feature_used', {
-                feature: 'redteam_config_target_type_section_revealed',
-              });
-            }
-          }}
-          margin="normal"
-          required
-          autoFocus
-          InputLabelProps={{
-            shrink: true,
-          }}
-        />
+        <div className="w-[360px] space-y-2">
+          <Label htmlFor="target-name">
+            Target Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="target-name"
+            value={selectedTarget?.label ?? ''}
+            placeholder="e.g. 'customer-service-agent'"
+            onChange={(e) => {
+              const newTarget = { ...selectedTarget, label: e.target.value };
+              setSelectedTarget(newTarget);
+              updateConfig('target', newTarget);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {
+                setShowTargetTypeSection(true);
+                recordEvent('feature_used', {
+                  feature: 'redteam_config_target_type_section_revealed',
+                });
+              }
+            }}
+            autoFocus
+          />
+        </div>
 
         {/* Inline Next Button for first step */}
         {hasTargetName && !showTargetTypeSection && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 2 }}>
+          <div className="flex justify-start">
             <Button
-              variant="contained"
               onClick={() => {
                 setShowTargetTypeSection(true);
                 recordEvent('feature_used', {
                   feature: 'redteam_config_target_type_section_revealed',
                 });
               }}
-              sx={{ minWidth: '200px' }}
+              className="min-w-[200px]"
             >
               Next: Select Target Type
             </Button>
-          </Box>
+          </div>
         )}
 
         {/* Only show target type selection after user clicks to reveal it */}
         {showTargetTypeSection && (
-          <Box sx={{ mt: 4 }} gap={4}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2, mt: 4 }}>
-              Select Target Type
-            </Typography>
-            <Box sx={{ my: 2 }}>
-              <Typography variant="body1">
-                Select the type that best matches your target. Don't see what you need? Try 'Custom
-                Target' to access{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  more providers
-                </Link>
-                . You can also create your own using{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/python/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Python
-                </Link>
-                ,{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/custom-api/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  JavaScript
-                </Link>
-                , or{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/custom-script/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  shell scripts
-                </Link>
-                .
-              </Typography>
-            </Box>
+          <div className="mt-6 space-y-4">
+            <h2 className="mt-6 text-xl font-bold">Select Target Type</h2>
+            <p className="text-base">
+              Select the type that best matches your target. Don't see what you need? Try 'Custom
+              Target' to access{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                more providers
+              </a>
+              . You can also create your own using{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/python/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Python
+              </a>
+              ,{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/custom-api/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                JavaScript
+              </a>
+              , or{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/custom-script/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                shell scripts
+              </a>
+              .
+            </p>
             {/* Provider Type Selection */}
             <ProviderTypeSelector
               provider={selectedTarget}
               setProvider={handleProviderChange}
               providerType={providerType}
             />
-          </Box>
+          </div>
         )}
-      </Stack>
+      </div>
     </PageWrapper>
   );
 }

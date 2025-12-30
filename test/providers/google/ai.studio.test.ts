@@ -29,14 +29,24 @@ vi.mock('../../../src/util/templates', async (importOriginal) => {
   };
 });
 
-// Hoisted mock for maybeLoadFromExternalFile
+// Hoisted mocks for file loading functions
+const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 const mockMaybeLoadFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 
 vi.mock('../../../src/util/file', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     getNunjucksEngineForFilePath: vi.fn(),
+    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
     maybeLoadFromExternalFile: mockMaybeLoadFromExternalFile,
+  };
+});
+
+// Also mock the barrel file since the provider imports from util/index
+vi.mock('../../../src/util/index', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
   };
 });
 
@@ -994,8 +1004,8 @@ describe('AIStudioChatProvider', () => {
         },
       ];
 
-      // Mock maybeLoadFromExternalFile to return tools for file:// paths
-      mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+      // Mock maybeLoadToolsFromExternalFile to return tools for file:// paths
+      mockMaybeLoadToolsFromExternalFile.mockImplementation((input) => {
         if (typeof input === 'string' && input === 'file://tools.json') {
           return mockExternalTools;
         }
@@ -1058,8 +1068,10 @@ describe('AIStudioChatProvider', () => {
         metadata: {},
       });
 
-      // Verify maybeLoadFromExternalFile was called with the tools file path
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://tools.json');
+      // Verify maybeLoadToolsFromExternalFile was called with the tools file path
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith('file://tools.json', {
+        location: 'San Francisco',
+      });
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {

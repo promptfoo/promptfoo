@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
+import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
 import { CopyButton } from '@app/components/ui/copy-button';
 import {
   Dialog,
@@ -213,22 +215,22 @@ export default function History({
           const failCount = row.original.metrics?.testFailCount ?? 0;
           const errorCount = row.original.metrics?.testErrorCount ?? 0;
           return (
-            <div className="flex items-center gap-1">
-              <Badge variant="critical" className="font-mono">
+            <div className="flex items-center gap-1 overflow-hidden">
+              <Badge variant="critical" className="font-mono shrink-0">
                 {failCount}
               </Badge>
               {errorCount > 0 && (
                 <>
-                  <span className="text-xs text-muted-foreground">+</span>
-                  <Badge variant="warning" className="font-mono text-xs">
-                    {errorCount} errors
+                  <span className="text-xs text-muted-foreground shrink-0">+</span>
+                  <Badge variant="warning" className="font-mono text-xs shrink-0">
+                    {errorCount} err
                   </Badge>
                 </>
               )}
             </div>
           );
         },
-        size: 140,
+        size: 150,
       },
       {
         accessorKey: 'metrics.score',
@@ -244,24 +246,28 @@ export default function History({
   );
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-0 bg-zinc-50 dark:bg-zinc-950 overflow-y-auto">
+    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
           <h1 className="text-2xl font-semibold">Evaluation History</h1>
           <p className="text-sm text-muted-foreground mt-1">View and compare all evaluation runs</p>
         </div>
       </PageHeader>
-      <div className="container max-w-7xl mx-auto px-6 py-6">
-        <DataTable
-          columns={columns}
-          data={data}
-          isLoading={isLoading}
-          error={error}
-          emptyMessage="No evaluation history found. Run an evaluation to see results here."
-          onExportCSV={handleExportCSV}
-          onExportJSON={handleExportJSON}
-          initialSorting={[{ id: 'evalId', desc: true }]}
-        />
+      <div className="flex-1 min-h-0 flex flex-col p-6">
+        <div className="container max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
+          <Card className="bg-white dark:bg-zinc-900 p-4 flex-1 min-h-0 flex flex-col">
+            <DataTable
+              columns={columns}
+              data={data}
+              isLoading={isLoading}
+              error={error}
+              emptyMessage="No evaluation history found. Run an evaluation to see results here."
+              onExportCSV={handleExportCSV}
+              onExportJSON={handleExportJSON}
+              initialSorting={[{ id: 'evalId', desc: true }]}
+            />
+          </Card>
+        </div>
       </div>
 
       {selectedPrompt && (
@@ -294,6 +300,6 @@ export default function History({
           </DialogContent>
         </Dialog>
       )}
-    </div>
+    </PageContainer>
   );
 }

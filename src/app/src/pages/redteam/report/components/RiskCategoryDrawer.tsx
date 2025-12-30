@@ -115,12 +115,31 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
-  const navigate = useNavigate();
+  // Validate category BEFORE any hooks to comply with Rules of Hooks
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
     return null;
   }
+
+  // All hooks must be called unconditionally after early returns
+  const navigate = useNavigate();
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
+  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
+    undefined,
+  );
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
+  const [selectedTest, setSelectedTest] = React.useState<{
+    prompt: string;
+    output: string;
+    gradingResult?: GradingResult;
+    result?: EvaluateResult;
+  } | null>(null);
+
+  const sortedFailures = React.useMemo(() => {
+    return [...failures].sort(sortByPriorityStrategies);
+  }, [failures]);
 
   const displayName =
     displayNameOverrides[category as keyof typeof displayNameOverrides] || categoryName;
@@ -145,24 +164,6 @@ const RiskCategoryDrawer = ({
       </Sheet>
     );
   }
-
-  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
-
-  const [activeTab, setActiveTab] = React.useState(0);
-  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
-  const [selectedTest, setSelectedTest] = React.useState<{
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  } | null>(null);
-
-  const sortedFailures = React.useMemo(() => {
-    return [...failures].sort(sortByPriorityStrategies);
-  }, [failures]);
 
   // Helper to render a test item (used for both failures and passes)
   const renderTestItem = (

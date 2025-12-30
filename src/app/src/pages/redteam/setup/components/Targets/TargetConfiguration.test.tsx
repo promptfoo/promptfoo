@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, queryByRole, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,9 +57,16 @@ vi.mock('../Prompts', () => ({
   default: () => <div data-testid="mock-prompts" />,
 }));
 
+const theme = createTheme();
+
+const AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <ThemeProvider theme={theme}>
+    <TooltipProvider>{children}</TooltipProvider>
+  </ThemeProvider>
+);
+
 const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+  return render(ui, { wrapper: AllProviders });
 };
 
 describe('TargetConfiguration', () => {
