@@ -46,23 +46,69 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
   return typeof test === 'object' && test !== null && 'vars' in test;
 }
 
+/**
+ * JSON Schema locations in promptfoo configs that should be excluded from
+ * config-level $ref dereferencing.
+ *
+ * These schemas may contain internal refs (e.g., #/$defs/Type) that are
+ * relative to the schema root, not the config root. The LLM API expects
+ * these refs to be preserved as-is.
+ *
+ * Pattern notes:
+ * - \d+ matches array indices
+ * - [^/]+ matches provider map keys (e.g., "openai:gpt-4")
+ * - (?:/.*)?$ matches the path AND all descendants
+ *
+ * @see https://github.com/promptfoo/promptfoo/issues/364
+ */
+const JSON_SCHEMA_PATH_PATTERNS: readonly RegExp[] = [
+  // === Provider config (array syntax: { name: 'openai:gpt-4', config: {...} }) ===
+  /^#\/providers\/\d+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === Provider config (map syntax: { 'openai:gpt-4': { config: {...} } }) ===
+  /^#\/providers\/\d+\/[^/]+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/[^/]+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/[^/]+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === defaultTest provider config ===
+  /^#\/defaultTest\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/defaultTest\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/defaultTest\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === Per-test provider config ===
+  /^#\/tests\/\d+\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/tests\/\d+\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/tests\/\d+\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+] as const;
+
+/**
+ * Check if a $ref path should be excluded from dereferencing.
+ *
+ * We exclude refs inside known JSON Schema locations because:
+ * 1. JSON Schemas can have internal $refs (#/$defs/..., #/definitions/...)
+ * 2. These refs are relative to schema root, not config root
+ * 3. json-schema-ref-parser would fail trying to resolve them at config level
+ */
+function isJsonSchemaPath(refPath: string): boolean {
+  return JSON_SCHEMA_PATH_PATTERNS.some((pattern) => pattern.test(refPath));
+}
+
+/**
+ * Dereference config-level $refs while preserving JSON Schema internal refs.
+ *
+ * Handles the collision between:
+ * - promptfoo config refs: $ref: '#/definitions/myPrompt' (should resolve)
+ * - JSON Schema refs: $ref: '#/$defs/MyType' (should preserve)
+ */
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
   }
 
-  // Some JSON schemas must be sent to the provider as they are, without dereferencing.
-  const excludedDereferencingPathPatterns = [
-    /^#\/providers\/\d+\/config\/response_format\/json_schema\/schema$/,
-    /^#\/providers\/\d+\/config\/tools\/\d+\/function\/parameters$/,
-    /^#\/providers\/\d+\/config\/functions\/\d+\/parameters$/,
-  ];
-
-  const excludedPathMatcher = (path: string) =>
-    excludedDereferencingPathPatterns.some((pattern) => new RegExp(pattern).test(path));
-
   return (await $RefParser.dereference(rawConfig, {
-    dereference: { excludedPathMatcher },
+    dereference: { excludedPathMatcher: isJsonSchemaPath },
   })) as unknown as UnifiedConfig;
 }
 
