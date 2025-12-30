@@ -148,18 +148,24 @@ function TableHeader({
     setPromptOpen(false);
   };
   return (
-    <div className={`${className || ''}`}>
-      <TruncatedText text={text} maxLength={maxLength} />
+    <div className={`${className || ''} flex items-center gap-1`}>
+      {expandedText ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="text-left cursor-pointer transition-colors px-2 py-1.5 -mx-2 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-[13px]"
+              onClick={handlePromptOpen}
+            >
+              <span className="line-clamp-3">{text}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>View prompt</TooltipContent>
+        </Tooltip>
+      ) : (
+        <TruncatedText text={text} maxLength={maxLength} />
+      )}
       {expandedText && (
         <>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button className="action" onClick={handlePromptOpen}>
-                🔎
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>View prompt</TooltipContent>
-          </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
               open={promptOpen}
@@ -225,61 +231,61 @@ function ResultsTableHeader({
 }) {
   'use no memo';
   return (
-    <table
-      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
-        stickyHeader && 'results-table-sticky'
-      }`}
-      style={{
-        wordBreak,
-        width: `${tableWidth}px`,
-        zoom,
-      }}
-    >
-      <thead ref={theadRef}>
-        {stickyHeader && (
-          <div className="header-dismiss">
-            <button
-              type="button"
-              onClick={() => setStickyHeader(false)}
-              className="p-1 rounded hover:bg-muted transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-        {reactTable.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id} className="header">
-            {headerGroup.headers.map((header) => {
-              const isMetadataCol =
-                header.column.id.startsWith('Variable') || header.column.id === 'description';
-              const isFinalRow = headerGroup.depth === 1;
+    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
+      {stickyHeader && (
+        <div className="header-dismiss">
+          <button
+            type="button"
+            onClick={() => setStickyHeader(false)}
+            className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+          width: `${tableWidth}px`,
+          zoom,
+        }}
+      >
+        <thead ref={theadRef}>
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => {
+                const isMetadataCol =
+                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                const isFinalRow = headerGroup.depth === 1;
 
-              return (
-                <th
-                  key={header.id}
-                  tabIndex={0}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                    borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                    height: isFinalRow ? 'fit-content' : 'auto',
-                  }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              );
-            })}
-          </tr>
-        ))}
-      </thead>
-    </table>
+                return (
+                  <th
+                    key={header.id}
+                    tabIndex={0}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: header.getSize(),
+                      borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                      height: isFinalRow ? 'fit-content' : 'auto',
+                    }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+      </table>
+    </div>
   );
 }
 
@@ -1122,7 +1128,9 @@ function ResultsTable({
                         </div>
                       </div>
                     ) : null}
-                    {metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
+                    {!isRedteam &&
+                    metrics?.namedScores &&
+                    Object.keys(metrics.namedScores).length > 0 ? (
                       <div className="collapse-hidden">
                         <CustomMetrics
                           lookup={metrics.namedScores}

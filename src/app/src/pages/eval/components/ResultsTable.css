@@ -499,6 +499,13 @@ table.results-table,
   top: 3.5rem; /* Account for navigation height (h-14) */
   z-index: 10;
   transition: transform 0.2s ease-out;
+  background: #fff;
+  /* Scroll-driven animation to show/hide dismiss button */
+  animation-name: collapseHeader;
+  animation-timeline: scroll();
+  animation-duration: 0;
+  animation-range: 0px 50px;
+  animation-fill-mode: both;
 }
 
 [data-theme='dark'] .results-table-sticky {
@@ -509,11 +516,7 @@ table.results-table,
   position: absolute;
   top: 8px;
   right: 8px;
-  cursor: pointer;
   z-index: 11;
-  padding: 4px;
-  border-radius: 100%;
-  background: #eee;
 }
 
 thead {
@@ -552,13 +555,9 @@ thead {
   }
 }
 
-[data-theme='dark'] .header-dismiss {
-  background: #333;
-}
-
-thead .header-dismiss {
+.results-table-sticky .header-dismiss {
   opacity: var(--collapsed--header-dismiss-opacity, 0);
-  pointer-events: var(--collapsed--header-dismiss-pointer-events, inherit);
+  pointer-events: var(--collapsed--header-dismiss-pointer-events, none);
   transition: opacity 0.2s ease-out;
   z-index: 100;
 }

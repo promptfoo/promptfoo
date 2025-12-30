@@ -55,6 +55,7 @@ import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { FilterChips } from './FilterChips';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
@@ -708,12 +709,14 @@ export default function ResultsView({
               </div>
             </div>
           </div>
-          {(debouncedSearchText ||
+          {(config?.redteam !== undefined ||
+            debouncedSearchText ||
             filterMode !== 'all' ||
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             stats?.durationMs != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
+              <FilterChips />
               {debouncedSearchText && (
                 <Badge variant="secondary" className="text-xs h-5 gap-1">
                   Search:{' '}
@@ -743,6 +746,16 @@ export default function ResultsView({
               )}
               {filters.appliedCount > 0 &&
                 Object.values(filters.values).map((filter) => {
+                  // For red team evals, skip metric filter badges since FilterChips already shows them
+                  const isRedteamEval = config?.redteam !== undefined;
+                  if (
+                    isRedteamEval &&
+                    filter.type === 'metric' &&
+                    filter.operator === 'is_defined'
+                  ) {
+                    return null;
+                  }
+
                   if (filter.type === 'metadata' && filter.operator === 'exists') {
                     if (!filter.field) {
                       return null;

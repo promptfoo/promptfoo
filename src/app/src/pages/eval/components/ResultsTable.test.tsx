@@ -2712,6 +2712,10 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     atInitialVerticalScrollPosition: true,
   };
 
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(<TooltipProvider>{ui}</TooltipProvider>);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -2751,7 +2755,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify first eval's column headers are present
     expect(screen.getByText('website_url')).toBeInTheDocument();
@@ -2791,7 +2795,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     }));
 
     // Fresh mount with new eval data (simulates what happens when key={evalId} changes)
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify second eval's column headers are present
     expect(screen.getByText('prompt')).toBeInTheDocument();
@@ -2838,7 +2842,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify first eval's prompt column header
     expect(screen.getByText('GPT-4 Classifier')).toBeInTheDocument();
@@ -2886,7 +2890,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify second eval's prompt column headers
     expect(screen.getByText('Claude Assistant')).toBeInTheDocument();
@@ -2926,7 +2930,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify all columns are present
     expect(screen.getByText('col1')).toBeInTheDocument();
@@ -2966,7 +2970,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify only the new column is present
     expect(screen.getByText('onlyColumn')).toBeInTheDocument();
