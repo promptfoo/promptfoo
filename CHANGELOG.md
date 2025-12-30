@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.9](https://github.com/promptfoo/promptfoo/compare/0.120.8...0.120.9) (2025-12-30)
+
+
+### Features
+
+* **app:** add apiBaseUrl field to provider configuration UI ([#6884](https://github.com/promptfoo/promptfoo/issues/6884)) ([24440e4](https://github.com/promptfoo/promptfoo/commit/24440e46b3a2c07fc5efb32206808c49a5b643f5))
+* **extensions:** enhance afterAll hook and add --extension CLI flag ([#4760](https://github.com/promptfoo/promptfoo/issues/4760)) ([18eb910](https://github.com/promptfoo/promptfoo/commit/18eb9109249b799cce33f3e595f382003c787912))
+* Introduce promptfoo design system, new nav, model audit, eval creator, and more ([#6823](https://github.com/promptfoo/promptfoo/issues/6823)) ([c5c698b](https://github.com/promptfoo/promptfoo/commit/c5c698bc97b3927b023eff623b9b73d6fa9d5940))
+* **lib:** add shareable URL support to Node.js evaluate() API ([#6839](https://github.com/promptfoo/promptfoo/issues/6839)) ([ecc7fa6](https://github.com/promptfoo/promptfoo/commit/ecc7fa6babbbaf1e9b2a99ba4852e6980e19a980))
+* **logger:** add structured logging support for cloud integrations ([#6845](https://github.com/promptfoo/promptfoo/issues/6845)) ([4b7bd33](https://github.com/promptfoo/promptfoo/commit/4b7bd335bd0ce1d37ed039a9ce2644566820dc31))
+* **mcp:** add OAuth authentication with proactive token refresh ([#6817](https://github.com/promptfoo/promptfoo/issues/6817)) ([bcd4db3](https://github.com/promptfoo/promptfoo/commit/bcd4db3fec98c0c2f40337eb0f7f317298d3a1e2))
+* **providers:** add xAI Voice Agent API provider ([#6792](https://github.com/promptfoo/promptfoo/issues/6792)) ([1f366a5](https://github.com/promptfoo/promptfoo/commit/1f366a588a9a275f3c4195fb565a71669fabd2a2))
+* **redteam:** hydrate applicationDefinition when importing YAML configs ([#6542](https://github.com/promptfoo/promptfoo/issues/6542)) ([70b6d07](https://github.com/promptfoo/promptfoo/commit/70b6d071019bd74aefc17b976c40ba3b8964eef0))
+* **redteam:** Improve output of validate target ([#6742](https://github.com/promptfoo/promptfoo/issues/6742)) ([664c5b9](https://github.com/promptfoo/promptfoo/commit/664c5b929618b161868e73a4317b5c679ae85719))
+* **redteam:** OWASP Top 10 for Agentic Applications ([#6694](https://github.com/promptfoo/promptfoo/issues/6694)) ([5fd44ca](https://github.com/promptfoo/promptfoo/commit/5fd44cacb368fafb3d1893ab93f30187c3faac82))
+* **report:** risk categories redesign ([#6876](https://github.com/promptfoo/promptfoo/issues/6876)) ([e29bc55](https://github.com/promptfoo/promptfoo/commit/e29bc55557010cb7e6790481f48226b81cb33fe1))
+* use radix-ui for radio-button and checkbox ([#6864](https://github.com/promptfoo/promptfoo/issues/6864)) ([5974d55](https://github.com/promptfoo/promptfoo/commit/5974d55a92f8103e57d1f525dc5a875a88c53f61))
+* **webui:** Migrate Reports + EvalOutputPromptDialog to design system ([#6831](https://github.com/promptfoo/promptfoo/issues/6831)) ([424ddfb](https://github.com/promptfoo/promptfoo/commit/424ddfbff2836968777bc02fb8e5a047dade5706))
+* **webui:** Port redteam setup flow to new design system ([#6838](https://github.com/promptfoo/promptfoo/issues/6838)) ([d296073](https://github.com/promptfoo/promptfoo/commit/d29607321f4e07b5de21c096cd9e2ef2fe59e9d4))
+* wildcards for prompt filters ([#6853](https://github.com/promptfoo/promptfoo/issues/6853)) ([cd5deba](https://github.com/promptfoo/promptfoo/commit/cd5deba396f08905704d69da05cea6919a696f41))
+
+
+### Bug Fixes
+
+* accessibility issues and warnings in console for new components ([#6859](https://github.com/promptfoo/promptfoo/issues/6859)) ([b3274d1](https://github.com/promptfoo/promptfoo/commit/b3274d11ca7863ef414b83679b2e94b4cb5958a6))
+* **app:** add compact markdown styling for eval table cells ([#1657](https://github.com/promptfoo/promptfoo/issues/1657)) ([#6840](https://github.com/promptfoo/promptfoo/issues/6840)) ([ae9c4d0](https://github.com/promptfoo/promptfoo/commit/ae9c4d076c52402225a6ef0a1d4af69d5d27e3f5))
+* **app:** preserve existing filters when changing column in DataTable ([#6837](https://github.com/promptfoo/promptfoo/issues/6837)) ([f7630e4](https://github.com/promptfoo/promptfoo/commit/f7630e42e023f336d91a8e7951e05cc85272659a))
+* **app:** prevent header value field collapse with long values ([#6830](https://github.com/promptfoo/promptfoo/issues/6830)) ([889f750](https://github.com/promptfoo/promptfoo/commit/889f750c733ccf2c51330493e679e3cc100ca3af))
+* **app:** prevent markdown re-render flickering in eval result cells ([#6847](https://github.com/promptfoo/promptfoo/issues/6847)) ([4439d70](https://github.com/promptfoo/promptfoo/commit/4439d70d7441b37c10df8574495727ee00e04fd3))
+* **app:** remove underline from navbar dropdown items ([#6875](https://github.com/promptfoo/promptfoo/issues/6875)) ([891a96a](https://github.com/promptfoo/promptfoo/commit/891a96accf84e6cfd2283cc8e0ad0e0ae0b3bbac))
+* **app:** resolve browser fs.readFileSync error by using direct imports ([#6861](https://github.com/promptfoo/promptfoo/issues/6861)) ([e47cb2a](https://github.com/promptfoo/promptfoo/commit/e47cb2aa505424107906abe7555cece1fb909c60))
+* **app:** resolve React 19 table header stale memoization on eval switch ([#6877](https://github.com/promptfoo/promptfoo/issues/6877)) ([6e8759d](https://github.com/promptfoo/promptfoo/commit/6e8759d111c8acaabedc5aca17d4685e5a4c0853))
+* **app:** resolve z-index stacking for filters in evals modal ([#6826](https://github.com/promptfoo/promptfoo/issues/6826)) ([7b5f0f8](https://github.com/promptfoo/promptfoo/commit/7b5f0f8912c210cdd66f756e8f84215e24920ea8))
+* **app:** show toolbar when filters return no results ([#6827](https://github.com/promptfoo/promptfoo/issues/6827)) ([b53f832](https://github.com/promptfoo/promptfoo/commit/b53f8322de6787366bb898fd6e3bcab8779d7cc2))
+* **assertions:** render template variables in assertion metric field ([#6678](https://github.com/promptfoo/promptfoo/issues/6678)) ([3277310](https://github.com/promptfoo/promptfoo/commit/32773108be8aa2084418f8e5fcf7c9d79d67f981))
+* **cli:** downgrade missing blob reference log ([#6814](https://github.com/promptfoo/promptfoo/issues/6814)) ([c3b6326](https://github.com/promptfoo/promptfoo/commit/c3b63263faaf7fe349262626828932997b3db5a5))
+* **cli:** respect prompts filter when providers loaded from file:// ([#6657](https://github.com/promptfoo/promptfoo/issues/6657)) ([d189e5c](https://github.com/promptfoo/promptfoo/commit/d189e5ca215bf4ef5f0dd64b847d35ef2f708907))
+* correctly extract provider ids from file references ([#6848](https://github.com/promptfoo/promptfoo/issues/6848)) ([b088306](https://github.com/promptfoo/promptfoo/commit/b088306c2e5c986fb2d574f6fae44de98b64b427))
+* **data-table:** pagination, plus performance ([#6858](https://github.com/promptfoo/promptfoo/issues/6858)) ([59301e3](https://github.com/promptfoo/promptfoo/commit/59301e35484acabfe3fa1c16c22e1da0aedaff75))
+* **deps:** pin pem to stable 1.14.x version ([#6835](https://github.com/promptfoo/promptfoo/issues/6835)) ([5e132fb](https://github.com/promptfoo/promptfoo/commit/5e132fbb04ce6da3df854c0602d73f0ca6ea70af))
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.25.1 ([#6805](https://github.com/promptfoo/promptfoo/issues/6805)) ([ab85bf4](https://github.com/promptfoo/promptfoo/commit/ab85bf4e65dfa52c34833fa1c3e84177527753ce))
+* **deps:** update dependency protobufjs to v8 ([#6806](https://github.com/promptfoo/promptfoo/issues/6806)) ([0c1e4c5](https://github.com/promptfoo/promptfoo/commit/0c1e4c50a972215690d943fbbbb94604a93b508d))
+* don't treat URLs as comments in YAML parsing ([#6854](https://github.com/promptfoo/promptfoo/issues/6854)) ([f85bf58](https://github.com/promptfoo/promptfoo/commit/f85bf58f8a7ef0b272cef5b8ed3218962a3d34bb))
+* **eval:** honor external abortSignal when timeoutMs is set ([#6850](https://github.com/promptfoo/promptfoo/issues/6850)) ([dd26762](https://github.com/promptfoo/promptfoo/commit/dd26762f774243d31d3837434d4fa08af3dff91d))
+* **eval:** prevent icon overflow in results table cells ([#6807](https://github.com/promptfoo/promptfoo/issues/6807)) ([3af0a5e](https://github.com/promptfoo/promptfoo/commit/3af0a5e91211f5f9c2b708d7d39150b79abdf68d))
+* **evals:** browser back button fix on evals results table ([#6832](https://github.com/promptfoo/promptfoo/issues/6832)) ([c4886bc](https://github.com/promptfoo/promptfoo/commit/c4886bcf63f1bdfb582e5474d2a52c0fef1f9887))
+* **evaluator:** apply comparison results to pass/fail ([#6774](https://github.com/promptfoo/promptfoo/issues/6774)) ([f6add72](https://github.com/promptfoo/promptfoo/commit/f6add7200ce845be2bc90be4374fbc19f744616d))
+* **http:** handle multipart/form-data and x-www-form-urlencoded in raw requests ([#6797](https://github.com/promptfoo/promptfoo/issues/6797)) ([8850ab2](https://github.com/promptfoo/promptfoo/commit/8850ab24dc4e1daf86168225b432ee17aae2799c))
+* pass env overrides to template rendering in providers ([#6785](https://github.com/promptfoo/promptfoo/issues/6785)) ([9b304bc](https://github.com/promptfoo/promptfoo/commit/9b304bc60c9d55cc2f251cd2e7d29dd0b33cb68f))
+* **providers:** respect PROMPTFOO_PYTHON env var in Python providers ([#6829](https://github.com/promptfoo/promptfoo/issues/6829)) ([05e30da](https://github.com/promptfoo/promptfoo/commit/05e30dab7306a42a357715018f839c6ea52633f2))
+* **redteam:** add retry strategy for failed test cases ([#6243](https://github.com/promptfoo/promptfoo/issues/6243)) ([e7228c8](https://github.com/promptfoo/promptfoo/commit/e7228c8345bdcea352728d064da864ad0cbb4762))
+* **redteam:** persist custom provider selection when changing tabs ([#6834](https://github.com/promptfoo/promptfoo/issues/6834)) ([d1efd11](https://github.com/promptfoo/promptfoo/commit/d1efd11da1cbe2615517d1f563d1e540b2e4cf16))
+* **redteam:** reduce false positives in grader rubrics ([#6784](https://github.com/promptfoo/promptfoo/issues/6784)) ([54a552a](https://github.com/promptfoo/promptfoo/commit/54a552a68a98e203a0f492cef33969a32a33219a))
+* **redteam:** use XML format for MCP tool call generation to reduce error rate ([#6812](https://github.com/promptfoo/promptfoo/issues/6812)) ([3ef3eb6](https://github.com/promptfoo/promptfoo/commit/3ef3eb6b47caa3f6400e6e5ecc0838306305e647))
+* **test:** convert flaky performance benchmark to smoke test ([#6856](https://github.com/promptfoo/promptfoo/issues/6856)) ([87b63db](https://github.com/promptfoo/promptfoo/commit/87b63db31fbf50f1f580c6ae2bc70e5cbd15ec2e))
+* **test:** make Google Live provider test order-agnostic ([#6852](https://github.com/promptfoo/promptfoo/issues/6852)) ([7a8d1ff](https://github.com/promptfoo/promptfoo/commit/7a8d1ff36e210e722ad5792cedeab65d78d00f4c))
+* **util:** convert sync fs operations to async across util modules ([#6869](https://github.com/promptfoo/promptfoo/issues/6869)) ([55c9edb](https://github.com/promptfoo/promptfoo/commit/55c9edbbc1545a36feca9f60f49cf2680dd7f954))
+* **webui:** improve test cases table formatting in eval creator ([#6860](https://github.com/promptfoo/promptfoo/issues/6860)) ([25637e3](https://github.com/promptfoo/promptfoo/commit/25637e3d2056f7883a4e179f88061e4a37927e2e))
+
+
+### Performance Improvements
+
+* **app:** eliminate crypto polyfill with native SubtleCrypto ([#6798](https://github.com/promptfoo/promptfoo/issues/6798)) ([c3e24ad](https://github.com/promptfoo/promptfoo/commit/c3e24ad8857f296713f935b826eb45cb8cb32ba8))
+
+
+### Reverts
+
+* **redteam:** use XML format for MCP tool call generation ([#6818](https://github.com/promptfoo/promptfoo/issues/6818)) ([b7154ba](https://github.com/promptfoo/promptfoo/commit/b7154ba0a0ce5c9421982c647766df29a2eae972))
+
 ## [0.120.8](https://github.com/promptfoo/promptfoo/compare/0.120.7...0.120.8) (2025-12-21)
 
 ### Features
