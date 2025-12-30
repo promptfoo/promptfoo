@@ -16,6 +16,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Path to the built CLI binary
@@ -223,14 +224,7 @@ describe('0.120.x Regression Tests', () => {
         const configPath = path.join(FIXTURES_DIR, 'configs/max-concurrency-config.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'max-concurrency-output.json');
 
-        const { exitCode, stderr } = runCli([
-          'eval',
-          '-c',
-          configPath,
-          '-o',
-          outputPath,
-          '--no-cache',
-        ]);
+        const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
         expect(exitCode).toBe(0);
 
