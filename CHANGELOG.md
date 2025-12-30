@@ -58,10 +58,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **app:** eliminate crypto polyfill with native SubtleCrypto ([#6798](https://github.com/promptfoo/promptfoo/issues/6798)) ([c3e24ad](https://github.com/promptfoo/promptfoo/commit/c3e24ad8857f296713f935b826eb45cb8cb32ba8)) — @JustinBeckwith
 
-### Reverts
-
-- **redteam:** revert XML format for MCP tool call generation ([#6818](https://github.com/promptfoo/promptfoo/issues/6818)) ([b7154ba](https://github.com/promptfoo/promptfoo/commit/b7154ba0a0ce5c9421982c647766df29a2eae972)) — @jameshiester
-
 ### Tests
 
 - convert flaky performance benchmark to smoke test ([#6856](https://github.com/promptfoo/promptfoo/issues/6856)) ([87b63db](https://github.com/promptfoo/promptfoo/commit/87b63db31fbf50f1f580c6ae2bc70e5cbd15ec2e)) — @mldangelo
