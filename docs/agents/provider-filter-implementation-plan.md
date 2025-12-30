@@ -112,7 +112,7 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
  */
 export function isProviderAllowed(
   provider: ApiProvider,
-  allowedProviders: string[] | undefined
+  allowedProviders: string[] | undefined,
 ): boolean {
   if (!Array.isArray(allowedProviders)) {
     return true; // No filter = all allowed
@@ -143,7 +143,7 @@ export class ProviderReferenceValidationError extends Error {
 export function validateTestProviderReferences(
   tests: TestCase[],
   providers: ApiProvider[],
-  defaultTest?: Partial<TestCase>
+  defaultTest?: Partial<TestCase>,
 ): void {
   // Validate defaultTest.providers
   if (defaultTest?.providers) {
@@ -151,7 +151,7 @@ export function validateTestProviderReferences(
       if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
         const available = providers.map(getProviderIdentifier).join(', ');
         throw new ProviderReferenceValidationError(
-          `defaultTest references provider "${ref}" which does not exist. Available providers: ${available}`
+          `defaultTest references provider "${ref}" which does not exist. Available providers: ${available}`,
         );
       }
     }
@@ -167,7 +167,7 @@ export function validateTestProviderReferences(
         const desc = test.description ? ` ("${test.description}")` : '';
         const available = providers.map(getProviderIdentifier).join(', ');
         throw new ProviderReferenceValidationError(
-          `Test #${i + 1}${desc} references provider "${ref}" which does not exist. Available providers: ${available}`
+          `Test #${i + 1}${desc} references provider "${ref}" which does not exist. Available providers: ${available}`,
         );
       }
     }
@@ -239,6 +239,7 @@ Create example showing isolated test suites.
 ### 9. Tests: `test/test-providers-filter.test.ts`
 
 Unit tests covering:
+
 - Exact label matching
 - Exact ID matching
 - Wildcard matching (`openai:*`)
@@ -301,6 +302,7 @@ tests:
 ## Alternative: Combine into #6686?
 
 Could add providers filter to PR #6686 directly, but:
+
 - PR #6686 is already substantial (739 additions)
 - Adding providers would increase scope significantly
 - Better to follow established pattern with separate, focused PR

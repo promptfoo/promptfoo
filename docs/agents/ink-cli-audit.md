@@ -79,7 +79,7 @@ const [activityNow, setActivityNow] = useState(() => Date.now());
 
 ```typescript
 debounceTimer.current = setTimeout(() => {
-  flushUpdates();  // Could dispatch after unmount
+  flushUpdates(); // Could dispatch after unmount
   debounceTimer.current = null;
 }, DEBOUNCE_MS);
 ```
@@ -87,9 +87,15 @@ debounceTimer.current = setTimeout(() => {
 **Impact:** If the component unmounts while a debounce timer is pending, `flushUpdates()` may dispatch to an unmounted component. The cleanup in the effect does clear the timer, but there's a race window.
 
 **Fix:** Add a mounted ref check:
+
 ```typescript
 const isMounted = useRef(true);
-useEffect(() => () => { isMounted.current = false; }, []);
+useEffect(
+  () => () => {
+    isMounted.current = false;
+  },
+  [],
+);
 // Then in flushUpdates: if (!isMounted.current) return;
 ```
 
@@ -98,6 +104,7 @@ useEffect(() => () => { isMounted.current = false; }, []);
 **File:** `src/ui/components/eval/EvalScreen.tsx:418-450`
 
 The component uses both `useNavigationKeys` (which internally uses Ink's `useInput`) and direct `process.stdin.on('data')` handlers. This can cause:
+
 - Double-handling of keystrokes
 - Unpredictable behavior when both handlers respond to the same key
 
@@ -117,6 +124,7 @@ execSync(fullCommand, {
 **Impact:** For very large text (e.g., huge JSON exports), this blocks the Node.js event loop and freezes the UI.
 
 **Fix:** Use `execFile` with async/await or a spawned process:
+
 ```typescript
 const { execFile } = require('child_process');
 await new Promise((resolve, reject) => {
@@ -146,6 +154,7 @@ This suggests intent to use compact mode but it's currently unused. Either remov
 **File:** `src/ui/contexts/EvalContext.tsx`
 
 The reducer handles 15+ action types in a single switch statement (~200 lines). Consider splitting into:
+
 - `providerReducer` - Provider-specific state
 - `metricsReducer` - Token/cost metrics
 - `uiReducer` - UI state (toggle, phase, etc.)
@@ -157,8 +166,9 @@ Then combine with a root reducer.
 **File:** `src/ui/components/table/types.ts`
 
 Several places use `any` or broad type assertions:
+
 ```typescript
-output: any;  // Should be EvaluateResultOutput or similar
+output: any; // Should be EvaluateResultOutput or similar
 ```
 
 Tighten these types for better type safety.
@@ -189,6 +199,7 @@ function normalizeProviderId(trackerId: string): string {
 ```
 
 If `trackerId` is empty string, the function returns empty string. This could cause issues with provider lookup. Add validation:
+
 ```typescript
 if (!trackerId) return 'unknown';
 ```
@@ -198,6 +209,7 @@ if (!trackerId) return 'unknown';
 **File:** `src/ui/render.ts:167, 177`
 
 Direct `process.exit()` calls bypass normal cleanup including:
+
 - Ink cleanup
 - Logger transport removal
 - Database connections
@@ -211,6 +223,7 @@ Consider using `app.exit()` from Ink and letting the process terminate naturally
 ### 11. Inconsistent Export Styles
 
 Some files have both default and named exports:
+
 ```typescript
 export function formatCost(...) { }
 export default RingBuffer;  // Same file has named exports too
@@ -229,6 +242,7 @@ The `useKeyHeld` hook sets a 100ms timeout to "release" the key since Ink doesn'
 **File:** Various
 
 Several magic numbers throughout:
+
 - `ACTIVITY_THRESHOLD_MS = 500`
 - `TICK_INTERVAL_MS = 250`
 - `DEBOUNCE_MS = 100`
@@ -239,6 +253,7 @@ Consider centralizing these in a config object or constants file.
 ### 14. Missing JSDoc on Some Public Functions
 
 While many functions have excellent JSDoc, some public APIs lack documentation:
+
 - `getVisibleRowRange`
 - `calculateSummaryStats`
 - Several component props interfaces
@@ -246,6 +261,7 @@ While many functions have excellent JSDoc, some public APIs lack documentation:
 ### 15. Test Coverage Gaps
 
 While tests are comprehensive for utilities and reducers, there are gaps:
+
 - No integration tests for the full Ink UI flow
 - No tests for edge cases like:
   - Rapid navigation (key repeat)
@@ -268,9 +284,11 @@ While tests are comprehensive for utilities and reducers, there are gaps:
 ### Potential Concerns
 
 1. **Clipboard command injection** - While unlikely, if `text` contained shell metacharacters with certain edge cases:
+
    ```typescript
    execSync(fullCommand, { input: text, ... });
    ```
+
    This is generally safe because `input` is piped to stdin, not interpolated into the command. But verify edge cases.
 
 2. **Terminal escape sequences** - The terminal title setting could theoretically be exploited if user-controlled content is passed. Currently only internal content is used.
@@ -371,14 +389,15 @@ This section provides a detailed, actionable roadmap for bug fixes, improvements
 
 #### Task 0.1: Fix useState Initializer Bug
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P0 - Critical |
-| **Effort** | 5 minutes |
-| **File** | `src/ui/components/eval/EvalScreen.tsx:396` |
-| **Dependencies** | None |
+| Attribute        | Value                                       |
+| ---------------- | ------------------------------------------- |
+| **Priority**     | P0 - Critical                               |
+| **Effort**       | 5 minutes                                   |
+| **File**         | `src/ui/components/eval/EvalScreen.tsx:396` |
+| **Dependencies** | None                                        |
 
 **Change:**
+
 ```typescript
 // Before
 const [activityNow, setActivityNow] = useState(Date.now);
@@ -388,6 +407,7 @@ const [activityNow, setActivityNow] = useState(() => Date.now());
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Code compiles without warnings
 - [ ] `activityNow` is a number on first render
 - [ ] Activity indicators work correctly
@@ -396,14 +416,15 @@ const [activityNow, setActivityNow] = useState(() => Date.now());
 
 #### Task 0.2: Add Mounted Ref Check in useTokenMetrics
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P0 - Critical |
-| **Effort** | 15 minutes |
-| **File** | `src/ui/hooks/useTokenMetrics.ts` |
-| **Dependencies** | None |
+| Attribute        | Value                             |
+| ---------------- | --------------------------------- |
+| **Priority**     | P0 - Critical                     |
+| **Effort**       | 15 minutes                        |
+| **File**         | `src/ui/hooks/useTokenMetrics.ts` |
+| **Dependencies** | None                              |
 
 **Implementation:**
+
 ```typescript
 export function useTokenMetrics(...) {
   // Add at top of hook
@@ -426,6 +447,7 @@ export function useTokenMetrics(...) {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] No React warnings about unmounted component updates
 - [ ] Token metrics still update correctly during evaluation
 - [ ] Clean unmount with no memory leaks
@@ -434,14 +456,15 @@ export function useTokenMetrics(...) {
 
 #### Task 0.3: Consolidate Keyboard Handling
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P0 - Critical |
-| **Effort** | 1-2 hours |
-| **File** | `src/ui/components/eval/EvalScreen.tsx:418-450` |
-| **Dependencies** | Task 0.1 (avoid merge conflicts) |
+| Attribute        | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| **Priority**     | P0 - Critical                                   |
+| **Effort**       | 1-2 hours                                       |
+| **File**         | `src/ui/components/eval/EvalScreen.tsx:418-450` |
+| **Dependencies** | Task 0.1 (avoid merge conflicts)                |
 
 **Current Problem:**
+
 ```typescript
 // Two separate keyboard handlers running simultaneously
 useNavigationKeys({ onEscape: ... });  // Uses Ink's useInput
@@ -455,38 +478,60 @@ useEffect(() => {
 **Solution Options:**
 
 **Option A (Recommended):** Extend `useNavigationKeys` to handle all keys
+
 ```typescript
 // In useKeypress.ts - add onKey callback for arbitrary keys
-export function useNavigationKeys(callbacks: {
-  onUp?: () => void;
-  // ... existing
-  onKey?: (key: string) => void;  // Add catch-all
-}, options?: KeypressOptions): void;
+export function useNavigationKeys(
+  callbacks: {
+    onUp?: () => void;
+    // ... existing
+    onKey?: (key: string) => void; // Add catch-all
+  },
+  options?: KeypressOptions,
+): void;
 
 // In EvalScreen.tsx
-useNavigationKeys({
-  onEscape: () => { onExit?.(); exit(); },
-  onKey: (key) => {
-    switch (key.toLowerCase()) {
-      case 'q': onExit?.(); exit(); break;
-      case 'e': dispatch({ type: 'TOGGLE_ERROR_DETAILS' }); break;
-      case 'v': /* toggle verbose */ break;
-    }
+useNavigationKeys(
+  {
+    onEscape: () => {
+      onExit?.();
+      exit();
+    },
+    onKey: (key) => {
+      switch (key.toLowerCase()) {
+        case 'q':
+          onExit?.();
+          exit();
+          break;
+        case 'e':
+          dispatch({ type: 'TOGGLE_ERROR_DETAILS' });
+          break;
+        case 'v':
+          /* toggle verbose */ break;
+      }
+    },
   },
-}, { isActive: isRawModeSupported && !inResultsPhase });
+  { isActive: isRawModeSupported && !inResultsPhase },
+);
 ```
 
 **Option B:** Use only `useKeypress` hook directly
+
 ```typescript
-useKeypress((key) => {
-  if (key.name === 'escape' || key.key === 'q') {
-    onExit?.(); exit();
-  }
-  // ... handle all keys in one place
-}, { isActive: isRawModeSupported && !inResultsPhase });
+useKeypress(
+  (key) => {
+    if (key.name === 'escape' || key.key === 'q') {
+      onExit?.();
+      exit();
+    }
+    // ... handle all keys in one place
+  },
+  { isActive: isRawModeSupported && !inResultsPhase },
+);
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Only one keyboard handler active at a time
 - [ ] All existing keyboard shortcuts still work
 - [ ] No duplicate key handling
@@ -496,14 +541,15 @@ useKeypress((key) => {
 
 #### Task 0.4: Make Clipboard Operations Async
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P0 - Critical |
-| **Effort** | 1-2 hours |
-| **File** | `src/ui/utils/clipboard.ts` |
-| **Dependencies** | None |
+| Attribute        | Value                       |
+| ---------------- | --------------------------- |
+| **Priority**     | P0 - Critical               |
+| **Effort**       | 1-2 hours                   |
+| **File**         | `src/ui/utils/clipboard.ts` |
+| **Dependencies** | None                        |
 
 **Implementation:**
+
 ```typescript
 import { spawn } from 'child_process';
 
@@ -551,6 +597,7 @@ const handleCopy = useCallback(async () => {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] UI remains responsive during large clipboard operations
 - [ ] Copy still works on macOS, Windows, and Linux
 - [ ] Fallback to xsel on Linux works
@@ -566,21 +613,23 @@ const handleCopy = useCallback(async () => {
 
 #### Task 1.1: Remove or Implement Compact Mode
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P1 |
-| **Effort** | 30 minutes (remove) or 2-3 hours (implement) |
-| **File** | `src/ui/components/eval/EvalScreen.tsx:390` |
+| Attribute    | Value                                        |
+| ------------ | -------------------------------------------- |
+| **Priority** | P1                                           |
+| **Effort**   | 30 minutes (remove) or 2-3 hours (implement) |
+| **File**     | `src/ui/components/eval/EvalScreen.tsx:390`  |
 
 **Decision Required:** Is compact mode needed?
 
 **Option A: Remove (simpler)**
+
 ```typescript
 // Delete this line
 const _compactMode = useCompactMode();
 ```
 
 **Option B: Implement**
+
 - Use `isCompact` to adjust row layout
 - Reduce column widths for narrow terminals
 - Collapse provider details to summary
@@ -589,11 +638,11 @@ const _compactMode = useCompactMode();
 
 #### Task 1.2: Add Provider ID Null Check
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P1 |
-| **Effort** | 10 minutes |
-| **File** | `src/ui/hooks/useTokenMetrics.ts:41-44` |
+| Attribute    | Value                                   |
+| ------------ | --------------------------------------- |
+| **Priority** | P1                                      |
+| **Effort**   | 10 minutes                              |
+| **File**     | `src/ui/hooks/useTokenMetrics.ts:41-44` |
 
 ```typescript
 function normalizeProviderId(trackerId: string): string {
@@ -606,6 +655,7 @@ function normalizeProviderId(trackerId: string): string {
 ```
 
 **Add test:**
+
 ```typescript
 it('should handle empty provider ID', () => {
   expect(normalizeProviderId('')).toBe('unknown-provider');
@@ -617,19 +667,21 @@ it('should handle empty provider ID', () => {
 
 #### Task 1.3: Graceful Exit Instead of process.exit()
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P1 |
-| **Effort** | 1-2 hours |
-| **Files** | `src/ui/render.ts`, `src/ui/evalRunner.tsx` |
+| Attribute    | Value                                       |
+| ------------ | ------------------------------------------- |
+| **Priority** | P1                                          |
+| **Effort**   | 1-2 hours                                   |
+| **Files**    | `src/ui/render.ts`, `src/ui/evalRunner.tsx` |
 
 **Current:**
+
 ```typescript
-process.exit(130);  // SIGINT
-process.exit(143);  // SIGTERM
+process.exit(130); // SIGINT
+process.exit(143); // SIGTERM
 ```
 
 **Improved:**
+
 ```typescript
 // In render.ts
 export function createInkApp(...) {
@@ -659,11 +711,11 @@ export function createInkApp(...) {
 
 #### Task 1.4: Terminal Title via Ink's useStdout
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 30 minutes |
-| **Files** | `src/ui/utils/format.ts`, `src/ui/components/eval/EvalScreen.tsx` |
+| Attribute    | Value                                                             |
+| ------------ | ----------------------------------------------------------------- |
+| **Priority** | P2                                                                |
+| **Effort**   | 30 minutes                                                        |
+| **Files**    | `src/ui/utils/format.ts`, `src/ui/components/eval/EvalScreen.tsx` |
 
 ```typescript
 // Create a hook instead of direct function
@@ -677,7 +729,7 @@ export function useTerminalTitle(title: string | null) {
     stdout.write(`\x1b]0;${title}\x07`);
 
     return () => {
-      stdout.write('\x1b]0;\x07');  // Clear on unmount
+      stdout.write('\x1b]0;\x07'); // Clear on unmount
     };
   }, [stdout, title]);
 }
@@ -693,12 +745,12 @@ useTerminalTitle(titleText);
 
 #### Task 1.5: Add Integration Tests
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P1 |
-| **Effort** | 4-6 hours |
-| **Files** | `test/ui/integration/` (new directory) |
-| **Dependencies** | Tasks 0.1-0.4 |
+| Attribute        | Value                                  |
+| ---------------- | -------------------------------------- |
+| **Priority**     | P1                                     |
+| **Effort**       | 4-6 hours                              |
+| **Files**        | `test/ui/integration/` (new directory) |
+| **Dependencies** | Tasks 0.1-0.4                          |
 
 **Test Scenarios:**
 
@@ -751,11 +803,11 @@ describe('Eval UI Integration', () => {
 
 #### Task 1.6: Add Clipboard/Export Error Tests
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 1-2 hours |
-| **Files** | `test/ui/utils/clipboard.test.ts` (new) |
+| Attribute    | Value                                   |
+| ------------ | --------------------------------------- |
+| **Priority** | P2                                      |
+| **Effort**   | 1-2 hours                               |
+| **Files**    | `test/ui/utils/clipboard.test.ts` (new) |
 
 ```typescript
 describe('clipboard', () => {
@@ -780,11 +832,11 @@ describe('clipboard', () => {
 
 #### Task 1.7: Add Edge Case Tests
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 2-3 hours |
-| **Files** | Various test files |
+| Attribute    | Value              |
+| ------------ | ------------------ |
+| **Priority** | P2                 |
+| **Effort**   | 2-3 hours          |
+| **Files**    | Various test files |
 
 **Test Cases to Add:**
 
@@ -795,8 +847,8 @@ it('should handle provider names with special chars', () => {
     type: 'INIT',
     payload: {
       totalTests: 10,
-      providers: ['openai:gpt-4 (test)', 'provider/with:special@chars']
-    }
+      providers: ['openai:gpt-4 (test)', 'provider/with:special@chars'],
+    },
   });
   expect(state.providerOrder).toHaveLength(2);
 });
@@ -821,13 +873,14 @@ it('should debounce rapid navigation', () => {
 
 #### Task 1.8: Add JSDoc to Public APIs
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 1-2 hours |
-| **Files** | Various |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P3        |
+| **Effort**   | 1-2 hours |
+| **Files**    | Various   |
 
 Functions needing documentation:
+
 - `getVisibleRowRange`
 - `calculateSummaryStats`
 - `navigationReducer`
@@ -843,14 +896,15 @@ Functions needing documentation:
 
 #### Task 2.1: Split EvalContext Reducer
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 4-6 hours |
-| **Files** | `src/ui/contexts/EvalContext.tsx` → multiple files |
-| **Dependencies** | Phase 1 complete |
+| Attribute        | Value                                              |
+| ---------------- | -------------------------------------------------- |
+| **Priority**     | P2                                                 |
+| **Effort**       | 4-6 hours                                          |
+| **Files**        | `src/ui/contexts/EvalContext.tsx` → multiple files |
+| **Dependencies** | Phase 1 complete                                   |
 
 **New Structure:**
+
 ```
 src/ui/contexts/
 ├── EvalContext.tsx         # Main context, combines reducers
@@ -865,6 +919,7 @@ src/ui/contexts/
 ```
 
 **Implementation Pattern:**
+
 ```typescript
 // reducers/providerReducer.ts
 export interface ProviderState {
@@ -896,6 +951,7 @@ export function rootReducer(state: EvalState, action: EvalAction): EvalState {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] All existing tests pass
 - [ ] Reducer logic identical (behavioral parity)
 - [ ] Each sub-reducer has focused tests
@@ -905,11 +961,11 @@ export function rootReducer(state: EvalState, action: EvalAction): EvalState {
 
 #### Task 2.2: Create Constants File
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 1 hour |
-| **Files** | `src/ui/constants.ts` (new) |
+| Attribute    | Value                       |
+| ------------ | --------------------------- |
+| **Priority** | P2                          |
+| **Effort**   | 1 hour                      |
+| **Files**    | `src/ui/constants.ts` (new) |
 
 ```typescript
 // src/ui/constants.ts
@@ -956,11 +1012,11 @@ export const COL_WIDTH = {
 
 #### Task 2.3: Tighten TypeScript Types
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 2-3 hours |
-| **Files** | `src/ui/components/table/types.ts` and others |
+| Attribute    | Value                                         |
+| ------------ | --------------------------------------------- |
+| **Priority** | P2                                            |
+| **Effort**   | 2-3 hours                                     |
+| **Files**    | `src/ui/components/table/types.ts` and others |
 
 **Changes:**
 
@@ -976,11 +1032,12 @@ export interface TableCellData {
   displayContent: string;
   status: CellStatus;
   isTruncated: boolean;
-  output: EvaluateResultOutput;  // Proper type
+  output: EvaluateResultOutput; // Proper type
 }
 ```
 
 **Files to Update:**
+
 - `src/ui/components/table/types.ts`
 - `src/ui/contexts/EvalContext.tsx` (action payloads)
 - `src/ui/evalBridge.ts` (event types)
@@ -989,11 +1046,11 @@ export interface TableCellData {
 
 #### Task 2.4: Standardize Export Style
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 1 hour |
-| **Files** | All files in `src/ui/` |
+| Attribute    | Value                  |
+| ------------ | ---------------------- |
+| **Priority** | P3                     |
+| **Effort**   | 1 hour                 |
+| **Files**    | All files in `src/ui/` |
 
 **Convention:** Use named exports only (no default exports)
 
@@ -1011,11 +1068,11 @@ export { RingBuffer };  // or just: export class RingBuffer { }
 
 #### Task 2.5: Extract TableRow Memoization
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 1-2 hours |
-| **File** | `src/ui/components/table/TableRow.tsx` |
+| Attribute    | Value                                  |
+| ------------ | -------------------------------------- |
+| **Priority** | P2                                     |
+| **Effort**   | 1-2 hours                              |
+| **File**     | `src/ui/components/table/TableRow.tsx` |
 
 Add custom comparison like `ProviderRow` has:
 
@@ -1030,11 +1087,12 @@ export const TableRow = memo(
     if (prev.selectedCol !== next.selectedCol) return false;
     if (prev.rowData.index !== next.rowData.index) return false;
     // Deep compare cells only if needed
-    return prev.rowData.cells.every((cell, i) =>
-      cell.status === next.rowData.cells[i].status &&
-      cell.displayContent === next.rowData.cells[i].displayContent
+    return prev.rowData.cells.every(
+      (cell, i) =>
+        cell.status === next.rowData.cells[i].status &&
+        cell.displayContent === next.rowData.cells[i].displayContent,
     );
-  }
+  },
 );
 ```
 
@@ -1042,11 +1100,11 @@ export const TableRow = memo(
 
 #### Task 2.6: Add Performance Benchmarks
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 2-3 hours |
-| **Files** | `test/ui/benchmarks/` (new directory) |
+| Attribute    | Value                                 |
+| ------------ | ------------------------------------- |
+| **Priority** | P3                                    |
+| **Effort**   | 2-3 hours                             |
+| **Files**    | `test/ui/benchmarks/` (new directory) |
 
 ```typescript
 // test/ui/benchmarks/tablePerformance.bench.ts
@@ -1081,10 +1139,10 @@ describe('ResultsTable Performance', () => {
 
 #### Task 3.1: Add Progress Persistence
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P2 |
-| **Effort** | 4-6 hours |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P2        |
+| **Effort**   | 4-6 hours |
 
 Show "Resuming from X/Y" when `--resume` is used, with visual indication of already-completed tests.
 
@@ -1092,10 +1150,10 @@ Show "Resuming from X/Y" when `--resume` is used, with visual indication of alre
 
 #### Task 3.2: Add Keyboard Shortcut Overlay
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 2-3 hours |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P3        |
+| **Effort**   | 2-3 hours |
 
 Press `?` during evaluation to show full keyboard shortcuts in a modal overlay.
 
@@ -1103,25 +1161,26 @@ Press `?` during evaluation to show full keyboard shortcuts in a modal overlay.
 
 #### Task 3.3: Add Color Themes
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 3-4 hours |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P3        |
+| **Effort**   | 3-4 hours |
 
 Support for different color themes via config or env var:
+
 ```yaml
 ui:
-  theme: dark  # or: light, high-contrast
+  theme: dark # or: light, high-contrast
 ```
 
 ---
 
 #### Task 3.4: Add Sparkline for Latency
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P3 |
-| **Effort** | 2-3 hours |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P3        |
+| **Effort**   | 2-3 hours |
 
 Show latency trend as ASCII sparkline: `▁▂▃▅▆▇`
 
@@ -1129,15 +1188,16 @@ Show latency trend as ASCII sparkline: `▁▂▃▅▆▇`
 
 #### Task 3.5: Add Sound Notifications
 
-| Attribute | Value |
-|-----------|-------|
-| **Priority** | P4 |
-| **Effort** | 1-2 hours |
+| Attribute    | Value     |
+| ------------ | --------- |
+| **Priority** | P4        |
+| **Effort**   | 1-2 hours |
 
 Optional terminal bell on completion/error:
+
 ```yaml
 ui:
-  sound: true  # Play terminal bell on completion
+  sound: true # Play terminal bell on completion
 ```
 
 ---
@@ -1167,6 +1227,7 @@ ui:
 #### Task 4.3: Plugin System for UI Extensions
 
 Allow custom panels/widgets:
+
 ```typescript
 // promptfooconfig.yaml
 ui:
@@ -1223,29 +1284,32 @@ Phase 3+ (Enhancements)
 
 ### Risk Assessment
 
-| Phase | Risk Level | Mitigation |
-|-------|------------|------------|
-| 0 | Low | Isolated fixes, easy rollback |
-| 1 | Low-Medium | Feature flags for new behavior |
-| 2 | Medium | Comprehensive test coverage before refactor |
-| 3 | Low | Additive features, opt-in |
-| 4 | High | Design review, prototyping first |
+| Phase | Risk Level | Mitigation                                  |
+| ----- | ---------- | ------------------------------------------- |
+| 0     | Low        | Isolated fixes, easy rollback               |
+| 1     | Low-Medium | Feature flags for new behavior              |
+| 2     | Medium     | Comprehensive test coverage before refactor |
+| 3     | Low        | Additive features, opt-in                   |
+| 4     | High       | Design review, prototyping first            |
 
 ---
 
 ### Success Metrics
 
 **Phase 0-1:**
+
 - [ ] Zero regression in existing tests
 - [ ] No new React warnings in console
 - [ ] UI remains responsive with 1000+ test cases
 
 **Phase 2:**
+
 - [ ] Reducer test coverage > 90%
 - [ ] TypeScript strict mode passes
 - [ ] Bundle size unchanged (±5%)
 
 **Phase 3+:**
+
 - [ ] User feedback positive
 - [ ] No performance regression
 - [ ] Feature adoption metrics (via telemetry)

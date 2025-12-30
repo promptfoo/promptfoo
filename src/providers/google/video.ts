@@ -9,14 +9,14 @@ import { sleep } from '../../util/time';
 import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
 import type { BlobRef } from '../../blobs';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type {
-  GoogleVideoOptions,
-  GoogleVideoOperation,
   GoogleVideoAspectRatio,
-  GoogleVideoResolution,
   GoogleVideoDuration,
+  GoogleVideoOperation,
+  GoogleVideoOptions,
+  GoogleVideoResolution,
 } from './types';
 
 // =============================================================================
@@ -375,7 +375,9 @@ export class GoogleVideoProvider implements ApiProvider {
   /**
    * Download video from URI and store to blob storage
    */
-  private async downloadVideoToBlob(videoUri: string): Promise<{ blobRef?: BlobRef; error?: string }> {
+  private async downloadVideoToBlob(
+    videoUri: string,
+  ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const client = await this.getClientWithCredentials();
 
@@ -407,7 +409,9 @@ export class GoogleVideoProvider implements ApiProvider {
   /**
    * Store base64 encoded video to blob storage
    */
-  private async storeBase64VideoToBlob(base64Data: string): Promise<{ blobRef?: BlobRef; error?: string }> {
+  private async storeBase64VideoToBlob(
+    base64Data: string,
+  ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const buffer = Buffer.from(base64Data, 'base64');
 
@@ -417,7 +421,9 @@ export class GoogleVideoProvider implements ApiProvider {
         location: 'response.video',
       });
 
-      logger.debug(`[Google Video] Stored video to blob storage: ${ref.uri} (deduplicated: ${deduplicated})`);
+      logger.debug(
+        `[Google Video] Stored video to blob storage: ${ref.uri} (deduplicated: ${deduplicated})`,
+      );
       return { blobRef: ref };
     } catch (err) {
       const error = err as { message?: string };

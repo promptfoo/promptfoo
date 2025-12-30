@@ -9,15 +9,19 @@ The plan is ambitious and comprehensive but has several areas requiring deeper c
 ## Strengths
 
 ### 1. Well-Structured Architecture
+
 The file structure is logical and follows established patterns from the eval UI. Separating shared components enables reuse in other commands (list, show) later.
 
 ### 2. Hierarchical Provider Selection
+
 The two-phase selection (family → models) is a significant UX improvement. This design scales well as more providers/models are added.
 
 ### 3. State Machine Approach
+
 Using XState provides explicit state management, enables back navigation, and makes the complex branching testable.
 
 ### 4. Comprehensive Test Strategy
+
 The testing plan covers unit, component, and integration levels appropriately.
 
 ---
@@ -29,6 +33,7 @@ The testing plan covers unit, component, and integration levels appropriately.
 **Problem**: The plan waves hands at "spawn $EDITOR and capture result" but this is a non-trivial cross-platform challenge.
 
 **Specific concerns**:
+
 - **Windows**: No standard `$EDITOR`. Notepad doesn't block. VS Code with `--wait` does, but requires detection.
 - **macOS/Linux**: `$EDITOR` might be `vim` which requires TTY. Running from non-TTY context (piped, CI) will fail.
 - **Ink rendering conflict**: Can't have Ink and an external editor both using the terminal simultaneously. Need to fully unmount Ink, spawn editor, then remount.
@@ -39,6 +44,7 @@ The testing plan covers unit, component, and integration levels appropriately.
 ### 2. 16-Day Timeline is Optimistic
 
 **Reality check**:
+
 - Phase 1 (Foundation): 3-4 days → Realistic
 - Phase 2 (Regular Init): 2-3 days → Underestimated. FilePreview alone with syntax highlighting, scrolling, tab switching is 1-2 days.
 - Phase 3 (Example Download): 1 day → Realistic
@@ -52,12 +58,14 @@ The testing plan covers unit, component, and integration levels appropriately.
 **The plan's assumption**: Unified experience is better than delegation.
 
 **Counter-argument**:
+
 - Redteam init is used by ~10% of users (based on typical redteam adoption)
 - It adds 8+ complex steps to the state machine
 - The external editor requirement is unique to redteam
 - Redteam users are generally more technical (can handle separate flow)
 
 **Alternative**: Keep redteam as a separate, parallel Ink implementation. Both share components but have separate entry points:
+
 ```bash
 promptfoo init           → Ink init wizard (no redteam)
 promptfoo redteam init   → Ink redteam wizard
@@ -72,6 +80,7 @@ This reduces Phase 4 from 4-5 days to 0 (for initial release), allowing faster d
 **Evidence**: The current onboarding.ts already has stale model names (references to unreleased models).
 
 **Recommendation options**:
+
 1. **Fetch from API**: Load provider catalog from promptfoo.dev at runtime (with local fallback)
 2. **Generate from schema**: Derive from existing provider implementations
 3. **Accept staleness**: Document that catalog is best-effort and users should check docs
@@ -81,6 +90,7 @@ This reduces Phase 4 from 4-5 days to 0 (for initial release), allowing faster d
 **Problem**: Plan doesn't address accessibility requirements.
 
 **Specific concerns**:
+
 - Screen reader compatibility with Ink components
 - Color-blind friendly indicators (not just red/green)
 - Keyboard-only navigation (already good, but needs testing)
@@ -90,11 +100,13 @@ This reduces Phase 4 from 4-5 days to 0 (for initial release), allowing faster d
 ### 6. Missing: Offline/CI Mode
 
 **Problem**: Init wizard assumes interactive TTY. What about:
+
 - CI environments generating configs
 - Offline mode (can't fetch examples)
 - Piped input for automation
 
 **Recommendation**: Add explicit handling for:
+
 ```bash
 # Non-interactive mode should still work
 promptfoo init --no-interactive --use-case compare --provider openai:gpt-5
@@ -109,15 +121,18 @@ The current inquirer-based init supports `--no-interactive`. The Ink version mus
 ### 1. HierarchicalSelect Complexity
 
 The two-phase selection is powerful but complex:
+
 - Phase 1: Select families (multi-select)
 - Phase 2: For each selected family, select models (multi-select)
 
 **Questions not answered**:
+
 - What if user selects 5 families? Do they see 5 sequential model selection screens?
 - Can they go back from model selection to family selection?
 - What's the UI if they select a family with only 1 model?
 
 **Recommendation**: Consider an alternative UX:
+
 - Expandable accordion within single screen
 - Or: Flat list with grouping headers and search
 
@@ -142,6 +157,7 @@ The two-phase selection is powerful but complex:
 ### 1. Error Recovery Strategy
 
 What happens when:
+
 - GitHub API fails during example list fetch?
 - File write fails mid-way?
 - User's disk is full?
@@ -198,7 +214,9 @@ Current behavior: Asks about overwrite.
 ## Alternative Approaches Considered
 
 ### 1. Wizard-in-Browser
+
 Instead of terminal wizard, open browser for init:
+
 ```bash
 promptfoo init  # Opens localhost:3000/init
 ```
@@ -209,13 +227,12 @@ promptfoo init  # Opens localhost:3000/init
 **Verdict**: Not recommended for v1, but interesting future option.
 
 ### 2. Config Builder API
+
 Expose programmatic config builder:
+
 ```typescript
 import { ConfigBuilder } from 'promptfoo';
-const config = new ConfigBuilder()
-  .withProvider('openai:gpt-5')
-  .withPrompt('...')
-  .build();
+const config = new ConfigBuilder().withProvider('openai:gpt-5').withPrompt('...').build();
 ```
 
 **Pros**: Useful for programmatic usage, CI
@@ -224,6 +241,7 @@ const config = new ConfigBuilder()
 **Verdict**: Orthogonal to this effort. Could be added separately.
 
 ### 3. Incremental Migration
+
 Instead of parallel implementation, gradually replace inquirer components with Ink equivalents within existing flow.
 
 **Pros**: Lower risk, incremental delivery
@@ -244,6 +262,7 @@ The plan is solid foundation but needs refinement before implementation:
 5. **Validate with users**: Paper prototype key screens before building
 
 **Recommended path forward**:
+
 - Week 1: Prototype external editor and HierarchicalSelect
 - Week 2-3: Implement Phase 1-2 (core init without redteam)
 - Week 4: Implement Phase 3 (examples) and initial Phase 5 (integration)

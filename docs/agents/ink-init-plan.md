@@ -19,6 +19,7 @@ This plan describes the implementation of a unified, Ink-based `init` command th
 ## Current State Analysis
 
 ### Regular Init Flow (4 steps)
+
 ```
 1. Use case: compare | rag | agent | redteam
 2. Language: python | javascript (if rag/agent)
@@ -27,6 +28,7 @@ This plan describes the implementation of a unified, Ink-based `init` command th
 ```
 
 ### Redteam Init Flow (10+ steps)
+
 ```
 1. Target type: existing | http | python
 2. Target config: provider selection OR custom setup
@@ -41,14 +43,15 @@ This plan describes the implementation of a unified, Ink-based `init` command th
 ```
 
 ### Pain Points Addressed
-| Issue | Current | Ink Solution |
-|-------|---------|--------------|
-| Can't go back | Restart wizard | `←`/`b` to go back |
-| No progress indicator | None | `[●●○○] Step 2 of 4` |
-| Long lists | Scroll only | Type to search/filter |
-| Single provider | Edit config later | Multi-select with drill-down |
-| No preview | Blind write | Full YAML preview before write |
-| Jarring `console.clear()` | Erases history | Clean Ink transitions |
+
+| Issue                     | Current           | Ink Solution                   |
+| ------------------------- | ----------------- | ------------------------------ |
+| Can't go back             | Restart wizard    | `←`/`b` to go back             |
+| No progress indicator     | None              | `[●●○○] Step 2 of 4`           |
+| Long lists                | Scroll only       | Type to search/filter          |
+| Single provider           | Edit config later | Multi-select with drill-down   |
+| No preview                | Blind write       | Full YAML preview before write |
+| Jarring `console.clear()` | Erases history    | Clean Ink transitions          |
 
 ---
 
@@ -154,8 +157,8 @@ interface InitContext {
 }
 
 interface SelectedProvider {
-  family: string;        // e.g., "openai"
-  models: string[];      // e.g., ["openai:gpt-5", "openai:gpt-5-mini"]
+  family: string; // e.g., "openai"
+  models: string[]; // e.g., ["openai:gpt-5", "openai:gpt-5-mini"]
   config?: Record<string, any>; // For custom providers
 }
 
@@ -271,6 +274,7 @@ interface StepIndicatorProps {
 ### 2. HierarchicalSelect (Provider Selection)
 
 Two-phase selection:
+
 1. Select provider families (OpenAI, Anthropic, etc.)
 2. Select specific models within each family
 
@@ -373,8 +377,8 @@ interface FilePreviewProps {
 // useExternalEditor.ts
 interface UseExternalEditorOptions {
   initialContent: string;
-  fileExtension?: string;  // .txt, .md, etc.
-  editorCommand?: string;  // Override $EDITOR
+  fileExtension?: string; // .txt, .md, etc.
+  editorCommand?: string; // Override $EDITOR
 }
 
 interface UseExternalEditorResult {
@@ -422,11 +426,11 @@ export interface ProviderFamily {
   id: string;
   name: string;
   description: string;
-  icon: string;  // Emoji for visual distinction
+  icon: string; // Emoji for visual distinction
   apiKeyEnv?: string;
   website?: string;
   models: ProviderModel[];
-  isCustom?: boolean;  // For HTTP, Python, JS providers
+  isCustom?: boolean; // For HTTP, Python, JS providers
 }
 
 export interface ProviderModel {
@@ -435,7 +439,7 @@ export interface ProviderModel {
   description: string;
   tags?: ('fast' | 'cheap' | 'reasoning' | 'vision' | 'latest' | 'deprecated')[];
   defaultSelected?: boolean;
-  config?: Record<string, any>;  // Default config for this model
+  config?: Record<string, any>; // Default config for this model
 }
 
 export const PROVIDER_CATALOG: ProviderFamily[] = [
@@ -672,9 +676,24 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
     name: 'Harmful Content',
     description: 'Tests for generation of harmful or dangerous content',
     plugins: [
-      { id: 'harmful:violent-crime', name: 'Violent Crime', description: 'Violence advice', severity: 'critical' },
-      { id: 'harmful:hate', name: 'Hate Speech', description: 'Discriminatory content', severity: 'critical' },
-      { id: 'harmful:self-harm', name: 'Self-Harm', description: 'Self-harm content', severity: 'critical' },
+      {
+        id: 'harmful:violent-crime',
+        name: 'Violent Crime',
+        description: 'Violence advice',
+        severity: 'critical',
+      },
+      {
+        id: 'harmful:hate',
+        name: 'Hate Speech',
+        description: 'Discriminatory content',
+        severity: 'critical',
+      },
+      {
+        id: 'harmful:self-harm',
+        name: 'Self-Harm',
+        description: 'Self-harm content',
+        severity: 'critical',
+      },
       // ... more
     ],
   },
@@ -683,9 +702,25 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
     name: 'Security',
     description: 'Tests for security vulnerabilities',
     plugins: [
-      { id: 'pii', name: 'PII Leakage', description: 'Personal information exposure', severity: 'critical', defaultSelected: true },
-      { id: 'sql-injection', name: 'SQL Injection', description: 'SQL injection attempts', severity: 'critical' },
-      { id: 'shell-injection', name: 'Shell Injection', description: 'Command injection', severity: 'critical' },
+      {
+        id: 'pii',
+        name: 'PII Leakage',
+        description: 'Personal information exposure',
+        severity: 'critical',
+        defaultSelected: true,
+      },
+      {
+        id: 'sql-injection',
+        name: 'SQL Injection',
+        description: 'SQL injection attempts',
+        severity: 'critical',
+      },
+      {
+        id: 'shell-injection',
+        name: 'Shell Injection',
+        description: 'Command injection',
+        severity: 'critical',
+      },
       { id: 'ssrf', name: 'SSRF', description: 'Server-side request forgery', severity: 'high' },
     ],
   },
@@ -694,9 +729,25 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
     name: 'Reliability',
     description: 'Tests for reliability and robustness',
     plugins: [
-      { id: 'hallucination', name: 'Hallucination', description: 'Factual accuracy', severity: 'medium', defaultSelected: true },
-      { id: 'overreliance', name: 'Overreliance', description: 'Excessive AI trust', severity: 'low' },
-      { id: 'contracts', name: 'Contracts', description: 'Unauthorized agreements', severity: 'medium' },
+      {
+        id: 'hallucination',
+        name: 'Hallucination',
+        description: 'Factual accuracy',
+        severity: 'medium',
+        defaultSelected: true,
+      },
+      {
+        id: 'overreliance',
+        name: 'Overreliance',
+        description: 'Excessive AI trust',
+        severity: 'low',
+      },
+      {
+        id: 'contracts',
+        name: 'Contracts',
+        description: 'Unauthorized agreements',
+        severity: 'medium',
+      },
     ],
   },
   // ... more categories
@@ -710,6 +761,7 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ### Phase 1: Foundation (3-4 days)
 
 **Day 1-2: Core Infrastructure**
+
 - [ ] Create `src/ui/init/` directory structure
 - [ ] Implement `initMachine.ts` with basic states (no redteam yet)
 - [ ] Create `StepIndicator` component
@@ -717,6 +769,7 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 - [ ] Create `initRunner.tsx` with `shouldUseInkInit()` check
 
 **Day 3-4: Shared Components**
+
 - [ ] Implement `SearchableSelect` component
 - [ ] Implement `MultiSelect` component
 - [ ] Implement `HierarchicalSelect` for providers
@@ -725,12 +778,14 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ### Phase 2: Regular Init Flow (2-3 days)
 
 **Day 5-6: Core Steps**
+
 - [ ] Implement `PathStep` (example vs new)
 - [ ] Implement `UseCaseStep` (compare/rag/agent/redteam branching)
 - [ ] Implement `LanguageStep` (conditional for rag/agent)
 - [ ] Implement `ProviderStep` with hierarchical selection
 
 **Day 7: Preview & Completion**
+
 - [ ] Implement `FilePreview` component
 - [ ] Implement `configGenerator.ts` for YAML generation
 - [ ] Implement `PreviewStep` with file tabs
@@ -740,6 +795,7 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ### Phase 3: Example Download Flow (1 day)
 
 **Day 8:**
+
 - [ ] Implement `ExampleStep` with GitHub example list
 - [ ] Implement download progress display
 - [ ] Handle download errors gracefully
@@ -748,6 +804,7 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ### Phase 4: Redteam Flow (4-5 days)
 
 **Day 9-10: Target Configuration**
+
 - [ ] Extend state machine with redteam states
 - [ ] Implement `TargetStep` (provider type selection)
 - [ ] Implement `TargetConfigStep` (model or custom config)
@@ -755,12 +812,14 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 - [ ] Implement `SystemPromptStep` with editor integration
 
 **Day 11-12: Plugin & Strategy Selection**
+
 - [ ] Implement `PurposeStep` (text input)
 - [ ] Implement `PluginStep` with category grouping
 - [ ] Implement `StrategyStep`
 - [ ] Implement `TestConfigStep` (numTests, generate option)
 
 **Day 13: Redteam Config Generation**
+
 - [ ] Extend `configGenerator.ts` for redteam YAML
 - [ ] Add redteam-specific file preview
 - [ ] Integrate with existing `doGenerateRedteam` for optional immediate generation
@@ -768,12 +827,14 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ### Phase 5: Integration & Polish (2-3 days)
 
 **Day 14-15: Integration**
+
 - [ ] Wire up to `src/commands/init.ts` with feature flag
 - [ ] Add telemetry for all steps (match existing funnel events)
 - [ ] Handle edge cases (Ctrl+C, errors, missing API keys)
 - [ ] Add keyboard help overlay
 
 **Day 16: Testing & Documentation**
+
 - [ ] Add integration tests for full flows
 - [ ] Update CLI documentation
 - [ ] Add migration guide in `docs/agents/`
@@ -783,6 +844,7 @@ export const PLUGIN_CATALOG: PluginCategory[] = [
 ## Testing Strategy
 
 ### Unit Tests
+
 ```
 test/ui/init/
 ├── components/
@@ -799,6 +861,7 @@ test/ui/init/
 ```
 
 ### Integration Tests
+
 ```typescript
 describe('Init Wizard Integration', () => {
   describe('Regular init flow', () => {
@@ -855,13 +918,13 @@ if (shouldUseInkInit()) {
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| External editor doesn't work on all platforms | Medium | High | Fallback chain: $EDITOR → $VISUAL → platform-specific → inline |
-| Ink rendering issues in some terminals | Low | Medium | Fallback to inquirer version |
-| State machine complexity leads to bugs | Medium | Medium | Comprehensive unit tests, visualize with XState inspector |
-| Provider catalog becomes stale | High | Low | Make catalog data-driven, consider fetching from API |
-| Redteam flow too long for users | Medium | Medium | Add "quick start" option with sensible defaults |
+| Risk                                          | Likelihood | Impact | Mitigation                                                     |
+| --------------------------------------------- | ---------- | ------ | -------------------------------------------------------------- |
+| External editor doesn't work on all platforms | Medium     | High   | Fallback chain: $EDITOR → $VISUAL → platform-specific → inline |
+| Ink rendering issues in some terminals        | Low        | Medium | Fallback to inquirer version                                   |
+| State machine complexity leads to bugs        | Medium     | Medium | Comprehensive unit tests, visualize with XState inspector      |
+| Provider catalog becomes stale                | High       | Low    | Make catalog data-driven, consider fetching from API           |
+| Redteam flow too long for users               | Medium     | Medium | Add "quick start" option with sensible defaults                |
 
 ---
 

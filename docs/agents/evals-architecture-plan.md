@@ -12,20 +12,21 @@ Model Audit represents the target architecture for frontend features in promptfo
 
 ### Architecture Comparison
 
-| Aspect | Model Audit | Evals | Gap |
-|--------|-------------|-------|-----|
-| Error boundaries | Per-route in App.tsx | None | High |
-| Route constants | `MODEL_AUDIT_ROUTES` used everywhere | `EVAL_ROUTES` exists but not used | Medium |
-| Type centralization | `ModelAudit.types.ts` | Inline types in components | Medium |
-| Store architecture | Split (Config + History stores) | Monolithic `store.ts` | High |
-| Server pagination | Full support with offset/limit | Client-only (loads all) | High |
-| Component reuse | Shared `model-audit/components/` | Tightly coupled to pages | Medium |
-| Design system | 100% Radix/Tailwind | 95% (MUI Tooltip remains) | Low |
-| Directory structure | Separate dirs per page | Nested components | Low |
+| Aspect              | Model Audit                          | Evals                             | Gap    |
+| ------------------- | ------------------------------------ | --------------------------------- | ------ |
+| Error boundaries    | Per-route in App.tsx                 | None                              | High   |
+| Route constants     | `MODEL_AUDIT_ROUTES` used everywhere | `EVAL_ROUTES` exists but not used | Medium |
+| Type centralization | `ModelAudit.types.ts`                | Inline types in components        | Medium |
+| Store architecture  | Split (Config + History stores)      | Monolithic `store.ts`             | High   |
+| Server pagination   | Full support with offset/limit       | Client-only (loads all)           | High   |
+| Component reuse     | Shared `model-audit/components/`     | Tightly coupled to pages          | Medium |
+| Design system       | 100% Radix/Tailwind                  | 95% (MUI Tooltip remains)         | Low    |
+| Directory structure | Separate dirs per page               | Nested components                 | Low    |
 
 ### File Locations
 
 **Model Audit (Reference)**
+
 ```
 src/app/src/pages/
 ├── model-audit/                    # Shared components & stores
@@ -47,6 +48,7 @@ src/app/src/pages/
 ```
 
 **Evals (Current)**
+
 ```
 src/app/src/pages/
 ├── eval/
@@ -75,6 +77,7 @@ src/app/src/pages/
 **File:** `src/app/src/App.tsx`
 
 **Current (lines 65-67):**
+
 ```tsx
 <Route path="/eval" element={<EvalPage />} />
 <Route path="/evals" element={<EvalsIndexPage />} />
@@ -82,6 +85,7 @@ src/app/src/pages/
 ```
 
 **Target:**
+
 ```tsx
 <Route
   path="/eval"
@@ -118,16 +122,19 @@ src/app/src/pages/
 **File:** `src/app/src/pages/evals/components/EvalsTable.tsx`
 
 **Current (line 18):**
+
 ```tsx
 import { Tooltip } from '@mui/material';
 ```
 
 **Target:**
+
 ```tsx
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 ```
 
 **Current usage (lines 248-261):**
+
 ```tsx
 <Tooltip title={text} placement="top" arrow>
   <span className="text-sm block" style={{...}}>
@@ -137,6 +144,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 ```
 
 **Target:**
+
 ```tsx
 <Tooltip>
   <TooltipTrigger asChild>
@@ -153,6 +161,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 ### 1.3 Use EVAL_ROUTES Constants Consistently
 
 **File:** `src/app/src/constants/routes.ts` already has:
+
 ```typescript
 export const EVAL_ROUTES = {
   ROOT: '/eval',
@@ -164,6 +173,7 @@ export const EVAL_ROUTES = {
 **Files to update:**
 
 1. `src/app/src/pages/evals/components/EvalsTable.tsx` (line 189):
+
    ```tsx
    // Current
    to={`/eval/${evalId}`}
@@ -174,6 +184,7 @@ export const EVAL_ROUTES = {
    ```
 
 2. `src/app/src/pages/evals/page.tsx` (line 25):
+
    ```tsx
    // Current
    onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)}
@@ -228,6 +239,7 @@ export type { EvalSummary as Eval };
 ```
 
 **Files to update:**
+
 - `src/app/src/pages/evals/components/EvalsTable.tsx` - import from types file
 - `src/app/src/pages/eval/components/store.ts` - import from types file
 - `src/app/src/pages/eval/components/*.tsx` - import from types file
@@ -374,12 +386,13 @@ export const useEvalListStore = create<EvalListState>()((set, get) => ({
   setCurrentPage: (currentPage) => set({ currentPage }),
   setSortModel: (sortModel) => set({ sortModel, currentPage: 0 }),
   setSearchQuery: (searchQuery) => set({ searchQuery, currentPage: 0 }),
-  resetFilters: () => set({
-    pageSize: DEFAULT_PAGE_SIZE,
-    currentPage: 0,
-    sortModel: [{ field: 'createdAt', sort: 'desc' }],
-    searchQuery: '',
-  }),
+  resetFilters: () =>
+    set({
+      pageSize: DEFAULT_PAGE_SIZE,
+      currentPage: 0,
+      sortModel: [{ field: 'createdAt', sort: 'desc' }],
+      searchQuery: '',
+    }),
 }));
 ```
 
@@ -392,11 +405,11 @@ Add pagination support to `/results` endpoint:
 ```typescript
 // Query params
 interface ResultsQuery {
-  limit?: number;   // Default: 50
-  offset?: number;  // Default: 0
-  sort?: string;    // Default: 'createdAt'
-  order?: 'asc' | 'desc';  // Default: 'desc'
-  search?: string;  // Optional text search
+  limit?: number; // Default: 50
+  offset?: number; // Default: 0
+  sort?: string; // Default: 'createdAt'
+  order?: 'asc' | 'desc'; // Default: 'desc'
+  search?: string; // Optional text search
 }
 
 // Response format
@@ -454,62 +467,66 @@ export default function EvalsTable({ onEvalSelected, ... }) {
 Follow Model Audit pattern (`ModelAuditHistory.tsx:281-337`):
 
 ```tsx
-{/* After DataTable */}
-{evals.length > 0 && (
-  <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-    <div className="text-sm text-muted-foreground">
-      Showing {currentPage * pageSize + 1} to{' '}
-      {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} evals
-    </div>
-    <div className="flex items-center gap-2">
-      <select
-        value={pageSize}
-        onChange={(e) => {
-          setPageSize(Number(e.target.value));
-        }}
-        className="px-3 py-1.5 rounded-md border border-border bg-background text-sm"
-      >
-        <option value={25}>25 / page</option>
-        <option value={50}>50 / page</option>
-        <option value={100}>100 / page</option>
-      </select>
-      <div className="flex gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(0)}
-          disabled={currentPage === 0}
+{
+  /* After DataTable */
+}
+{
+  evals.length > 0 && (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+      <div className="text-sm text-muted-foreground">
+        Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalCount)}{' '}
+        of {totalCount} evals
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+          }}
+          className="px-3 py-1.5 rounded-md border border-border bg-background text-sm"
         >
-          First
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(currentPage - 1)}
-          disabled={currentPage === 0}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(currentPage + 1)}
-          disabled={(currentPage + 1) * pageSize >= totalCount}
-        >
-          Next
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize) - 1)}
-          disabled={(currentPage + 1) * pageSize >= totalCount}
-        >
-          Last
-        </Button>
+          <option value={25}>25 / page</option>
+          <option value={50}>50 / page</option>
+          <option value={100}>100 / page</option>
+        </select>
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(0)}
+            disabled={currentPage === 0}
+          >
+            First
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 0}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={(currentPage + 1) * pageSize >= totalCount}
+          >
+            Next
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize) - 1)}
+            disabled={(currentPage + 1) * pageSize >= totalCount}
+          >
+            Last
+          </Button>
+        </div>
       </div>
     </div>
-  </div>
-)}
+  );
+}
 ```
 
 ---
@@ -616,14 +633,14 @@ export function PassRateDisplay({ rate, className }: PassRateDisplayProps) {
 
 After implementation:
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Error boundaries on eval routes | 0 | 3 |
-| MUI components in evals list | 1 | 0 |
-| Hardcoded route strings | ~10 | 0 |
-| Separate store files | 1 | 3+ |
-| Server-side pagination | No | Yes |
-| Type centralization | Inline | Single file |
+| Metric                          | Before | After       |
+| ------------------------------- | ------ | ----------- |
+| Error boundaries on eval routes | 0      | 3           |
+| MUI components in evals list    | 1      | 0           |
+| Hardcoded route strings         | ~10    | 0           |
+| Separate store files            | 1      | 3+          |
+| Server-side pagination          | No     | Yes         |
+| Type centralization             | Inline | Single file |
 
 ---
 
