@@ -267,8 +267,7 @@ export default function Insurance() {
               </div>
               <div className={styles.showcaseImage}>
                 <img
-                  src="/img/riskreport-2.png"
-                  srcSet="/img/riskreport-2.png 1x, /img/riskreport-2@2x.png 2x"
+                  src="/img/solutions/insurance.png"
                   alt="Risk report showing PHI vulnerability findings"
                   loading="lazy"
                 />
