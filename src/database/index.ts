@@ -33,6 +33,9 @@ export function getDb() {
 
     sqliteInstance = new Database(dbPath);
 
+    // Enable foreign key constraints (required for referential integrity)
+    sqliteInstance.pragma('foreign_keys = ON');
+
     // Configure WAL mode unless explicitly disabled or using in-memory database
     if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
       try {
@@ -104,4 +107,15 @@ export function closeDb() {
  */
 export function isDbOpen(): boolean {
   return sqliteInstance !== null && dbInstance !== null;
+}
+
+/**
+ * Close database connection if it's currently open
+ * Safe to call even if database was never opened
+ * Should be called during graceful shutdown to prevent event loop hanging
+ */
+export function closeDbIfOpen(): void {
+  if (sqliteInstance) {
+    closeDb();
+  }
 }

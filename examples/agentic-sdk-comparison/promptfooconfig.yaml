@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Compare agentic SDK providers: Codex, Claude Agent, OpenCode'
+
+prompts:
+  - |
+    Analyze all Python files in the current directory for security vulnerabilities.
+    Return your findings in JSON format with: vulnerabilities (array), risk_score (0-100), and summary.
+
+providers:
+  # Codex SDK with native JSON schema support
+  - id: openai:codex-sdk
+    label: codex-sdk
+    config:
+      model: gpt-5.1-codex
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      skip_git_repo_check: true
+      output_schema:
+        type: object
+        required: [vulnerabilities, risk_score, summary]
+        additionalProperties: false
+        properties:
+          vulnerabilities:
+            type: array
+            items:
+              type: object
+              required: [file, severity, category, issue, recommendation]
+              additionalProperties: false
+              properties:
+                file:
+                  type: string
+                severity:
+                  type: string
+                  enum: [critical, high, medium, low]
+                category:
+                  type: string
+                  enum: [authentication, cryptography, data-exposure, input-validation, other]
+                issue:
+                  type: string
+                recommendation:
+                  type: string
+          risk_score:
+            type: integer
+            minimum: 0
+            maximum: 100
+          summary:
+            type: string
+
+  # Claude Agent SDK with file system tools
+  - id: anthropic:claude-agent-sdk
+    label: claude-agent-sdk
+    config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+
+  # OpenCode SDK with file system tools (provider-agnostic)
+  - id: opencode:sdk
+    label: opencode-sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+
+  # Plain LLM for baseline (no file access)
+  - id: openai:gpt-5.1
+    label: plain-llm
+    config:
+      temperature: 0
+
+defaultTest:
+  options:
+    timeout: 90000
+
+tests:
+  - description: Find security vulnerabilities
+    assert:
+      - type: javascript
+        value: |
+          // Codex SDK returns structured JSON, plain LLM returns text
+          if (typeof output === 'object' && output.vulnerabilities) {
+            // Validate JSON structure
+            const hasStructure = Array.isArray(output.vulnerabilities) &&
+                                typeof output.risk_score === 'number' &&
+                                typeof output.summary === 'string';
+            if (!hasStructure) {
+              return { pass: false, score: 0, reason: 'Invalid JSON structure' };
+            }
+
+            // Check for key vulnerabilities (MD5, CVV, passwords)
+            const vulns = output.vulnerabilities;
+            const hasCrypto = vulns.some(v => v.category === 'cryptography');
+            const hasDataExposure = vulns.some(v => v.category === 'data-exposure');
+
+            const score = (vulns.length >= 3 ? 0.4 : 0) + (hasCrypto ? 0.3 : 0) + (hasDataExposure ? 0.3 : 0);
+            return {
+              pass: score >= 0.6,
+              score,
+              reason: `Found ${vulns.length} vulnerabilities (crypto: ${hasCrypto}, data: ${hasDataExposure})`
+            };
+          }
+
+          // Plain LLM - check mentions of key issues
+          const text = String(output).toLowerCase();
+          const issues = ['md5', 'cvv', 'password', 'session'].filter(term => text.includes(term));
+          const score = Math.min(issues.length / 4, 1);
+
+          return {
+            pass: score >= 0.5,
+            score,
+            reason: `Mentioned ${issues.length}/4 key issues: ${issues.join(', ')}`
+          };
+        metric: Vulnerability Detection

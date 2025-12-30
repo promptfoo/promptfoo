@@ -1,8 +1,10 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockUpdateApplicationDefinition = vi.fn();
 const mockUpdateConfig = vi.fn();
@@ -22,24 +24,28 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 vi.mock('@app/hooks/useApiHealth', () => ({
-  useApiHealth: () => ({
-    status: 'connected',
-    checkHealth: mockCheckHealth,
-  }),
+  useApiHealth: vi.fn(),
 }));
+
+vi.mocked(useApiHealth).mockReturnValue({
+  data: { status: 'connected', message: null },
+  refetch: mockCheckHealth,
+  isLoading: false,
+} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('Purpose Component', () => {
-  const theme = createTheme();
-
   const renderComponent = (props: any) => {
     return render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider>
         <Purpose {...props} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
   };
 
@@ -102,7 +108,7 @@ describe('Purpose Component', () => {
 
     renderComponent({ onNext: vi.fn() });
 
-    const modelButton = screen.getByRole('button', { name: /test model/i });
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
     fireEvent.click(modelButton);
 
     const nextButton = screen.getByRole('button', { name: /next/i });
@@ -120,6 +126,46 @@ describe('Purpose Component', () => {
 
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', testPurpose);
+  });
+
+  it("should display the correct description when testMode is 'application'", () => {
+    renderComponent({ onNext: vi.fn() });
+
+    const descriptionElement = screen.getByText(
+      'Describe your application so we can generate targeted security tests.',
+    );
+    expect(descriptionElement).toBeInTheDocument();
+  });
+
+  it("should display the description 'Describe the foundation model so we can generate targeted tests.' when testMode is set to 'model'", () => {
+    renderComponent({ onNext: vi.fn() });
+
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
+    fireEvent.click(modelButton);
+
+    expect(
+      screen.getByText('Describe the foundation model so we can generate targeted tests.'),
+    ).toBeInTheDocument();
+  });
+
+  it('should update description text immediately when switching between test modes', () => {
+    renderComponent({ onNext: vi.fn() });
+
+    const initialDescription = screen.getByText(
+      'Describe your application so we can generate targeted security tests.',
+    );
+    const initialText = initialDescription.textContent;
+
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
+    fireEvent.click(modelButton);
+
+    const updatedDescription = screen.getByText(
+      'Describe the foundation model so we can generate targeted tests.',
+    );
+    const updatedText = updatedDescription.textContent;
+
+    expect(updatedDescription).toBeInTheDocument();
+    expect(updatedText).not.toEqual(initialText);
   });
 
   describe('Long Text Input', () => {
@@ -181,6 +227,64 @@ describe('Purpose Component', () => {
 
       await waitFor(() => {
         expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      });
+    });
+
+    it('should display an error message when attempting to discover purpose with an empty URL', async () => {
+      const errorMessage = 'Target URL is required';
+      const mockCallApi = vi.mocked(callApi);
+      mockCallApi.mockRejectedValue(new Error(errorMessage));
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: {
+            purpose: 'A test purpose to enable the next button',
+          },
+          target: {
+            id: 'http',
+            config: {
+              url: '',
+            },
+          },
+          testGenerationInstructions: '',
+        },
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent({ onNext: vi.fn() });
+
+      const discoverButton = screen.getByRole('button', { name: /discover/i });
+      fireEvent.click(discoverButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('API Health Status Change', () => {
+    it('should display an error message when the API health status changes to blocked', async () => {
+      const { rerender } = renderComponent({ onNext: vi.fn() });
+
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: 'Network error: Unable to check API health' },
+        refetch: mockCheckHealth,
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      rerender(
+        <TooltipProvider>
+          <Purpose onNext={vi.fn()} />
+        </TooltipProvider>,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            /Cannot connect to Promptfoo API. Auto-discovery requires a healthy API connection./i,
+          ),
+        ).toBeInTheDocument();
       });
     });
   });

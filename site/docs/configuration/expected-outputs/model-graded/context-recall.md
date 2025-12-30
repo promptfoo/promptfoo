@@ -1,36 +1,77 @@
 ---
-sidebar_label: Context Recall
-description: 'Quantify retrieval quality by measuring how thoroughly LLM responses incorporate all relevant context information provided'
+sidebar_position: 50
+description: 'Quantify retrieval quality by measuring how thoroughly LLM responses cover expected information from source materials.'
 ---
 
 # Context recall
 
-The `context-recall` assertion evaluates whether the provided context contains the information needed to answer a specific question or verify a particular fact.
+Checks if your retrieved context contains the information needed to generate a known correct answer.
+
+**Use when**: You have ground truth answers and want to verify your retrieval finds supporting evidence.
+
+**How it works**: Breaks the expected answer into statements and checks if each can be attributed to the context. Score = attributable statements / total statements.
+
+**Example**:
+
+```text
+Expected: "Python was created by Guido van Rossum in 1991"
+Context: "Python was released in 1991"
+Score: 0.5 (year ✓, creator ✗)
+```
 
 ## Configuration
 
 ```yaml
 assert:
   - type: context-recall
-    value: 'Expected fact to find in context'
-    threshold: 0.8 # Score from 0 to 1
+    value: 'Python was created by Guido van Rossum in 1991'
+    threshold: 1.0 # Context must support entire answer
 ```
 
-:::note
+### Required fields
 
-This assertion requires context and the LLM's output to evaluate recall. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+- `value` - Expected answer/ground truth
+- `context` - Retrieved text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-:::
+### Full example
 
-### How it works
+```yaml
+tests:
+  - vars:
+      query: 'Who created Python?'
+      context: 'Guido van Rossum created Python in 1991.'
+    assert:
+      - type: context-recall
+        value: 'Python was created by Guido van Rossum in 1991'
+        threshold: 1.0
+```
 
-The context recall checker:
+### Dynamic context extraction
 
-1. Analyzes whether the provided context contains the information specified in the `value` field
-2. Evaluates the completeness and accuracy of information retrieval
-3. Returns a score from 0 to 1, where 1 means the context fully contains the expected information
+For RAG systems that return context with their response:
 
-# Further reading
+```yaml
+# Provider returns { answer: "...", context: "..." }
+assert:
+  - type: context-recall
+    value: 'Expected answer here'
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.8
+```
 
-- See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
-- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.
+## Limitations
+
+- Binary attribution (no partial credit)
+- Works best with factual statements
+- Requires known correct answers
+
+## Related metrics
+
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Is retrieved context relevant?
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Does output stay faithful to context?
+
+## Further reading
+
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

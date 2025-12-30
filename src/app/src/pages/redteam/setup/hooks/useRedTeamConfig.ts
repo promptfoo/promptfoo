@@ -271,13 +271,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
-          const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
-          const stringifiedNewPlugins = JSON.stringify(plugins);
-
-          if (stringifiedCurrentPlugins === stringifiedNewPlugins) {
-            return state;
-          }
-
+          // First compute the merged plugins
           const newPlugins = plugins.map((plugin) => {
             if (typeof plugin === 'string' || !plugin.config) {
               return plugin;
@@ -301,6 +295,13 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             return plugin;
           });
 
+          // Compare OUTPUT vs current state (not input vs state)
+          // This prevents infinite loops when merge logic preserves extra properties
+          // that weren't in the input but existed in the current state
+          if (JSON.stringify(newPlugins) === JSON.stringify(state.config.plugins)) {
+            return state;
+          }
+
           return {
             config: {
               ...state.config,
@@ -314,8 +315,8 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       },
       resetConfig: () => {
         set({ config: defaultConfig, providerType: undefined });
-        // There's a bunch of state that's not persisted that we want to reset
-        window.location.href = '/redteam/setup';
+        // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+        window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
         set((state) => {

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { sanitizeMarkdown } from '../../site/src/utils/markdown';
 
 describe('sanitizeMarkdown', () => {
@@ -21,7 +22,6 @@ console.log('code block');
 Here's some \`inline code\` and a [link](https://example.com).
 
 <img src="test.jpg" alt="HTML image" />
-
 
 
 Multiple newlines above.

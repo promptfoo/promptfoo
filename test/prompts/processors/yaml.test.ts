@@ -1,17 +1,30 @@
 import * as fs from 'fs';
 
 import dedent from 'dedent';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
+import * as fileModule from '../../../src/util/file';
 
-jest.mock('fs');
+vi.mock('fs');
+vi.mock('../../../src/util/file');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 describe('processYamlFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockMaybeLoadConfigFromExternalFile = vi.mocked(fileModule.maybeLoadConfigFromExternalFile);
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(logger.debug).mockClear();
+    vi.clearAllMocks();
+    // By default, maybeLoadConfigFromExternalFile returns its input unchanged
+    mockMaybeLoadConfigFromExternalFile.mockImplementation((input) => input);
   });
 
   it('should process a valid YAML file without a label', () => {
@@ -125,5 +138,97 @@ template: "{{ variable }}   "
     expect(logger.debug).toHaveBeenCalledWith(
       expect.stringMatching(/Error parsing YAML file issue-2368\.yaml:/),
     );
+  });
+
+  describe('recursive file:// resolution', () => {
+    it('should recursively resolve file:// references in YAML content', () => {
+      const filePath = 'conversation.yaml';
+      const fileContent = dedent`
+        - role: system
+          content: file://system.md
+        - role: user
+          content: file://user.md
+      `;
+
+      const parsedYaml = [
+        { role: 'system', content: 'file://system.md' },
+        { role: 'user', content: 'file://user.md' },
+      ];
+
+      const resolvedContent = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is 2 + 2?' },
+      ];
+
+      mockReadFileSync.mockReturnValue(fileContent);
+      mockMaybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(mockMaybeLoadConfigFromExternalFile).toHaveBeenCalledWith(parsedYaml);
+      expect(result[0].raw).toBe(JSON.stringify(resolvedContent));
+    });
+
+    it('should handle nested file:// references in complex structures', () => {
+      const filePath = 'config.yaml';
+      const fileContent = dedent`
+        provider:
+          id: openai:gpt-4
+          config:
+            temperature: file://temperature.json
+            tools: file://tools.yaml
+        messages:
+          - role: system
+            content: file://system.txt
+      `;
+
+      const parsedYaml = {
+        provider: {
+          id: 'openai:gpt-4',
+          config: {
+            temperature: 'file://temperature.json',
+            tools: 'file://tools.yaml',
+          },
+        },
+        messages: [{ role: 'system', content: 'file://system.txt' }],
+      };
+
+      const resolvedContent = {
+        provider: {
+          id: 'openai:gpt-4',
+          config: {
+            temperature: 0.7,
+            tools: [{ name: 'search', description: 'Search the web' }],
+          },
+        },
+        messages: [{ role: 'system', content: 'You are a helpful assistant.' }],
+      };
+
+      mockReadFileSync.mockReturnValue(fileContent);
+      mockMaybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(mockMaybeLoadConfigFromExternalFile).toHaveBeenCalledWith(parsedYaml);
+      expect(result[0].raw).toBe(JSON.stringify(resolvedContent));
+    });
+
+    it('should handle when maybeLoadConfigFromExternalFile returns unchanged content', () => {
+      const filePath = 'no-refs.yaml';
+      const fileContent = dedent`
+        key1: value1
+        key2: value2
+      `;
+
+      const parsedYaml = { key1: 'value1', key2: 'value2' };
+
+      mockReadFileSync.mockReturnValue(fileContent);
+      mockMaybeLoadConfigFromExternalFile.mockReturnValue(parsedYaml);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(mockMaybeLoadConfigFromExternalFile).toHaveBeenCalledWith(parsedYaml);
+      expect(result[0].raw).toBe(JSON.stringify(parsedYaml));
+    });
   });
 });

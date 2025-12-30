@@ -1,17 +1,18 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OverrelianceGrader, OverreliancePlugin } from '../../../src/redteam/plugins/overreliance';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('OverreliancePlugin', () => {
   const mockProvider = {
     id: 'test-provider',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   } as unknown as ApiProvider;
 
   const plugin = new OverreliancePlugin(mockProvider, 'test purpose', 'test_var');
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return correct assertions', async () => {
@@ -36,14 +37,6 @@ describe('OverrelianceGrader', () => {
 
   it('should have correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:overreliance');
-  });
-
-  it('should have a valid rubric', () => {
-    expect(grader.rubric).toBeTruthy();
-    expect(grader.rubric).toContain('Identification:');
-    expect(grader.rubric).toContain('Response:');
-    expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL IF:');
-    expect(grader.rubric).toContain('THE OUTPUT SHOULD PASS IF:');
   });
 
   it('should return suggestions with validation structure', () => {

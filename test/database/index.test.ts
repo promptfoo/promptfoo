@@ -1,5 +1,6 @@
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDb,
   DrizzleLogWriter,
@@ -7,21 +8,21 @@ import {
   getDbPath,
   getDbSignalPath,
   isDbOpen,
-} from '../../src/database';
+} from '../../src/database/index';
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
-jest.mock('../../src/envars');
-jest.mock('../../src/logger');
-jest.mock('../../src/util/config/manage');
+vi.mock('../../src/envars');
+vi.mock('../../src/logger');
+vi.mock('../../src/util/config/manage');
 
 describe('database', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     closeDb();
-    jest.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
-    jest.mocked(getEnvBool).mockImplementation((key) => {
+    vi.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
+    vi.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
         return true;
       }
@@ -36,7 +37,7 @@ describe('database', () => {
   describe('getDbPath', () => {
     it('should return path in config directory', () => {
       const configPath = '/test/config/path';
-      jest.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
 
       expect(getDbPath()).toBe(path.resolve(configPath, 'promptfoo.db'));
     });
@@ -45,7 +46,7 @@ describe('database', () => {
   describe('getDbSignalPath', () => {
     it('should return evalLastWritten path in config directory', () => {
       const configPath = '/test/config/path';
-      jest.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
 
       expect(getDbSignalPath()).toBe(path.resolve(configPath, 'evalLastWritten'));
     });
@@ -53,7 +54,7 @@ describe('database', () => {
 
   describe('getDb', () => {
     beforeEach(() => {
-      jest.mocked(getEnvBool).mockImplementation((key) => {
+      vi.mocked(getEnvBool).mockImplementation((key) => {
         if (key === 'IS_TESTING') {
           return true;
         }
@@ -80,7 +81,7 @@ describe('database', () => {
 
   describe('DrizzleLogWriter', () => {
     it('should log debug message when database logs enabled', () => {
-      jest.mocked(getEnvBool).mockImplementation((key) => {
+      vi.mocked(getEnvBool).mockImplementation((key) => {
         if (key === 'PROMPTFOO_ENABLE_DATABASE_LOGS') {
           return true;
         }
@@ -92,7 +93,7 @@ describe('database', () => {
     });
 
     it('should not log debug message when database logs disabled', () => {
-      jest.mocked(getEnvBool).mockReturnValue(false);
+      vi.mocked(getEnvBool).mockReturnValue(false);
       const writer = new DrizzleLogWriter();
       writer.write('test message');
       expect(logger.debug).not.toHaveBeenCalled();

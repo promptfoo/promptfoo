@@ -88,6 +88,10 @@ export interface AzureCompletionOptions {
   stop?: string[];
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
+  /**
+   * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
+   */
+  verbosity?: 'low' | 'medium' | 'high';
 
   /**
    * If set, automatically call these functions when the model calls them.
@@ -147,7 +151,8 @@ export interface AzureProviderOptions {
 }
 
 export interface AzureAssistantProviderOptions {
-  config?: AzureAssistantOptions;
+  config?: AzureAssistantOptions & { projectUrl?: string };
   id?: string;
   env?: EnvOverrides;
+  /** Azure AI Project URL for Foundry agent provider */
 }

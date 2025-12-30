@@ -9,13 +9,14 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { isRunningUnderNpx } from '../util';
+import { fetchWithProxy } from '../util/fetch/index';
+import { promptfooCommand } from '../util/promptfooCommand';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
 export async function downloadFile(url: string, filePath: string): Promise<void> {
-  const response = await fetch(url);
+  const response = await fetchWithProxy(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.statusText}`);
   }
@@ -26,7 +27,7 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
   // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  let response = await fetch(url, {
+  let response = await fetchWithProxy(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'promptfoo-cli',
@@ -36,7 +37,7 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
   // If VERSION fails, try with 'main'
   if (!response.ok) {
     const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
-    response = await fetch(mainUrl, {
+    response = await fetchWithProxy(mainUrl, {
       headers: {
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'promptfoo-cli',
@@ -63,10 +64,24 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
 }
 
 export async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
+  let dirAlreadyExists = false;
+  try {
+    await fs.access(targetDir);
+    dirAlreadyExists = true;
+  } catch {
+    // Directory doesn't exist, continue
+  }
   try {
     await fs.mkdir(targetDir, { recursive: true });
     await downloadDirectory(exampleName, targetDir);
   } catch (error) {
+    if (!dirAlreadyExists) {
+      try {
+        await fs.rm(targetDir, { recursive: true, force: true });
+      } catch (error) {
+        logger.error(`Failed to remove directory: ${error}`);
+      }
+    }
     throw new Error(
       `Failed to download example: ${error instanceof Error ? error.message : error}`,
     );
@@ -75,7 +90,7 @@ export async function downloadExample(exampleName: string, targetDir: string): P
 
 export async function getExamplesList(): Promise<string[]> {
   try {
-    const response = await fetch(
+    const response = await fetchWithProxy(
       `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples?ref=${VERSION}`,
       {
         headers: {
@@ -115,7 +130,7 @@ async function selectExample(): Promise<string> {
   return selectedExample;
 }
 
-async function handleExampleDownload(
+export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
 ): Promise<string | undefined> {
@@ -142,11 +157,23 @@ async function handleExampleDownload(
       });
       if (attemptDownload) {
         exampleName = await selectExample();
+      } else {
+        // User declined to try downloading a different example
+        logger.info(
+          dedent`
+
+          No example downloaded. To get started, try:
+
+            ${chalk.bold('promptfoo init --example')}    (browse and select an example)
+            ${chalk.bold('promptfoo init')}              (create a basic project)
+
+           `,
+        );
+        return exampleName;
       }
     }
   }
 
-  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
   if (!exampleName) {
     return;
   }
@@ -163,6 +190,7 @@ async function handleExampleDownload(
       `,
     );
   } else {
+    const runCommand = promptfooCommand('eval');
     logger.info(
       dedent`
 
@@ -190,9 +218,6 @@ export function initCommand(program: Command) {
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
-      telemetry.record('command_used', {
-        name: 'init - started',
-      });
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:

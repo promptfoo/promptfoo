@@ -29,6 +29,7 @@ Latest releases:
 | [deepseek/deepseek-r1](https://openrouter.ai/deepseek/deepseek-r1)                                         | 64,000               |
 | [deepseek/deepseek-r1-distill-llama-70b](https://openrouter.ai/deepseek/deepseek-r1-distill-llama-70b)     | 131,072              |
 | [deepseek/deepseek-v3-base:free](https://openrouter.ai/deepseek/deepseek-v3-base)                          | 131,072              |
+| [deepseek/deepseek-v3.2-exp](https://openrouter.ai/deepseek/deepseek-v3.2-exp)                             | 128,000              |
 | [google/gemini-2.0-flash-exp:free](https://openrouter.ai/google/gemini-2.0-flash-exp:free)                 | 1,048,576            |
 | [google/gemini-2.5-pro-preview](https://openrouter.ai/google/gemini-2.5-pro-preview)                       | 1,000,000            |
 | [google/gemini-flash-1.5](https://openrouter.ai/google/gemini-flash-1.5)                                   | 1,000,000            |
@@ -55,8 +56,8 @@ Latest releases:
 | [mistralai/mistral-nemo](https://openrouter.ai/mistralai/mistral-nemo)                                     | 131,072              |
 | [mistralai/ministral-8b](https://openrouter.ai/mistralai/ministral-8b)                                     | 131,072              |
 | [neversleep/llama-3-lumimaid-8b:extended](https://openrouter.ai/neversleep/llama-3-lumimaid-8b:extended)   | 24,576               |
-| [openai/gpt-4.1-mini](https://openrouter.ai/openai/gpt-4.1-mini)                                           | 128,000              |
-| [openai/gpt-4.1-mini-2024-07-18](https://openrouter.ai/openai/gpt-4.1-mini-2024-07-18)                     | 128,000              |
+| [openai/gpt-5-mini](https://openrouter.ai/openai/gpt-5-mini)                                               | 128,000              |
+| [openai/gpt-5-mini-2024-07-18](https://openrouter.ai/openai/gpt-5-mini-2024-07-18)                         | 128,000              |
 | [openhands/openhands-lm-32b-v0.1](https://openrouter.ai/openhands/openhands-lm-32b-v0.1)                   | 16,384               |
 | [openrouter/quasar-alpha](https://openrouter.ai/openrouter/quasar-alpha)                                   | 1,000,000            |
 | [eva-unit-01/eva-qwen-2.5-72b](https://openrouter.ai/eva-unit-01/eva-qwen-2.5-72b)                         | 16,384               |

@@ -1,50 +1,69 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
 import { FalImageGenerationProvider } from '../../src/providers/fal';
 
-// Mock the fal client
-const mockSubscribe = jest.fn();
-const mockConfig = jest.fn();
+const mockSubscribe = vi.hoisted(() => vi.fn());
+const mockConfig = vi.hoisted(() => vi.fn());
 
-jest.mock('@fal-ai/client', () => ({
-  fal: {
-    subscribe: mockSubscribe,
-    config: mockConfig,
-  },
-}));
+vi.mock('@fal-ai/client', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('../../src/cache', () => ({
-  ...jest.requireActual('../../src/cache'),
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
-}));
+    fal: {
+      subscribe: mockSubscribe,
+      config: mockConfig,
+    },
+  };
+});
 
-jest.mock('../../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvInt: jest.fn().mockReturnValue(300000),
-  getEnvBool: jest.fn().mockReturnValue(true),
-  getEnvFloat: jest.fn(),
-}));
+vi.mock('../../src/cache', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+  return {
+    ...actual,
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
+
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getEnvString: vi.fn(),
+    getEnvInt: vi.fn().mockReturnValue(300000),
+    getEnvBool: vi.fn().mockReturnValue(true),
+    getEnvFloat: vi.fn(),
+  };
+});
 
 describe('Fal Provider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn(),
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {
-        get: jest.fn(),
-        set: jest.fn(),
-      },
-    });
+    vi.clearAllMocks();
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
+          get: vi.fn(),
+          set: vi.fn(),
+        },
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('FalImageGenerationProvider', () => {
@@ -92,7 +111,9 @@ describe('Fal Provider', () => {
       });
 
       it('should use environment variable for API key when not provided in config', () => {
-        jest.mocked(jest.mocked(getEnvString)).mockReturnValue('env-api-key');
+        vi.mocked(getEnvString).mockImplementation(function () {
+          return 'env-api-key';
+        });
 
         const envProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 
@@ -121,7 +142,9 @@ describe('Fal Provider', () => {
 
     describe('API key validation', () => {
       it('should throw error when API key is not set', async () => {
-        jest.mocked(jest.mocked(getEnvString)).mockReturnValue(undefined as any);
+        vi.mocked(getEnvString).mockImplementation(function () {
+          return undefined as any;
+        });
 
         const noKeyProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 
@@ -283,23 +306,34 @@ describe('Fal Provider', () => {
 
     describe('caching behavior', () => {
       it('should use cached response when cache is enabled and available', async () => {
-        jest.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
         const mockCachedResponse = JSON.stringify(
           '![cached prompt](https://cached.example.com/image.png)',
         );
 
         const mockCache = {
-          get: jest.fn().mockResolvedValue(mockCachedResponse),
-          set: jest.fn(),
-          wrap: jest.fn(),
-          del: jest.fn(),
-          reset: jest.fn(),
-          store: {
-            get: jest.fn(),
-            set: jest.fn(),
-          },
+          get: vi.fn().mockResolvedValue(mockCachedResponse),
+          set: vi.fn(),
+          wrap: vi.fn(),
+          del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
+          reset: vi.fn(),
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const result = await provider.callApi('test prompt');
 
@@ -314,19 +348,30 @@ describe('Fal Provider', () => {
       });
 
       it('should set cache when enabled and response is fresh', async () => {
-        jest.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
         const mockCache = {
-          get: jest.fn().mockResolvedValue(null),
-          set: jest.fn(),
-          wrap: jest.fn(),
-          del: jest.fn(),
-          reset: jest.fn(),
-          store: {
-            get: jest.fn(),
-            set: jest.fn(),
-          },
+          get: vi.fn().mockResolvedValue(null),
+          set: vi.fn(),
+          wrap: vi.fn(),
+          del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
+          reset: vi.fn(),
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {
@@ -351,19 +396,30 @@ describe('Fal Provider', () => {
       });
 
       it('should handle cache set errors gracefully', async () => {
-        jest.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
         const mockCache = {
-          get: jest.fn().mockResolvedValue(null),
-          set: jest.fn().mockRejectedValue(new Error('Cache error')),
-          wrap: jest.fn(),
-          del: jest.fn(),
-          reset: jest.fn(),
-          store: {
-            get: jest.fn(),
-            set: jest.fn(),
-          },
+          get: vi.fn().mockResolvedValue(null),
+          set: vi.fn().mockRejectedValue(new Error('Cache error')),
+          wrap: vi.fn(),
+          del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
+          reset: vi.fn(),
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {
@@ -409,7 +465,7 @@ describe('Fal Provider', () => {
 
     describe('client initialization', () => {
       it('should lazy load the fal client', async () => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
 
         const newProvider = new FalImageGenerationProvider('fal-ai/flux/schnell', {
           config: { apiKey: 'test-api-key' },

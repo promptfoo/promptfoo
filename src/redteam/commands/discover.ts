@@ -8,18 +8,19 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
+import { HttpProvider } from '../../providers/http';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
 // ========================================================
 // Schemas
@@ -27,7 +28,7 @@ import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 
 const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
-  answers: z.array(z.string()),
+  answers: z.array(z.any()),
 });
 
 export const TargetPurposeDiscoveryRequestSchema = z.object({
@@ -243,6 +244,19 @@ export async function doTargetPurposeDiscovery(
           `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
 
+        // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
+        // prompt the user to define a transformResponse.
+        if (
+          target instanceof HttpProvider &&
+          target.config.transformResponse === undefined &&
+          typeof targetResponse.output === 'object' &&
+          targetResponse.output !== null
+        ) {
+          logger.warn(
+            `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
+          );
+        }
+
         state.answers.push(targetResponse.output);
       }
     } finally {
@@ -306,9 +320,7 @@ export function discoverCommand(
       }
 
       // Record telemetry:
-      telemetry.record('command_used', {
-        name: `redteam ${COMMAND}`,
-      });
+      telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports

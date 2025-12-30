@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -206,6 +207,49 @@ describe('eval routes', () => {
       expect(updatedEval.prompts[result.promptIdx].metrics?.score).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testPassCount).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testFailCount).toBe(1);
+    });
+  });
+
+  describe('GET /:id/metadata-keys', () => {
+    it('should return metadata keys for valid eval', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      // Add eval results with metadata using direct database insert
+      const { getDb } = await import('../../src/database');
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
+        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
+      );
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('keys');
+      expect(res.body.keys).toEqual(expect.arrayContaining(['key1', 'key2', 'key3']));
+    });
+
+    it('should return 404 for non-existent eval', async () => {
+      const res = await request(app).get('/api/eval/non-existent-id/metadata-keys');
+
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Eval not found');
+    });
+
+    it('should return empty keys array for eval with no metadata', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('keys');
+      expect(res.body.keys).toEqual([]);
     });
   });
 });

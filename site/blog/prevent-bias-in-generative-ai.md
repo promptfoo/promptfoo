@@ -98,7 +98,7 @@ Deploy **bias detection tools** before development. Use sentiment analysis and n
 
 **Red team** your application to detect failure modes across a wide range of inputs. There are tools ([like Promptfoo](/docs/red-team/)) that can help you automate thousands of inputs and outputs.
 
-Set up **guardrails** to catch biased outputs. These are typically provided as [APIs](/docs/red-team/guardrails/) that can classify inputs or outputs, and block, modify, or flag them for human review.
+Set up **guardrails** to catch biased outputs. These are typically provided as APIs that can classify inputs or outputs, and block, modify, or flag them for human review.
 
 ### 3. Fine-tune models
 

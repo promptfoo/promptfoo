@@ -1,38 +1,52 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { Plugins } from '../../../src/redteam/plugins';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
 import { CustomPlugin } from '../../../src/redteam/plugins/custom';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer';
 import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/cliState', () => ({
+vi.mock('../../../src/cache');
+vi.mock('../../../src/cliState', () => ({
   __esModule: true,
   default: { remote: false },
 }));
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
-  neverGenerateRemote: jest.fn().mockReturnValue(false),
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
-}));
-jest.mock('../../../src/util', () => ({
-  ...jest.requireActual('../../../src/util'),
-  maybeLoadFromExternalFile: jest.fn().mockReturnValue({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
+vi.mock('../../../src/util', async () => ({
+  ...(await vi.importActual('../../../src/util')),
+
+  maybeLoadFromExternalFile: vi.fn().mockReturnValue({
     generator: 'Generate test prompts',
     grader: 'Grade the response',
   }),
 }));
+vi.mock('../../../src/integrations/huggingfaceDatasets', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    fetchHuggingFaceDataset: vi
+      .fn()
+      .mockResolvedValue([{ vars: { prompt: 'test prompt', category: 'test' } }]),
+  };
+});
 
 // Mock contracts plugin to ensure it has canGenerateRemote = true
-jest.mock('../../../src/redteam/plugins/contracts', () => {
-  const original = jest.requireActual('../../../src/redteam/plugins/contracts');
+vi.mock('../../../src/redteam/plugins/contracts', async () => {
+  const original = await vi.importActual('../../../src/redteam/plugins/contracts');
   return {
     ...original,
   };
@@ -43,16 +57,16 @@ describe('canGenerateRemote property and behavior', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Sample output',
         error: null,
       }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
 
     // Reset all mocks
-    jest.clearAllMocks();
-    jest.mocked(fetchWithCache).mockReset();
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
   });
 
   describe('Plugin canGenerateRemote property', () => {
@@ -70,7 +84,9 @@ describe('canGenerateRemote property and behavior', () => {
 
   describe('Remote generation behavior', () => {
     it('should not use remote generation for dataset-based plugins even when shouldGenerateRemote is true', async () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const unsafeBenchPlugin = Plugins.find((p) => p.key === 'unsafebench');
 
@@ -87,7 +103,9 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use remote generation for LLM-based plugins when shouldGenerateRemote is true', async () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       // Force the canGenerateRemote property to be true for this test
       const originalContractPlugin = Plugins.find((p) => p.key === 'contracts');
@@ -98,7 +116,7 @@ describe('canGenerateRemote property and behavior', () => {
       // Create a mock plugin with canGenerateRemote=true
       const mockContractPlugin = {
         ...originalContractPlugin,
-        action: jest.fn().mockImplementation(async () => {
+        action: vi.fn().mockImplementation(async function () {
           await fetchWithCache('http://test-url/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -127,7 +145,9 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
 
       // Use the plugin from Plugins array directly
       const contractPlugin = Plugins.find((p) => p.key === 'contracts');

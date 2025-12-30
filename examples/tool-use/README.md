@@ -70,6 +70,16 @@ This example uses a simple weather lookup function that takes a location and opt
 
 External tools can also be loaded from separate files, as demonstrated with `external_tools.yaml`.
 
+### Anthropic Strict Mode
+
+The Anthropic provider includes an example with `strict: true` enabled, which uses Anthropic's structured outputs feature to guarantee that tool parameters exactly match your schema. This is useful for:
+
+- Building reliable agentic workflows
+- Ensuring type-safe function calls
+- Production systems that require guaranteed schema conformance
+
+When `strict: true` is enabled, Claude will always return tool inputs that strictly follow your `input_schema`, with no type mismatches or missing required fields. See the [Anthropic structured outputs example](../anthropic/structured-outputs) for more details.
+
 ## Finish Reason Assertions
 
 This example also demonstrates the use of `finish-reason` assertions to validate why a model stopped generating:

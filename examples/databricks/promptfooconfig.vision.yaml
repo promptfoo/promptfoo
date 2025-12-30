@@ -6,7 +6,7 @@ prompts:
   - file://vision-prompt.json
 
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4
     config:
       isPayPerToken: true
       temperature: 0.1

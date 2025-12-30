@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
-import CrispChat from '@app/components/CrispChat';
+import PylonChat from '@app/components/PylonChat';
+import { Spinner } from '@app/components/ui/spinner';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
@@ -14,7 +15,7 @@ export default function ReportPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({
-    title: evalId ? 'Red team report' : 'Red team reports',
+    title: 'Red Team Vulnerability Reports',
     description: 'View or browse red team results',
   });
 
@@ -29,7 +30,12 @@ export default function ReportPage() {
   }, [isLoading, email, navigate]);
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex flex-col gap-3 justify-center items-center h-36">
+        <Spinner className="h-6 w-6" />
+        <span className="text-sm text-muted-foreground">Waiting for report data</span>
+      </div>
+    );
   }
 
   if (!email) {
@@ -40,7 +46,7 @@ export default function ReportPage() {
   return (
     <UserProvider>
       {evalId ? <Report /> : <ReportIndex />}
-      <CrispChat />
+      <PylonChat />
     </UserProvider>
   );
 }

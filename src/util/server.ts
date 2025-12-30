@@ -1,17 +1,28 @@
+import chalk from 'chalk';
 import opener from 'opener';
-import { fetchWithCache } from '../cache';
 import { getDefaultPort, VERSION } from '../constants';
 import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
+import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
 
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-  OPEN_TO_REDTEAM_CREATE = 4,
-}
+export const BrowserBehavior = {
+  ASK: 0,
+  OPEN: 1,
+  SKIP: 2,
+  OPEN_TO_REPORT: 3,
+  OPEN_TO_REDTEAM_CREATE: 4,
+} as const;
+export type BrowserBehavior = (typeof BrowserBehavior)[keyof typeof BrowserBehavior];
+
+// Reverse lookup for BrowserBehavior names
+export const BrowserBehaviorNames: Record<BrowserBehavior, string> = {
+  [BrowserBehavior.ASK]: 'ASK',
+  [BrowserBehavior.OPEN]: 'OPEN',
+  [BrowserBehavior.SKIP]: 'SKIP',
+  [BrowserBehavior.OPEN_TO_REPORT]: 'OPEN_TO_REPORT',
+  [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: 'OPEN_TO_REDTEAM_CREATE',
+};
 
 // Cache for feature detection results to avoid repeated version checks
 const featureCache = new Map<string, boolean>();
@@ -49,14 +60,12 @@ export async function checkServerFeatureSupport(
     const versionUrl = getRemoteVersionUrl();
 
     if (versionUrl) {
-      const { data } = await fetchWithCache(
-        versionUrl,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        5000,
-      );
+      const response = await fetchWithProxy(versionUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
 
       if (data.buildDate) {
         // Parse build date and check if it's after the required date
@@ -89,12 +98,17 @@ export async function checkServerFeatureSupport(
 }
 
 export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {
+  logger.debug(`Checking for existing server on port ${port}...`);
   try {
-    const response = await fetch(`http://localhost:${port}/health`);
+    const response = await fetchWithProxy(`http://localhost:${port}/health`, {
+      headers: {
+        'x-promptfoo-silent': 'true',
+      },
+    });
     const data = await response.json();
     return data.status === 'OK' && data.version === VERSION;
   } catch (err) {
-    logger.debug(`Failed to check server health: ${String(err)}`);
+    logger.debug(`No existing server found - this is expected on first startup. ${String(err)}`);
     return false;
   }
 }
@@ -126,6 +140,61 @@ export async function openBrowser(
       await doOpen();
     }
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
+    await doOpen();
+  }
+}
+
+/**
+ * Opens authentication URLs in the browser with environment-aware behavior.
+ *
+ * @param authUrl - The login/signup URL to open in the browser
+ * @param welcomeUrl - The URL where users can get their API token after login
+ * @param browserBehavior - Controls how the browser opening is handled:
+ *   - BrowserBehavior.ASK: Prompts user before opening (defaults to yes)
+ *   - BrowserBehavior.OPEN: Opens browser automatically without prompting
+ *   - BrowserBehavior.SKIP: Shows manual URLs without opening browser
+ * @returns Promise that resolves when the operation completes
+ *
+ * @example
+ * ```typescript
+ * // Prompt user to open login page
+ * await openAuthBrowser(
+ *   'https://promptfoo.app',
+ *   'https://promptfoo.app/welcome',
+ *   BrowserBehavior.ASK
+ * );
+ * ```
+ */
+export async function openAuthBrowser(
+  authUrl: string,
+  welcomeUrl: string,
+  browserBehavior: BrowserBehavior,
+): Promise<void> {
+  const doOpen = async () => {
+    try {
+      logger.info(`Opening ${authUrl} in your browser...`);
+      await opener(authUrl);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+    } catch (err) {
+      logger.error(`Failed to open browser: ${String(err)}`);
+      // Fallback to showing URLs manually
+      logger.info(`Please visit: ${chalk.green(authUrl)}`);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+    }
+  };
+
+  if (browserBehavior === BrowserBehavior.ASK) {
+    const shouldOpen = await promptYesNo('Open login page in browser?', true);
+    if (shouldOpen) {
+      await doOpen();
+    } else {
+      logger.info(`Please visit: ${chalk.green(authUrl)}`);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+    }
+  } else if (browserBehavior === BrowserBehavior.SKIP) {
+    logger.info(`Please visit: ${chalk.green(authUrl)}`);
+    logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+  } else {
     await doOpen();
   }
 }

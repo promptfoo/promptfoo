@@ -1,24 +1,23 @@
-import { randomUUID } from 'crypto';
-
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
-import { getDb } from '../database';
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
-import { type EvaluateResult } from '../types';
+import {
+  type ApiProvider,
+  type AtomicTestCase,
+  type EvaluateResult,
+  type GradingResult,
+  isResultFailureReason,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
+  ResultFailureReason,
+} from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
-
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  GradingResult,
-  Prompt,
-  ProviderOptions,
-  ProviderResponse,
-  ResultFailureReason,
-} from '../types';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
@@ -79,15 +78,24 @@ export default class EvalResult {
       testCase,
     } = result;
 
-    const args = {
-      id: randomUUID(),
+    // Normalize provider for storage and extract blobs from responses
+    const preSanitizeTestCase = {
+      ...testCase,
+      ...(testCase.provider && {
+        provider: sanitizeProvider(testCase.provider),
+      }),
+    };
+
+    const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
-      testCase: {
-        ...testCase,
-        ...(testCase.provider && {
-          provider: sanitizeProvider(testCase.provider),
-        }),
-      },
+      testIdx: result.testIdx,
+      promptIdx: result.promptIdx,
+    });
+
+    const args = {
+      id: crypto.randomUUID(),
+      evalId,
+      testCase: preSanitizeTestCase,
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,
@@ -95,7 +103,7 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: result.response || null,
+      response: processedResponse || null,
       gradingResult: gradingResult || null,
       namedScores,
       provider: sanitizeProvider(provider),
@@ -116,13 +124,26 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        const dbResult = await tx
+    const processedResults: EvaluateResult[] = [];
+    for (const result of results) {
+      const processedResponse = isBlobStorageEnabled()
+        ? await extractAndStoreBinaryData(result.response, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          })
+        : result.response;
+      processedResults.push({ ...result, response: processedResponse ?? undefined });
+    }
+
+    db.transaction(() => {
+      for (const result of processedResults) {
+        const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+          .values({ ...result, evalId, id: crypto.randomUUID() })
+          .returning()
+          .get();
+        returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
       }
     });
     return returnResults;
@@ -167,6 +188,23 @@ export default class EvalResult {
       );
 
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  /**
+   * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
+   * Key format: `${testIdx}:${promptIdx}`
+   */
+  static async getCompletedIndexPairs(evalId: string): Promise<Set<string>> {
+    const db = getDb();
+    const rows = await db
+      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, evalId));
+    const ret = new Set<string>();
+    for (const r of rows) {
+      ret.add(`${r.testIdx}:${r.promptIdx}`);
+    }
+    return ret;
   }
 
   // This is a generator that yields batches of results from the database
@@ -243,7 +281,7 @@ export default class EvalResult {
     latencyMs?: number | null;
     cost?: number | null;
     metadata?: Record<string, any> | null;
-    failureReason: ResultFailureReason;
+    failureReason: ResultFailureReason | number;
     persisted?: boolean;
   }) {
     this.id = opts.id;
@@ -264,7 +302,9 @@ export default class EvalResult {
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
     this.metadata = opts.metadata || {};
-    this.failureReason = opts.failureReason;
+    this.failureReason = isResultFailureReason(opts.failureReason)
+      ? opts.failureReason
+      : ResultFailureReason.NONE;
     this.persisted = opts.persisted || false;
     this.pluginId = opts.testCase.metadata?.pluginId;
   }

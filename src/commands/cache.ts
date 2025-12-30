@@ -1,7 +1,6 @@
 import { clearCache } from '../cache';
 import logger from '../logger';
-import telemetry from '../telemetry';
-import { setupEnv } from '../util';
+import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
 export function cacheCommand(program: Command) {
@@ -41,9 +40,5 @@ export function cacheCommand(program: Command) {
       } finally {
         clearInterval(interval);
       }
-
-      telemetry.record('command_used', {
-        name: 'cache_clear',
-      });
     });
 }

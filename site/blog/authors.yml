@@ -22,6 +22,12 @@ ben:
   url: https://github.com/benshipley
   image_url: /img/team/ben.jpeg
 
+dane:
+  name: Dane Schneider
+  title: Staff Engineer
+  url: https://github.com/danenania
+  image_url: /img/team/dane.jpeg
+
 faizan:
   name: Faizan Minhas
   title: Senior Engineer
@@ -49,7 +55,7 @@ michael:
 shuo:
   name: Guangshuo Zang
   title: Staff Engineer
-  url: https://github.com/guangshuo
+  url: https://github.com/mrflounder
   image_url: /img/team/shuo.jpeg
 
 steve:
@@ -60,8 +66,8 @@ steve:
 
 tabs:
   name: Tabs Fakier
-  title: Founding Developer Advocate
-  url: https://github.com/tabsfakier
+  title: Contributor
+  url: https://github.com/ladyofcode
   image_url: /img/team/tabs.jpeg
 
 vanessa:

@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-5.1 Reasoning and Verbosity Comparison
+prompts:
+  - |
+    Please help me solve this coding problem:
+    {{coding_problem}}
+
+providers:
+  - id: openai:responses:gpt-5.1
+    label: gpt-5.1-none-low-verbosity
+    config:
+      reasoning:
+        effort: 'none' # Default - no reasoning tokens, fastest
+      verbosity: 'low' # Concise output
+      max_output_tokens: 1000
+
+  - id: openai:responses:gpt-5.1
+    label: gpt-5.1-medium-reasoning
+    config:
+      reasoning:
+        effort: 'medium' # Balanced reasoning
+      verbosity: 'medium' # Default verbosity
+      max_output_tokens: 2000
+
+  - id: openai:responses:gpt-5.1
+    label: gpt-5.1-high-reasoning
+    config:
+      reasoning:
+        effort: 'high' # Maximum reasoning for complex tasks
+      verbosity: 'high' # Detailed output
+      max_output_tokens: 4000
+
+tests:
+  - vars:
+      coding_problem: 'Write a Python function to find the longest palindromic substring in a given string. Optimize for time complexity.'
+    assert:
+      - type: javascript
+        value: output.toLowerCase().includes('palindrome')
+      - type: javascript
+        value: output.toLowerCase().includes('def ') || output.toLowerCase().includes('function')
+
+  - vars:
+      coding_problem: 'Implement a function to reverse a linked list in-place without using extra space. Return the new head.'
+    assert:
+      - type: contains
+        value: 'head'
+      - type: javascript
+        value: output.toLowerCase().includes('next') || output.toLowerCase().includes('pointer')
+
+  - vars:
+      coding_problem: 'Given a binary tree, write a function to find the maximum path sum. A path can start and end at any node in the tree.'
+    assert:
+      - type: llm-rubric
+        value: 'Solution correctly handles maximum path sum in a binary tree'

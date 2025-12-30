@@ -1,8 +1,10 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
@@ -10,6 +12,7 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
+import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -71,6 +74,8 @@ export interface GeminiResponseData {
   promptFeedback?: {
     safetyRatings: Array<{ category: string; probability: string }>;
     blockReason: any;
+    /** Message explaining why content was blocked (e.g., by Model Armor) */
+    blockReasonMessage?: string;
   };
 }
 
@@ -130,7 +135,10 @@ const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
 
-export function maybeCoerceToGeminiFormat(contents: any): {
+export function maybeCoerceToGeminiFormat(
+  contents: any,
+  options?: { useAssistantRole?: boolean },
+): {
   contents: GeminiFormat;
   coerced: boolean;
   systemInstruction: { parts: [Part, ...Part[]] } | undefined;
@@ -163,6 +171,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   // Handle native Gemini format with system_instruction
   if (
     typeof contents === 'object' &&
+    contents !== null &&
     !Array.isArray(contents) &&
     'system_instruction' in contents
   ) {
@@ -194,14 +203,20 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     contents.every((item) => typeof item.content === 'string')
   ) {
     // This looks like an OpenAI chat format
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => ({
-      role: item.role as 'user' | 'model' | undefined,
+      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
       parts: [{ text: item.content }],
     }));
     coerced = true;
   } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
     // This looks like an OpenAI chat format with content that might be an array or object
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => {
+      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
+        | 'user'
+        | 'model'
+        | undefined;
       if (Array.isArray(item.content)) {
         // Handle array content
         const parts = item.content.map((contentItem: any) => {
@@ -215,34 +230,39 @@ export function maybeCoerceToGeminiFormat(contents: any): {
           }
         });
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts,
         };
       } else if (typeof item.content === 'object') {
         // Handle object content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [item.content],
         };
       } else {
         // Handle string content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [{ text: item.content }],
         };
       }
     });
     coerced = true;
-  } else if (typeof contents === 'object' && 'parts' in contents) {
+  } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
+    // Ensure we always return an array, even for unknown formats
+    // This prevents "contents.map is not a function" errors downstream
+    // For arrays that don't match known formats, we still return them as-is
+    // since they're already arrays and won't cause .map() errors
+    const fallbackContents: GeminiFormat = Array.isArray(contents) ? contents : [];
+    return { contents: fallbackContents, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -255,6 +275,19 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return true;
   });
 
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
+    coerced = true;
+    systemPromptParts = [];
+  }
+
   return {
     contents: coercedContents,
     coerced,
@@ -264,24 +297,94 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 }
 
 let cachedAuth: GoogleAuth | undefined;
-export async function getGoogleClient() {
+
+/**
+ * Loads and processes Google credentials from various sources
+ */
+export function loadCredentials(credentials?: string): string | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  if (credentials.startsWith('file://')) {
+    try {
+      return maybeLoadFromExternalFile(credentials) as string;
+    } catch (error) {
+      throw new Error(`Failed to load credentials from file: ${error}`);
+    }
+  }
+
+  return credentials;
+}
+
+/**
+ * Creates a Google client with optional custom credentials
+ */
+export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
   if (!cachedAuth) {
     let GoogleAuth;
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
+      cachedAuth = new GoogleAuth({
+        scopes: 'https://www.googleapis.com/auth/cloud-platform',
+      });
     } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
     }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
   }
-  const client = await cachedAuth.getClient();
-  const projectId = await cachedAuth.getProjectId();
+
+  const processedCredentials = loadCredentials(credentials);
+
+  let client;
+  if (processedCredentials) {
+    try {
+      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
+    } catch (error) {
+      logger.error(`[Vertex] Could not load credentials: ${error}`);
+      throw new Error(`[Vertex] Could not load credentials: ${error}`);
+    }
+  } else {
+    client = await cachedAuth.getClient();
+  }
+
+  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
+  // This allows the fallback logic in resolveProjectId to work properly
+  let projectId;
+  try {
+    projectId = await cachedAuth.getProjectId();
+  } catch {
+    // If Google Auth Library can't detect project ID from environment,
+    // let resolveProjectId handle the fallback logic
+    projectId = undefined;
+  }
+
   return { client, projectId };
+}
+
+/**
+ * Gets project ID from config, environment, or Google client
+ */
+export async function resolveProjectId(
+  config: { projectId?: string; credentials?: string },
+  env?: EnvOverrides,
+): Promise<string> {
+  const processedCredentials = loadCredentials(config.credentials);
+  const { projectId: googleProjectId } = await getGoogleClient({
+    credentials: processedCredentials,
+  });
+
+  return (
+    config.projectId ||
+    env?.VERTEX_PROJECT_ID ||
+    env?.GOOGLE_PROJECT_ID ||
+    getEnvString('VERTEX_PROJECT_ID') ||
+    getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
+    ''
+  );
 }
 
 export async function hasGoogleDefaultCredentials() {
@@ -295,11 +398,35 @@ export async function hasGoogleDefaultCredentials() {
 
 export function getCandidate(data: GeminiResponseData) {
   if (!data || !data.candidates || data.candidates.length < 1) {
-    throw new Error('Expected at least one candidate in AI Studio API response.');
+    // Check if the prompt was blocked
+    let errorDetails = 'No candidates returned in API response.';
+
+    if (data?.promptFeedback?.blockReason) {
+      errorDetails = `Response blocked: ${data.promptFeedback.blockReason}`;
+      if (data.promptFeedback.safetyRatings) {
+        const flaggedCategories = data.promptFeedback.safetyRatings
+          .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+          .map((rating) => `${rating.category}: ${rating.probability}`);
+        if (flaggedCategories.length > 0) {
+          errorDetails += ` (Safety ratings: ${flaggedCategories.join(', ')})`;
+        }
+      }
+    } else if (data?.promptFeedback?.safetyRatings) {
+      const flaggedCategories = data.promptFeedback.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+        .map((rating) => `${rating.category}: ${rating.probability}`);
+      if (flaggedCategories.length > 0) {
+        errorDetails = `Response may have been blocked due to safety filters: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    errorDetails += `\n\nGot response: ${JSON.stringify(data)}`;
+
+    throw new Error(errorDetails);
   }
   if (data.candidates.length > 1) {
     logger.debug(
-      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}: ${JSON.stringify(data)}`,
     );
   }
   const candidate = data.candidates[0];
@@ -307,6 +434,38 @@ export function getCandidate(data: GeminiResponseData) {
 }
 
 export function formatCandidateContents(candidate: Candidate) {
+  // Check if the candidate was blocked or stopped for safety reasons
+  if (
+    candidate.finishReason &&
+    ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(
+      candidate.finishReason,
+    )
+  ) {
+    let errorMessage = `Response was blocked with finish reason: ${candidate.finishReason}`;
+
+    if (candidate.safetyRatings) {
+      const flaggedCategories = candidate.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE' || rating.blocked)
+        .map(
+          (rating) =>
+            `${rating.category}: ${rating.probability}${rating.blocked ? ' (BLOCKED)' : ''}`,
+        );
+      if (flaggedCategories.length > 0) {
+        errorMessage += `\nSafety ratings: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    if (candidate.finishReason === 'RECITATION') {
+      errorMessage +=
+        "\n\nThis typically occurs when the response is too similar to content from the model's training data.";
+    } else if (candidate.finishReason === 'SAFETY') {
+      errorMessage +=
+        '\n\nThe response was blocked due to safety filters. Consider adjusting safety settings or modifying your prompt.';
+    }
+
+    throw new Error(errorMessage);
+  }
+
   if (candidate.content?.parts) {
     let output = '';
     let is_text = true;
@@ -404,35 +563,60 @@ export function loadFile(
 }
 
 function isValidBase64Image(data: string): boolean {
-  if (!data || data.length < 100) {
+  // Handle both data URLs and raw base64
+  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
+
+  // Minimum length check: smallest valid GIF is ~35 chars
+  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
+  if (!base64Data || base64Data.length < 20) {
     return false;
   }
 
   try {
     // Verify it's valid base64
-    Buffer.from(data, 'base64');
+    Buffer.from(base64Data, 'base64');
 
-    // Check for known image format headers
+    // Check for known image format headers (magic numbers)
     return (
-      data.startsWith('/9j/') || // JPEG
-      data.startsWith('iVBORw0KGgo') || // PNG
-      data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGR') // WebP
+      base64Data.startsWith('/9j/') || // JPEG
+      base64Data.startsWith('iVBORw0KGgo') || // PNG
+      base64Data.startsWith('R0lGODlh') || // GIF89a
+      base64Data.startsWith('R0lGODdh') || // GIF87a
+      base64Data.startsWith('UklGR') || // WebP (RIFF)
+      base64Data.startsWith('Qk0') || // BMP
+      base64Data.startsWith('Qk1') || // BMP (alternate)
+      base64Data.startsWith('SUkq') || // TIFF (little-endian)
+      base64Data.startsWith('TU0A') || // TIFF (big-endian)
+      base64Data.startsWith('AAABAA') // ICO
     );
   } catch {
     return false;
   }
 }
 
-function getMimeTypeFromBase64(base64Data: string): string {
+function getMimeTypeFromBase64(base64DataOrUrl: string): string {
+  // Try to extract MIME type from data URL first
+  const parsed = parseDataUrl(base64DataOrUrl);
+  if (parsed) {
+    return parsed.mimeType;
+  }
+
+  // Fallback to magic number detection for raw base64
+  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh')) {
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
   } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
   }
   // Default to jpeg for unknown formats
   return 'image/jpeg';
@@ -444,6 +628,16 @@ function processImagesInContents(
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
+  }
+
+  // Guard: ensure contents is an array
+  if (!Array.isArray(contents)) {
+    logger.warn('[Google] contents is not an array in processImagesInContents', {
+      contentsType: typeof contents,
+      contentsValue: contents,
+    });
+    // Return empty array as fallback to prevent .map() error
+    return [];
   }
 
   const base64ToVarName = new Map<string, string>();
@@ -483,10 +677,14 @@ function processImagesInContents(
 
               // Add the image part
               const mimeType = getMimeTypeFromBase64(trimmedLine);
+              // Extract raw base64 data (Google expects raw base64, not data URLs)
+              const base64Data = isDataUrl(trimmedLine)
+                ? extractBase64FromDataUrl(trimmedLine)
+                : trimmedLine;
               processedParts.push({
                 inlineData: {
                   mimeType,
-                  data: trimmedLine,
+                  data: base64Data,
                 },
               });
             } else {
@@ -526,10 +724,57 @@ function processImagesInContents(
   });
 }
 
+/**
+ * Parses and processes config-level systemInstruction.
+ * Handles file loading, string-to-Content conversion, and Nunjucks template rendering.
+ *
+ * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
+ * @param contextVars - Variables for Nunjucks template rendering
+ * @returns Processed Content object or undefined
+ */
+function parseConfigSystemInstruction(
+  configSystemInstruction: Content | string | undefined,
+  contextVars?: Record<string, string | object>,
+): Content | undefined {
+  if (!configSystemInstruction) {
+    return undefined;
+  }
+
+  // Make a copy to avoid mutating the original
+  let configInstruction = clone(configSystemInstruction);
+
+  // Load systemInstruction from file if it's a file path
+  if (typeof configSystemInstruction === 'string') {
+    configInstruction = loadFile(configSystemInstruction, contextVars);
+  }
+
+  // Convert string to Content structure
+  if (typeof configInstruction === 'string') {
+    configInstruction = { parts: [{ text: configInstruction }] };
+  }
+
+  // Render Nunjucks templates in all text parts
+  if (contextVars && configInstruction) {
+    const nunjucks = getNunjucksEngine();
+    for (const part of configInstruction.parts) {
+      if (part.text) {
+        try {
+          part.text = nunjucks.renderString(part.text, contextVars);
+        } catch (err) {
+          throw new Error(`Unable to render nunjucks in systemInstruction: ${err}`);
+        }
+      }
+    }
+  }
+
+  return configInstruction;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,
+  options?: { useAssistantRole?: boolean },
 ): {
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
@@ -548,41 +793,22 @@ export function geminiFormatAndSystemInstructions(
     contents: updatedContents,
     coerced,
     systemInstruction: parsedSystemInstruction,
-  } = maybeCoerceToGeminiFormat(contents);
+  } = maybeCoerceToGeminiFormat(contents, options);
   if (coerced) {
     logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
-  if (configSystemInstruction && !systemInstruction) {
-    // Make a copy
-    systemInstruction = clone(configSystemInstruction);
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-    // Load SI from file
-    if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
-    }
-
-    // Format SI if string was not a filepath above
-    if (typeof systemInstruction === 'string') {
-      systemInstruction = { parts: [{ text: systemInstruction }] };
-    }
-
-    if (contextVars && systemInstruction) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          try {
-            part.text = nunjucks.renderString(part.text, contextVars);
-          } catch (err) {
-            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
-          }
-        }
-      }
-    }
-  } else if (configSystemInstruction && systemInstruction) {
-    throw new Error(`Template error: system instruction defined in prompt and config.`);
+  const parsedConfigInstruction = parseConfigSystemInstruction(
+    configSystemInstruction,
+    contextVars,
+  );
+  if (parsedConfigInstruction) {
+    systemInstruction = systemInstruction
+      ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
+      : parsedConfigInstruction;
   }
 
   // Process images in contents

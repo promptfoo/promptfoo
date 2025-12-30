@@ -18,7 +18,9 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
+
+import type { ModelAuditScanResults } from '../types/modelAudit';
 
 // ------------ Prompts ------------
 
@@ -62,10 +64,15 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
+    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<
+      Partial<import('../types').EvaluateOptions>
+    >(),
+    isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
+    isRedteamIdx: index('evals_is_redteam_idx').on(table.isRedteam),
   }),
 );
 
@@ -108,6 +115,15 @@ export const evalResultsTable = sqliteTable(
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
     testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
+
+    evalTestIdx: index('eval_result_eval_test_idx').on(table.evalId, table.testIdx),
+    evalSuccessIdx: index('eval_result_eval_success_idx').on(table.evalId, table.success),
+    evalFailureIdx: index('eval_result_eval_failure_idx').on(table.evalId, table.failureReason),
+    evalTestSuccessIdx: index('eval_result_eval_test_success_idx').on(
+      table.evalId,
+      table.testIdx,
+      table.success,
+    ),
 
     responseIdx: index('eval_result_response_idx').on(table.response),
 
@@ -189,6 +205,45 @@ export const evalsToTagsRelations = relations(evalsToTagsTable, ({ one }) => ({
     references: [tagsTable.id],
   }),
 }));
+
+// ------------ Blobs ------------
+
+export const blobAssetsTable = sqliteTable(
+  'blob_assets',
+  {
+    hash: text('hash').primaryKey(),
+    sizeBytes: integer('size_bytes').notNull(),
+    mimeType: text('mime_type').notNull(),
+    provider: text('provider').notNull(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    providerIdx: index('blob_assets_provider_idx').on(table.provider),
+    createdAtIdx: index('blob_assets_created_at_idx').on(table.createdAt),
+  }),
+);
+
+export const blobReferencesTable = sqliteTable(
+  'blob_references',
+  {
+    id: text('id').primaryKey(),
+    blobHash: text('blob_hash')
+      .notNull()
+      .references(() => blobAssetsTable.hash, { onDelete: 'cascade' }),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evalsTable.id, { onDelete: 'cascade' }),
+    testIdx: integer('test_idx'),
+    promptIdx: integer('prompt_idx'),
+    location: text('location'), // e.g., response.audio.data, turns[0].audio.data
+    kind: text('kind'), // audio | image
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    blobIdx: index('blob_references_blob_idx').on(table.blobHash),
+    evalIdx: index('blob_references_eval_idx').on(table.evalId),
+  }),
+);
 
 // ------------ Datasets ------------
 
@@ -317,6 +372,60 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
   }),
 }));
 */
+
+// ------------ Model Audits ------------
+
+export const modelAuditsTable = sqliteTable(
+  'model_audits',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+
+    // Basic audit information
+    name: text('name'), // Optional name/identifier for the audit
+    author: text('author'), // Optional author/user who ran the audit
+    modelPath: text('model_path').notNull(), // Path to the model/file being audited
+    modelType: text('model_type'), // Optional: type of model (e.g., 'pytorch', 'tensorflow', etc.)
+
+    // Audit results as JSON blob
+    results: text('results', { mode: 'json' }).$type<ModelAuditScanResults>().notNull(),
+
+    // Extracted checks and issues from results for easier querying
+    checks: text('checks', { mode: 'json' }).$type<ModelAuditScanResults['checks']>(),
+    issues: text('issues', { mode: 'json' }).$type<ModelAuditScanResults['issues']>(),
+
+    // Summary fields for quick filtering/querying
+    hasErrors: integer('has_errors', { mode: 'boolean' }).notNull(),
+    totalChecks: integer('total_checks'),
+    passedChecks: integer('passed_checks'),
+    failedChecks: integer('failed_checks'),
+
+    // Optional metadata
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+
+    // Model revision tracking (dual-field approach for deduplication + security)
+    modelId: text('model_id'), // Normalized model identifier (e.g., "meta-llama/Llama-2-7b")
+    revisionSha: text('revision_sha'), // Native revision (HF Git SHA, S3 version ID, etc.) - nullable
+    contentHash: text('content_hash'), // SHA-256 of actual downloaded content - always present
+    modelSource: text('model_source'), // 'huggingface', 's3', 'gcs', 'local', etc.
+    sourceLastModified: integer('source_last_modified'), // Unix timestamp in milliseconds
+    scannerVersion: text('scanner_version'), // ModelAudit version used (e.g., "0.2.14")
+  },
+  (table) => ({
+    createdAtIdx: index('model_audits_created_at_idx').on(table.createdAt),
+    modelPathIdx: index('model_audits_model_path_idx').on(table.modelPath),
+    hasErrorsIdx: index('model_audits_has_errors_idx').on(table.hasErrors),
+    modelTypeIdx: index('model_audits_model_type_idx').on(table.modelType),
+
+    // Revision tracking indexes for deduplication queries
+    modelIdIdx: index('model_audits_model_id_idx').on(table.modelId),
+    revisionShaIdx: index('model_audits_revision_sha_idx').on(table.revisionSha),
+    contentHashIdx: index('model_audits_content_hash_idx').on(table.contentHash),
+    modelRevisionIdx: index('model_audits_model_revision_idx').on(table.modelId, table.revisionSha),
+    modelContentIdx: index('model_audits_model_content_idx').on(table.modelId, table.contentHash),
+  }),
+);
 
 // ------------ Traces ------------
 

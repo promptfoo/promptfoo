@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {
@@ -68,6 +69,7 @@ describe('EchoProvider', () => {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 

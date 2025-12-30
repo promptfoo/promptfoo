@@ -1,7 +1,7 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import NodeCache from 'node-cache';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -26,7 +26,7 @@ import {
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 
@@ -455,6 +455,21 @@ export async function deleteEval(evalId: string) {
 }
 
 /**
+ * Deletes evals by their IDs.
+ * @param ids - The IDs of the evals to delete.
+ */
+export function deleteEvals(ids: string[]) {
+  const db = getDb();
+  db.transaction(() => {
+    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+  });
+}
+
+/**
  * Deletes all evaluations and related records with foreign keys from the database.
  * @async
  * @returns {Promise<void>}
@@ -483,7 +498,13 @@ export type StandaloneEval = CompletedPrompt & {
   uuid: string;
 };
 
-const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
+const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
+  ttl: 60 * 60 * 2 * 1000, // 2 hours in milliseconds
+  // Cache entries are keyed by (limit, tag, description) filter combinations.
+  // 2000 handles heavy automation scenarios while keeping memory bounded (~few MB).
+  // On eviction, the next request simply re-queries the DB with minimal latency impact.
+  max: 2000,
+});
 
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
@@ -494,8 +515,8 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
-  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
+  const cachedResult = standaloneEvalCache.get(cacheKey);
 
   if (cachedResult) {
     return cachedResult;
@@ -529,58 +550,67 @@ export async function getStandaloneEvals({
     .limit(limit)
     .all();
 
-  // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
-  const standaloneEvals = (
-    await Promise.all(
-      results.map(async (result) => {
-        const {
-          description,
-          createdAt,
-          evalId,
-          promptId,
-          datasetId,
-          // @ts-ignore
-          isRedteam,
-        } = result;
-        const eval_ = await Eval.findById(evalId);
-        invariant(eval_, `Eval with ID ${evalId} not found`);
-        const table = (await eval_.getTable()) || { body: [] };
-        // @ts-ignore
-        return eval_.getPrompts().map((col, index) => {
-          // Compute some stats
-          const pluginCounts = table.body.reduce(
-            // @ts-ignore
-            (acc, row) => {
-              const pluginId = row.test.metadata?.pluginId;
-              if (pluginId) {
-                const isPass = row.outputs[index].pass;
-                acc.pluginPassCount[pluginId] =
-                  (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
-                acc.pluginFailCount[pluginId] =
-                  (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
-              }
-              return acc;
-            },
-            { pluginPassCount: {}, pluginFailCount: {} } as {
-              pluginPassCount: Record<string, number>;
-              pluginFailCount: Record<string, number>;
-            },
-          );
+  // Conservative optimization: Reduce N+1 by batching eval lookups while maintaining exact logic
+  const uniqueEvalIds = Array.from(new Set(results.map((r) => r.evalId)));
 
-          return {
-            evalId,
-            description,
-            promptId,
-            datasetId,
-            createdAt,
-            isRedteam: isRedteam as boolean,
-            ...pluginCounts,
-            ...col,
-          };
-        });
-      }),
-    )
-  ).flat();
+  // Batch load all unique evals to reduce N+1 queries
+  const evalPromises = uniqueEvalIds.map(async (evalId) => {
+    const eval_ = await Eval.findById(evalId);
+    invariant(eval_, `Eval with ID ${evalId} not found`);
+    const table = (await eval_.getTable()) || { body: [] };
+    return { evalId, eval_, table };
+  });
+
+  const evalData = await Promise.all(evalPromises);
+  const evalMap = new Map(evalData.map(({ evalId, eval_, table }) => [evalId, { eval_, table }]));
+
+  const standaloneEvals = results.flatMap((result) => {
+    const {
+      description,
+      createdAt,
+      evalId,
+      promptId,
+      datasetId,
+      // @ts-ignore
+      isRedteam,
+    } = result;
+
+    const evalInfo = evalMap.get(evalId);
+    invariant(evalInfo, `Eval with ID ${evalId} not found in map`);
+    const { eval_, table } = evalInfo;
+
+    // @ts-ignore
+    return eval_.getPrompts().map((col, index) => {
+      // Compute some stats - keep original logic exactly
+      const pluginCounts = table.body.reduce(
+        // @ts-ignore
+        (acc, row) => {
+          const pluginId = row.test.metadata?.pluginId;
+          if (pluginId) {
+            const isPass = row.outputs[index].pass;
+            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+          }
+          return acc;
+        },
+        { pluginPassCount: {}, pluginFailCount: {} } as {
+          pluginPassCount: Record<string, number>;
+          pluginFailCount: Record<string, number>;
+        },
+      );
+
+      return {
+        evalId,
+        description,
+        promptId,
+        datasetId,
+        createdAt,
+        isRedteam: isRedteam as boolean,
+        ...pluginCounts,
+        ...col,
+      };
+    });
+  });
 
   // Ensure each row has a UUID as the `id` and `evalId` properties are not unique!
   const withUUIDs = standaloneEvals.map((eval_) => ({

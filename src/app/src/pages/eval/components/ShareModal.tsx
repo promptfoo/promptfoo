@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
@@ -19,13 +19,21 @@ interface ShareModalProps {
   onShare: (id: string) => Promise<string>;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
+const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset state when evalId changes to prevent stale data
+  useEffect(() => {
+    setCopied(false);
+    setShowNeedsSignup(false);
+    setShareUrl('');
+    setError(null);
+  }, [evalId]);
 
   useEffect(() => {
     const handleShare = async () => {
@@ -160,9 +168,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
               }}
             />
             <DialogContentText sx={{ fontSize: '0.75rem' }}>
-              {shareUrl.includes('api.promptfoo.dev')
-                ? 'Shared URLs are deleted after 2 weeks.'
-                : 'This URL is accessible to users with access to your organization.'}
+              This URL is accessible to users with access to your organization.
             </DialogContentText>
           </DialogContent>
           <DialogActions>

@@ -4,8 +4,13 @@ import logger from '../logger';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, CallApiContextParams, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 
 const AI21_CHAT_MODELS = [
   {
@@ -142,7 +147,6 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     };
 
     const url = `${this.getApiUrl()}/chat/completions`;
-    logger.debug(`AI21 API request: ${url} ${JSON.stringify(body)}`);
 
     let data,
       cached = false;
@@ -165,8 +169,6 @@ export class AI21ChatCompletionProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`AI21 API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       return {

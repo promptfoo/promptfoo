@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MedicalIncorrectKnowledgePluginGrader } from '../../../../src/redteam/plugins/medical/medicalIncorrectKnowledge';
 
 describe('MedicalIncorrectKnowledgePluginGrader', () => {

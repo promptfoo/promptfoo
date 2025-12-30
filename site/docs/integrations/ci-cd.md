@@ -31,33 +31,17 @@ If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/
 
 For other platforms, here's a basic example:
 
-````bash
+```bash
 # Run eval (no global install required)
 npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
 # Run security scan (red teaming)
 npx promptfoo@latest redteam run
-```typescript
-interface OutputFile {
-  evalId?: string;
-  results: EvaluateSummary;
-  config: Partial<UnifiedConfig>;
-  shareableUrl: string | null;
-  metadata?: {
-    promptfooVersion: string;
-    nodeVersion: string;
-    platform: string;
-    arch: string;
-    exportedAt: string;
-    evaluationCreatedAt?: string;
-    author?: string;
-  };
-}
-````
+```
 
 ## Prerequisites
 
-- Node.js 18+ installed in your CI environment
+- Node.js 20+ installed in your CI environment
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments

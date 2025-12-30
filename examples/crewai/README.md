@@ -19,7 +19,7 @@ npx promptfoo@latest init --example crewai
 This example requires the following:
 
 1. **Python 3.10+**
-2. **Node.js 14+**
+2. **Node.js 20+**
 3. **OpenAI API Key** - You MUST have a valid OpenAI API key to run this example
 
 ## Environment Setup

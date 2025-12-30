@@ -1,21 +1,12 @@
-import type { AssertionParams, GradingResult } from '../types';
+import { matchesPattern } from './traceUtils';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceSpanDurationValue {
   pattern?: string;
   max: number;
   percentile?: number;
-}
-
-function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
 }
 
 function calculatePercentile(durations: number[], percentile: number): number {
@@ -28,8 +19,11 @@ function calculatePercentile(durations: number[], percentile: number): number {
   return sorted[Math.max(0, index)];
 }
 
-export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams): GradingResult => {
-  if (!context.trace || !context.trace.spans) {
+export const handleTraceSpanDuration = ({
+  assertion,
+  assertionValueContext,
+}: AssertionParams): GradingResult => {
+  if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
   }
 
@@ -39,7 +33,7 @@ export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams)
   }
 
   const { pattern = '*', max, percentile } = value;
-  const spans = context.trace.spans as TraceSpan[];
+  const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
   const matchingSpans = spans.filter((span) => {

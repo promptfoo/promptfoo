@@ -1,24 +1,40 @@
-import type { RunEvalOptions } from '../src/types';
+import cliProgress from 'cli-progress';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { RunEvalOptions } from '../src/types/index';
+
+// Create hoisted mock functions
+const mockBar = vi.hoisted(() => ({
+  increment: vi.fn(),
+  update: vi.fn(),
+  getTotal: vi.fn().mockImplementation(function (this: any) {
+    return this._total || 10;
+  }),
+}));
+
+const mockCreate = vi.hoisted(() =>
+  vi.fn().mockImplementation((total: number) => {
+    const bar = { ...mockBar, _total: total };
+    return bar;
+  }),
+);
+
+const mockStop = vi.hoisted(() => vi.fn());
+
+// Create a proper class for MultiBar mock
+const MockMultiBar = vi.hoisted(
+  () =>
+    class MockMultiBar {
+      create = mockCreate;
+      stop = mockStop;
+    },
+);
 
 // Mock dependencies
-jest.mock('cli-progress', () => {
-  const mockBar = {
-    increment: jest.fn(),
-    update: jest.fn(),
-    getTotal: jest.fn().mockImplementation(function (this: any) {
-      return this._total || 10;
-    }),
-  };
-
+vi.mock('cli-progress', () => {
   return {
     default: {
-      MultiBar: jest.fn().mockImplementation(() => ({
-        create: jest.fn().mockImplementation((total: number) => {
-          const bar = { ...mockBar, _total: total };
-          return bar;
-        }),
-        stop: jest.fn(),
-      })),
+      MultiBar: MockMultiBar,
       Presets: {
         shades_classic: {},
       },
@@ -26,21 +42,21 @@ jest.mock('cli-progress', () => {
   };
 });
 
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    warn: jest.fn(),
-    debug: jest.fn(),
-    info: jest.fn(),
-    error: jest.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
   logger: {
-    warn: jest.fn(),
-    debug: jest.fn(),
-    info: jest.fn(),
-    error: jest.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
-  setLogLevel: jest.fn(),
+  setLogLevel: vi.fn(),
 }));
 
 // Import after mocking - we need to extract ProgressBarManager from evaluator
@@ -48,7 +64,7 @@ jest.mock('../src/logger', () => ({
 
 describe('Progress Bar Management', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('ProgressBarManager Work Distribution', () => {
@@ -131,8 +147,7 @@ describe('Progress Bar Management', () => {
       // This test validates that comparison bars are created with the correct total
       // after we know the actual count of comparisons needed
 
-      const cliProgress = require('cli-progress').default;
-      const mockMultibar = new cliProgress.MultiBar();
+      const mockMultibar = new cliProgress.MultiBar({});
 
       // Simulate creating progress bars without knowing comparison count initially
       mockMultibar.create(2, 0); // 2 serial tasks
@@ -142,10 +157,10 @@ describe('Progress Bar Management', () => {
       mockMultibar.create(5, 0);
 
       // Verify the create method was called with correct totals
-      expect(mockMultibar.create).toHaveBeenCalledTimes(3);
-      expect(mockMultibar.create).toHaveBeenNthCalledWith(1, 2, 0);
-      expect(mockMultibar.create).toHaveBeenNthCalledWith(2, 3, 0);
-      expect(mockMultibar.create).toHaveBeenNthCalledWith(3, 5, 0);
+      expect(mockCreate).toHaveBeenCalledTimes(3);
+      expect(mockCreate).toHaveBeenNthCalledWith(1, 2, 0);
+      expect(mockCreate).toHaveBeenNthCalledWith(2, 3, 0);
+      expect(mockCreate).toHaveBeenNthCalledWith(3, 5, 0);
     });
   });
 });

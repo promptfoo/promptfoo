@@ -18,8 +18,14 @@ export async function getPrompt(
   let prompt;
 
   if (!langfuse) {
-    const { Langfuse } = await import('langfuse');
-    langfuse = new Langfuse(langfuseParams);
+    try {
+      const { Langfuse } = await import('langfuse');
+      langfuse = new Langfuse(langfuseParams);
+    } catch (_err) {
+      throw new Error(
+        'The langfuse package is required for Langfuse integration. Please install it with: npm install langfuse',
+      );
+    }
   }
 
   const options = label ? { label } : {};

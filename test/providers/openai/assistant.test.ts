@@ -1,14 +1,15 @@
 import OpenAI from 'openai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
-jest.mock('openai');
+vi.mock('openai');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -20,25 +21,25 @@ describe('OpenAI Provider', () => {
     let mockClient: any;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       mockClient = {
         beta: {
           threads: {
-            createAndRun: jest.fn(),
+            createAndRun: vi.fn(),
             runs: {
-              retrieve: jest.fn(),
-              submitToolOutputs: jest.fn(),
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
               steps: {
-                list: jest.fn(),
+                list: vi.fn(),
               },
             },
             messages: {
-              retrieve: jest.fn(),
+              retrieve: vi.fn(),
             },
           },
         },
       };
-      jest.mocked(OpenAI).mockImplementation(function (this: any) {
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
       });
@@ -49,7 +50,7 @@ describe('OpenAI Provider', () => {
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
-          test_function: async (args: string) => 'Function result',
+          test_function: async (_args: string) => 'Function result',
         },
       },
     });
@@ -231,35 +232,35 @@ describe('OpenAI Provider', () => {
     let mockClient: any;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       disableCache();
 
       mockClient = {
         beta: {
           threads: {
-            createAndRun: jest.fn(),
+            createAndRun: vi.fn(),
             runs: {
-              retrieve: jest.fn(),
-              submitToolOutputs: jest.fn(),
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
               steps: {
-                list: jest.fn(),
+                list: vi.fn(),
               },
             },
             messages: {
-              retrieve: jest.fn(),
+              retrieve: vi.fn(),
             },
           },
         },
       };
 
-      jest.mocked(OpenAI).mockImplementation(function (this: any) {
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
       });
     });
 
     it('should pass context to function callbacks', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('test result');
+      const mockCallback = vi.fn().mockResolvedValue('test result');
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -346,7 +347,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should work with callbacks that do not use context', async () => {
-      const oldStyleCallback = jest.fn().mockResolvedValue('old style result');
+      const oldStyleCallback = vi.fn().mockResolvedValue('old style result');
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -459,18 +460,19 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle callbacks that access context properties', async () => {
-      const contextAwareCallback = jest
-        .fn()
-        .mockImplementation((args: any, context?: CallbackContext) => {
-          const result = {
-            originalArgs: args,
-            contextInfo: {
-              threadId: context?.threadId,
-              provider: context?.provider,
-            },
-          };
-          return Promise.resolve(JSON.stringify(result));
-        });
+      const contextAwareCallback = vi.fn().mockImplementation(function (
+        args: any,
+        context?: CallbackContext,
+      ) {
+        const result = {
+          originalArgs: args,
+          contextInfo: {
+            threadId: context?.threadId,
+            provider: context?.provider,
+          },
+        };
+        return Promise.resolve(JSON.stringify(result));
+      });
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -544,7 +546,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle function callback errors gracefully', async () => {
-      const errorCallback = jest.fn().mockRejectedValue(new Error('Callback error'));
+      const errorCallback = vi.fn().mockRejectedValue(new Error('Callback error'));
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {

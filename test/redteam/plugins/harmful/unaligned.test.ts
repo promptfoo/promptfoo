@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
@@ -8,31 +9,31 @@ import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmfu
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types';
+import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
-jest.mock('../../../../src/envars');
+vi.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
   let mockProvider: ApiProvider;
-  let mockCallApi: jest.SpyInstance;
+  let mockCallApi: MockInstance;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     if (mockCallApi) {
       mockCallApi.mockRestore();
     }
-    mockCallApi = jest.spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi').mockReset();
+    mockCallApi = vi.spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi').mockReset();
 
-    jest.mocked(getEnvBool).mockReset();
-    jest.mocked(getEnvString).mockReset();
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvString).mockReset();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     if (mockCallApi) {
       mockCallApi.mockRestore();
     }
@@ -129,7 +130,7 @@ describe('harmful plugin', () => {
     });
 
     it('should handle moderation assertions with OPENAI_API_KEY', async () => {
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'OPENAI_API_KEY') {
           return 'test-key';
         }
@@ -162,9 +163,9 @@ describe('harmful plugin', () => {
         label: 'Privacy violations',
         description: 'test description',
       };
-      jest.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(mockCategory);
+      vi.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(mockCategory);
 
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_KEY') {
           return 'test-key';
         }
@@ -172,9 +173,9 @@ describe('harmful plugin', () => {
       });
 
       const mockOutput = 'Test output';
-      jest
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: [mockOutput] });
+      vi.spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi').mockResolvedValue({
+        output: [mockOutput],
+      });
 
       const result = await getHarmfulTests(
         {

@@ -1,12 +1,14 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
-import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
+import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 describe('PolicyPlugin', () => {
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
-    callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
   };
 
   const mockPurpose = 'Test purpose';
@@ -14,7 +16,7 @@ describe('PolicyPlugin', () => {
   const mockPolicy = 'Test policy';
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should initialize with required parameters', () => {
@@ -36,7 +38,7 @@ describe('PolicyPlugin', () => {
     });
 
     const mockApiResponse = { output: 'Prompt: Test generated prompt' };
-    jest.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
 
     const tests = await plugin.generateTests(1, 0);
 
@@ -58,7 +60,7 @@ describe('PolicyPlugin', () => {
     });
 
     const mockApiResponse = { output: 'Prompt: Test generated prompt' };
-    jest.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
 
     const tests = await plugin.generateTests(1, 0);
 
@@ -73,7 +75,7 @@ describe('PolicyPlugin', () => {
     });
 
     const mockApiResponse = { output: 'Prompt: Test1\nPrompt: Test2' };
-    jest.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
 
     const tests = await plugin.generateTests(2, 0);
     expect(tests).toHaveLength(2);
@@ -88,7 +90,7 @@ describe('PolicyPlugin', () => {
     expect(assertions).toEqual([
       expect.objectContaining({
         type: 'promptfoo:redteam:policy',
-        metric: 'PolicyViolation',
+        metric: `${POLICY_METRIC_PREFIX}:${plugin.policyId}`,
       }),
     ]);
   });
@@ -112,11 +114,11 @@ describe('PolicyPlugin', () => {
 describe('PolicyViolationGrader', () => {
   const mockProvider = {
     id: () => 'test-provider',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   } as unknown as ApiProvider;
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should initialize with correct properties', () => {
@@ -126,11 +128,15 @@ describe('PolicyViolationGrader', () => {
       id: grader.id,
       hasSystemPurpose: grader.rubric.includes('<system_purpose>'),
       hasPolicy: grader.rubric.includes('<policy>'),
+      hasUserQuery: grader.rubric.includes('<user_query>'),
+      hasPromptVariable: grader.rubric.includes('{{prompt}}'),
       hasAssessmentCriteria: grader.rubric.includes('Assessment criteria:'),
     }).toEqual({
       id: 'promptfoo:redteam:policy',
       hasSystemPurpose: true,
       hasPolicy: true,
+      hasUserQuery: true,
+      hasPromptVariable: true,
       hasAssessmentCriteria: true,
     });
   });
@@ -145,7 +151,7 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
       grade: { score: 1, reason: 'No violation', passed: true, pass: true },
       rubric: 'No specific policy provided',
     } as any);
@@ -180,7 +186,7 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
       grade: { score: 1, reason: 'No violation', passed: true, pass: true },
       rubric: `Rubric for policy: ${testWithExtraMetadata.metadata?.policy}`,
     } as any);
@@ -213,9 +219,9 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest
-      .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockRejectedValueOnce(new Error('Grading failed'));
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValueOnce(
+      new Error('Grading failed'),
+    );
 
     await expect(
       grader.getResult('test prompt', 'test output', testCase, mockProvider),
@@ -233,7 +239,7 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
       grade: { score: 1, reason: 'Empty output', passed: true, pass: true },
       rubric: 'Some rubric',
     } as any);
@@ -262,7 +268,7 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    const superGetResult = jest
+    const superGetResult = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValueOnce({
         grade: { score: 0, reason: 'Violated', passed: false, pass: false },
@@ -291,6 +297,9 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
+      undefined, // gradingContext
     );
   });
 
@@ -304,7 +313,7 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    const superGetResult = jest
+    const superGetResult = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValueOnce({
         grade: { score: 1, reason: 'No violation', passed: true, pass: true },
@@ -333,6 +342,9 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
+      undefined, // gradingContext
     );
   });
 });

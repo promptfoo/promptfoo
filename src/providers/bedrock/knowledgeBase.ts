@@ -5,7 +5,7 @@ import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { AwsBedrockGenericProvider } from './index';
+import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
@@ -16,6 +16,7 @@ import type { ApiProvider, ProviderResponse } from '../../types/providers';
 
 interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
+  apiKey?: string;
   profile?: string;
   region?: string;
   secretAccessKey?: string;
@@ -27,6 +28,7 @@ interface BedrockKnowledgeBaseOptions {
   max_tokens?: number;
   top_p?: number;
   top_k?: number;
+  numberOfResults?: number;
 }
 
 // Define citation types for metadata
@@ -105,18 +107,42 @@ export class AwsBedrockKnowledgeBaseProvider
   async getKnowledgeBaseClient() {
     if (!this.knowledgeBaseClient) {
       let handler;
-      // set from https://www.npmjs.com/package/proxy-agent
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
+      const apiKey = this.getApiKey();
+
+      // Create request handler for proxy or API key scenarios
+      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
+
+          // Create handler with proxy support if needed
+          const proxyAgent =
+            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
+              ? new ProxyAgent()
+              : undefined;
+
           handler = new NodeHttpHandler({
-            httpsAgent: new ProxyAgent() as unknown as Agent,
+            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
+            requestTimeout: 300000, // 5 minutes
           });
+
+          // Add Bearer token middleware for API key authentication
+          if (apiKey) {
+            const originalHandle = handler.handle.bind(handler);
+            handler.handle = async (request: any, options?: any) => {
+              // Add Authorization header with Bearer token
+              request.headers = {
+                ...request.headers,
+                Authorization: `Bearer ${apiKey}`,
+              };
+              return originalHandle(request, options);
+            };
+          }
         } catch {
-          throw new Error(
-            `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
-          );
+          const reason = apiKey
+            ? 'API key authentication requires the @smithy/node-http-handler package'
+            : 'Proxy configuration requires the @smithy/node-http-handler package';
+          throw new Error(`${reason}. Please install it in your project or globally.`);
         }
       }
 
@@ -174,6 +200,16 @@ export class AwsBedrockKnowledgeBaseProvider
       knowledgeBaseConfiguration.modelArn = modelArn;
     }
 
+    // Only add retrieval configuration when numberOfResults is explicitly configured
+    // This preserves backwards compatibility with AWS default behavior
+    if (this.kbConfig.numberOfResults !== undefined) {
+      knowledgeBaseConfiguration.retrievalConfiguration = {
+        vectorSearchConfiguration: {
+          numberOfResults: this.kbConfig.numberOfResults,
+        },
+      };
+    }
+
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
@@ -182,7 +218,7 @@ export class AwsBedrockKnowledgeBaseProvider
       },
     };
 
-    logger.debug(`Calling Amazon Bedrock Knowledge Base API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
 
     const cache = await getCache();
 
@@ -218,7 +254,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
       const response = await client.send(command);
 
-      logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
+      logger.debug('Amazon Bedrock Knowledge Base API response', { response });
 
       let output = '';
       if (response && response.output && response.output.text) {

@@ -1,5 +1,6 @@
 import type winston from 'winston';
 
+import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -24,6 +25,7 @@ interface AtomicTestCase {
   score?: number;
   failureReason?: string;
   metadata?: Record<string, any>;
+  options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
   error?: string;
@@ -66,6 +68,17 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  /**
+   * Index of the test case within the current evaluation (row in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  testIdx?: number;
+  /**
+   * Index of the prompt within the current evaluation (column in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  promptIdx?: number;
+  repeatIndex?: number;
 }
 
 export interface CallApiOptionsParams {
@@ -122,18 +135,34 @@ export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
   error?: string;
+  /**
+   * Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
+   * Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
+   */
+  isBase64?: boolean;
+  /**
+   * Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
+   */
+  format?: string;
   logProbs?: number[];
+  latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
       status: number;
       statusText: string;
       headers: Record<string, string>;
+      requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
   };
   raw?: string | any;
   output?: string | any;
+  /**
+   * Output after provider-level transform. Used by contextTransform to ensure
+   * it operates on provider-normalized output, independent of test transforms.
+   */
+  providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
@@ -143,8 +172,12 @@ export interface ProviderResponse {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: BlobRef;
     transcript?: string;
     format?: string;
+    sampleRate?: number;
+    channels?: number;
+    duration?: number;
   };
 }
 
@@ -152,6 +185,7 @@ export interface ProviderEmbeddingResponse {
   cost?: number;
   error?: string;
   embedding?: number[];
+  latencyMs?: number;
   tokenUsage?: Partial<TokenUsage>;
   metadata?: {
     transformed?: boolean;
@@ -202,6 +236,7 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
 
 export interface ProviderTestResponse {
   testResult: {
+    message?: string;
     error?: string;
     changes_needed?: boolean;
     changes_needed_reason?: string;
@@ -210,6 +245,7 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+  transformedRequest?: any;
 }
 
 /**
@@ -223,4 +259,5 @@ export interface DefaultProviders {
   moderationProvider: ApiProvider;
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
+  webSearchProvider?: ApiProvider;
 }

@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 // Map of standard characters to homoglyph unicode characters
 export const homoglyphMap: { [key: string]: string } = {

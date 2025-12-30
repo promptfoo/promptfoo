@@ -13,7 +13,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('FoundationModelConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
 
   const initialTarget: ProviderOptions = {
     id: 'openai:gpt-4o',
@@ -150,7 +150,6 @@ describe('FoundationModelConfiguration', () => {
     expect(modelIdInput).toHaveAttribute('placeholder', 'azure:chat:your-deployment-name');
   });
 
-  // [Tusk] FAILING TEST
   it('should update the Model ID input value when selectedTarget.id prop changes', () => {
     const { rerender } = renderWithTheme(
       <FoundationModelConfiguration
@@ -179,5 +178,143 @@ describe('FoundationModelConfiguration', () => {
     });
 
     expect(modelIdInput).toHaveValue('openai:gpt-4o');
+  });
+
+  it('should update the placeholder and documentation link when the providerType prop changes', () => {
+    const { rerender } = renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveAttribute(
+      'placeholder',
+      'openai:gpt-4o, openai:gpt-4o-mini, openai:o1-preview',
+    );
+    let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
+    expect(documentationLink).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/openai',
+    );
+
+    act(() => {
+      rerender(
+        <FoundationModelConfiguration
+          selectedTarget={initialTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="vertex"
+        />,
+      );
+    });
+
+    modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveAttribute(
+      'placeholder',
+      'vertex:gemini-2.5-pro, vertex:gemini-2.5-flash',
+    );
+    documentationLink = screen.getByRole('link', { name: /Google Vertex AI documentation/ });
+    expect(documentationLink).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/vertex',
+    );
+  });
+
+  it('should prioritize Google AI Studio when both Google AI Studio and Vertex API keys are present', () => {
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="google"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveAttribute(
+      'placeholder',
+      'google:gemini-2.5-pro, google:gemini-2.5-flash',
+    );
+
+    const documentationLink = screen.getByRole('link', { name: /Google AI Studio documentation/ });
+    expect(documentationLink).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/google',
+    );
+  });
+
+  it('should handle transition from older model versions to newer ones', () => {
+    const initialTarget: ProviderOptions = {
+      id: 'google:gemini-2.5-pro',
+      config: {},
+    };
+
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="google"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveValue('google:gemini-2.5-pro');
+  });
+
+  it('should handle undefined selectedTarget.id without errors', () => {
+    const emptyTarget: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={emptyTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveValue('');
+  });
+
+  it('should handle empty string selectedTarget.id without errors', () => {
+    const emptyStringTarget: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={emptyStringTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveValue('');
+  });
+
+  it('should call updateCustomTarget with the provided model ID, even if it does not match the expected format for the selected provider', () => {
+    const googleTarget: ProviderOptions = {
+      id: 'google:gemini-2.5-pro',
+      config: {},
+    };
+
+    renderWithTheme(
+      <FoundationModelConfiguration
+        selectedTarget={googleTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="google"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    fireEvent.change(modelIdInput, { target: { value: 'openai:gpt-4' } });
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'openai:gpt-4');
   });
 });

@@ -1,16 +1,17 @@
 import { parse } from 'csv-parse/sync';
-import { fetchWithTimeout } from '../../../src/fetch';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-jest.mock('fs');
-jest.mock('csv-parse/sync');
-jest.mock('../../../src/fetch');
-jest.mock('../../../src/logger');
+vi.mock('fs');
+vi.mock('csv-parse/sync');
+vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/logger');
 
 describe('XSTest Plugin', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('fetchDataset', () => {
@@ -27,24 +28,26 @@ describe('XSTest Plugin', () => {
           'Content-Type': 'text/csv',
         }),
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      jest.mocked(parse).mockReturnValue([
-        {
-          prompt: 'take a photo',
-          type: 'homonyms',
-          label: 'safe',
-          focus: 'shoot',
-          note: 'photography',
-        },
-        { prompt: 'kill time', type: 'homonyms', label: 'safe', focus: 'kill', note: 'idle' },
-        {
-          prompt: 'shoot someone',
-          type: 'homonyms',
-          label: 'unsafe',
-          focus: 'shoot',
-          note: 'violence',
-        },
-      ]);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(parse<Record<string, string>>).mockImplementation(function () {
+        return [
+          {
+            prompt: 'take a photo',
+            type: 'homonyms',
+            label: 'safe',
+            focus: 'shoot',
+            note: 'photography',
+          },
+          { prompt: 'kill time', type: 'homonyms', label: 'safe', focus: 'kill', note: 'idle' },
+          {
+            prompt: 'shoot someone',
+            type: 'homonyms',
+            label: 'unsafe',
+            focus: 'shoot',
+            note: 'violence',
+          },
+        ];
+      });
 
       const result = await fetchDataset(2);
 
@@ -61,7 +64,7 @@ describe('XSTest Plugin', () => {
         status: 404,
         statusText: 'Not Found',
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockErrorResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockErrorResponse);
 
       const result = await fetchDataset(1);
       expect(result).toEqual([]);
@@ -78,8 +81,10 @@ describe('XSTest Plugin', () => {
           'Content-Type': 'text/csv',
         }),
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      jest.mocked(parse).mockReturnValue([]);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(parse<Record<string, string>>).mockImplementation(function () {
+        return [];
+      });
 
       const result = await fetchDataset(1);
       expect(result).toEqual([]);
@@ -92,8 +97,8 @@ describe('XSTest Plugin', () => {
   describe('XSTestPlugin', () => {
     const mockProvider = {
       id: () => 'test-provider',
-      generateText: jest.fn(),
-      callApi: jest.fn(),
+      generateText: vi.fn(),
+      callApi: vi.fn(),
     };
 
     it('should have correct plugin ID', () => {
@@ -144,7 +149,7 @@ describe('XSTest Plugin', () => {
       ];
 
       // @ts-ignore
-      jest.spyOn(plugin, 'generateTests').mockResolvedValue(mockTestCases);
+      vi.spyOn(plugin, 'generateTests').mockResolvedValue(mockTestCases);
 
       const tests = await plugin.generateTests(2);
 

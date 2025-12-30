@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { fetchWithProxy } from '../util/fetch/index';
 
 const heliconeApiKey = getEnvString('HELICONE_API_KEY');
 
@@ -80,7 +81,7 @@ export async function getPrompt(
     minorVersion?: number,
     variables?: Record<string, any>,
   ) => {
-    const res = await fetch(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
+    const res = await fetchWithProxy(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
       headers: {
         Authorization: `Bearer ${heliconeApiKey}`,
         'Content-Type': 'application/json',

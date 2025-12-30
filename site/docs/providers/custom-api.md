@@ -20,7 +20,8 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
-```javascript title="echoProvider.js"
+```javascript title="echoProvider.mjs"
+// Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS
 export default class EchoProvider {
   id = () => 'echo';
 
@@ -57,7 +58,7 @@ module.exports = class OpenAIProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: this.config?.model || 'gpt-4.1-mini',
+          model: this.config?.model || 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: this.config?.max_tokens || 1024,
           temperature: this.config?.temperature || 0,
@@ -149,7 +150,7 @@ module.exports = class TwoStageProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
         }),
       },
@@ -275,14 +276,32 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: file://./myProvider.js
+  - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI
     config:
-      model: 'gpt-4.1'
+      model: 'gpt-5'
       temperature: 0.7
       max_tokens: 2000
       custom_parameter: 'custom value'
+  # - id: file://./myProvider.js   # CommonJS modules
 ```
+
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: file://./myProvider.mjs
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Multiple Instances
 

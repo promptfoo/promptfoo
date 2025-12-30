@@ -12,7 +12,7 @@ keywords:
     template variables,
     prompt engineering,
   ]
-pagination_prev: configuration/parameters
+pagination_prev: configuration/reference
 pagination_next: configuration/test-cases
 ---
 
@@ -235,6 +235,96 @@ module.exports = async function ({ vars }) {
 };
 ```
 
+## Executable Scripts
+
+Run any script or binary to generate prompts dynamically. This lets you use your existing tooling and any programming language.
+
+Your script receives test context as JSON in the first argument and outputs the prompt to stdout.
+
+### Usage
+
+Explicitly mark as executable:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - exec:./generate-prompt.sh
+  - exec:/usr/bin/my-prompt-tool
+```
+
+Or just reference the script directly (auto-detected for `.sh`, `.bash`, `.rb`, `.pl`, and other common script extensions):
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - ./generate-prompt.sh
+  - ./prompt_builder.rb
+```
+
+:::note
+Python files (`.py`) are processed as Python prompt templates, not executables. To run a Python script as an executable prompt, use the `exec:` prefix: `exec:./generator.py`
+:::
+
+Pass configuration if needed:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - label: 'Technical Prompt'
+    raw: exec:./generator.sh
+    config:
+      style: technical
+      verbose: true
+```
+
+### Examples
+
+Shell script that reads from a database:
+
+```bash title="fetch-context.sh"
+#!/bin/bash
+CONTEXT=$1
+USER_ID=$(echo "$CONTEXT" | jq -r '.vars.user_id')
+
+# Fetch user history from database
+HISTORY=$(psql -h localhost -U myapp -t -v user_id="$USER_ID" -c \
+  "SELECT prompt_context FROM users WHERE id = :'user_id'")
+
+echo "Based on your previous interactions: $HISTORY
+
+How can I help you today?"
+```
+
+Ruby script:
+
+```ruby title="ab-test.rb"
+#!/usr/bin/env ruby
+require 'json'
+require 'digest'
+
+context = JSON.parse(ARGV[0])
+user_id = context['vars']['user_id']
+
+# Call LLM API here...
+puts "\nUser query: #{context['vars']['query']}"
+```
+
+### Security Considerations
+
+:::warning
+Executable scripts run with full permissions of the promptfoo process. Be mindful of:
+
+- **User Input**: Scripts receive user-controlled `vars` as JSON. Always validate and sanitize inputs before using them in commands.
+- **Untrusted Scripts**: Only run scripts from trusted sources. Scripts can access files, make network calls, and execute commands.
+- **Environment Access**: Scripts can access environment variables, including API keys.
+- **Timeout**: Configure a timeout via `config.timeout` (default: 60 seconds) to prevent hanging scripts.
+  :::
+
+### When to Use
+
+This approach works well when you're already using scripts for prompt generation, need to query external systems (databases, APIs), or want to reuse code written in languages other than JavaScript or Python.
+
+Scripts can be written in any language - Bash, Go, Rust, or even compiled binaries - as long as it reads JSON from argv and prints to stdout.
+
+Note that there are dedicated handlers for Python and Javascript (see above).
+
 ## Model-Specific Prompts
 
 Different prompts for different providers:
@@ -252,6 +342,10 @@ providers:
   - id: anthropic:claude-3
     prompts: [claude_prompt]
 ```
+
+Prompt filters match labels exactly, support group prefixes (e.g. `group` matches `group:...`), and allow wildcard prefixes like `group:*`.
+
+The `prompts` field also works when providers are defined in external files (`file://provider.yaml`).
 
 ## CSV Prompts
 

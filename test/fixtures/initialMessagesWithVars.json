@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "I want to fly from {{city_origin}} to {{city_destination}}"
+  },
+  {
+    "role": "assistant",
+    "content": "I can help you find flights. What date are you looking for?"
+  }
+]

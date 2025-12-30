@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Qwen Models Evaluation'
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  # Qwen3 Coder 480B - Large MoE model optimized for coding and agentic tasks
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    label: Qwen3 Coder 480B
+    config:
+      region: us-west-2
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+      showThinking: true # Set to false to hide thinking content
+
+  # Claude for comparison
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet
+    config:
+      region: us-west-2
+      max_tokens: 2048
+      temperature: 0.7
+
+  # Qwen3 Coder 30B - Smaller MoE model for efficient coding tasks
+  - id: bedrock:qwen.qwen3-coder-30b-a3b-v1:0
+    label: Qwen3 Coder 30B
+    config:
+      region: us-west-2
+      max_tokens: 1024
+      temperature: 0.5
+      top_p: 0.9
+
+  # Qwen3 235B - General purpose MoE model for reasoning and coding
+  - id: bedrock:qwen.qwen3-235b-a22b-2507-v1:0
+    label: Qwen3 235B
+    config:
+      region: us-west-2
+      max_tokens: 1024
+      temperature: 0.7
+      top_p: 0.9
+
+  # Qwen3 32B Dense - Dense model for consistent performance
+  - id: bedrock:qwen.qwen3-32b-v1:0
+    label: Qwen3 32B Dense
+    config:
+      region: us-east-1
+      max_tokens: 1024
+      temperature: 0.7
+      top_p: 0.9
+
+  # Example with tool calling configuration
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    label: Qwen3 Coder 480B with Tools
+    config:
+      region: us-west-2
+      max_tokens: 2048
+      temperature: 0.3
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: Perform arithmetic calculations
+            parameters:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: The mathematical expression to evaluate
+              required: ['expression']
+      tool_choice: auto
+
+tests:
+  - vars:
+      question: Write a Python function to calculate the factorial of a number
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains
+        value: 'factorial'
+
+  - vars:
+      question: Explain the concept of recursion with a simple example
+    assert:
+      - type: contains
+        value: 'recursion'
+      - type: llm-rubric
+        value: Response clearly explains recursion with a concrete example
+
+  - vars:
+      question: What are the benefits of using mixture-of-experts models?
+    assert:
+      - type: contains
+        value: 'efficiency'
+
+  - vars:
+      question: Debug this code and explain the issue - "for i in range(10) print(i)"
+    assert:
+      - type: contains
+        value: 'syntax'
+      - type: contains
+        value: ':'
+
+  - vars:
+      question: Create a REST API endpoint using FastAPI for user authentication
+    assert:
+      - type: contains
+        value: 'FastAPI'
+      - type: contains
+        value: 'authentication'
+
+  # Test tool calling specifically with the tools provider
+  - vars:
+      question: Calculate the result of 15 * 8 + 42
+    assert:
+      - type: contains
+        value: 'Called function calculate'
+      - type: contains
+        value: '15 * 8 + 42'
+    options:
+      provider: bedrock:qwen.qwen3-coder-480b-a35b-v1:0:Qwen3 Coder 480B with Tools

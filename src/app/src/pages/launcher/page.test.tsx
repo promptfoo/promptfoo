@@ -1,8 +1,11 @@
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -39,6 +42,14 @@ const renderLauncher = () => {
     </MemoryRouter>,
   );
 };
+
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn().mockReturnValue({
+    data: { status: 'unknown', message: null },
+    refetch: vi.fn(),
+    isLoading: false,
+  } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>),
+}));
 
 describe('LauncherPage', () => {
   beforeEach(() => {
@@ -151,5 +162,29 @@ describe('LauncherPage', () => {
     await waitFor(() => {
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
+  });
+
+  it('should call checkHealth every 2 seconds after the initial 3-second delay', async () => {
+    vi.useFakeTimers();
+
+    const checkHealthMock = vi.fn();
+    (useApiHealth as Mock).mockReturnValue({
+      data: { status: 'unknown', message: null },
+      refetch: checkHealthMock,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+    renderLauncher();
+
+    vi.advanceTimersByTime(3000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(3);
+
+    vi.useRealTimers();
   });
 });

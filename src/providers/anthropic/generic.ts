@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 
 /**
  * Base options shared by all Anthropic provider implementations
@@ -66,7 +66,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   /**
    * Base implementation - should be overridden by specific provider implementations
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     throw new Error('Not implemented: callApi must be implemented by subclasses');
   }
 }

@@ -9,17 +9,12 @@ import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   children: React.ReactNode;
   description?: string;
 }
 
-const SettingsSection: React.FC<SettingsSectionProps> = ({
-  title,
-  children,
-  icon,
-  description,
-}) => {
+const SettingsSection = ({ title, children, icon, description }: SettingsSectionProps) => {
   const theme = useTheme();
   const sectionId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
 

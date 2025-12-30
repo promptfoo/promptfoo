@@ -1,29 +1,30 @@
-import React from 'react';
+import { useState } from 'react';
 
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { Gauge } from '@mui/x-charts/Gauge';
+import { Card, CardContent } from '@app/components/ui/card';
+import { Gauge } from '@app/components/ui/gauge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   displayNameOverrides,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { type GradingResult } from '@promptfoo/types';
+import { CheckCircle, ChevronRight, XCircle } from 'lucide-react';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
-import './RiskCard.css';
 
-const RiskCard: React.FC<{
+const RiskCard = ({
+  title,
+  subtitle,
+  progressValue,
+  numTestsPassed,
+  numTestsFailed,
+  testTypes,
+  evalId,
+  failuresByPlugin,
+  passesByPlugin,
+}: {
   title: string;
   subtitle: string;
   progressValue: number;
@@ -39,22 +40,10 @@ const RiskCard: React.FC<{
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
-}> = ({
-  title,
-  subtitle,
-  progressValue,
-  numTestsPassed,
-  numTestsFailed,
-  testTypes,
-  evalId,
-  failuresByPlugin,
-  passesByPlugin,
-  strategyStats,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [selectedCategory, setSelectedCategory] = React.useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   // Hide risk cards with no tests
   const filteredTestTypes = testTypes.filter((test) => test.numPassed + test.numFailed > 0);
@@ -62,142 +51,96 @@ const RiskCard: React.FC<{
     return null;
   }
 
+  const getPercentageColor = (percentage: number): string => {
+    if (percentage >= 0.8) {
+      return 'text-emerald-600 dark:text-emerald-400';
+    }
+    if (percentage >= 0.5) {
+      return 'text-amber-600 dark:text-amber-400';
+    }
+    return 'text-red-600 dark:text-red-400';
+  };
+
   return (
     <Card>
-      <CardContent
-        className="risk-card-container"
-        sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
-      >
-        <Grid
-          container
-          spacing={3}
-          sx={{
-            '@media print': {
-              flexDirection: 'column',
-              gap: '2rem',
-            },
-          }}
-        >
-          <Grid
-            item
-            xs={12}
-            md={6}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <Typography variant="h5" className="risk-card-title">
-              {title}
-            </Typography>
-            <Typography variant="subtitle1" color="textSecondary" mb={2}>
-              {subtitle}
-            </Typography>
-            <Box
-              sx={{
-                position: 'relative',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 100,
-                height: 100,
-              }}
-            >
-              <Gauge
-                value={progressValue}
-                // @ts-ignore
-                max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
-                text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                }}
-              />
-            </Box>
-            <Typography
-              variant="h6"
-              sx={{
-                color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
-              }}
+      <CardContent className="break-inside-avoid py-8 print:py-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 print:flex print:flex-row print:gap-8">
+          {/* Left side - Title and Gauge */}
+          <div className="flex flex-col items-center text-center print:flex-1">
+            <h2 className="text-xl font-bold">{title}</h2>
+            <p className="mb-4 text-sm text-muted-foreground">{subtitle}</p>
+
+            {/* Gauge */}
+            <div className="relative mb-2 flex h-[100px] w-[100px] items-center justify-center">
+              <Gauge value={progressValue} size={100} strokeWidth={10} />
+            </div>
+
+            <p
+              className={cn(
+                'text-lg font-semibold',
+                numTestsFailed === 0 ? 'text-muted-foreground' : 'text-destructive',
+              )}
             >
               {numTestsFailed} failed probes
-            </Typography>
-            <Typography
-              variant="subtitle1"
-              color="textSecondary"
-              className="risk-card-tests-passed"
-            >
+            </p>
+            <p className="text-sm text-muted-foreground">
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
-            </Typography>
-          </Grid>
-          <Grid item xs={6} md={4}>
-            <List dense>
+            </p>
+          </div>
+
+          {/* Right side - Test list */}
+          <div className="print:flex-1">
+            <div className="space-y-1">
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
                 return (
-                  <Tooltip
-                    key={index}
-                    title={
-                      subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions] ||
-                      'Click to view details'
-                    }
-                    placement="left"
-                    arrow
-                  >
-                    <ListItem
-                      className="risk-card-list-item"
-                      onClick={() => {
-                        setSelectedCategory(test.name);
-                        setDrawerOpen(true);
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <ListItemText
-                        primary={
-                          displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
-                          categoryAliases[test.name as keyof typeof categoryAliases]
-                        }
-                        primaryTypographyProps={{ variant: 'body2' }}
-                      />
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {showPercentagesOnRiskCards ? (
-                          <Typography
-                            variant="body2"
-                            className={`risk-card-percentage ${
-                              percentage >= 0.8
-                                ? 'risk-card-percentage-high'
-                                : percentage >= 0.5
-                                  ? 'risk-card-percentage-medium'
-                                  : 'risk-card-percentage-low'
-                            }`}
-                          >
-                            {`${Math.round(percentage * 100)}%`}
-                          </Typography>
-                        ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
-                        ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                  <Tooltip key={index}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center justify-between rounded px-2 py-1.5 text-left transition-all',
+                          'border border-transparent',
+                          'hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-sm hover:translate-x-0.5',
+                          'dark:hover:border-blue-800/50 dark:hover:bg-blue-950/30',
                         )}
-                        <ArrowForwardIosIcon
-                          className="risk-card-expand-icon print-hide"
-                          fontSize="small"
-                        />
-                      </Box>
-                    </ListItem>
+                        onClick={() => {
+                          setSelectedCategory(test.name);
+                          setDrawerOpen(true);
+                        }}
+                        aria-label={`View details for ${displayNameOverrides[test.name as keyof typeof displayNameOverrides] || categoryAliases[test.name as keyof typeof categoryAliases]}`}
+                      >
+                        <span className="text-sm">
+                          {displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
+                            categoryAliases[test.name as keyof typeof categoryAliases]}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {showPercentagesOnRiskCards ? (
+                            <span
+                              className={cn('text-sm font-bold', getPercentageColor(percentage))}
+                            >
+                              {`${Math.round(percentage * 100)}%`}
+                            </span>
+                          ) : percentage >= pluginPassRateThreshold ? (
+                            <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-destructive" />
+                          )}
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 print:hidden" />
+                        </div>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      {subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions] ||
+                        'Click to view details'}
+                    </TooltipContent>
                   </Tooltip>
                 );
               })}
-            </List>
-          </Grid>
-        </Grid>
+            </div>
+          </div>
+        </div>
+
         {selectedCategory && (
           <RiskCategoryDrawer
             open={drawerOpen}
@@ -206,9 +149,14 @@ const RiskCard: React.FC<{
             failures={failuresByPlugin[selectedCategory] || []}
             passes={passesByPlugin[selectedCategory] || []}
             evalId={evalId}
-            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
-            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
-            strategyStats={strategyStats}
+            numPassed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numPassed ?? 0;
+            })()}
+            numFailed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numFailed ?? 0;
+            })()}
           />
         )}
       </CardContent>

@@ -1,9 +1,10 @@
-import { ResultFailureReason } from '../../../src/types';
+import { describe, expect, it } from 'vitest';
+import { ResultFailureReason } from '../../../src/types/index';
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
-} from '../../../src/util/exportToFile';
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
+} from '../../../src/util/exportToFile/index';
 
 import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';
@@ -174,7 +175,7 @@ describe('exportToFile utils', () => {
       };
 
       const output = convertEvalResultToTableCell(result as EvalResult);
-      expect(output.text).toBe('test error\n---\ntest output');
+      expect(output.text).toBe('test output');
       expect(output.pass).toBe(false);
     });
 

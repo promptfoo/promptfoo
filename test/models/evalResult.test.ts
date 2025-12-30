@@ -1,3 +1,4 @@
+import { beforeAll, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -8,7 +9,7 @@ import {
   type Prompt,
   type ProviderOptions,
   ResultFailureReason,
-} from '../../src/types';
+} from '../../src/types/index';
 
 describe('EvalResult', () => {
   beforeAll(async () => {

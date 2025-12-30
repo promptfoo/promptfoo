@@ -5,6 +5,10 @@ description: "Integrate JFrog's ML model management platform for artifact securi
 
 # JFrog ML
 
+:::note Not JFrog Artifactory
+This documentation covers the **JFrog ML** provider for AI model inference (formerly known as Qwak). This is different from **JFrog Artifactory**, which is supported in [ModelAudit](/docs/model-audit/usage#jfrog-artifactory) for scanning models stored in artifact repositories.
+:::
+
 The JFrog ML provider (formerly known as Qwak) allows you to interact with JFrog ML's LLM Model Library using the OpenAI protocol. It supports chat completion models hosted on JFrog ML's infrastructure.
 
 ## Setup

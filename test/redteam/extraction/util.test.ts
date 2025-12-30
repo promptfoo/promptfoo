@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -10,15 +11,31 @@ import {
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-}));
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+  };
+});
 
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
@@ -26,8 +43,10 @@ describe('fetchRemoteGeneration', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
+    vi.clearAllMocks();
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
+      return 'https://api.promptfoo.app/api/v1/task';
+    });
   });
 
   it('should fetch remote generation for purpose task', async () => {
@@ -40,7 +59,7 @@ describe('fetchRemoteGeneration', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const result = await fetchRemoteGeneration('purpose', ['prompt1', 'prompt2']);
 
@@ -72,7 +91,7 @@ describe('fetchRemoteGeneration', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const result = await fetchRemoteGeneration('entities', ['prompt1', 'prompt2']);
 
@@ -96,7 +115,7 @@ describe('fetchRemoteGeneration', () => {
 
   it('should throw an error when fetchWithCache fails', async () => {
     const mockError = new Error('Network error');
-    jest.mocked(fetchWithCache).mockRejectedValue(mockError);
+    vi.mocked(fetchWithCache).mockRejectedValue(mockError);
 
     await expect(fetchRemoteGeneration('purpose', ['prompt'])).rejects.toThrow('Network error');
     expect(logger.warn).toHaveBeenCalledWith(
@@ -114,7 +133,7 @@ describe('fetchRemoteGeneration', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await expect(fetchRemoteGeneration('purpose', ['prompt'])).rejects.toThrow('Invalid input');
     expect(logger.warn).toHaveBeenCalledWith(
@@ -124,7 +143,9 @@ describe('fetchRemoteGeneration', () => {
 
   it('should use custom remote generation URL when provided', async () => {
     const customUrl = 'https://custom-api.example.com/generate';
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue(customUrl);
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
+      return customUrl;
+    });
 
     const mockResponse = {
       data: {
@@ -135,7 +156,7 @@ describe('fetchRemoteGeneration', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await fetchRemoteGeneration('purpose', ['prompt1']);
 
@@ -191,10 +212,10 @@ describe('Extraction Utils', () => {
 
   beforeEach(() => {
     provider = {
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('callExtraction', () => {
@@ -210,40 +231,40 @@ describe('Extraction Utils', () => {
 
     it('should throw an error if API call fails', async () => {
       const error = new Error('API error');
-      jest.mocked(provider.callApi).mockResolvedValue({ error: error.message });
+      vi.mocked(provider.callApi).mockResolvedValue({ error: error.message });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Failed to perform extraction: API error',
       );
     });
 
     it('should throw an error if output is not a string', async () => {
-      jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
+      vi.mocked(provider.callApi).mockResolvedValue({ output: 123 });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: 123',
       );
     });
 
     it('should handle empty string output', async () => {
-      jest.mocked(provider.callApi).mockResolvedValue({ output: '' });
+      vi.mocked(provider.callApi).mockResolvedValue({ output: '' });
 
       const result = await callExtraction(provider, 'test prompt', (output) => output.length);
       expect(result).toBe(0);
     });
 
     it('should handle null output', async () => {
-      jest.mocked(provider.callApi).mockResolvedValue({ output: null });
+      vi.mocked(provider.callApi).mockResolvedValue({ output: null });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: null',
       );
     });
 
     it('should handle undefined output', async () => {
-      jest.mocked(provider.callApi).mockResolvedValue({ output: undefined });
+      vi.mocked(provider.callApi).mockResolvedValue({ output: undefined });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: undefined',
       );
     });

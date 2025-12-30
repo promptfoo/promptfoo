@@ -19,6 +19,10 @@ The guardrails assertion is currently supported on:
 
 Other providers do not currently support this assertion type. The assertion will pass with a score of 0 for unsupported providers.
 
+::::note
+If you are using Promptfoo's built-in Azure OpenAI (with Content Filters) or AWS Bedrock (with Amazon Guardrails) providers, Promptfoo automatically maps provider responses to the top-level `guardrails` object. You do not need to implement a response transform for these built-in integrations. The mapping guidance below is only necessary for custom HTTP targets or other non-built-in providers.
+::::
+
 ## Basic Usage
 
 Here's a basic example of using the guardrail assertion:
@@ -52,9 +56,23 @@ Pass/fail logic of the assertion:
 For Azure, if the prompt fails the input content safety filter, the response status is 400 with code `content_filter`. In this case, the guardrails assertion passes.
 :::
 
+## Inverse Assertion (not-guardrails)
+
+Use `not-guardrails` to verify dangerous prompts get caught - the test passes when content is blocked, fails when it slips through:
+
+```yaml
+assert:
+  - type: not-guardrails
+```
+
+With `not-guardrails`:
+
+- If the provider's guardrails blocks the content, the test **passes** (the attack was blocked)
+- If the content passes through, the test **fails** (the guardrail didn't catch it)
+
 ## Red Team Configuration
 
-When using guardrails assertions for red teaming scenarios, you should specify the `guardrails` property:
+For red team testing, use the `purpose: redteam` config option:
 
 ```yaml
 assert:
@@ -63,14 +81,7 @@ assert:
       purpose: redteam
 ```
 
-:::note
-
-This changes the pass/fail logic of the assertion:
-
-- If the provider's guardrails blocks the content, the test **passes** (indicating the attack was successfully blocked)
-- If the guardrails passes the content, the assertion doesn't impact the final test result (the test will be graded based on other assertions)
-
-:::
+This has the same pass/fail behavior as `not-guardrails`, but additionally tracks failed content safety checks in Promptfoo's red team reporting.
 
 ## How it works
 
@@ -86,3 +97,160 @@ The assertion will:
 - Pass with score 0 if no guardrails was applied
 
 When content is flagged, the assertion provides specific feedback about whether it was the input or output that failed the safety checks.
+
+## Mapping provider responses to `guardrails`
+
+You only need this when you're not using Promptfoo's built-in Azure OpenAI or AWS Bedrock providers. For custom HTTP targets or other non-built-in providers, normalize your provider response into the `guardrails` shape described below.
+
+In order for this assertion to work, your target's response object must include a top-level `guardrails` field. The assertion reads only the following fields:
+
+- `flagged` (boolean)
+- `flaggedInput` (boolean)
+- `flaggedOutput` (boolean)
+- `reason` (string)
+
+Many HTTP or custom targets need a response transform to normalize provider-specific responses into this shape. You can do this by returning an object from your transform with both `output` and `guardrails`.
+
+### Example: HTTP provider transform (Azure content filters)
+
+The following example shows how to map an Azure OpenAI Content Filter error into the required `guardrails` object. It uses an HTTP provider with a file-based `transformResponse` that inspects the JSON body and HTTP status to populate `guardrails` correctly.
+
+```yaml
+providers:
+  - id: https
+    label: azure-gpt
+    config:
+      url: https://your-azure-openai-endpoint/openai/deployments/<model>/chat/completions?api-version=2024-02-15-preview
+      method: POST
+      headers:
+        api-key: '{{ env.AZURE_OPENAI_API_KEY }}'
+        content-type: application/json
+      body: |
+        {
+          "messages": [{"role": "user", "content": "{{prompt}}"}],
+          "temperature": 0
+        }
+      transformResponse: file://./transform-azure-guardrails.js
+```
+
+`transform-azure-guardrails.js`:
+
+```javascript
+module.exports = (json, text, context) => {
+  // Default successful shape
+  const successOutput = json?.choices?.[0]?.message?.content ?? '';
+
+  // Azure input content filter case: 400 with code "content_filter"
+  const status = context?.response?.status;
+  const errCode = json?.error?.code;
+  const errMessage = json?.error?.message;
+
+  // Build guardrails object when provider indicates filtering
+  if (status === 400 && errCode === 'content_filter') {
+    return {
+      output: errMessage || 'Content filtered by Azure',
+      guardrails: {
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+        reason: errMessage || 'Azure content filter detected policy violation',
+      },
+    };
+  }
+
+  // Example: map provider header to output filtering signal, if available
+  const wasFiltered = context?.response?.headers?.['x-content-filtered'] === 'true';
+  if (wasFiltered) {
+    return {
+      output: successOutput,
+      guardrails: {
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+        reason: 'Provider flagged completion by content filter',
+      },
+    };
+  }
+
+  // Default: pass-through when no guardrails signal present
+  return {
+    output: successOutput,
+    // Omit guardrails or return { flagged: false } to indicate no issues
+    guardrails: { flagged: false },
+  };
+};
+```
+
+Alternatively, you can use an inline JavaScript transform:
+
+```yaml
+providers:
+  - id: https
+    label: azure-gpt
+    config:
+      url: https://your-azure-openai-endpoint/openai/deployments/<model>/chat/completions?api-version=2024-02-15-preview
+      method: POST
+      headers:
+        api-key: '{{ env.AZURE_OPENAI_API_KEY }}'
+        content-type: application/json
+      body: |
+        {
+          "messages": [{"role": "user", "content": "{{prompt}}"}],
+          "temperature": 0
+        }
+      transformResponse: |
+        (json, text, context) => {
+          // Default successful shape
+          const successOutput = json?.choices?.[0]?.message?.content ?? '';
+
+          // Azure input content filter case: 400 with code "content_filter"
+          const status = context?.response?.status;
+          const errCode = json?.error?.code;
+          const errMessage = json?.error?.message;
+
+          // Build guardrails object when provider indicates filtering
+          if (status === 400 && errCode === 'content_filter') {
+            return {
+              output: errMessage || 'Content filtered by Azure',
+              guardrails: {
+                flagged: true,
+                flaggedInput: true,
+                flaggedOutput: false,
+                reason: errMessage || 'Azure content filter detected policy violation',
+              },
+            };
+          }
+
+          // Example: map provider header to output filtering signal, if available
+          const wasFiltered = context?.response?.headers?.['x-content-filtered'] === 'true';
+          if (wasFiltered) {
+            return {
+              output: successOutput,
+              guardrails: {
+                flagged: true,
+                flaggedInput: false,
+                flaggedOutput: true,
+                reason: 'Provider flagged completion by content filter',
+              },
+            };
+          }
+
+          // Default: pass-through when no guardrails signal present
+          return {
+            output: successOutput,
+            guardrails: { flagged: false },
+          };
+        }
+```
+
+Notes:
+
+- The transform must return an object with `output` and `guardrails` at the top level.
+- The `guardrails` object should reflect whether the input or output was flagged (`flaggedInput`, `flaggedOutput`) and include a human-readable `reason`.
+- For Azure, failed input content safety checks typically return HTTP 400 with code `content_filter`. In this case, set `flagged: true` and `flaggedInput: true` and populate `reason` from the error.
+- You can also derive guardrail flags from response headers or other metadata available in `context.response`.
+
+See also:
+
+- [HTTP provider transforms and guardrails](/docs/providers/http#guardrails-support)
+- [Reference for the `guardrails` shape](/docs/configuration/reference#guardrails)

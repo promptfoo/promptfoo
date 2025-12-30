@@ -15,7 +15,7 @@ providers:
           server_label: stripe
           server_url: https://mcp.stripe.com
           headers:
-            Authorization: 'Bearer ${STRIPE_API_KEY}'
+            Authorization: 'Bearer {{ env.STRIPE_API_KEY }}'
           require_approval: never
           allowed_tools: ['create_payment_link', 'list_payment_methods']
       max_output_tokens: 1000

@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
 
 interface EmailStatus {
   hasEmail: boolean;
   email?: string;
-  status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
+  status: UserEmailStatus;
   message?: string;
 }
 
@@ -19,49 +20,65 @@ interface EmailVerificationResult {
 export function useEmailVerification() {
   const [isChecking, setIsChecking] = useState(false);
 
-  const checkEmailStatus = useCallback(async (): Promise<EmailVerificationResult> => {
-    setIsChecking(true);
-    try {
-      const response = await callApi('/user/email/status');
-      const status: EmailStatus = await response.json();
+  const checkEmailStatus = useCallback(
+    async (options?: { validate?: boolean }): Promise<EmailVerificationResult> => {
+      setIsChecking(true);
+      try {
+        const validateParam = options?.validate ? '&validate=true' : '';
+        const response = await callApi(`/user/email/status?${validateParam}`);
+        const status: EmailStatus = await response.json();
 
-      if (!status.hasEmail) {
+        if (!status.hasEmail) {
+          return {
+            canProceed: false,
+            needsEmail: true,
+            status,
+            error: null,
+          };
+        }
+
+        if (
+          status.status === EmailValidationStatus.RISKY_EMAIL ||
+          status.status === EmailValidationStatus.DISPOSABLE_EMAIL
+        ) {
+          return {
+            canProceed: false,
+            needsEmail: false,
+            status,
+            error: 'Please use a valid work email.',
+          };
+        }
+
+        if (status.status === EmailValidationStatus.EXCEEDED_LIMIT) {
+          return {
+            canProceed: false,
+            needsEmail: false,
+            status,
+            error:
+              'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+          };
+        }
+
         return {
-          canProceed: false,
-          needsEmail: true,
+          canProceed: true,
+          needsEmail: false,
           status,
           error: null,
         };
-      }
-
-      if (status.status === 'exceeded_limit') {
+      } catch (error) {
+        console.error('Error checking email status:', error);
         return {
           canProceed: false,
           needsEmail: false,
-          status,
-          error:
-            'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+          status: null,
+          error: 'Failed to check email verification status. Please try again.',
         };
+      } finally {
+        setIsChecking(false);
       }
-
-      return {
-        canProceed: true,
-        needsEmail: false,
-        status,
-        error: null,
-      };
-    } catch (error) {
-      console.error('Error checking email status:', error);
-      return {
-        canProceed: false,
-        needsEmail: false,
-        status: null,
-        error: 'Failed to check email verification status. Please try again.',
-      };
-    } finally {
-      setIsChecking(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const saveEmail = useCallback(async (email: string): Promise<{ error?: string }> => {
     try {
@@ -86,9 +103,28 @@ export function useEmailVerification() {
     }
   }, []);
 
+  const clearEmail = useCallback(async (): Promise<{ error?: string }> => {
+    try {
+      const emailResponse = await callApi('/user/email/clear', {
+        method: 'PUT',
+      });
+
+      if (!emailResponse.ok) {
+        const errorData = await emailResponse.json();
+        return { error: errorData.error || 'Failed to clear email' };
+      }
+
+      return {};
+    } catch (error) {
+      console.error('Error clearing email:', error);
+      return { error: `Failed to clear email: ${error}` };
+    }
+  }, []);
+
   return {
     checkEmailStatus,
     saveEmail,
+    clearEmail,
     isChecking,
   };
 }

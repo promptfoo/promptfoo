@@ -11,7 +11,7 @@ This guide will walk you through the process of benchmarking [Llama2 Uncensored]
 
 By the end of this guide, you'll be able to produce a side-by-side comparison of these models using your own data. You can substitute your own test cases and choose the model that's best for you.
 
-View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama-comparison).
+View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama).
 
 ![llama2 uncensored and gpt comparison](/img/docs/llama-uncensored-comparison.png)
 
@@ -40,7 +40,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 providers:
   - ollama:llama2
   - ollama:llama2-uncensored
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 These [providers](/docs/providers) reference the built-in Ollama models.
@@ -83,7 +83,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
       - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
       - openai_prompt
 ```
@@ -130,7 +130,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
     - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
     - openai_prompt
 ```
@@ -186,7 +186,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
     - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
     - openai_prompt
 ```

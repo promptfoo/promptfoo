@@ -1,6 +1,14 @@
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
 
+/**
+ * Converts evaluation results from a ResultsFile into a table format for display.
+ * Processes test results, formats variables (including pretty-printing objects/arrays as JSON),
+ * handles redteam prompts, and structures data for console table and HTML output.
+ *
+ * @param eval_ - The results file containing evaluation data (requires version >= 4)
+ * @returns An EvaluateTable with formatted headers and body rows for display
+ */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
     eval_.prompts,
@@ -28,7 +36,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
               if (typeof varValue === 'string') {
                 return varValue;
               }
-              return JSON.stringify(varValue);
+              return JSON.stringify(varValue, null, 2);
             })
             .flat()
         : [],
@@ -53,10 +61,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
     // format text
     let resultText: string | undefined;
-    const failReasons = (result.gradingResult?.componentResults || [])
-      .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .join(' --- ');
+
     const outputTextDisplay = (
       typeof result.response?.output === 'object'
         ? JSON.stringify(result.response.output)
@@ -66,7 +71,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       if (result.success) {
         resultText = `${outputTextDisplay || result.error || ''}`;
       } else {
-        resultText = `${result.error || failReasons}\n---\n${outputTextDisplay}`;
+        resultText = `${outputTextDisplay}`;
       }
     } else if (result.error) {
       resultText = `${result.error}`;
@@ -102,7 +107,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
   for (const row of rows) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
+    row.vars = sortedVars.map((varName) => {
+      const varValue = varValuesForRow.get(row.testIdx)?.[varName] || '';
+      if (typeof varValue === 'string') {
+        return varValue;
+      }
+      return JSON.stringify(varValue, null, 2);
+    });
   }
 
   return {

@@ -56,3 +56,34 @@ export const getIssueFilePath = (issue: {
 
   return 'Unknown';
 };
+
+/**
+ * Checks if a severity level is considered critical/error
+ * @param severity - The severity level to check
+ * @returns True if the severity is critical or error
+ */
+export const isCriticalSeverity = (severity: string): boolean => {
+  return severity === 'critical' || severity === 'error';
+};
+
+/**
+ * Maps severity for filtering purposes, handling the critical/error equivalence
+ * @param selectedSeverity - The selected severity filter
+ * @param issueSeverity - The issue's severity level
+ * @returns True if the issue matches the filter
+ */
+export const mapSeverityForFiltering = (
+  selectedSeverity: string | null,
+  issueSeverity: string,
+): boolean => {
+  if (!selectedSeverity) {
+    return true;
+  }
+
+  // Handle critical/error mapping
+  if (selectedSeverity === 'error') {
+    return isCriticalSeverity(issueSeverity);
+  }
+
+  return issueSeverity === selectedSeverity;
+};

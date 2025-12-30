@@ -1,9 +1,13 @@
 import chalk from 'chalk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkNodeVersion } from '../src/checkNodeVersion';
 import logger from '../src/logger';
+import { ENGINES } from '../src/version';
 
-jest.mock('../package.json', () => ({
-  engines: { node: '>=18.0.1' },
+vi.mock('../src/logger', () => ({
+  default: {
+    warn: vi.fn(),
+  },
 }));
 
 const setNodeVersion = (version: string) => {
@@ -15,31 +19,37 @@ const setNodeVersion = (version: string) => {
 
 describe('checkNodeVersion', () => {
   const originalProcessVersion = process.version;
+  const requiredVersion = ENGINES.node;
 
   afterEach(() => {
     setNodeVersion(originalProcessVersion);
+    vi.clearAllMocks();
   });
 
   it('should handle version strings correctly and throw if required version is not met', () => {
-    setNodeVersion('v18.0.0');
+    // Use a version that's definitely below the requirement (currently >=20.0.0)
+    setNodeVersion('v19.9.9');
 
     expect(() => checkNodeVersion()).toThrow(
-      'You are using Node.js 18.0.0. This version is not supported. Please use Node.js >=18.0.1.',
+      `You are using Node.js 19.9.9. This version is not supported. Please use Node.js ${requiredVersion}.`,
     );
   });
 
   it('should not throw if Node.js version is supported', () => {
-    setNodeVersion('v18.0.1');
+    // Use a version that meets the requirement
+    setNodeVersion('v20.0.0');
 
     expect(() => checkNodeVersion()).not.toThrow();
   });
 
   it('should log a warning if Node.js version format is unexpected', () => {
-    setNodeVersion('v18');
+    setNodeVersion('v20');
 
     checkNodeVersion();
     expect(logger.warn).toHaveBeenCalledWith(
-      chalk.yellow('Unexpected Node.js version format: v18. Please use Node.js >=18.0.1.'),
+      chalk.yellow(
+        `Unexpected Node.js version format: v20. Please use Node.js ${requiredVersion}.`,
+      ),
     );
   });
 });

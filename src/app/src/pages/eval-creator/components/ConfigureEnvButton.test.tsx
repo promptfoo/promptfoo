@@ -1,9 +1,10 @@
+import React from 'react';
+
+import { useStore } from '@app/stores/evalConfig';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore } from '@app/stores/evalConfig';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { beforeEach, describe, expect, it } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
 
 const renderWithTheme = (component: React.ReactNode) => {
@@ -91,6 +92,10 @@ describe('ConfigureEnvButton', () => {
 
     const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     expect(openaiApiKeyInput).toHaveValue(initialEnv.OPENAI_API_KEY);
+
+    // Expand the Azure section
+    const azureSection = screen.getByRole('button', { name: /azure/i });
+    await userEvent.click(azureSection);
 
     const azureApiKeyInput = screen.getByLabelText(/azure api key/i);
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);

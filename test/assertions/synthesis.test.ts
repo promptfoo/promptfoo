@@ -1,15 +1,16 @@
 import dedent from 'dedent';
+import { describe, expect, it, vi } from 'vitest';
 import {
   convertQuestionToPythonPrompt,
   generateNewQuestionsPrompt,
   synthesize,
 } from '../../src/assertions/synthesis';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index';
 
-jest.mock('../../src/providers', () => ({
-  loadApiProvider: jest.fn(),
+vi.mock('../../src/providers', () => ({
+  loadApiProvider: vi.fn(),
 }));
 
 describe('synthesize', () => {
@@ -17,7 +18,7 @@ describe('synthesize', () => {
     let i = 0;
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn(() => {
+      callApi: vi.fn(() => {
         if (i === 0) {
           i++;
           return Promise.resolve({
@@ -28,7 +29,7 @@ describe('synthesize', () => {
         return Promise.resolve({ output: 'None' });
       }),
     };
-    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     const result = await synthesize({
       provider: 'mock-provider',
       prompts: ['Test prompt'],

@@ -60,10 +60,13 @@ export type VulnerabilityType =
   | 'bias'
   | 'criminal'
   | 'custom'
+  | 'ecommerce'
   | 'financial'
   | 'harmful'
+  | 'insurance'
   | 'medical'
   | 'misinformation and misuse'
+  | 'pharmacy'
   | 'privacy'
   | 'security';
 
@@ -272,6 +275,21 @@ export const PLUGINS = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
+    category: 'Compliance and Legal',
+    description: "Tests compliance with children's privacy regulations (COPPA)",
+    label: 'compliance',
+    link: '/docs/red-team/plugins/coppa/',
+    name: 'COPPA',
+    pluginId: 'coppa',
+    isRemote: true,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Checks for information sharing between unrelated sessions',
     label: 'technical',
@@ -371,6 +389,64 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for bypassing age, geographic, and regulatory restrictions on e-commerce products',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Compliance Bypass',
+    pluginId: 'ecommerce:compliance-bypass',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests for order fraud, transaction manipulation, and return/refund policy abuse',
+    label: 'security',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Order Fraud',
+    pluginId: 'ecommerce:order-fraud',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests for PCI DSS violations and payment card data exposure',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce PCI DSS',
+    pluginId: 'ecommerce:pci-dss',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for unauthorized pricing changes, discount abuse, and promotional policy violations',
+    label: 'security',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Price Manipulation',
+    pluginId: 'ecommerce:price-manipulation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
     category: 'Brand',
     description: 'Model taking excessive initiative or misunderstanding its capabilities',
     label: 'brand',
@@ -383,6 +459,20 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests compliance with student educational privacy regulations (FERPA)',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ferpa/',
+    name: 'FERPA',
+    pluginId: 'ferpa',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
   },
   {
     category: 'Compliance and Legal',
@@ -419,11 +509,57 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests for inappropriate disclosure of MNPI, proprietary strategies, or confidential financial data',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-confidential-disclosure',
+    name: 'Financial Confidential Disclosure',
+    pluginId: 'financial:confidential-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description: 'Tests for false financial narratives or misleading market information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-counterfactual',
+    name: 'Financial Counterfactual Narrative',
+    pluginId: 'financial:counterfactual',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests for exposure of proprietary trading strategies or confidential financial data',
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#financial-data-leakage',
     name: 'Financial Data Leakage',
     pluginId: 'financial:data-leakage',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description: 'Tests for false statements damaging financial entity reputations',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-defamation',
+    name: 'Financial Defamation',
+    pluginId: 'financial:defamation',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -449,6 +585,36 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description: 'Tests for unauthorized financial advice or transaction facilitation',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-impartiality',
+    name: 'Financial Services Impartiality',
+    pluginId: 'financial:impartiality',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests for facilitation of financial crimes or market manipulation',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-misconduct',
+    name: 'Financial Services Misconduct',
+    pluginId: 'financial:misconduct',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description:
       'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
@@ -462,6 +628,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      "Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart's Law)",
+    label: 'brand',
+    link: '/docs/red-team/plugins/goal-misalignment/',
+    name: 'Goal Misalignment',
+    pluginId: 'goal-misalignment',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
     isRemote: true,
   },
   {
@@ -639,7 +821,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
@@ -864,7 +1046,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
@@ -988,6 +1170,22 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests for inappropriate off-label medication recommendations without proper disclaimers',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-off-label-use',
+    name: 'Medical Off-Label Use',
+    pluginId: 'medical:off-label-use',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for poor medical prioritization and triage decisions',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-prioritization-error',
@@ -1014,6 +1212,102 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#controlled-substance-compliance',
+    name: 'Controlled Substance Compliance',
+    pluginId: 'pharmacy:controlled-substance-compliance',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of pharmaceutical dosage calculations including weight-based dosing and renal adjustments',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#dosage-calculation',
+    name: 'Dosage Calculation',
+    pluginId: 'pharmacy:dosage-calculation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests identification of dangerous drug-drug, drug-food, and drug-supplement interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#drug-interaction-detection',
+    name: 'Drug Interaction Detection',
+    pluginId: 'pharmacy:drug-interaction',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for discriminatory coverage decisions based on protected characteristics violating ADA, Section 1557, and GINA',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#coverage-discrimination',
+    name: 'Coverage Discrimination',
+    pluginId: 'insurance:coverage-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of provider network information to prevent surprise medical bills and balance billing',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#network-misinformation',
+    name: 'Network Misinformation',
+    pluginId: 'insurance:network-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#phi-disclosure',
+    name: 'PHI Disclosure',
+    pluginId: 'insurance:phi-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
     isRemote: true,
   },
   {
@@ -1250,6 +1544,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests for special token injection vulnerabilities using conversation format delimiters',
+    label: 'technical',
+    link: '/docs/red-team/plugins/special-token-injection/',
+    name: 'Special Token Injection',
+    pluginId: 'special-token-injection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to perform SQL injection attacks to manipulate database queries',
     label: 'technical',
     link: '/docs/red-team/plugins/sql-injection/',
@@ -1323,6 +1633,20 @@ export const PLUGINS = [
     vulnerabilityType: 'harmful',
   },
   {
+    category: 'Brand',
+    description: 'Tests whether AI systems make claims that cannot be verified even in principle',
+    label: 'brand',
+    link: '/docs/red-team/plugins/unverifiable-claims/',
+    name: 'Unverifiable Claims',
+    pluginId: 'unverifiable-claims',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
+  {
     category: 'Dataset',
     description: 'Tests handling of unsafe image content through multi-modal model evaluation',
     label: 'harmful',
@@ -1335,6 +1659,36 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlguard/',
+    name: 'VLGuard',
+    pluginId: 'vlguard',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests whether AI systems can be tricked into generating profanity through innocent-seeming wordplay',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/wordplay/',
+    name: 'Wordplay',
+    pluginId: 'wordplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Dataset',

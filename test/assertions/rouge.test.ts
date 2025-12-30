@@ -1,17 +1,18 @@
 import * as rouge from 'js-rouge';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleRougeScore } from '../../src/assertions/rouge';
 
-import type { Assertion, AssertionParams } from '../../src/types';
+import type { Assertion, AssertionParams } from '../../src/types/index';
 
-jest.mock('js-rouge', () => ({
-  n: jest.fn(),
-  l: jest.fn(),
-  s: jest.fn(),
+vi.mock('js-rouge', () => ({
+  n: vi.fn(),
+  l: vi.fn(),
+  s: vi.fn(),
 }));
 
 describe('handleRougeScore', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   const mockAssertion: Assertion = {
@@ -25,7 +26,7 @@ describe('handleRougeScore', () => {
     renderedValue: 'expected text',
     outputString: 'actual text',
     inverse: false,
-    context: {
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: {},
       test: { assert: [mockAssertion] },
@@ -51,7 +52,7 @@ describe('handleRougeScore', () => {
   };
 
   it('should pass when score is above default threshold', () => {
-    jest.mocked(rouge.n).mockReturnValue(0.8);
+    vi.mocked(rouge.n).mockReturnValue(0.8);
 
     const result = handleRougeScore(baseParams);
 
@@ -62,7 +63,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should fail when score is below default threshold', () => {
-    jest.mocked(rouge.n).mockReturnValue(0.7);
+    vi.mocked(rouge.n).mockReturnValue(0.7);
 
     const result = handleRougeScore(baseParams);
 
@@ -73,7 +74,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should use custom threshold when provided', () => {
-    jest.mocked(rouge.n).mockReturnValue(0.6);
+    vi.mocked(rouge.n).mockReturnValue(0.6);
 
     const result = handleRougeScore({
       ...baseParams,
@@ -87,7 +88,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should handle inverse scoring', () => {
-    jest.mocked(rouge.n).mockReturnValue(0.8);
+    vi.mocked(rouge.n).mockReturnValue(0.8);
 
     const result = handleRougeScore({
       ...baseParams,
@@ -101,7 +102,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should use ROUGE-L method', () => {
-    jest.mocked(rouge.l).mockReturnValue(0.8);
+    vi.mocked(rouge.l).mockReturnValue(0.8);
 
     const result = handleRougeScore({
       ...baseParams,
@@ -114,7 +115,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should use ROUGE-S method', () => {
-    jest.mocked(rouge.s).mockReturnValue(0.8);
+    vi.mocked(rouge.s).mockReturnValue(0.8);
 
     const result = handleRougeScore({
       ...baseParams,

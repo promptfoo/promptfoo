@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
@@ -11,8 +12,13 @@ import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 interface TextGenRequestParametersModel {
@@ -133,7 +139,11 @@ interface WatsonXModel {
 
 async function fetchModelSpecs(): Promise<ModelSpec[]> {
   try {
-    const { data } = await fetchWithCache(
+    const {
+      data,
+      cached: _cached,
+      latencyMs: _latencyMs,
+    } = await fetchWithCache(
       'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
       {
         headers: {
@@ -225,7 +235,17 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
+    let IamAuthenticator: any;
+    let BearerTokenAuthenticator: any;
+
+    try {
+      ({ IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core'));
+    } catch (err) {
+      logger.error(`Error loading ibm-cloud-sdk-core: ${err}`);
+      throw new Error(
+        'The ibm-cloud-sdk-core package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
 
     const apiKey =
       this.config.apiKey ||
@@ -306,16 +326,54 @@ export class WatsonXProvider implements ApiProvider {
     }
 
     const authenticator = await this.getAuth();
-    const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
-    this.client = WatsonXAI.newInstance({
-      version: this.options.config.version || '2023-05-29',
-      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-      authenticator,
-    });
-    return this.client!;
+
+    try {
+      const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
+      this.client = WatsonXAI.newInstance({
+        version: this.options.config.version || '2023-05-29',
+        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+        authenticator,
+      });
+      return this.client!;
+    } catch (err) {
+      logger.error(`Error loading @ibm-cloud/watsonx-ai: ${err}`);
+      throw new Error(
+        'The @ibm-cloud/watsonx-ai package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'watsonx',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      maxTokens: this.options.config.maxNewTokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+  }
+
+  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
     const client = await this.getClient();
 
     const modelId = this.getModelId();
@@ -331,7 +389,8 @@ export class WatsonXProvider implements ApiProvider {
         logger.debug(
           `Watsonx: Returning cached response for prompt "${prompt}" with config "${configHash}": ${cachedResponse}`,
         );
-        return JSON.parse(cachedResponse as string) as ProviderResponse;
+        const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
+        return { ...resp, cached: true };
       }
     }
 

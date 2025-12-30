@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers';
 import invariant from '../../src/util/invariant';
 
-import type { AssertionValueFunctionContext } from '../../src/types';
+import type { AssertionValueFunctionContext } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/util/invariant');
+vi.mock('../../src/matchers');
+vi.mock('../../src/util/invariant');
 
 describe('handleAnswerRelevance', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(invariant).mockImplementation((condition, message) => {
+    vi.resetAllMocks();
+    vi.mocked(invariant).mockImplementation((condition, message) => {
       if (!condition) {
         throw new Error(typeof message === 'function' ? message() : message);
       }
@@ -18,7 +19,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should call matchesAnswerRelevance with correct parameters', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -37,7 +38,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -46,7 +47,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -59,7 +66,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should use query from vars if available', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -80,7 +87,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -89,7 +96,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test query', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -114,7 +127,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -138,7 +151,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -150,7 +163,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should use default threshold of 0 if not specified', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -168,7 +181,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -177,7 +190,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',

@@ -122,10 +122,51 @@ You can customize the dataset generation process by providing additional options
 | `-w, --write`              | Write the generated test cases directly to the configuration file.      |
 | `--numPersonas`            | Number of personas to generate for the dataset.                         |
 | `--numTestCasesPerPersona` | Number of test cases to generate per persona.                           |
-| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4.1     |
+| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-5       |
 
 For example:
 
 ```sh
 promptfoo generate dataset --config path_to_config.yaml --output path_to_output.yaml --instructions "Consider edge cases related to international travel"
+```
+
+### Using a custom provider
+
+The `--provider` flag specifies the LLM used to generate test cases. This is separate from the providers in your config file (which are the targets being tested).
+
+By default, dataset generation uses OpenAI (`OPENAI_API_KEY`). To use a different provider, set the appropriate environment variables:
+
+```bash
+# Azure OpenAI
+export AZURE_OPENAI_API_KEY=your-key
+export AZURE_API_HOST=your-host.openai.azure.com
+export AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment
+
+promptfoo generate dataset
+```
+
+Alternatively, use the `--provider` flag with any supported provider:
+
+```bash
+promptfoo generate dataset --provider openai:chat:gpt-5-mini
+```
+
+For more control, create a provider config file:
+
+```yaml title="synthesis-provider.yaml"
+id: openai:responses:gpt-5.2
+config:
+  reasoning:
+    effort: medium
+  max_output_tokens: 4096
+```
+
+```bash
+promptfoo generate dataset --provider file://synthesis-provider.yaml
+```
+
+You can also use a Python provider:
+
+```bash
+promptfoo generate dataset --provider file://synthesis-provider.py
 ```

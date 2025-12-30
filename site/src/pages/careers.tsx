@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
+
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 
-export default function Careers(): JSX.Element {
+export default function Careers(): React.ReactElement {
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://jobs.ashbyhq.com/promptfoo/embed';

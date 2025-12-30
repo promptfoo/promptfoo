@@ -1,7 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import { getDb } from '../../database';
+import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
 import type { Request, Response } from 'express';
@@ -41,7 +40,7 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
     const { name, type, config } = req.body;
-    const id = uuidv4();
+    const id = crypto.randomUUID();
 
     const [result] = await db
       .insert(configsTable)

@@ -1,17 +1,17 @@
-import { callApi } from '@app/utils/api';
+import useApiConfig from '@app/stores/apiConfig';
+import { callApi, fetchUserEmail } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useEmailVerification', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   const setupApiMock = (response: any, isSuccess = true) => {
     if (isSuccess) {
       (callApi as Mock).mockResolvedValue({
@@ -45,6 +45,18 @@ describe('useEmailVerification', () => {
     });
     return result;
   };
+
+  const callClearEmail = async (hook: any) => {
+    let result;
+    await act(async () => {
+      result = await hook.current.clearEmail();
+    });
+    return result;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   describe('checkEmailStatus', () => {
     it.each([
@@ -107,7 +119,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(callApi).toHaveBeenCalledWith('/user/email/status');
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         ...expected,
         status: apiResponse,
@@ -146,7 +158,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(callApi).toHaveBeenCalledWith('/user/email/status');
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         canProceed: false,
         needsEmail: false,
@@ -209,5 +221,74 @@ describe('useEmailVerification', () => {
 
       expect(saveEmailResult).toEqual({ error: `Failed to set email: ${mockError}` });
     });
+  });
+
+  describe('clearEmail', () => {
+    it('should return an empty object when the API call to /user/email/clear returns ok: true', async () => {
+      setupApiMock({}, true);
+      const { result } = renderHook(() => useEmailVerification());
+
+      const clearEmailResult = await callClearEmail(result);
+
+      expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
+        method: 'PUT',
+      });
+      expect(clearEmailResult).toEqual({});
+    });
+
+    it('should return an error object when the API call returns ok: false', async () => {
+      const apiResponse = { error: 'Failed to clear email from database' };
+      setupApiMock(apiResponse, false);
+      const { result } = renderHook(() => useEmailVerification());
+
+      const clearEmailResult = await callClearEmail(result);
+
+      expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
+        method: 'PUT',
+      });
+      expect(clearEmailResult).toEqual({ error: 'Failed to clear email from database' });
+    });
+
+    it('should return a default error message when the API call returns ok: false with no error message', async () => {
+      setupApiMock({}, false);
+      const { result } = renderHook(() => useEmailVerification());
+
+      const clearEmailResult = await callClearEmail(result);
+
+      expect(clearEmailResult).toEqual({ error: 'Failed to clear email' });
+    });
+
+    it('should return an error object when callApi throws an exception', async () => {
+      const mockError = new Error('Network error');
+      setupApiError(mockError);
+      const { result } = renderHook(() => useEmailVerification());
+
+      const clearEmailResult = await callClearEmail(result);
+
+      expect(clearEmailResult).toEqual({ error: `Failed to clear email: ${mockError}` });
+    });
+  });
+});
+
+describe('fetchUserEmail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should return null when apiBaseUrl is missing or invalid', async () => {
+    (fetchUserEmail as Mock).mockImplementationOnce(async () => null);
+
+    const mockGetState = vi.fn(() => ({
+      apiBaseUrl: undefined,
+      setApiBaseUrl: vi.fn(),
+      fetchingPromise: null,
+      setFetchingPromise: vi.fn(),
+      persistApiBaseUrl: false,
+      enablePersistApiBaseUrl: vi.fn(),
+    }));
+    vi.spyOn(useApiConfig, 'getState').mockImplementation(mockGetState);
+
+    const email = await fetchUserEmail();
+    expect(email).toBe(null);
   });
 });

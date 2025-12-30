@@ -9,7 +9,12 @@ interface FailReasonCarouselProps {
   failReasons: string[];
 }
 
-const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) => {
+const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
+  // Validate props BEFORE hooks to comply with Rules of Hooks
+  if (failReasons.length < 1) {
+    return null;
+  }
+
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {
@@ -19,10 +24,6 @@ const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) 
   const handleNext = () => {
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
-
-  if (failReasons.length < 1) {
-    return null;
-  }
 
   return (
     <div className="fail-reason">

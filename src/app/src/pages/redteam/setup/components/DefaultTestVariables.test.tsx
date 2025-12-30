@@ -77,7 +77,8 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const emptyState = screen.getByText('No test variables configured').closest('div');
-      expect(emptyState).toHaveClass('MuiBox-root');
+      // Now uses Tailwind classes instead of MUI
+      expect(emptyState).toHaveClass('border-dashed');
     });
   });
 
@@ -162,7 +163,8 @@ describe('DefaultTestVariables Component', () => {
     it('removes variable when delete button is clicked', async () => {
       render(<DefaultTestVariables />);
 
-      const deleteButtons = screen.getAllByTestId('DeleteIcon');
+      // Get delete buttons by their aria-label pattern
+      const deleteButtons = screen.getAllByRole('button', { name: /delete variable/i });
       expect(deleteButtons).toHaveLength(3);
 
       fireEvent.click(deleteButtons[0]);
@@ -209,8 +211,9 @@ describe('DefaultTestVariables Component', () => {
 
       render(<DefaultTestVariables />);
 
-      const nameFields = screen.getAllByLabelText('Variable name');
-      const valueFields = screen.getAllByLabelText('Value');
+      // Labels are now sr-only, but still accessible
+      const nameFields = screen.getAllByPlaceholderText('Variable name');
+      const valueFields = screen.getAllByPlaceholderText('Value');
 
       expect(nameFields).toHaveLength(3);
       expect(valueFields).toHaveLength(3);
@@ -231,24 +234,23 @@ describe('DefaultTestVariables Component', () => {
 
       render(<DefaultTestVariables />);
 
-      const deleteButtons = screen.getAllByTestId('DeleteIcon');
+      // Get delete buttons by their aria-label pattern (Lucide icons, not MUI)
+      const deleteButtons = screen.getAllByRole('button', { name: /delete variable/i });
       expect(deleteButtons).toHaveLength(3);
 
       deleteButtons.forEach((button) => {
         expect(button).toBeInTheDocument();
-        expect(button.closest('button')).toHaveAttribute(
-          'aria-label',
-          expect.stringContaining('Delete variable'),
-        );
+        expect(button).toHaveAttribute('aria-label', expect.stringContaining('Delete variable'));
       });
     });
 
-    it('renders the empty state container with correct background and border colors', () => {
+    it('renders the empty state container with correct styling', () => {
       render(<DefaultTestVariables />);
 
       const emptyStateContainer = screen.getByText('No test variables configured').closest('div');
-      expect(emptyStateContainer).toHaveStyle('background-color: rgba(0, 0, 0, 0.04)');
-      expect(emptyStateContainer).toHaveStyle('border-color: rgba(0, 0, 0, 0.12)');
+      // Uses Tailwind classes for styling instead of inline styles
+      expect(emptyStateContainer).toHaveClass('border-dashed');
+      expect(emptyStateContainer).toHaveClass('rounded-lg');
     });
   });
 
@@ -373,8 +375,9 @@ describe('DefaultTestVariables Component', () => {
       });
       render(<DefaultTestVariables />);
 
-      const nameField = screen.getByLabelText('Variable name');
-      const valueField = screen.getByLabelText('Value');
+      // Use placeholder text to find inputs since labels are sr-only
+      const nameField = screen.getByPlaceholderText('Variable name');
+      const valueField = screen.getByPlaceholderText('Value');
 
       expect(nameField).toBeInTheDocument();
       expect(valueField).toBeInTheDocument();
@@ -434,14 +437,15 @@ describe('DefaultTestVariables Component', () => {
     const addButton = screen.getByText('Add Variable');
     fireEvent.click(addButton);
     await waitFor(() => {
-      const variableInputs = screen.getAllByLabelText('Variable name');
+      // Use placeholder text to find inputs since labels are sr-only
+      const variableInputs = screen.getAllByPlaceholderText('Variable name');
       expect(variableInputs.length).toBe(1);
       fireEvent.change(variableInputs[0], { target: { value: ' var' } });
     });
 
     fireEvent.click(addButton);
     await waitFor(() => {
-      const variableInputs = screen.getAllByLabelText('Variable name');
+      const variableInputs = screen.getAllByPlaceholderText('Variable name');
       expect(variableInputs.length).toBe(2);
       fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
     });

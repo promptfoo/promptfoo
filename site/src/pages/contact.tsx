@@ -1,5 +1,6 @@
-import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect, useState } from 'react';
+
+import Cal, { getCalApi } from '@calcom/embed-react';
 import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,11 +10,11 @@ import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import styles from './contact.module.css';
 
@@ -33,7 +34,7 @@ function Calendar() {
     <div className={styles.calendarContainer}>
       <Cal
         calLink="team/promptfoo/intro2"
-        style={{ width: '100%', height: '100%', overflow: 'scroll' }}
+        style={{ width: '100%', height: '100%', overflow: 'visible' }}
         config={{ layout: 'month_view' }}
       />
     </div>
@@ -62,7 +63,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -89,7 +90,7 @@ function Contact(): JSX.Element {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Contact Sales
+            Book a Demo
           </Typography>
           <Typography variant="h6" color="text.secondary">
             Let's discuss how Promptfoo can secure your AI infrastructure
@@ -386,7 +387,7 @@ function Contact(): JSX.Element {
                   🐙 View on GitHub
                 </Link>
                 <Link
-                  href="mailto:enterprise@promptfoo.dev"
+                  href="mailto:inquiries@promptfoo.dev"
                   className={styles.quickLink}
                   sx={{
                     fontSize: '0.75rem',
@@ -395,7 +396,7 @@ function Contact(): JSX.Element {
                     textDecoration: 'none',
                   }}
                 >
-                  📧 enterprise@promptfoo.dev
+                  📧 inquiries@promptfoo.dev
                 </Link>
               </Box>
             </Box>
@@ -406,7 +407,7 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.ReactElement {
   return (
     <Layout
       title="Contact Enterprise Sales"
