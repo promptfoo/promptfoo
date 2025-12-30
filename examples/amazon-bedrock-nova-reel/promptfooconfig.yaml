@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Amazon Nova Reel Video Generation
+
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      region: us-east-1
+      # Required: S3 bucket for video output
+      # Update this to your own S3 bucket
+      s3OutputUri: s3://your-bucket/nova-reel-outputs
+      durationSeconds: 6
+      # Optional: Set seed for reproducible results
+      # seed: 12345
+
+prompts:
+  - 'Closeup of a large seashell in the sand. Gentle waves flow around the shell. Camera slowly zooms in.'
+  - 'A hummingbird hovering near colorful flowers in slow motion, shallow depth of field, golden hour lighting'
+
+tests:
+  - vars: {}
