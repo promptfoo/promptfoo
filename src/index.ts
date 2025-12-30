@@ -29,6 +29,15 @@ import type { ApiProvider } from './types/providers';
 export { generateTable } from './table';
 export * from './types/index';
 
+// Extension hook context types for users writing custom extensions
+export type {
+  AfterAllExtensionHookContext,
+  AfterEachExtensionHookContext,
+  BeforeAllExtensionHookContext,
+  BeforeEachExtensionHookContext,
+  ExtensionHookContextMap,
+} from './evaluatorHelpers';
+
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
     await runDbMigrations();

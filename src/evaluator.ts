@@ -1912,11 +1912,25 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
-      suite: testSuite,
-    });
+    // Only load results from database if there are extensions to run
+    if (testSuite.extensions?.length) {
+      // Load results from database for extensions (results may not be in memory for persisted evals)
+      const allResults = await this.evalRecord.getResults();
+
+      // Convert EvalResult model instances to plain EvaluateResult objects for extensions
+      const resultsForExtension: EvaluateResult[] = allResults.map(
+        (result): EvaluateResult =>
+          'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+      );
+
+      await runExtensionHook(testSuite.extensions, 'afterAll', {
+        prompts: this.evalRecord.prompts,
+        results: resultsForExtension,
+        suite: testSuite,
+        evalId: this.evalRecord.id,
+        config: this.evalRecord.config,
+      });
+    }
 
     // Calculate additional metrics for telemetry
     const endTime = Date.now();
