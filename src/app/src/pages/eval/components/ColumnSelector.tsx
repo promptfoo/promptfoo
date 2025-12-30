@@ -1,10 +1,13 @@
 import React from 'react';
 
+import RefreshIcon from '@mui/icons-material/Refresh';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -18,20 +21,52 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { SelectChangeEvent } from '@mui/material/Select';
 
+import type { ColumnVisibilityByName } from './store';
+
 interface ColumnData {
   value: string;
   label: string;
   group?: string;
   description?: string;
+  /** The semantic name for the column (e.g., "context" for "Variable 1: context") */
+  semanticName?: string;
 }
 
 interface ColumnSelectorProps {
   columnData: ColumnData[];
   selectedColumns: string[];
   onChange: (event: SelectChangeEvent<string[]>) => void;
+  /** Current name-based column visibility preferences */
+  columnVisibilityByName?: ColumnVisibilityByName;
+  /** Callback when a column's visibility preference should be saved by name */
+  onSaveColumnPreference?: (semanticName: string, visible: boolean) => void;
+  /** Callback to clear a column's saved preference */
+  onClearColumnPreference?: (semanticName: string) => void;
+  /** Callback to reset all column preferences */
+  onResetAllPreferences?: () => void;
+  /** Callback to set global variable visibility default */
+  onSetGlobalVariableVisibility?: (visible: boolean) => void;
+  /** Callback to set global prompt visibility default */
+  onSetGlobalPromptVisibility?: (visible: boolean) => void;
+  /** Callback to clear per-eval column state (for migrating from legacy state) */
+  onClearPerEvalState?: () => void;
+  /** Whether there are any saved preferences */
+  hasPreferences?: boolean;
 }
 
-export const ColumnSelector = ({ columnData, selectedColumns, onChange }: ColumnSelectorProps) => {
+export const ColumnSelector = ({
+  columnData,
+  selectedColumns,
+  onChange,
+  columnVisibilityByName = {},
+  onSaveColumnPreference,
+  onClearColumnPreference,
+  onResetAllPreferences,
+  onSetGlobalVariableVisibility,
+  onSetGlobalPromptVisibility,
+  onClearPerEvalState,
+  hasPreferences = false,
+}: ColumnSelectorProps) => {
   const [open, setOpen] = React.useState(false);
 
   const handleOpen = () => setOpen(true);
@@ -52,40 +87,89 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
       type: 'change',
     }) as unknown as SelectChangeEvent<string[]>;
 
-  const handleToggle = (value: string) => {
-    const newSelected = selectedColumns.includes(value)
-      ? selectedColumns.filter((item) => item !== value)
-      : [...selectedColumns, value];
+  const handleToggle = (column: ColumnData) => {
+    const isCurrentlySelected = selectedColumns.includes(column.value);
+    const newSelected = isCurrentlySelected
+      ? selectedColumns.filter((item) => item !== column.value)
+      : [...selectedColumns, column.value];
     onChange(createSelectEvent(newSelected));
+
+    // Save the preference by semantic name if available
+    if (onSaveColumnPreference && column.semanticName) {
+      onSaveColumnPreference(column.semanticName, !isCurrentlySelected);
+    }
   };
 
   const handleShowAll = () => {
+    // Clear all name-based preferences first so global defaults can take effect.
+    // Without this, hidden columns would stay hidden because name-based preferences
+    // have higher priority than global defaults.
+    if (onResetAllPreferences) {
+      onResetAllPreferences();
+    }
+    onChange(createSelectEvent(columnData.map((col) => col.value)));
+    // When showing all, also update the global defaults for both variables and prompts
+    if (onSetGlobalVariableVisibility) {
+      onSetGlobalVariableVisibility(true);
+    }
+    if (onSetGlobalPromptVisibility) {
+      onSetGlobalPromptVisibility(true);
+    }
+  };
+
+  const handleResetToDefaults = () => {
+    // Clear all name-based preferences
+    if (onResetAllPreferences) {
+      onResetAllPreferences();
+    }
+    // Clear per-eval column state for current eval (legacy migration)
+    if (onClearPerEvalState) {
+      onClearPerEvalState();
+    }
+    // Reset global defaults to show all
+    if (onSetGlobalVariableVisibility) {
+      onSetGlobalVariableVisibility(true);
+    }
+    if (onSetGlobalPromptVisibility) {
+      onSetGlobalPromptVisibility(true);
+    }
+    // Show all columns after reset
     onChange(createSelectEvent(columnData.map((col) => col.value)));
   };
 
-  // Get all variable columns
-  const variableColumns = columnData
-    .filter((col) => col.value.startsWith('Variable'))
-    .map((col) => col.value);
+  // Get all variable columns with their semantic names
+  const variableColumns = columnData.filter((col) => col.value.startsWith('Variable'));
+  const variableColumnIds = variableColumns.map((col) => col.value);
 
   // Check if all variables are currently visible
   const variablesVisible =
-    variableColumns.length > 0 && variableColumns.every((col) => selectedColumns.includes(col));
+    variableColumnIds.length > 0 && variableColumnIds.every((col) => selectedColumns.includes(col));
 
   const handleToggleVariables = () => {
-    if (variablesVisible) {
-      // Hide all variables - keep non-variable columns
-      const newSelected = selectedColumns.filter((col) => !col.startsWith('Variable'));
-      onChange(createSelectEvent(newSelected));
-    } else {
+    const newVariablesVisible = !variablesVisible;
+
+    if (newVariablesVisible) {
       // Show all variables - add all variable columns that aren't already selected
       const newSelected = [...selectedColumns];
-      variableColumns.forEach((col) => {
+      variableColumnIds.forEach((col) => {
         if (!newSelected.includes(col)) {
           newSelected.push(col);
         }
       });
       onChange(createSelectEvent(newSelected));
+    } else {
+      // Hide all variables - keep non-variable columns
+      const newSelected = selectedColumns.filter((col) => !col.startsWith('Variable'));
+      onChange(createSelectEvent(newSelected));
+    }
+
+    // Only update the global variable visibility preference.
+    // We don't create individual column preferences here because:
+    // 1. It pollutes the persistence store with explicit overrides for every variable
+    // 2. The global default is sufficient for group-level visibility control
+    // 3. Individual column preferences should only be created when toggling individual columns
+    if (onSetGlobalVariableVisibility) {
+      onSetGlobalVariableVisibility(newVariablesVisible);
     }
   };
 
@@ -102,6 +186,11 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
     {} as Record<string, ColumnData[]>,
   );
 
+  // Check if a column has a saved preference
+  const hasColumnPreference = (column: ColumnData): boolean => {
+    return column.semanticName ? columnVisibilityByName[column.semanticName] !== undefined : false;
+  };
+
   return (
     <>
       <Button onClick={handleOpen} startIcon={<ViewColumnIcon />} variant="text">
@@ -116,10 +205,12 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
               <Button size="small" onClick={handleShowAll} variant="outlined">
                 Show All
               </Button>
-              {variableColumns.length > 0 && (
+              {variableColumnIds.length > 0 && (
                 <Tooltip
                   title={
-                    variablesVisible ? 'Hide all variable columns' : 'Show all variable columns'
+                    variablesVisible
+                      ? 'Hide all variable columns (saves preference)'
+                      : 'Show all variable columns (saves preference)'
                   }
                 >
                   <Button
@@ -133,10 +224,29 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
                   </Button>
                 </Tooltip>
               )}
+              {hasPreferences && onResetAllPreferences && (
+                <Tooltip title="Clear all saved column preferences and show all columns">
+                  <Button
+                    size="small"
+                    onClick={handleResetToDefaults}
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<RefreshIcon />}
+                  >
+                    Reset
+                  </Button>
+                </Tooltip>
+              )}
             </Stack>
           </Stack>
         </DialogTitle>
         <DialogContent dividers>
+          <Box sx={{ mb: 2, px: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Column visibility preferences are saved and apply across all evals with matching
+              column names.
+            </Typography>
+          </Box>
           {Object.entries(groupedColumns).map(([group, columns]) => (
             <List
               key={group}
@@ -146,35 +256,58 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
                 </ListSubheader>
               }
             >
-              {columns.map((column) => (
-                <ListItem key={column.value} dense disablePadding>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        edge="start"
-                        checked={selectedColumns.includes(column.value)}
-                        onChange={() => handleToggle(column.value)}
-                      />
-                    }
-                    label={
-                      <Tooltip title={column.description || column.label} placement="right">
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            maxWidth: '500px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {column.label}
-                        </Typography>
-                      </Tooltip>
-                    }
-                    sx={{ ml: 1, width: '100%' }}
-                  />
-                </ListItem>
-              ))}
+              {columns.map((column) => {
+                const hasPref = hasColumnPreference(column);
+                return (
+                  <ListItem key={column.value} dense disablePadding>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          edge="start"
+                          checked={selectedColumns.includes(column.value)}
+                          onChange={() => handleToggle(column)}
+                        />
+                      }
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Tooltip title={column.description || column.label} placement="right">
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                maxWidth: '400px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {column.label}
+                            </Typography>
+                          </Tooltip>
+                          {hasPref && (
+                            <Tooltip title="This column has a saved preference. Click the column checkbox to update it.">
+                              <Chip
+                                size="small"
+                                label="saved"
+                                sx={{
+                                  height: 18,
+                                  fontSize: '0.7rem',
+                                  '& .MuiChip-label': { px: 0.75 },
+                                }}
+                                onDelete={
+                                  onClearColumnPreference && column.semanticName
+                                    ? () => onClearColumnPreference(column.semanticName!)
+                                    : undefined
+                                }
+                              />
+                            </Tooltip>
+                          )}
+                        </Box>
+                      }
+                      sx={{ ml: 1, width: '100%' }}
+                    />
+                  </ListItem>
+                );
+              })}
             </List>
           ))}
         </DialogContent>

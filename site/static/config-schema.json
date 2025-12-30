@@ -1836,6 +1836,34 @@
         "writeLatestResults": {
           "type": "boolean"
         },
+        "defaultColumnVisibility": {
+          "type": "object",
+          "properties": {
+            "variables": {
+              "type": "string",
+              "enum": ["visible", "hidden"],
+              "default": "visible"
+            },
+            "prompts": {
+              "type": "string",
+              "enum": ["visible", "hidden"],
+              "default": "visible"
+            },
+            "hideColumns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "showColumns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "tracing": {
           "type": "object",
           "properties": {

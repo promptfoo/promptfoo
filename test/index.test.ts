@@ -96,6 +96,7 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'ConversationMessageSchema',
+    'DefaultColumnVisibilitySchema',
     'DerivedMetricSchema',
     'EvalResultsFilterMode',
     'NotPrefixedAssertionTypesSchema',

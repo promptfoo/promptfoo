@@ -375,6 +375,23 @@ interface TableState {
   reset: () => void;
 }
 
+/**
+ * Global defaults for column visibility that apply across all evals.
+ */
+export interface GlobalColumnDefaults {
+  /** Whether to show all variable columns by default */
+  showAllVariables: boolean;
+  /** Whether to show all prompt columns by default */
+  showAllPrompts: boolean;
+}
+
+/**
+ * Name-based column visibility preferences.
+ * Keys are semantic column names (e.g., "context", "question").
+ * Values are visibility states (true = visible, false = hidden).
+ */
+export type ColumnVisibilityByName = Record<string, boolean>;
+
 interface SettingsState {
   maxTextLength: number;
   setMaxTextLength: (maxTextLength: number) => void;
@@ -400,8 +417,48 @@ interface SettingsState {
   stickyHeader: boolean;
   setStickyHeader: (stickyHeader: boolean) => void;
 
+  /** @deprecated Use columnVisibilityByName and globalColumnDefaults instead */
   columnStates: Record<string, ColumnState>;
+  /** @deprecated Use setColumnVisibilityByName instead */
   setColumnState: (evalId: string, state: ColumnState) => void;
+  /** Clears per-eval column state for a specific eval (for migration from legacy state) */
+  clearColumnState: (evalId: string) => void;
+
+  /**
+   * Name-based column visibility preferences.
+   * Keys are semantic column names (e.g., "context", "question").
+   * Values indicate if the column should be visible (true) or hidden (false).
+   * These preferences persist across different evals that have matching column names.
+   */
+  columnVisibilityByName: ColumnVisibilityByName;
+  /**
+   * Sets visibility for a specific column by its semantic name.
+   * @param columnName - The semantic name of the column (e.g., "context", not "Variable 1")
+   * @param visible - Whether the column should be visible
+   */
+  setColumnVisibilityByName: (columnName: string, visible: boolean) => void;
+  /**
+   * Sets visibility for multiple columns at once.
+   */
+  setMultipleColumnVisibilityByName: (updates: ColumnVisibilityByName) => void;
+  /**
+   * Clears a column's visibility preference, reverting to global defaults.
+   */
+  clearColumnVisibilityByName: (columnName: string) => void;
+  /**
+   * Clears all column visibility preferences.
+   */
+  clearAllColumnVisibilityByName: () => void;
+
+  /**
+   * Global defaults for column visibility.
+   * These are used when a column has no specific preference set.
+   */
+  globalColumnDefaults: GlobalColumnDefaults;
+  /**
+   * Sets the global column defaults.
+   */
+  setGlobalColumnDefaults: (defaults: Partial<GlobalColumnDefaults>) => void;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -443,6 +500,47 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           columnStates: {
             ...prevState.columnStates,
             [evalId]: state,
+          },
+        })),
+      clearColumnState: (evalId: string) =>
+        set((prevState) => {
+          const { [evalId]: _, ...rest } = prevState.columnStates;
+          return { columnStates: rest };
+        }),
+
+      // Name-based column visibility (persists across evals with matching column names)
+      columnVisibilityByName: {},
+      setColumnVisibilityByName: (columnName: string, visible: boolean) =>
+        set((prevState) => ({
+          columnVisibilityByName: {
+            ...prevState.columnVisibilityByName,
+            [columnName]: visible,
+          },
+        })),
+      setMultipleColumnVisibilityByName: (updates: ColumnVisibilityByName) =>
+        set((prevState) => ({
+          columnVisibilityByName: {
+            ...prevState.columnVisibilityByName,
+            ...updates,
+          },
+        })),
+      clearColumnVisibilityByName: (columnName: string) =>
+        set((prevState) => {
+          const { [columnName]: _, ...rest } = prevState.columnVisibilityByName;
+          return { columnVisibilityByName: rest };
+        }),
+      clearAllColumnVisibilityByName: () => set(() => ({ columnVisibilityByName: {} })),
+
+      // Global column defaults
+      globalColumnDefaults: {
+        showAllVariables: true,
+        showAllPrompts: true,
+      },
+      setGlobalColumnDefaults: (defaults: Partial<GlobalColumnDefaults>) =>
+        set((prevState) => ({
+          globalColumnDefaults: {
+            ...prevState.globalColumnDefaults,
+            ...defaults,
           },
         })),
 

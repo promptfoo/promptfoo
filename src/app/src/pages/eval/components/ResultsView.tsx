@@ -47,6 +47,7 @@ import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
+import { getConfigColumnVisibility, resolveColumnVisibility } from './columnVisibility';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
@@ -62,7 +63,6 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
-import type { VisibilityState } from '@tanstack/table-core';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -201,12 +201,19 @@ export default function ResultsView({
   const {
     setInComparisonMode,
     columnStates,
-    setColumnState,
+    clearColumnState,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
+    // New name-based column visibility
+    columnVisibilityByName,
+    setColumnVisibilityByName,
+    clearColumnVisibilityByName,
+    clearAllColumnVisibilityByName,
+    globalColumnDefaults,
+    setGlobalColumnDefaults,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -340,13 +347,14 @@ export default function ResultsView({
 
   const columnData = React.useMemo(() => {
     return [
-      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
-      ...head.vars.map((_, idx) => ({
+      ...(hasAnyDescriptions
+        ? [{ value: 'description', label: 'Description', semanticName: 'description' }]
+        : []),
+      ...head.vars.map((varName, idx) => ({
         value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
+        label: `Var ${idx + 1}: ${varName.length > 100 ? varName.slice(0, 97) + '...' : varName}`,
         group: 'Variables',
+        semanticName: varName, // Semantic name for preference persistence
       })),
       ...promptOptions,
     ];
@@ -359,19 +367,42 @@ export default function ResultsView({
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  const allColumns = React.useMemo(
-    () => [
-      ...(hasAnyDescriptions ? ['description'] : []),
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ],
-    [hasAnyDescriptions, head.vars, head.prompts],
-  );
+  // Resolve column visibility using the new layered approach:
+  // 1. Per-eval override (legacy columnStates)
+  // 2. Name-based user preferences (columnVisibilityByName)
+  // 3. Config defaults (defaultColumnVisibility from config)
+  // 4. Global defaults (globalColumnDefaults)
+  const resolvedColumnState = React.useMemo(() => {
+    const configDefaults = getConfigColumnVisibility(config);
+    const perEvalState = columnStates[currentEvalId]?.columnVisibility;
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+    const result = resolveColumnVisibility({
+      varNames: head.vars,
+      promptCount: head.prompts.length,
+      hasDescription: hasAnyDescriptions,
+      perEvalColumnState: perEvalState,
+      columnVisibilityByName,
+      globalColumnDefaults,
+      configDefaults,
+    });
+
+    return {
+      selectedColumns: result.visibleColumns,
+      columnVisibility: result.columnVisibility,
+    };
+  }, [
+    config,
+    columnStates,
+    currentEvalId,
+    head.vars,
+    head.prompts.length,
+    hasAnyDescriptions,
+    columnVisibilityByName,
+    globalColumnDefaults,
+  ]);
+
+  // Use resolved state, falling back to legacy state if needed
+  const currentColumnState = resolvedColumnState;
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -381,29 +412,23 @@ export default function ResultsView({
     [head.prompts, currentColumnState.columnVisibility],
   );
 
-  const updateColumnVisibility = React.useCallback(
-    (columns: string[]) => {
-      const newColumnVisibility: VisibilityState = {};
-      allColumns.forEach((col) => {
-        newColumnVisibility[col] = columns.includes(col);
-      });
-      setColumnState(currentEvalId, {
-        selectedColumns: columns,
-        columnVisibility: newColumnVisibility,
-      });
-    },
-    [allColumns, setColumnState, currentEvalId],
-  );
-
-  const handleChange = React.useCallback(
-    (event: SelectChangeEvent<string[]>) => {
-      const newSelectedColumns =
-        typeof event.target.value === 'string' ? event.target.value.split(',') : event.target.value;
-
-      updateColumnVisibility(newSelectedColumns);
-    },
-    [updateColumnVisibility],
-  );
+  // Column visibility onChange handler for ColumnSelector.
+  //
+  // ARCHITECTURE NOTE: This handler is intentionally a no-op.
+  //
+  // Column visibility is managed through two separate callbacks in ColumnSelector:
+  // 1. onSaveColumnPreference - saves individual column visibility by semantic name
+  // 2. onSetGlobalVariableVisibility/onSetGlobalPromptVisibility - sets global defaults
+  //
+  // The onChange prop exists because ColumnSelector was originally designed to emit
+  // the full list of visible columns on every change. Now that we use name-based
+  // preferences with priority resolution, the selected columns are computed from
+  // the preference state rather than being stored directly.
+  //
+  // This empty handler maintains API compatibility with ColumnSelector's onChange prop.
+  const handleColumnSelectorChange = React.useCallback((_event: SelectChangeEvent<string[]>) => {
+    // No-op: visibility is managed via onSaveColumnPreference and global defaults
+  }, []);
 
   const handleSaveEvalName = React.useCallback(
     async (newName: string) => {
@@ -889,7 +914,19 @@ export default function ResultsView({
                 <ColumnSelector
                   columnData={columnData}
                   selectedColumns={currentColumnState.selectedColumns}
-                  onChange={handleChange}
+                  onChange={handleColumnSelectorChange}
+                  columnVisibilityByName={columnVisibilityByName}
+                  onSaveColumnPreference={setColumnVisibilityByName}
+                  onClearColumnPreference={clearColumnVisibilityByName}
+                  onResetAllPreferences={clearAllColumnVisibilityByName}
+                  onSetGlobalVariableVisibility={(visible) =>
+                    setGlobalColumnDefaults({ showAllVariables: visible })
+                  }
+                  onSetGlobalPromptVisibility={(visible) =>
+                    setGlobalColumnDefaults({ showAllPrompts: visible })
+                  }
+                  onClearPerEvalState={() => clearColumnState(currentEvalId)}
+                  hasPreferences={Object.keys(columnVisibilityByName ?? {}).length > 0}
                 />
                 <Tooltip title="Edit table view settings" placement="bottom">
                   <Button
