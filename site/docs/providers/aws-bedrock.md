@@ -634,6 +634,107 @@ providers:
 
 Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
 
+### Amazon Nova Reel (Video Generation)
+
+Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
+
+:::note Prerequisites
+Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
+
+- `bedrock:InvokeModel` and `bedrock:StartAsyncInvoke` permissions
+- `s3:PutObject` permission on the output bucket
+- `s3:GetObject` permission for downloading generated videos
+  :::
+
+#### Basic Configuration
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      region: us-east-1
+      s3OutputUri: s3://my-bucket/videos # Required
+      durationSeconds: 6 # Default: 6
+      seed: 42 # Optional: for reproducibility
+```
+
+#### Task Types
+
+Nova Reel supports three task types:
+
+**TEXT_VIDEO (default)** - Generate a 6-second video from a text prompt:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: TEXT_VIDEO
+      durationSeconds: 6
+```
+
+**MULTI_SHOT_AUTOMATED** - Generate longer videos (12-120 seconds) from a single prompt:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: MULTI_SHOT_AUTOMATED
+      durationSeconds: 18 # Must be multiple of 6
+```
+
+**MULTI_SHOT_MANUAL** - Define individual shots with separate prompts:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: MULTI_SHOT_MANUAL
+      durationSeconds: 12
+      shots:
+        - text: 'Drone footage of a forest from high altitude'
+        - text: 'Camera arcs around vehicles in a forest'
+```
+
+#### Image-to-Video Generation
+
+Use an image as the starting frame (must be 1280x720):
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      image: file://path/to/image.png
+```
+
+#### Configuration Options
+
+| Option            | Description                                                  | Default    |
+| ----------------- | ------------------------------------------------------------ | ---------- |
+| `s3OutputUri`     | S3 bucket URI for output (required)                          | -          |
+| `taskType`        | `TEXT_VIDEO`, `MULTI_SHOT_AUTOMATED`, or `MULTI_SHOT_MANUAL` | TEXT_VIDEO |
+| `durationSeconds` | Video duration (6, or 12-120 in multiples of 6)              | 6          |
+| `seed`            | Random seed (0-2,147,483,646)                                | -          |
+| `image`           | Starting frame image (file:// path or base64)                | -          |
+| `shots`           | Shot definitions for MULTI_SHOT_MANUAL                       | -          |
+| `pollIntervalMs`  | Polling interval in ms                                       | 10000      |
+| `maxPollTimeMs`   | Maximum polling time in ms                                   | 900000     |
+| `downloadFromS3`  | Download video to local blob storage                         | true       |
+
+Generated videos are 1280x720 resolution at 24 FPS in MP4 format.
+
+:::warning Generation Time
+Video generation is asynchronous and takes approximately:
+
+- 6-second video: ~90 seconds
+- 2-minute video: ~14-17 minutes
+
+The provider polls for completion automatically.
+:::
+
 ### AI21 Models
 
 For AI21 models (e.g., `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:

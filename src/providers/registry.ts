@@ -362,10 +362,17 @@ export const providerMap: ProviderFactory[] = [
       }
 
       // Handle Luma Ray video model
-      if (modelType === 'video' || modelType.includes('luma.ray')) {
+      if (modelType.includes('luma.ray')) {
         const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
         const videoModelName = modelName || 'luma.ray-v2:0';
         return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
+      // Handle Nova Reel video model
+      if (modelType === 'video' || modelType.includes('amazon.nova-reel')) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
       }
 
       // Handle Bedrock Agents
