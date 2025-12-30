@@ -10,6 +10,7 @@ import {
   WarningIcon,
 } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;
@@ -60,7 +61,9 @@ export default function InstallationGuide({
           </AlertDescription>
         </Alert>
 
-        <h3 className="text-lg font-semibold mb-4">Quick Installation</h3>
+        <Typography variant="subtitle" as="h3" className="mb-4">
+          Quick Installation
+        </Typography>
 
         <div
           className="flex items-center justify-between p-4 rounded-lg bg-muted font-mono text-sm mb-4"
@@ -108,7 +111,9 @@ export default function InstallationGuide({
           </Button>
         </div>
 
-        <h4 className="text-sm font-medium text-muted-foreground mb-3">Troubleshooting</h4>
+        <Typography variant="label" as="h4" className="text-muted-foreground mb-3">
+          Troubleshooting
+        </Typography>
         <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
           <li>
             Make sure <code className="bg-muted px-1 rounded">pip</code> is available in your PATH

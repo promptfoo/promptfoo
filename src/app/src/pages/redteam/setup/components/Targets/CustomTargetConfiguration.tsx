@@ -12,6 +12,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import {
   AlertCircle,
@@ -459,10 +460,10 @@ const CustomTargetConfiguration = ({
 
   return (
     <div className="mt-4">
-      <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+      <Typography variant="subtitle" as="h3" className="mb-4 flex items-center gap-2">
         {config.icon}
         {config.title}
-      </h3>
+      </Typography>
 
       <div className="rounded-lg border border-border p-4">
         {/* Target ID Section */}

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { Typography } from '@app/components/ui/typography';
 import { Plus, Trash2 } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
@@ -23,7 +24,9 @@ const BrowserAutomationConfiguration = ({
 }: BrowserAutomationConfigurationProps) => {
   return (
     <div className="mt-4">
-      <h3 className="mb-4 text-lg font-semibold">Browser Automation Configuration</h3>
+      <Typography variant="subtitle" as="h3" className="mb-4">
+        Browser Automation Configuration
+      </Typography>
       <div className="rounded-lg border border-border p-4">
         <p className="mb-4 text-sm text-muted-foreground">
           Configure browser automation steps to interact with web applications. Each step represents
@@ -73,7 +76,9 @@ const BrowserAutomationConfiguration = ({
         </div>
 
         <div className="mt-6">
-          <h4 className="mb-2 font-medium">Browser Steps</h4>
+          <Typography variant="label" as="h4" className="mb-2">
+            Browser Steps
+          </Typography>
 
           {selectedTarget.config.steps?.map((step: any, index: number) => (
             <div key={index} className="mb-4 rounded-lg border border-border p-4">

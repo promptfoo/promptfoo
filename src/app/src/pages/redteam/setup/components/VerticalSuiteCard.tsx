@@ -6,6 +6,7 @@ import { Card } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@app/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { cn } from '@app/lib/utils';
 import {
@@ -173,7 +174,9 @@ export default function VerticalSuiteCard({
           {/* Content */}
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-center gap-2">
-              <h3 className="text-lg font-semibold">{suite.name}</h3>
+              <Typography variant="subtitle" as="h3">
+                {suite.name}
+              </Typography>
               {isLocked && (
                 <Tooltip>
                   <TooltipTrigger asChild>

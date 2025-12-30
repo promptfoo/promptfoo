@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
@@ -157,7 +158,9 @@ const RiskCategoryDrawer = ({
         >
           <SheetTitle className="sr-only">{displayName}</SheetTitle>
           <div className="risk-category-drawer">
-            <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
+            <Typography variant="subtitle" as="h2" className="mb-4">
+              {displayName}
+            </Typography>
             <p className="mt-4 text-center">No tests have been run for this category.</p>
           </div>
         </SheetContent>
@@ -237,7 +240,9 @@ const RiskCategoryDrawer = ({
       >
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
         <div className="risk-category-drawer p-2">
-          <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
+          <Typography variant="subtitle" as="h2" className="mb-4">
+            {displayName}
+          </Typography>
 
           {/* Stats row */}
           <div className="mb-4 flex items-center justify-between">
@@ -334,9 +339,9 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="flow">
               <div className="mt-4">
-                <h3 className="mb-3 text-center text-lg font-semibold">
+                <Typography variant="subtitle" as="h3" className="mb-3 text-center">
                   Simulated User - Attack Performance
-                </h3>
+                </Typography>
                 <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
               </div>
             </TabsContent>

@@ -15,6 +15,7 @@ import {
 } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -605,12 +606,14 @@ const App = () => {
       <div className="flex h-screen flex-col items-center justify-center p-6">
         <Card className="max-w-xl p-8 text-center">
           <AlertTriangle className="mx-auto mb-4 h-16 w-16 text-amber-500" />
-          <h1 className="mb-6 text-2xl font-bold">Report unavailable</h1>
-          <p className="text-muted-foreground">
+          <Typography variant="pageTitle" as="h1" className="mb-6">
+            Report unavailable
+          </Typography>
+          <Typography variant="muted">
             The {searchParams.get('evalId') ? 'selected' : 'latest'} evaluation results are not
             displayable in report format.
-          </p>
-          <p className="text-muted-foreground">Please run a red team and try again.</p>
+          </Typography>
+          <Typography variant="muted">Please run a red team and try again.</Typography>
         </Card>
       </div>
     );
@@ -652,9 +655,13 @@ const App = () => {
       >
         <div className="mx-auto max-w-7xl px-4">
           <div className="flex min-h-16 items-center justify-between py-2">
-            <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4 font-bold">
+            <Typography
+              variant="label"
+              as="h1"
+              className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4"
+            >
               {evalData.config.description || 'Risk Assessment'}
-            </h1>
+            </Typography>
             <div className="shrink-0">{actionButtons}</div>
           </div>
         </div>
@@ -667,10 +674,12 @@ const App = () => {
           {/* Report Header Card */}
           <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
             <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
-            <h1 className="text-2xl font-bold">
+            <Typography variant="pageTitle" as="h1" className="font-bold">
               {evalData.config.description || 'Risk Assessment'}
-            </h1>
-            <p className="mb-4 text-muted-foreground">{formatDataGridDate(evalData.createdAt)}</p>
+            </Typography>
+            <Typography variant="muted" className="mb-4">
+              {formatDataGridDate(evalData.createdAt)}
+            </Typography>
             <div className="flex flex-wrap gap-3">
               {selectedPrompt && prompts.length > 1 ? (
                 <Select
@@ -741,7 +750,9 @@ const App = () => {
             <Card className="print:hidden">
               <CardContent className="p-4">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Filters</h2>
+                  <Typography variant="subtitle" as="h2">
+                    Filters
+                  </Typography>
                   {hasActiveFilters && (
                     <Button variant="ghost" size="sm" onClick={clearAllFilters}>
                       <X className="mr-1 h-4 w-4" />

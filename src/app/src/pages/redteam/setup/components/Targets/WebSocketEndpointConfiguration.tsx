@@ -5,6 +5,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
 import Prism from 'prismjs';
@@ -45,7 +46,9 @@ const WebSocketEndpointConfiguration = ({
   );
   return (
     <div className="mt-4">
-      <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
+      <Typography variant="subtitle" as="h3" className="mb-4">
+        Custom WebSocket Endpoint Configuration
+      </Typography>
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
           <Label htmlFor="websocket-url">WebSocket URL</Label>

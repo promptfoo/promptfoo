@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { Typography } from '@app/components/ui/typography';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -120,7 +121,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Assertions</h3>
+      <Typography variant="subtitle" as="h3">
+        Assertions
+      </Typography>
 
       {asserts.length > 0 && (
         <div className="space-y-3">

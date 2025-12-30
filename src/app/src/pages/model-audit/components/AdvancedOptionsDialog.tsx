@@ -15,6 +15,7 @@ import { XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Switch } from '@app/components/ui/switch';
+import { Typography } from '@app/components/ui/typography';
 
 import type { ScanOptions } from '../ModelAudit.types';
 
@@ -86,7 +87,9 @@ export default function AdvancedOptionsDialog({
           {/* Blacklist Patterns */}
           <div className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold">Blacklist Patterns</h3>
+              <Typography variant="label" as="h3">
+                Blacklist Patterns
+              </Typography>
               <p className="text-sm text-muted-foreground mt-1">
                 Add patterns for disallowed model names (regex supported)
               </p>
@@ -131,7 +134,9 @@ export default function AdvancedOptionsDialog({
           {/* Timeout */}
           <div className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold">Scan Timeout</h3>
+              <Typography variant="label" as="h3">
+                Scan Timeout
+              </Typography>
             </div>
             <div className="relative">
               <BaseNumberInput
@@ -165,7 +170,9 @@ export default function AdvancedOptionsDialog({
           {/* Max Size */}
           <div className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold">Maximum Size Limit</h3>
+              <Typography variant="label" as="h3">
+                Maximum Size Limit
+              </Typography>
             </div>
             <Input
               placeholder="e.g., 1GB, 500MB"

@@ -4,6 +4,7 @@ import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -148,10 +149,12 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-2xl font-semibold">Datasets</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <Typography variant="pageTitle" as="h1">
+            Datasets
+          </Typography>
+          <Typography variant="muted" className="mt-1">
             Manage test datasets and track their evaluation history
-          </p>
+          </Typography>
         </div>
       </PageHeader>
       <div className="flex-1 min-h-0 flex flex-col p-6">

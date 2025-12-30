@@ -11,6 +11,7 @@ import {
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import PromptDialog from './PromptDialog';
@@ -101,7 +102,9 @@ const PromptsSection = () => {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Prompts</h2>
+        <Typography variant="title" as="h2">
+          Prompts
+        </Typography>
         <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>

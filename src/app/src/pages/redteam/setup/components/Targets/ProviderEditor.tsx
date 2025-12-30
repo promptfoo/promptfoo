@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getProviderType } from './helpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
@@ -101,7 +102,11 @@ export default function ProviderEditor({
 
   return (
     <div className="flex flex-col gap-6">
-      {!disableTitle && <h2 className="mb-6 text-2xl font-bold">Select Red Team Provider</h2>}
+      {!disableTitle && (
+        <Typography variant="title" as="h2" weight="bold" className="mb-6">
+          Select Red Team Provider
+        </Typography>
+      )}
 
       <p className="text-base">
         {description ||

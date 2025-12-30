@@ -4,6 +4,7 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -518,7 +519,9 @@ const TestSuites = ({
   return (
     <div className="break-before-page print:break-before-always" ref={vulnerabilitiesDataGridRef}>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
+        <Typography variant="title" as="h2">
+          Vulnerabilities and Mitigations
+        </Typography>
         <Button onClick={exportToCSV} className="print:hidden">
           <Download className="mr-2 h-4 w-4" />
           Export vulnerabilities to CSV

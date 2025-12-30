@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { Textarea } from '@app/components/ui/textarea';
+import { Typography } from '@app/components/ui/typography';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
@@ -309,10 +310,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         <Sparkles className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
-                        <p className="text-xs text-muted-foreground">
+                        <Typography variant="label" as="h2" className="tracking-tight">
+                          Auto-Discovery
+                        </Typography>
+                        <Typography variant="small" className="text-muted-foreground">
                           1-click detection of your target's capabilities
-                        </p>
+                        </Typography>
                       </div>
                     </div>
 
@@ -401,12 +404,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               {/* Main Purpose - Standalone Section */}
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-semibold tracking-tight">Application Details</h2>
-                  <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
+                  <Typography variant="pageTitle" as="h2" className="tracking-tight">
+                    Application Details
+                  </Typography>
+                  <Typography variant="muted" className="mt-3 text-[15px] leading-relaxed">
                     This is the most critical step for generating effective red team attacks. The
                     quality and specificity of your responses directly determines how targeted and
                     realistic the generated attacks will be.
-                  </p>
+                  </Typography>
                 </div>
 
                 <div>
@@ -445,9 +450,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
+                      <Typography variant="label" as="h3" className="tracking-tight">
                         Core Application Details
-                      </h3>
+                      </Typography>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Core Application Details')}
                       </span>
@@ -543,9 +548,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
+                      <Typography variant="label" as="h3" className="tracking-tight">
                         Access & Permissions
-                      </h3>
+                      </Typography>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Access & Permissions')}
                       </span>
@@ -660,7 +665,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Data & Content</h3>
+                      <Typography variant="label" as="h3" className="tracking-tight">
+                        Data & Content
+                      </Typography>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Data & Content')}
                       </span>
@@ -774,7 +781,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 >
                   <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Business Context</h3>
+                      <Typography variant="label" as="h3" className="tracking-tight">
+                        Business Context
+                      </Typography>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Business Context')}
                       </span>
@@ -818,7 +827,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
               {/* Red Team User - Standalone Section */}
               <div className="mt-8 space-y-4">
-                <h2 className="text-lg font-semibold tracking-tight">Red Team User</h2>
+                <Typography variant="subtitle" as="h2" className="tracking-tight">
+                  Red Team User
+                </Typography>
                 <div>
                   <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
                     Who typically uses this system?
@@ -844,9 +855,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
               {/* Test Generation Instructions - Standalone Section */}
               <div className="mt-8 space-y-4">
-                <h2 className="text-lg font-semibold tracking-tight">
+                <Typography variant="subtitle" as="h2" className="tracking-tight">
                   Test Generation Instructions
-                </h2>
+                </Typography>
                 <div>
                   <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
                     Additional instructions for test generation

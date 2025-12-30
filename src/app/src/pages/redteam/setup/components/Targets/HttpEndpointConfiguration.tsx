@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
@@ -608,7 +609,9 @@ ${exampleRequest}`;
               {urlError && <p className="text-sm text-destructive">{urlError}</p>}
             </div>
 
-            <p className="mb-2 mt-6 font-medium">Headers</p>
+            <Typography variant="label" className="mb-2 mt-6">
+              Headers
+            </Typography>
             {headers.map(({ key, value }, index) => (
               <div key={index} className="mb-2 flex items-center gap-2">
                 <Input
@@ -634,7 +637,9 @@ ${exampleRequest}`;
               Add Header
             </Button>
 
-            <p className="mb-2 mt-6 font-medium">Request Body</p>
+            <Typography variant="label" className="mb-2 mt-6">
+              Request Body
+            </Typography>
             <div
               className={cn(
                 'relative mt-2 rounded-md border bg-white dark:bg-zinc-900',
@@ -673,7 +678,9 @@ ${exampleRequest}`;
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <Typography variant="label" className="mb-2 mt-6">
+          Response Parser
+        </Typography>
         <p className="mb-4 text-sm text-muted-foreground">
           This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
           with the actual response nested inside - this parser helps find the right part. Leave
@@ -757,9 +764,9 @@ ${exampleRequest}`;
           </p>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-lg font-semibold">
+              <Typography variant="subtitle" className="mb-2">
                 Example Request (paste your HTTP request here)
-              </p>
+              </Typography>
               <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={request}
@@ -775,9 +782,9 @@ ${exampleRequest}`;
               </div>
             </div>
             <div>
-              <p className="mb-2 text-lg font-semibold">
+              <Typography variant="subtitle" className="mb-2">
                 Example Response (optional, improves accuracy)
-              </p>
+              </Typography>
               <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={response}
@@ -800,7 +807,9 @@ ${exampleRequest}`;
             {generatedConfig && (
               <div className="col-span-2">
                 <div className="mb-2 mt-4 flex items-center">
-                  <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                  <Typography variant="subtitle" className="flex-1">
+                    Generated Configuration
+                  </Typography>
                   <Button
                     variant="ghost"
                     size="icon"

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { Card, CardContent } from '@app/components/ui/card';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import {
@@ -173,10 +174,10 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   return (
     <div className="break-before-page print:break-before-always">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">
+        <Typography variant="title" as="h2">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
           {frameworksToShow.length})
-        </h2>
+        </Typography>
         <CSVExporter
           categoryStats={categoryStats}
           pluginPassRateThreshold={pluginPassRateThreshold}

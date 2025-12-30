@@ -11,6 +11,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { AlertTriangle, Code, Copy, Download, Info } from 'lucide-react';
 import { AGENT_TEMPLATE } from './consts';
@@ -174,7 +175,9 @@ export default function AgentFrameworkConfiguration({
         </div>
 
         <div>
-          <h3 className="mb-2 text-lg font-semibold">Quickstart Template</h3>
+          <Typography variant="subtitle" as="h3" className="mb-2">
+            Quickstart Template
+          </Typography>
           <p className="mb-4 max-w-[1000px] text-muted-foreground">
             Want to see how it works? Promptfoo can generate a starter template for{' '}
             {frameworkDetails.name} that shows you how to connect your agent to the red team

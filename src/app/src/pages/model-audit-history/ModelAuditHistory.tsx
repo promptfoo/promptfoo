@@ -21,6 +21,7 @@ import {
 } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -224,10 +225,12 @@ export default function ModelAuditHistory() {
               <HistoryIcon className="h-7 w-7 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Scan History</h1>
-              <p className="text-sm text-muted-foreground mt-1.5">
+              <Typography variant="pageTitle" as="h1" weight="bold" className="tracking-tight">
+                Scan History
+              </Typography>
+              <Typography variant="muted" className="mt-1.5">
                 View and manage your model security scan results
-              </p>
+              </Typography>
             </div>
           </div>
         </div>
@@ -247,13 +250,17 @@ export default function ModelAuditHistory() {
           {historyError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="text-4xl mb-4">⚠️</div>
-              <h3 className="text-lg font-semibold text-destructive mb-1">Error loading history</h3>
+              <Typography variant="subtitle" as="h3" className="text-destructive mb-1">
+                Error loading history
+              </Typography>
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
           ) : historicalScans.length === 0 && !isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
               <div className="text-4xl">🔍</div>
-              <h3 className="text-lg font-semibold">No scan history found</h3>
+              <Typography variant="subtitle" as="h3">
+                No scan history found
+              </Typography>
               <p className="text-sm text-muted-foreground">
                 Run your first model security scan to see results here
               </p>

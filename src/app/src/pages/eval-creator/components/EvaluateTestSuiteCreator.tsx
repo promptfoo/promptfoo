@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Typography } from '@app/components/ui/typography';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -161,10 +162,17 @@ const EvaluateTestSuiteCreator = () => {
           <div className="container max-w-7xl mx-auto px-4 py-10">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
-                <p className="text-muted-foreground">
+                <Typography
+                  variant="pageTitle"
+                  as="h1"
+                  weight="bold"
+                  className="text-3xl tracking-tight"
+                >
+                  Create Evaluation
+                </Typography>
+                <Typography variant="muted">
                   Configure providers, prompts, and test cases to evaluate your LLM application
-                </p>
+                </Typography>
               </div>
 
               <div className="flex items-center gap-2">
@@ -192,9 +200,12 @@ const EvaluateTestSuiteCreator = () => {
               {/* Left Sidebar - Step Navigation */}
               <div className="w-64 flex-shrink-0">
                 <div className="sticky top-8 space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground mb-4 px-3">
+                  <Typography
+                    variant="small"
+                    className="text-muted-foreground mb-4 px-3 font-semibold"
+                  >
                     SETUP STEPS
-                  </h3>
+                  </Typography>
 
                   {/* Step 1 */}
                   <button

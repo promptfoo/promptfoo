@@ -21,6 +21,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { useModelAuditConfigStore } from '../stores';
@@ -78,7 +79,9 @@ function EnterpriseTabContent({
   return (
     <div className="py-8 text-center">
       <Icon className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
-      <h3 className="text-lg font-medium text-muted-foreground mb-2">{title}</h3>
+      <Typography variant="subtitle" as="h3" className="text-muted-foreground mb-2">
+        {title}
+      </Typography>
       <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{description}</p>
 
       {examples && (
@@ -87,7 +90,9 @@ function EnterpriseTabContent({
             <Card key={provider} className="bg-muted/50">
               <CardContent className="p-4 text-center">
                 <CloudUploadIcon className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-                <h4 className="font-medium mb-1">{provider}</h4>
+                <Typography variant="label" as="h4" className="mb-1">
+                  {provider}
+                </Typography>
                 <p className="text-xs text-muted-foreground mb-2">{desc}</p>
                 <code className="text-xs bg-muted px-2 py-1 rounded">{example}</code>
               </CardContent>
@@ -349,7 +354,9 @@ export default function PathSelector({
           {recentPaths.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-muted-foreground">Recent Paths</h4>
+                <Typography variant="label" as="h4" className="text-muted-foreground">
+                  Recent Paths
+                </Typography>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -448,7 +455,9 @@ export default function PathSelector({
       {paths.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-lg font-semibold">Selected Paths</h3>
+            <Typography variant="subtitle" as="h3">
+              Selected Paths
+            </Typography>
             <Badge variant="default" className="text-xs">
               {paths.length}
             </Badge>

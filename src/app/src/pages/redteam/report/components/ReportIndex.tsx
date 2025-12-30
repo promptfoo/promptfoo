@@ -1,6 +1,7 @@
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
+import { Typography } from '@app/components/ui/typography';
 import { REDTEAM_ROUTES } from '@app/constants/routes';
 import { useNavigate } from 'react-router-dom';
 import ReportsTable from './ReportsTable';
@@ -12,7 +13,9 @@ export default function ReportIndex() {
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 overflow-y-auto">
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-2xl font-semibold">Red Team Reports</h1>
+          <Typography variant="pageTitle" as="h1">
+            Red Team Reports
+          </Typography>
           <p className="text-sm text-muted-foreground mt-1">
             View and analyze your red team vulnerability scans
           </p>

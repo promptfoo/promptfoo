@@ -4,6 +4,7 @@ import { CopyButton } from '@app/components/ui/copy-button';
 import { CheckCircleIcon, ErrorIcon, FolderIcon, WarningIcon } from '@app/components/ui/icons';
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { formatDataGridDate } from '@app/utils/date';
 import SeverityScorecard from './SeverityScorecard';
@@ -71,7 +72,14 @@ export default function ScanResultHeader({
               )}
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight truncate">{name}</h1>
+              <Typography
+                variant="pageTitle"
+                as="h1"
+                weight="bold"
+                className="tracking-tight truncate"
+              >
+                {name}
+              </Typography>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-muted-foreground">
                 <Tooltip>
                   <TooltipTrigger asChild>
