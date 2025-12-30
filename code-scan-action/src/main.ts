@@ -117,6 +117,8 @@ async function run(): Promise<void> {
       ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath!,
+      '--base',
+      baseBranch, // Use actual PR base branch (supports stacked PRs)
       '--compare',
       'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
       '--json', // JSON output for parsing
