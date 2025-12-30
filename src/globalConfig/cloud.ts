@@ -66,8 +66,16 @@ export class CloudConfig {
     };
   }
 
+  /**
+   * Returns the API key from config file or PROMPTFOO_API_KEY environment variable.
+   * Config file takes precedence over environment variable.
+   */
+  private resolveApiKey(): string | undefined {
+    return this.config.apiKey || process.env.PROMPTFOO_API_KEY;
+  }
+
   isEnabled(): boolean {
-    return !!this.config.apiKey;
+    return !!this.resolveApiKey();
   }
 
   setApiHost(apiHost: string): void {
@@ -81,7 +89,7 @@ export class CloudConfig {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey;
+    return this.resolveApiKey();
   }
 
   getApiHost(): string {
