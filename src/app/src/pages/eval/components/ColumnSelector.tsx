@@ -84,7 +84,7 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
 
   return (
     <>
-      <Button onClick={handleOpen} variant="ghost" size="sm">
+      <Button onClick={handleOpen} variant="outline" size="sm">
         <Columns3 className="h-4 w-4 mr-2" />
         Columns ({selectedColumns.length})
       </Button>
@@ -92,7 +92,7 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center pr-8">
               <DialogTitle>Select Columns</DialogTitle>
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleShowAll} variant="outline">

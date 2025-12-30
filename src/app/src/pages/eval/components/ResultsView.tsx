@@ -3,6 +3,8 @@ import React from 'react';
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import { Chip } from '@app/components/ui/chip';
 import {
   Dialog,
   DialogContent,
@@ -16,14 +18,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
-import { Input } from '@app/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@app/components/ui/select';
+import { SearchInput } from '@app/components/ui/search-input';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -43,14 +39,13 @@ import {
   Edit,
   Eye,
   Play,
-  Search,
   Settings,
   Share,
   Trash2,
   X,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useDebounce } from 'use-debounce';
+import { useDebouncedCallback } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -63,7 +58,6 @@ import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
-import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
@@ -77,65 +71,6 @@ interface ResultsViewProps {
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
 }
-
-const SearchInputField = React.memo(
-  ({
-    value,
-    onChange,
-    onKeyDown,
-    placeholder = 'Search...',
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-    onKeyDown?: React.KeyboardEventHandler;
-    placeholder?: string;
-  }) => {
-    const [localValue, setLocalValue] = React.useState(value);
-
-    React.useEffect(() => {
-      setLocalValue(value);
-    }, [value]);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value;
-      setLocalValue(newValue);
-      onChange(newValue);
-    };
-
-    const handleClear = () => {
-      setLocalValue('');
-      onChange('');
-    };
-
-    return (
-      <div className="relative w-full max-w-[400px]">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-9 pr-8 rounded-full h-9"
-          placeholder={placeholder}
-          value={localValue}
-          onChange={handleChange}
-          onKeyDown={onKeyDown}
-        />
-        {localValue && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleClear}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted transition-colors"
-                aria-label="Clear search (Esc)"
-              >
-                <X className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Clear search (Esc)</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-    );
-  },
-);
 
 export default function ResultsView({
   recentEvals,
@@ -153,7 +88,6 @@ export default function ResultsView({
     setConfig,
     evalId,
     setAuthor,
-    filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
     filters,
@@ -177,16 +111,40 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
-  const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchValue] = useDebounce(searchText, 1000);
+  const initialSearchText = searchParams.get('search') || '';
+  const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
+  const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
 
-  const handleSearchTextChange = React.useCallback(
-    (text: string) => {
-      setSearchParams((prev) => ({ ...prev, search: text }), { replace: true });
-      setSearchText(text);
-    },
-    [setSearchParams],
-  );
+  // Debounced update for URL, table, and pill
+  const debouncedUpdate = useDebouncedCallback((text: string) => {
+    setDebouncedSearchText(text);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (text) {
+          next.set('search', text);
+        } else {
+          next.delete('search');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, 300);
+
+  const handleClearSearch = () => {
+    setSearchInputValue('');
+    debouncedUpdate.cancel();
+    setDebouncedSearchText('');
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('search');
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = React.useCallback(
@@ -213,11 +171,11 @@ export default function ResultsView({
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
 
-  const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
-  const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
+  // State for eval actions dropdown menu
+  const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
 
-  // State for anchor element
-  const [_anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  // State for compare eval dialog
+  const [compareDialogOpen, setCompareDialogOpen] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
@@ -226,12 +184,7 @@ export default function ResultsView({
 
   // Handle menu close
   const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  // Function to open the eval actions menu
-  const _handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+    setEvalActionsOpen(false);
   };
 
   const handleShareButtonClick = async () => {
@@ -273,10 +226,14 @@ export default function ResultsView({
   };
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
-    setAnchorEl(null);
-
+    // Prevent self-comparison
+    if (compareEvalId === currentEvalId) {
+      setCompareDialogOpen(false);
+      return;
+    }
     setInComparisonMode(true);
     setComparisonEvalIds([...comparisonEvalIds, compareEvalId]);
+    setCompareDialogOpen(false);
   };
 
   const hasAnyDescriptions = React.useMemo(
@@ -547,17 +504,6 @@ export default function ResultsView({
     }
   };
 
-  const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
-    (event) => {
-      if (event.key === 'Escape') {
-        handleSearchTextChange('');
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    },
-    [handleSearchTextChange],
-  );
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {
     if (!table?.body) {
@@ -583,20 +529,22 @@ export default function ResultsView({
   return (
     <>
       <div className="px-4 pt-4" style={{ isolation: 'isolate' }}>
-        <div className="transition-all duration-300">
+        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900">
           <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row eval-header">
             <div className="flex items-center w-full max-w-[250px]">
-              <button
-                type="button"
-                onClick={() => setEvalSelectorDialogOpen(true)}
-                className="flex items-center w-full h-9 px-3 border border-input rounded-md bg-background text-sm cursor-pointer hover:bg-muted/50 transition-colors"
-              >
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-                <span className="flex-1 text-left truncate">
-                  {config?.description || evalId || 'Search or select an eval...'}
-                </span>
-                <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Chip
+                    label="EVAL"
+                    onClick={() => setEvalSelectorDialogOpen(true)}
+                    trailingIcon={<ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    className="w-full justify-start [&>span:first-child]:truncate"
+                  >
+                    {config?.description || evalId || 'Select...'}
+                  </Chip>
+                </TooltipTrigger>
+                <TooltipContent>Click to select an eval</TooltipContent>
+              </Tooltip>
               <EvalSelectorDialog
                 open={evalSelectorDialogOpen}
                 onClose={() => setEvalSelectorDialogOpen(false)}
@@ -621,197 +569,46 @@ export default function ResultsView({
             ))}
           </div>
           <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row mt-2">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Zoom</label>
-              <Select
-                value={String(resultsTableZoom)}
-                onValueChange={(val) => setResultsTableZoom(Number(val))}
-              >
-                <SelectTrigger className="w-[100px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0.5">50%</SelectItem>
-                  <SelectItem value="0.75">75%</SelectItem>
-                  <SelectItem value="0.9">90%</SelectItem>
-                  <SelectItem value="1">100%</SelectItem>
-                  <SelectItem value="1.25">125%</SelectItem>
-                  <SelectItem value="1.5">150%</SelectItem>
-                  <SelectItem value="2">200%</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <FilterModeSelector
-                filterMode={filterMode}
-                onChange={handleFilterModeChange}
-                showDifferentOption={visiblePromptCount > 1}
-              />
-            </div>
-            <div>
-              <SearchInputField
-                value={searchText}
-                onChange={handleSearchTextChange}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Text or regex"
-              />
-            </div>
-
-            <FiltersButton
-              appliedFiltersCount={filters.appliedCount}
-              onClick={() => setFiltersFormOpen(true)}
-              ref={filtersButtonRef}
+            <Select
+              value={String(resultsTableZoom)}
+              onValueChange={(val) => setResultsTableZoom(Number(val))}
+            >
+              <SelectTrigger className="w-[115px] h-8 text-xs">
+                <span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    ZOOM
+                  </span>{' '}
+                  {Math.round(resultsTableZoom * 100)}%
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0.5">50%</SelectItem>
+                <SelectItem value="0.75">75%</SelectItem>
+                <SelectItem value="0.9">90%</SelectItem>
+                <SelectItem value="1">100%</SelectItem>
+                <SelectItem value="1.25">125%</SelectItem>
+                <SelectItem value="1.5">150%</SelectItem>
+                <SelectItem value="2">200%</SelectItem>
+              </SelectContent>
+            </Select>
+            <FilterModeSelector
+              filterMode={filterMode}
+              onChange={handleFilterModeChange}
+              showDifferentOption={visiblePromptCount > 1}
             />
-            <FiltersForm
-              open={filtersFormOpen}
-              onClose={() => setFiltersFormOpen(false)}
-              anchorEl={filtersButtonRef.current}
+            <SearchInput
+              value={searchInputValue}
+              onChange={(value) => {
+                setSearchInputValue(value);
+                debouncedUpdate(value);
+              }}
+              onClear={handleClearSearch}
+              containerClassName="w-[200px]"
+              className="h-8 text-xs"
             />
 
-            <div className="flex items-center bg-muted/50 rounded-2xl px-3 py-1 text-sm">
-              {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
-                <>
-                  <strong>{filteredResultsCount}</strong>
-                  <span className="mx-1">of</span>
-                  <strong>{totalResultsCount}</strong>
-                  <span className="mx-1">results</span>
-                  {searchText && (
-                    <Badge variant="secondary" className="ml-1 text-xs h-5 gap-1">
-                      Search:{' '}
-                      {searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}
-                      <button
-                        type="button"
-                        onClick={() => handleSearchTextChange('')}
-                        className="ml-1 hover:bg-muted rounded-full"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {filterMode !== 'all' && (
-                    <Badge variant="secondary" className="ml-1 text-xs h-5 gap-1">
-                      Filter: {filterMode}
-                      <button
-                        type="button"
-                        onClick={() => setFilterMode('all')}
-                        className="ml-1 hover:bg-muted rounded-full"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {filters.appliedCount > 0 &&
-                    Object.values(filters.values).map((filter) => {
-                      // For metadata filters with exists operator, only field is required
-                      // For metric filters with is_defined operator, only field is required
-                      // For other filters, check field and value requirements
-                      if (filter.type === 'metadata' && filter.operator === 'exists') {
-                        if (!filter.field) {
-                          return null;
-                        }
-                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
-                        if (!filter.field) {
-                          return null;
-                        }
-                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
-                        if (!filter.value || !filter.field) {
-                          return null;
-                        }
-                      } else if (!filter.value) {
-                        return null;
-                      }
+            <FiltersForm />
 
-                      const truncatedValue =
-                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-
-                      let label: string;
-                      if (filter.type === 'metric') {
-                        const operatorSymbols: Record<string, string> = {
-                          is_defined: 'is defined',
-                          eq: '==',
-                          neq: '!=',
-                          gt: '>',
-                          gte: '≥',
-                          lt: '<',
-                          lte: '≤',
-                        };
-                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
-                        if (filter.operator === 'is_defined') {
-                          label = `Metric: ${filter.field}`;
-                        } else {
-                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
-                        }
-                      } else if (filter.type === 'plugin') {
-                        const displayName =
-                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                          filter.value;
-                        label =
-                          filter.operator === 'not_equals'
-                            ? `Plugin != ${displayName}`
-                            : `Plugin: ${displayName}`;
-                      } else if (filter.type === 'strategy') {
-                        const displayName =
-                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                          filter.value;
-                        label = `Strategy: ${displayName}`;
-                      } else if (filter.type === 'severity') {
-                        const severityDisplay =
-                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
-                        label = `Severity: ${severityDisplay}`;
-                      } else if (filter.type === 'policy') {
-                        const policyName = filters.policyIdToNameMap?.[filter.value];
-                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                      } else {
-                        if (filter.operator === 'exists') {
-                          label = `Metadata: ${filter.field}`;
-                        } else {
-                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                        }
-                      }
-
-                      return (
-                        <Badge
-                          key={filter.id}
-                          variant="secondary"
-                          className="ml-1 text-xs h-5 gap-1"
-                          title={filter.value}
-                        >
-                          {label}
-                          <button
-                            type="button"
-                            onClick={() => removeFilter(filter.id)}
-                            className="ml-1 hover:bg-muted rounded-full"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
-                </>
-              ) : (
-                <>{filteredResultsCount} results</>
-              )}
-            </div>
-            {highlightedResultsCount > 0 && (
-              <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
-                {highlightedResultsCount} highlighted
-              </Badge>
-            )}
-            {(() => {
-              const formattedDuration =
-                stats?.durationMs != null ? formatDuration(stats.durationMs) : null;
-              return formattedDuration ? (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
-                      <Clock className="h-3.5 w-3.5 mr-1" />
-                      {formattedDuration}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
-                </Tooltip>
-              ) : null;
-            })()}
             <div className="flex-1" />
             <div className="flex justify-end">
               <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row">
@@ -822,7 +619,11 @@ export default function ResultsView({
                 />
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" onClick={() => setViewSettingsModalOpen(true)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViewSettingsModalOpen(true)}
+                    >
                       <Settings className="h-4 w-4 mr-2" />
                       Table Settings
                     </Button>
@@ -830,9 +631,9 @@ export default function ResultsView({
                   <TooltipContent>Edit table view settings</TooltipContent>
                 </Tooltip>
                 {config && (
-                  <DropdownMenu>
+                  <DropdownMenu open={evalActionsOpen} onOpenChange={setEvalActionsOpen}>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline">
+                      <Button variant="outline" size="sm">
                         Eval actions
                         <ChevronDown className="h-4 w-4 ml-2" />
                       </Button>
@@ -851,11 +652,7 @@ export default function ResultsView({
                         <Play className="h-4 w-4 mr-2" />
                         Edit and re-run
                       </DropdownMenuItem>
-                      <CompareEvalMenuItem
-                        initialEvals={recentEvals}
-                        onComparisonEvalSelected={handleComparisonEvalSelected}
-                        onMenuClose={handleMenuClose}
-                      />
+                      <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
                       <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
                         <Eye className="h-4 w-4 mr-2" />
                         View YAML
@@ -884,7 +681,11 @@ export default function ResultsView({
                   </DropdownMenu>
                 )}
                 {canRenderResultsCharts && (
-                  <Button variant="ghost" onClick={() => setRenderResultsCharts((prev) => !prev)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRenderResultsCharts((prev) => !prev)}
+                  >
                     <BarChart className="h-4 w-4 mr-2" />
                     {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
                   </Button>
@@ -893,7 +694,10 @@ export default function ResultsView({
                 {(config?.redteam || config?.metadata?.redteam) && validEvalId && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}>
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
+                      >
                         <Eye className="h-4 w-4 mr-2" />
                         Vulnerability Report
                       </Button>
@@ -904,13 +708,148 @@ export default function ResultsView({
               </div>
             </div>
           </div>
+          {(debouncedSearchText ||
+            filterMode !== 'all' ||
+            filters.appliedCount > 0 ||
+            highlightedResultsCount > 0 ||
+            stats?.durationMs != null) && (
+            <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
+              {debouncedSearchText && (
+                <Badge variant="secondary" className="text-xs h-5 gap-1">
+                  Search:{' '}
+                  {debouncedSearchText.length > 4
+                    ? debouncedSearchText.substring(0, 5) + '...'
+                    : debouncedSearchText}
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="ml-1 hover:bg-muted rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterMode !== 'all' && (
+                <Badge variant="secondary" className="text-xs h-5 gap-1">
+                  Filter: {filterMode}
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode('all')}
+                    className="ml-1 hover:bg-muted rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {filters.appliedCount > 0 &&
+                Object.values(filters.values).map((filter) => {
+                  if (filter.type === 'metadata' && filter.operator === 'exists') {
+                    if (!filter.field) {
+                      return null;
+                    }
+                  } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                    if (!filter.field) {
+                      return null;
+                    }
+                  } else if (filter.type === 'metadata' || filter.type === 'metric') {
+                    if (!filter.value || !filter.field) {
+                      return null;
+                    }
+                  } else if (!filter.value) {
+                    return null;
+                  }
+
+                  const truncatedValue =
+                    filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+
+                  let label: string;
+                  if (filter.type === 'metric') {
+                    const operatorSymbols: Record<string, string> = {
+                      is_defined: 'is defined',
+                      eq: '==',
+                      neq: '!=',
+                      gt: '>',
+                      gte: '≥',
+                      lt: '<',
+                      lte: '≤',
+                    };
+                    const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+                    if (filter.operator === 'is_defined') {
+                      label = `Metric: ${filter.field}`;
+                    } else {
+                      label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+                    }
+                  } else if (filter.type === 'plugin') {
+                    const displayName =
+                      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                      filter.value;
+                    label =
+                      filter.operator === 'not_equals'
+                        ? `Plugin != ${displayName}`
+                        : `Plugin: ${displayName}`;
+                  } else if (filter.type === 'strategy') {
+                    const displayName =
+                      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                      filter.value;
+                    label = `Strategy: ${displayName}`;
+                  } else if (filter.type === 'severity') {
+                    const severityDisplay =
+                      filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                    label = `Severity: ${severityDisplay}`;
+                  } else if (filter.type === 'policy') {
+                    const policyName = filters.policyIdToNameMap?.[filter.value];
+                    label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+                  } else {
+                    if (filter.operator === 'exists') {
+                      label = `Metadata: ${filter.field}`;
+                    } else {
+                      label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                    }
+                  }
+
+                  return (
+                    <Badge
+                      key={filter.id}
+                      variant="secondary"
+                      className="text-xs h-5 gap-1"
+                      title={filter.value}
+                    >
+                      {label}
+                      <button
+                        type="button"
+                        onClick={() => removeFilter(filter.id)}
+                        className="ml-1 hover:bg-muted rounded-full"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+              {highlightedResultsCount > 0 && (
+                <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
+                  {highlightedResultsCount} highlighted
+                </Badge>
+              )}
+              {stats?.durationMs != null && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
+                      <Clock className="h-3.5 w-3.5 mr-1" />
+                      {formatDuration(stats.durationMs)}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )}
           {canRenderResultsCharts && renderResultsCharts && (
             <ResultsCharts
               handleHideCharts={() => setRenderResultsCharts(false)}
               scores={resultsChartsScores}
             />
           )}
-        </div>
+        </Card>
         <ResultsTable
           key={currentEvalId}
           maxTextLength={maxTextLength}
@@ -919,7 +858,7 @@ export default function ResultsView({
           showStats={showInferenceDetails}
           filterMode={filterMode}
           failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchValue}
+          debouncedSearchText={debouncedSearchText}
           onFailureFilterToggle={handleFailureFilterToggle}
           zoom={resultsTableZoom}
         />
@@ -930,6 +869,14 @@ export default function ResultsView({
         onClose={() => setShareModalOpen(false)}
         evalId={currentEvalId}
         onShare={handleShare}
+      />
+      <EvalSelectorDialog
+        open={compareDialogOpen}
+        onClose={() => setCompareDialogOpen(false)}
+        onEvalSelected={handleComparisonEvalSelected}
+        description="Only evals with the same dataset can be compared."
+        focusedEvalId={currentEvalId}
+        filterByDatasetId
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <ConfirmEvalNameDialog

@@ -14,12 +14,12 @@ interface FilterModeSelectorProps {
 }
 
 const BASE_OPTIONS: { value: EvalResultsFilterMode; label: string }[] = [
-  { value: 'all', label: 'Show all results' },
-  { value: 'failures', label: 'Show failures only' },
-  { value: 'passes', label: 'Show passes only' },
-  { value: 'errors', label: 'Show errors only' },
-  { value: 'different', label: 'Show different outputs' },
-  { value: 'highlights', label: 'Show highlights only' },
+  { value: 'all', label: 'All results' },
+  { value: 'failures', label: 'Failures only' },
+  { value: 'passes', label: 'Passes only' },
+  { value: 'errors', label: 'Errors only' },
+  { value: 'different', label: 'Different outputs' },
+  { value: 'highlights', label: 'Highlights only' },
 ];
 
 export const FilterModeSelector = ({
@@ -33,8 +33,8 @@ export const FilterModeSelector = ({
 
   return (
     <Select value={filterMode} onValueChange={onChange}>
-      <SelectTrigger className="min-w-[180px] h-9">
-        <SelectValue placeholder="Display" />
+      <SelectTrigger className="w-[140px] h-8 text-xs">
+        <SelectValue placeholder="All results" />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

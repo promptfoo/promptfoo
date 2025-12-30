@@ -191,7 +191,6 @@ table.results-table,
 /* Remove default button styling - but not for MUI IconButton */
 .results-table tr button.action:not(.MuiIconButton-root) {
   background: none;
-  color: inherit;
   border: none;
   padding: 0;
   font: inherit;
@@ -497,7 +496,7 @@ table.results-table,
 
 .results-table-sticky {
   position: sticky;
-  top: 0;
+  top: 3.5rem; /* Account for navigation height (h-14) */
   z-index: 10;
   transition: transform 0.2s ease-out;
 }

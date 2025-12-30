@@ -12,7 +12,7 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
 const selectTriggerVariants = cva(
-  'flex w-full items-center justify-between rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+  'flex w-full items-center justify-between rounded-md border border-input bg-white dark:bg-zinc-900 ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
   {
     variants: {
       size: {
@@ -29,9 +29,36 @@ const selectTriggerVariants = cva(
 
 export interface SelectTriggerProps
   extends React.ComponentProps<typeof SelectPrimitive.Trigger>,
-    VariantProps<typeof selectTriggerVariants> {}
+    VariantProps<typeof selectTriggerVariants> {
+  /** Optional label displayed above the value in a stacked layout */
+  label?: string;
+}
 
-function SelectTrigger({ className, children, size, ref, ...props }: SelectTriggerProps) {
+function SelectTrigger({ className, children, size, label, ref, ...props }: SelectTriggerProps) {
+  if (label) {
+    return (
+      <SelectPrimitive.Trigger
+        ref={ref}
+        className={cn(
+          'flex w-full items-center justify-between rounded-md border border-input bg-white dark:bg-zinc-900 ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+          'h-auto py-1.5 px-3',
+          className,
+        )}
+        {...props}
+      >
+        <div className="flex flex-col items-start flex-1 min-w-0">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</span>
+          <span className="text-sm truncate w-full text-left [&>span]:line-clamp-1">
+            {children}
+          </span>
+        </div>
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+    );
+  }
+
   return (
     <SelectPrimitive.Trigger
       ref={ref}
