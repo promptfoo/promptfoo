@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isAllowedPrompt } from '../src/evaluator';
-import type { Prompt, TestCase } from '../src/types/index';
 import { doesPromptRefMatch, isPromptAllowed } from '../src/util/promptMatching';
 import {
   PromptReferenceValidationError,
   validateTestPromptReferences,
 } from '../src/util/validateTestPromptReferences';
+
+import type { Prompt, TestCase } from '../src/types/index';
 
 describe('isAllowedPrompt with ID and wildcard support', () => {
   afterEach(() => {

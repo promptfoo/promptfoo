@@ -1,5 +1,6 @@
-import type { Prompt, TestCase } from '../types/index';
 import { doesPromptRefMatch } from './promptMatching';
+
+import type { Prompt, TestCase } from '../types/index';
 
 export class PromptReferenceValidationError extends Error {
   constructor(message: string) {

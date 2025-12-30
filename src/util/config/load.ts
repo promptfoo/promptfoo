@@ -11,7 +11,6 @@ import yaml from 'js-yaml';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
-import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import cliState from '../../cliState';
 import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
@@ -40,6 +39,7 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { validateTestPromptReferences } from '../validateTestPromptReferences';
 
 /**
  * Type guard to check if a test case has vars property

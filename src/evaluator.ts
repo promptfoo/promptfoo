@@ -50,6 +50,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isPromptAllowed } from './util/promptMatching';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -60,7 +61,6 @@ import {
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
-import { isPromptAllowed } from './util/promptMatching';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
