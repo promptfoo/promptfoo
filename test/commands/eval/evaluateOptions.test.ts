@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import yaml from 'js-yaml';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import type { Command } from 'commander';

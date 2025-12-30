@@ -1,9 +1,9 @@
-import fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import path from 'path';
-import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
-import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 
+import { getProxyForUrl } from 'proxy-from-env';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -13,6 +13,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+
 import type { FetchOptions } from './types';
 
 /**
@@ -110,7 +111,7 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {

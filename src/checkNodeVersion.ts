@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { ENGINES } from './version';
 import logger from './logger';
+import { ENGINES } from './version';
 
 /**
  * Function to check the current Node version against the required version

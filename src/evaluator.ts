@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -9,6 +7,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
@@ -22,8 +21,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { strategyDisplayNames } from './redteam/constants';
-import { getSessionId, isSimbaTestCase } from './redteam/util';
+import { getSessionId } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -32,6 +30,8 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import { getDefaultOtelConfig } from './tracing/otelConfig';
+import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
@@ -65,6 +65,7 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -154,7 +155,7 @@ class ProgressBarManager {
     this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
-    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+    const vars = formatVarsForDisplay(evalStep.test.vars, 40);
 
     this.progressBar.increment({
       provider,
@@ -274,6 +275,7 @@ export async function runEval({
   provider,
   prompt, // raw prompt
   test,
+  testSuite,
   delay,
   nunjucksFilters: filters,
   evaluateOptions,
@@ -294,8 +296,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up the special _conversation variable
-  const vars = test.vars || {};
+  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // This is important because providers (especially multi-turn strategies like GOAT,
+  // Crescendo) may add runtime variables like sessionId to vars during execution.
+  // Without this copy, those mutations would persist to the stored testCase, causing
+  // test matching to fail when using --filter-errors-only or --filter-failing.
+  const vars = { ...(test.vars || {}) };
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -354,7 +360,13 @@ export async function runEval({
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
       // Generate trace context if tracing is enabled
-      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
+      traceContext = await generateTraceContextIfNeeded(
+        test,
+        evaluateOptions,
+        testIdx,
+        promptIdx,
+        testSuite,
+      );
 
       const callApiContext: any = {
         // Always included
@@ -383,35 +395,11 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      // Handle Simba providers specially - they use runSimba instead of callApi
-      if (activeProvider.id() === 'promptfoo:redteam:simba') {
-        const simbaProvider = activeProvider as any;
-        if (simbaProvider.runSimba) {
-          // Simba returns EvaluateResult[] directly, so we need to return early
-          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
-            prompt: renderedPrompt,
-            context: callApiContext,
-            options: abortSignal ? { abortSignal } : undefined,
-            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-          });
-
-          // Update results with proper indices for Simba
-          for (const result of simbaResults) {
-            result.promptIdx = promptIdx;
-            result.testIdx = testIdx++;
-          }
-
-          return simbaResults;
-        } else {
-          throw new Error('Simba provider does not have runSimba method');
-        }
-      } else {
-        response = await activeProvider.callApi(
-          renderedPrompt,
-          callApiContext,
-          abortSignal ? { abortSignal } : undefined,
-        );
-      }
+      response = await activeProvider.callApi(
+        renderedPrompt,
+        callApiContext,
+        abortSignal ? { abortSignal } : undefined,
+      );
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -499,7 +487,7 @@ export async function runEval({
       }
     } else {
       // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
+      let processedResponse = { ...response };
 
       // Apply provider transform first (if exists)
       if (provider.transform) {
@@ -523,6 +511,15 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
+      const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        testIdx,
+        promptIdx,
+      });
+      if (blobbedResponse) {
+        processedResponse = blobbedResponse;
+      }
 
       // Extract traceId from traceparent if available
       let traceId: string | undefined;
@@ -716,6 +713,40 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
+  /**
+   * Updates metrics and stats after a comparison assertion (select-best or max-score).
+   */
+  private updateComparisonStats(
+    result: EvalResult,
+    passed: boolean,
+    reason: string,
+    tokensUsed: TokenUsage | undefined,
+    wasSuccess: boolean,
+    wasScore: number,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ): void {
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (tokensUsed) {
+        updateAssertionMetrics(metrics, tokensUsed);
+      }
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = reason;
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      this.stats.successes -= 1;
+      this.stats.failures += 1;
+    }
+  }
+
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
@@ -749,7 +780,9 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    if (!options.silent) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -952,7 +985,7 @@ class Evaluator {
         if (inputTransform) {
           const transformContext: TransformContext = {
             prompt: {},
-            uuid: randomUUID(),
+            uuid: crypto.randomUUID(),
           };
           const transformedVars: Vars = await transform(
             inputTransform,
@@ -1086,6 +1119,7 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
+                testSuite,
                 test: (() => {
                   const baseTest = {
                     ...testCase,
@@ -1093,12 +1127,14 @@ class Evaluator {
                     options: testCase.options,
                   };
                   // Only add tracing metadata fields if tracing is actually enabled
+                  // Check env flag, test case metadata, and test suite config
                   const tracingEnabled =
+                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
                   logger.debug(
-                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
                   );
 
                   if (tracingEnabled) {
@@ -1256,11 +1292,6 @@ class Evaluator {
           await writer.write(row);
         }
 
-        if (row.metadata?.simbaSessionId) {
-          this.evalRecord.config.metadata ??= {};
-          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
-        }
-
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
@@ -1346,19 +1377,25 @@ class Evaluator {
 
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
-      const { signal } = abortController;
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
+        : abortController.signal;
 
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
+
+      let timeoutId: NodeJS.Timeout | undefined;
+      let didTimeout = false;
 
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
+              didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
 
@@ -1372,13 +1409,13 @@ class Evaluator {
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-
-              // Clear the timeout to prevent memory leaks
-              clearTimeout(timeoutId);
             }, timeoutMs);
           }),
         ]);
       } catch (error) {
+        if (!didTimeout) {
+          throw error;
+        }
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1417,6 +1454,8 @@ class Evaluator {
           metrics.totalLatencyMs += timeoutMs;
         }
 
+        numComplete++;
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1444,6 +1483,10 @@ class Evaluator {
               cost: 0,
             },
           );
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
       }
     };
@@ -1487,15 +1530,12 @@ class Evaluator {
       }
     };
 
-    // Separate serial, concurrent, and Simba eval options
+    // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
-    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (isSimbaTestCase(evalOption)) {
-        simbaRunEvalOptions.push(evalOption);
-      } else if (evalOption.test.options?.runSerially) {
+      if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1503,13 +1543,15 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
-      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-    }
-    if (concurrentRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
+    if (!this.options.silent) {
+      if (serialRunEvalOptions.length > 0) {
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+      }
+      if (concurrentRunEvalOptions.length > 0) {
+        logger.info(
+          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+        );
+      }
     }
 
     // Now start the progress bar after info messages
@@ -1544,28 +1586,6 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
-
-      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
-      if (simbaRunEvalOptions.length > 0) {
-        if (progressBarManager) {
-          progressBarManager.complete();
-          progressBarManager.stop();
-        }
-
-        for (const evalStep of simbaRunEvalOptions) {
-          if (isWebUI) {
-            const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
-            logger.info(
-              `[${numComplete}/${runEvalOptions.length}] Running ${strategyDisplayNames.simba} ${provider} with vars: ${vars}`,
-            );
-          }
-          checkAbort();
-          const idx = runEvalOptions.indexOf(evalStep);
-          await processEvalStepWithTimeout(evalStep, idx);
-          processedIndices.add(idx);
-        }
-      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout
@@ -1640,6 +1660,9 @@ class Evaluator {
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const metrics = prompts[result.promptIdx]?.metrics;
           if (result.gradingResult) {
             result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
@@ -1689,8 +1712,25 @@ class Evaluator {
             }
             result.gradingResult.componentResults.push(gradingResult);
           } else {
-            result.gradingResult = gradingResult;
+            const newPass = result.success && gradingResult.pass;
+            result.gradingResult = {
+              ...gradingResult,
+              pass: newPass,
+            };
+            result.success = newPass;
+            if (!gradingResult.pass) {
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
           }
+          this.updateComparisonStats(
+            result,
+            gradingResult.pass,
+            gradingResult.reason || '',
+            gradingResult.tokensUsed,
+            wasSuccess,
+            wasScore,
+            metrics,
+          );
           if (this.evalRecord.persisted) {
             await result.save();
           }
@@ -1756,11 +1796,26 @@ class Evaluator {
             // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
+            const wasSuccess = result.success;
+            const wasScore = result.score;
+            const metrics = prompts[result.promptIdx]?.metrics;
+            const comparisonPassed = maxScoreGradingResult.pass;
+            const previousPass = existingGradingResult?.pass ?? result.success;
+            const nextPass = previousPass && comparisonPassed;
+
+            // When max-score fails, update score like select-best does
+            const newScore = comparisonPassed
+              ? (existingGradingResult?.score ?? result.score)
+              : maxScoreGradingResult.score;
 
             result.gradingResult = {
-              pass: maxScoreGradingResult.pass,
-              score: maxScoreGradingResult.score,
-              reason: maxScoreGradingResult.reason,
+              ...(existingGradingResult || {}),
+              pass: nextPass,
+              score: newScore,
+              reason:
+                !comparisonPassed && previousPass
+                  ? maxScoreGradingResult.reason
+                  : (existingGradingResult?.reason ?? ''),
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
@@ -1770,9 +1825,20 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Don't overwrite overall success/score - max-score is just another assertion
-            // The overall result should be determined by all assertions, not just max-score
-
+            // Max-score is an additional assertion, so overall pass depends on existing asserts too.
+            result.success = nextPass;
+            if (!comparisonPassed) {
+              result.score = newScore;
+            }
+            this.updateComparisonStats(
+              result,
+              comparisonPassed,
+              maxScoreGradingResult.reason || '',
+              maxScoreGradingResult.tokensUsed,
+              wasSuccess,
+              wasScore,
+              metrics,
+            );
             if (this.evalRecord.persisted) {
               await result.save();
             }
@@ -1849,6 +1915,9 @@ class Evaluator {
     // Calculate additional metrics for telemetry
     const endTime = Date.now();
     const totalEvalTimeMs = endTime - startTime;
+
+    // Store the duration on the eval record for persistence
+    this.evalRecord.setDurationMs(totalEvalTimeMs);
 
     // Calculate aggregated metrics
     const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
@@ -1959,6 +2028,11 @@ class Evaluator {
       isRedteam: Boolean(options.isRedteam),
     });
 
+    // Save the eval record to persist durationMs
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
+
     // Update database signal file after all results are written, passing the eval ID
     updateSignalFile(this.evalRecord.id);
 
@@ -1968,9 +2042,31 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     await startOtlpReceiverIfNeeded(this.testSuite);
 
+    // Initialize OTEL SDK if tracing is enabled
+    // Check env flag, test suite level, and default test metadata
+    const tracingEnabled =
+      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+      this.testSuite.tracing?.enabled === true ||
+      (typeof this.testSuite.defaultTest === 'object' &&
+        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
+
+    if (tracingEnabled) {
+      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+      const otelConfig = getDefaultOtelConfig();
+      initializeOtel(otelConfig);
+    }
+
     try {
       return await this._runEvaluation();
     } finally {
+      // Flush and shutdown OTEL SDK
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Flushing OTEL spans...');
+        await flushOtel();
+        await shutdownOtel();
+      }
+
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');

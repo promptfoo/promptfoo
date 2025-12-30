@@ -41,6 +41,7 @@ import type {
   ToolType as GatewayToolType,
 } from '@adaline/types';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -50,7 +51,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache

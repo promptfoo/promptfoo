@@ -16,29 +16,41 @@ export interface LogFileInfo {
  * @throws Error if directory exists but cannot be read (permissions, I/O errors, etc.)
  */
 export function getLogFiles(logDir: string): LogFileInfo[] {
-  if (!fs.existsSync(logDir)) {
-    return [];
+  let entries: fs.Dirent[];
+  try {
+    // Use withFileTypes to avoid separate statSync calls for each file
+    entries = fs.readdirSync(logDir, { withFileTypes: true });
+  } catch (error) {
+    // Directory doesn't exist or can't be read
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
   }
 
-  const files = fs.readdirSync(logDir);
   const logFiles: LogFileInfo[] = [];
 
-  for (const file of files) {
-    if (!file.startsWith('promptfoo-') || !file.endsWith('.log')) {
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.startsWith('promptfoo-') || !entry.name.endsWith('.log')) {
       continue;
     }
 
-    const filePath = path.join(logDir, file);
+    const filePath = path.join(logDir, entry.name);
     try {
+      // We still need statSync for mtime since Dirent doesn't include it
       const stat = fs.statSync(filePath);
       logFiles.push({
-        name: file,
+        name: entry.name,
         path: filePath,
         mtime: stat.mtime,
       });
-    } catch {
+    } catch (error) {
       // File may have been deleted between readdir and stat (race condition)
-      // Skip this file and continue with others
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // Skip this file and continue with others
+        continue;
+      }
+      throw error;
     }
   }
 

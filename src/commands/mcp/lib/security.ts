@@ -1,4 +1,5 @@
 import * as path from 'path';
+
 import { ConfigurationError } from './errors';
 
 /**

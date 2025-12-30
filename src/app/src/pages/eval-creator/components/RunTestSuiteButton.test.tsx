@@ -1,12 +1,12 @@
 import React from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import userEvent from '@testing-library/user-event';
 
-import RunTestSuiteButton from './RunTestSuiteButton';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import RunTestSuiteButton from './RunTestSuiteButton';
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),

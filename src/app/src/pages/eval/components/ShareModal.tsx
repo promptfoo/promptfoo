@@ -27,6 +27,14 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset state when evalId changes to prevent stale data
+  useEffect(() => {
+    setCopied(false);
+    setShowNeedsSignup(false);
+    setShareUrl('');
+    setError(null);
+  }, [evalId]);
+
   useEffect(() => {
     const handleShare = async () => {
       if (!open || !evalId || shareUrl) {
@@ -160,9 +168,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
               }}
             />
             <DialogContentText sx={{ fontSize: '0.75rem' }}>
-              {shareUrl.includes('api.promptfoo.dev')
-                ? 'Shared URLs are deleted after 2 weeks.'
-                : 'This URL is accessible to users with access to your organization.'}
+              This URL is accessible to users with access to your organization.
             </DialogContentText>
           </DialogContent>
           <DialogActions>

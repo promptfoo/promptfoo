@@ -47,13 +47,7 @@ const EvalSelector = ({ onEvalSelected }: EvalSelectorProps) => {
   }, []);
 
   return (
-    <EvalSelectorDialog
-      title="Open an Eval"
-      open={open}
-      onClose={handleClose}
-      onEvalSelected={handleEvalSelected}
-      onOpenFocusSearch
-    />
+    <EvalSelectorDialog open={open} onClose={handleClose} onEvalSelected={handleEvalSelected} />
   );
 };
 
