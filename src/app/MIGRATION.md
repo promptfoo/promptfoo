@@ -750,8 +750,10 @@ We define z-index values as CSS custom properties in `index.css`:
 ```css
 :root {
   /* Z-index scale for layered components
-   * Modal < Dropdown ensures nested dropdowns appear above modals
-   * Values >= 1300 for MUI compatibility during migration */
+   * Banner < AppBar < Modal < Dropdown ensures proper stacking
+   * Values >= 1100 for MUI compatibility during migration */
+  --z-banner: 1100;
+  --z-appbar: 1200;
   --z-modal-backdrop: 1300;
   --z-modal: 1310;
   --z-dropdown: 1400;
@@ -764,6 +766,12 @@ We define z-index values as CSS custom properties in `index.css`:
 Use the `z-[var(--z-*)]` syntax in Tailwind classes:
 
 ```tsx
+// Navigation.tsx - sticky header
+<header className="sticky top-0 z-[var(--z-appbar)] ..." />
+
+// UpdateBanner.tsx - notification banner (styled component)
+zIndex: 'var(--z-banner)',
+
 // dialog.tsx
 <DialogPrimitive.Overlay className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/50 ..." />
 <DialogPrimitive.Content className="fixed ... z-[var(--z-modal)] ..." />
@@ -779,16 +787,22 @@ Use the `z-[var(--z-*)]` syntax in Tailwind classes:
 
 | Layer          | CSS Variable         | Value | Components                    |
 | -------------- | -------------------- | ----- | ----------------------------- |
+| Banner         | `--z-banner`         | 1100  | UpdateBanner, notification bars |
+| App Bar        | `--z-appbar`         | 1200  | Navigation header (sticky)    |
 | Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                |
 | Modal Content  | `--z-modal`          | 1310  | Dialog content                |
 | Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu |
 | Tooltips       | `--z-tooltip`        | 1500  | Tooltip                       |
 
-**Key insight**: Dropdowns (1400) are **above** modals (1310) so that dropdowns inside modals work correctly.
+**Key insights**:
+- **Banner < AppBar**: The sticky header (and its dropdown menus) must appear above notification banners
+- **Dropdowns (1400) > Modals (1310)**: Nested dropdowns inside modals work correctly
+- **Tooltip highest**: Tooltips should always be visible, even over dropdowns
 
 #### Why These Values?
 
-- **>= 1300**: MUI modals use z-index 1300, so our components stack correctly during migration
+- **>= 1100**: MUI uses z-index 1100 for appBar, so our components stack correctly during migration
+- **AppBar > Banner**: Nav dropdown menus must not be obscured by banners
 - **Modal < Dropdown**: Nested dropdowns must appear above parent modals
 - **Tooltip highest**: Tooltips should always be visible, even over dropdowns
 
