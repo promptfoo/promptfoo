@@ -2689,6 +2689,286 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
   });
 });
 
+describe('ResultsTable Header Column Updates on Eval Switch', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: false,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should update column headers when switching between evals with different variable columns', () => {
+    // First eval: NAICS classifier with location-based variables
+    const firstEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: ['https://example.com', 'New York', 'NY'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['website_url', 'city', 'state'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-naics-123',
+      setTable: vi.fn(),
+      table: firstEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = render(<ResultsTable {...defaultProps} />);
+
+    // Verify first eval's column headers are present
+    expect(screen.getByText('website_url')).toBeInTheDocument();
+    expect(screen.getByText('city')).toBeInTheDocument();
+    expect(screen.getByText('state')).toBeInTheDocument();
+
+    // Unmount to simulate component being removed (like when key changes)
+    unmount();
+
+    // Second eval: Customer support with different variables
+    const secondEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 2' }],
+          test: {},
+          vars: ['Hello, I need help', 'session-abc-123'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['prompt', 'sessionId'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-support-456',
+      setTable: vi.fn(),
+      table: secondEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    // Re-render with new eval data (simulates what happens when key={evalId} changes)
+    render(<ResultsTable {...defaultProps} />);
+
+    // Verify second eval's column headers are present
+    expect(screen.getByText('prompt')).toBeInTheDocument();
+    expect(screen.getByText('sessionId')).toBeInTheDocument();
+
+    // Verify first eval's columns are NOT present (they should be gone)
+    expect(screen.queryByText('website_url')).not.toBeInTheDocument();
+    expect(screen.queryByText('city')).not.toBeInTheDocument();
+    expect(screen.queryByText('state')).not.toBeInTheDocument();
+  });
+
+  it('should update prompt column headers when switching between evals with different prompts', () => {
+    // First eval: Single prompt
+    const firstEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: ['input1'],
+        },
+      ],
+      head: {
+        prompts: [
+          {
+            provider: 'openai:gpt-4',
+            label: 'GPT-4 Classifier',
+          },
+        ],
+        vars: ['input'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-single-prompt',
+      setTable: vi.fn(),
+      table: firstEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = render(<ResultsTable {...defaultProps} />);
+
+    // Verify first eval's prompt column header
+    expect(screen.getByText('GPT-4 Classifier')).toBeInTheDocument();
+
+    unmount();
+
+    // Second eval: Multiple prompts with different labels
+    const secondEvalTable = {
+      body: [
+        {
+          outputs: [
+            { pass: true, score: 1, text: 'output from claude' },
+            { pass: false, score: 0, text: 'output from gemini' },
+          ],
+          test: {},
+          vars: ['input2'],
+        },
+      ],
+      head: {
+        prompts: [
+          {
+            provider: 'anthropic:claude-3',
+            label: 'Claude Assistant',
+          },
+          {
+            provider: 'google:gemini-pro',
+            label: 'Gemini Helper',
+          },
+        ],
+        vars: ['query'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-multi-prompt',
+      setTable: vi.fn(),
+      table: secondEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    // Verify second eval's prompt column headers
+    expect(screen.getByText('Claude Assistant')).toBeInTheDocument();
+    expect(screen.getByText('Gemini Helper')).toBeInTheDocument();
+
+    // Verify first eval's prompt column is NOT present
+    expect(screen.queryByText('GPT-4 Classifier')).not.toBeInTheDocument();
+  });
+
+  it('should handle switching from eval with many columns to eval with few columns', () => {
+    // First eval: Many variable columns
+    const manyColumnsTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output' }],
+          test: {},
+          vars: ['val1', 'val2', 'val3', 'val4', 'val5'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['col1', 'col2', 'col3', 'col4', 'col5'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-many-cols',
+      setTable: vi.fn(),
+      table: manyColumnsTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = render(<ResultsTable {...defaultProps} />);
+
+    // Verify all columns are present
+    expect(screen.getByText('col1')).toBeInTheDocument();
+    expect(screen.getByText('col2')).toBeInTheDocument();
+    expect(screen.getByText('col3')).toBeInTheDocument();
+    expect(screen.getByText('col4')).toBeInTheDocument();
+    expect(screen.getByText('col5')).toBeInTheDocument();
+
+    unmount();
+
+    // Second eval: Just one variable column
+    const fewColumnsTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output' }],
+          test: {},
+          vars: ['single value'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['onlyColumn'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-few-cols',
+      setTable: vi.fn(),
+      table: fewColumnsTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    // Verify only the new column is present
+    expect(screen.getByText('onlyColumn')).toBeInTheDocument();
+
+    // Verify old columns are gone
+    expect(screen.queryByText('col1')).not.toBeInTheDocument();
+    expect(screen.queryByText('col2')).not.toBeInTheDocument();
+    expect(screen.queryByText('col3')).not.toBeInTheDocument();
+    expect(screen.queryByText('col4')).not.toBeInTheDocument();
+    expect(screen.queryByText('col5')).not.toBeInTheDocument();
+  });
+});
+
 describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => {
   let mockSetTable: ReturnType<typeof vi.fn>;
   let mockCallApi: any;
