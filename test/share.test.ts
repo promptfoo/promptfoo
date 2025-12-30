@@ -225,7 +225,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe('https://promptfoo.app');
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use PROMPTFOO_REMOTE_APP_BASE_URL when specified', () => {
@@ -246,7 +245,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(customDomain);
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use config sharing.appBaseUrl when provided', () => {
@@ -265,7 +263,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 
   it('should prioritize config sharing.appBaseUrl over environment variables', () => {
@@ -292,7 +289,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 });
 

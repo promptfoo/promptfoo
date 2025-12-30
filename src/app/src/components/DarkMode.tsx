@@ -1,5 +1,3 @@
-import React from 'react';
-
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import IconButton from '@mui/material/IconButton';
@@ -28,7 +26,7 @@ interface DarkModeToggleProps {
   onToggleDarkMode: () => void;
 }
 
-const DarkModeToggle = React.memo(({ onToggleDarkMode }: DarkModeToggleProps) => {
+function DarkModeToggle({ onToggleDarkMode }: DarkModeToggleProps) {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
@@ -56,8 +54,6 @@ const DarkModeToggle = React.memo(({ onToggleDarkMode }: DarkModeToggleProps) =>
       </AnimatedIcon>
     </StyledIconButton>
   );
-});
-
-DarkModeToggle.displayName = 'DarkModeToggle';
+}
 
 export default DarkModeToggle;

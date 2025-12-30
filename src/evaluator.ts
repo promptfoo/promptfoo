@@ -64,6 +64,7 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -249,10 +250,21 @@ function updateAssertionMetrics(
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
+  const promptLabel = prompt.label;
   return (
     !Array.isArray(allowedPrompts) ||
-    allowedPrompts.includes(prompt.label) ||
-    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
+    allowedPrompts.some((allowedPrompt) => {
+      if (allowedPrompt === promptLabel) {
+        return true;
+      }
+
+      if (allowedPrompt.endsWith('*')) {
+        const prefix = allowedPrompt.slice(0, -1);
+        return promptLabel.startsWith(prefix);
+      }
+
+      return promptLabel.startsWith(`${allowedPrompt}:`);
+    })
   );
 }
 
@@ -714,6 +726,40 @@ class Evaluator {
         : [];
 
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+  }
+
+  /**
+   * Updates metrics and stats after a comparison assertion (select-best or max-score).
+   */
+  private updateComparisonStats(
+    result: EvalResult,
+    passed: boolean,
+    reason: string,
+    tokensUsed: TokenUsage | undefined,
+    wasSuccess: boolean,
+    wasScore: number,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ): void {
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (tokensUsed) {
+        updateAssertionMetrics(metrics, tokensUsed);
+      }
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = reason;
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      this.stats.successes -= 1;
+      this.stats.failures += 1;
+    }
   }
 
   private async _runEvaluation(): Promise<Eval> {
@@ -1337,19 +1383,25 @@ class Evaluator {
 
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
-      const { signal } = abortController;
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
+        : abortController.signal;
 
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
+
+      let timeoutId: NodeJS.Timeout | undefined;
+      let didTimeout = false;
 
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
+              didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
 
@@ -1363,13 +1415,13 @@ class Evaluator {
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-
-              // Clear the timeout to prevent memory leaks
-              clearTimeout(timeoutId);
             }, timeoutMs);
           }),
         ]);
       } catch (error) {
+        if (!didTimeout) {
+          throw error;
+        }
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1408,6 +1460,8 @@ class Evaluator {
           metrics.totalLatencyMs += timeoutMs;
         }
 
+        numComplete++;
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1435,6 +1489,10 @@ class Evaluator {
               cost: 0,
             },
           );
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
       }
     };
@@ -1608,6 +1666,9 @@ class Evaluator {
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const metrics = prompts[result.promptIdx]?.metrics;
           if (result.gradingResult) {
             result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
@@ -1657,8 +1718,25 @@ class Evaluator {
             }
             result.gradingResult.componentResults.push(gradingResult);
           } else {
-            result.gradingResult = gradingResult;
+            const newPass = result.success && gradingResult.pass;
+            result.gradingResult = {
+              ...gradingResult,
+              pass: newPass,
+            };
+            result.success = newPass;
+            if (!gradingResult.pass) {
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
           }
+          this.updateComparisonStats(
+            result,
+            gradingResult.pass,
+            gradingResult.reason || '',
+            gradingResult.tokensUsed,
+            wasSuccess,
+            wasScore,
+            metrics,
+          );
           if (this.evalRecord.persisted) {
             await result.save();
           }
@@ -1724,11 +1802,26 @@ class Evaluator {
             // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
+            const wasSuccess = result.success;
+            const wasScore = result.score;
+            const metrics = prompts[result.promptIdx]?.metrics;
+            const comparisonPassed = maxScoreGradingResult.pass;
+            const previousPass = existingGradingResult?.pass ?? result.success;
+            const nextPass = previousPass && comparisonPassed;
+
+            // When max-score fails, update score like select-best does
+            const newScore = comparisonPassed
+              ? (existingGradingResult?.score ?? result.score)
+              : maxScoreGradingResult.score;
 
             result.gradingResult = {
-              pass: maxScoreGradingResult.pass,
-              score: maxScoreGradingResult.score,
-              reason: maxScoreGradingResult.reason,
+              ...(existingGradingResult || {}),
+              pass: nextPass,
+              score: newScore,
+              reason:
+                !comparisonPassed && previousPass
+                  ? maxScoreGradingResult.reason
+                  : (existingGradingResult?.reason ?? ''),
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
@@ -1738,9 +1831,20 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Don't overwrite overall success/score - max-score is just another assertion
-            // The overall result should be determined by all assertions, not just max-score
-
+            // Max-score is an additional assertion, so overall pass depends on existing asserts too.
+            result.success = nextPass;
+            if (!comparisonPassed) {
+              result.score = newScore;
+            }
+            this.updateComparisonStats(
+              result,
+              comparisonPassed,
+              maxScoreGradingResult.reason || '',
+              maxScoreGradingResult.tokensUsed,
+              wasSuccess,
+              wasScore,
+              metrics,
+            );
             if (this.evalRecord.persisted) {
               await result.save();
             }

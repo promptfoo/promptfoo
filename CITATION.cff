@@ -9,6 +9,8 @@ authors:
     given-names: Steven
   - family-names: Zang
     given-names: Guangshuo
+  - family-names: Minhas
+    given-names: Faizan
 title: promptfoo
 version: 0.119.11
 date-released: '2025-11-24'

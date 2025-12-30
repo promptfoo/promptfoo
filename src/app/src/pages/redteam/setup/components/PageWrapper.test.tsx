@@ -18,7 +18,7 @@ describe('PageWrapper', () => {
         </PageWrapper>,
       );
 
-      const titleElement = screen.getByRole('heading', { name: testTitle, level: 4 });
+      const titleElement = screen.getByRole('heading', { name: testTitle, level: 1 });
       expect(titleElement).toBeInTheDocument();
 
       const descriptionElement = screen.getByText(testDescription);

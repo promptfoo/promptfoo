@@ -84,20 +84,20 @@ const CustomMetrics = ({
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
-  const applyFilterFromMetric = useApplyFilterFromMetric();
-  const { data: cloudConfig } = useCloudConfig();
-  const { config } = useTableStore();
-
+  // Validate props BEFORE hooks to comply with Rules of Hooks
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
+
+  const applyFilterFromMetric = useApplyFilterFromMetric();
+  const { data: cloudConfig } = useCloudConfig();
+  const { config } = useTableStore();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
-
-  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>

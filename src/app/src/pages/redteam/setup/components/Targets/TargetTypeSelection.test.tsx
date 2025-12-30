@@ -1,5 +1,6 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
 
@@ -30,11 +31,10 @@ describe('TargetTypeSelection', () => {
   const onBack = vi.fn();
 
   const renderComponent = () => {
-    const theme = createTheme();
     return render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider>
         <TargetTypeSelection onNext={onNext} onBack={onBack} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
   };
 
@@ -76,7 +76,7 @@ describe('TargetTypeSelection', () => {
     expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
 
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     // After entering name, the inline "Next: Select Target Type" button should appear
@@ -111,7 +111,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(changeButton);
 
     const openAICard = await screen.findByText('OpenAI');
-    fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
+    fireEvent.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
     await waitFor(() => {
       expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -152,7 +152,7 @@ describe('TargetTypeSelection', () => {
 
     renderComponent();
 
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
@@ -170,7 +170,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(changeButton);
 
     const openAICard = await screen.findByText('OpenAI');
-    fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
+    fireEvent.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(
@@ -192,7 +192,7 @@ describe('TargetTypeSelection', () => {
   it('should disable Next button after entering a target name, revealing the target type section, and then deleting the target name', async () => {
     renderComponent();
 
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
@@ -205,12 +205,13 @@ describe('TargetTypeSelection', () => {
     });
 
     // Now the footer Next button should be present
-    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+    await screen.findByRole('button', { name: /Next.*Configure/i });
 
     fireEvent.change(nameInput, { target: { value: '' } });
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {
+      const footerNextButton = screen.getByRole('button', { name: /Next.*Configure/i });
       expect(footerNextButton).toBeDisabled();
     });
   });
@@ -218,7 +219,7 @@ describe('TargetTypeSelection', () => {
   it('should maintain revealed provider type section and validate new name when target name is changed', async () => {
     renderComponent();
 
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = await screen.findByRole('button', {
@@ -231,18 +232,19 @@ describe('TargetTypeSelection', () => {
     });
 
     // Now the footer Next button should be present
-    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+    await screen.findByRole('button', { name: /Next.*Configure/i });
 
     fireEvent.change(nameInput, { target: { value: 'New Target Name' } });
 
     expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
-    expect(footerNextButton).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Next.*Configure/i })).toBeEnabled();
 
     fireEvent.change(nameInput, { target: { value: '' } });
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {
+      const footerNextButton = screen.getByRole('button', { name: /Next.*Configure/i });
       expect(footerNextButton).toBeDisabled();
     });
   });
@@ -264,7 +266,7 @@ describe('TargetTypeSelection', () => {
 
     renderComponent();
 
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
     const inlineNextButton = screen.getByRole('button', {
@@ -414,42 +416,49 @@ describe('TargetTypeSelection', () => {
     });
 
     it('should allow proceeding to next step with custom provider after entering name', async () => {
-      // Start with a custom provider selected but the user needs to confirm/enter a name
+      // This test verifies the flow when user selects custom provider and enters a name
+      const user = userEvent.setup();
       const mockSetProviderType = vi.fn();
       mockUseRedTeamConfig.mockReturnValue({
         config: {
           target: {
             id: '', // Empty id for custom provider
-            label: 'my-custom-target',
+            label: '',
             config: {},
           },
         },
         updateConfig: mockUpdateConfig,
-        providerType: 'custom',
+        providerType: 'custom', // Custom provider already selected
         setProviderType: mockSetProviderType,
       });
 
       renderComponent();
+
+      // Enter a target name using userEvent for proper input simulation
+      const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
+      await user.type(nameInput, 'my-custom-target');
+
+      // Click the inline "Next: Select Target Type" button to reveal the section
+      const inlineNextButton = await screen.findByRole('button', {
+        name: 'Next: Select Target Type',
+      });
+      await user.click(inlineNextButton);
 
       // Wait for target type section to be visible
       await waitFor(() => {
         expect(screen.getByText('Select Target Type')).toBeInTheDocument();
       });
 
-      // The footer Next button should be present
+      // The footer Next button should be present and enabled since we have providerType set and label entered
       const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
       expect(footerNextButton).toBeInTheDocument();
 
-      // Enter a name in the input to enable the button
-      const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
-      fireEvent.change(nameInput, { target: { value: 'my-custom-target' } });
-
-      // Now the button should be enabled
+      // Wait for button to become enabled (state updates may be asynchronous)
       await waitFor(() => {
         expect(footerNextButton).toBeEnabled();
       });
 
-      fireEvent.click(footerNextButton);
+      await user.click(footerNextButton);
 
       expect(onNext).toHaveBeenCalledTimes(1);
     });

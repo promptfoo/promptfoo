@@ -19,7 +19,7 @@ import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
@@ -34,18 +34,21 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import yaml from 'js-yaml';
-import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
-import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import VariableMarkdownCell from './VariableMarkdownCell';
+import type {
+  CellContext,
+  ColumnDef,
+  ColumnSizingState,
+  VisibilityState,
+} from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -222,6 +225,7 @@ function ResultsTableHeader({
   setStickyHeader: (sticky: boolean) => void;
   zoom: number;
 }) {
+  'use no memo';
   return (
     <table
       className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
@@ -292,6 +296,7 @@ function ResultsTable({
   onFailureFilterToggle,
   zoom,
 }: ResultsTableProps) {
+  'use no memo';
   const {
     evalId,
     table,
@@ -327,6 +332,10 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  // Persist column sizing state to prevent header resize flicker during pagination.
+  // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
 
   /**
    * Reset the pagination state when the filtered results count changes.
@@ -551,7 +560,8 @@ function ResultsTable({
   }, [filters.values]);
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
+    // Use functional update to avoid stale closure over pagination state
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
@@ -561,7 +571,8 @@ function ResultsTable({
   // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
-      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      // Use functional update to avoid stale closure over pagination state
+      setPagination((prev) => ({ pageIndex: 0, pageSize: prev.pageSize }));
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -757,13 +768,11 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
+                // Use memoized VariableMarkdownCell to prevent re-renders when
+                // table layout changes (e.g., column visibility toggles).
+                // @see https://github.com/promptfoo/promptfoo/issues/969
                 const cellContent = renderMarkdown ? (
-                  <MarkdownErrorBoundary fallback={value}>
-                    <TruncatedText
-                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
-                      maxLength={maxTextLength}
-                    />
-                  </MarkdownErrorBoundary>
+                  <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
@@ -852,7 +861,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
+  }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, config]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -1194,6 +1203,7 @@ function ResultsTable({
     getMetrics,
     getOutput,
     handleRating,
+    head,
     head.prompts,
     maxTextLength,
     metricTotals,
@@ -1236,6 +1246,7 @@ function ResultsTable({
   }, [descriptionColumn, variableColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
+
   const reactTable = useReactTable({
     data: tableBody,
     columns,
@@ -1245,8 +1256,10 @@ function ResultsTable({
     pageCount,
     state: {
       columnVisibility,
+      columnSizing,
       pagination,
     },
+    onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
 
