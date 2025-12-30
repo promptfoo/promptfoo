@@ -9,6 +9,7 @@ import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../va
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
+import type { BlobRef } from '../blobs/types';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -325,13 +326,13 @@ export interface EvaluateTableOutput {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
-    blobRef?: import('../blobs/types').BlobRef;
+    blobRef?: BlobRef;
     transcript?: string;
     format?: string;
   };
   video?: {
     id?: string; // Provider video ID (e.g., Veo operation name)
-    blobRef?: import('../blobs/types').BlobRef; // Blob storage reference for video data
+    blobRef?: BlobRef; // Blob storage reference for video data
     url?: string; // Legacy: API path to serve video (deprecated, use blobRef)
     format?: string; // 'mp4'
     size?: string; // '1280x720' or '720x1280'
