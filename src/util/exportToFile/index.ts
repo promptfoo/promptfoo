@@ -36,6 +36,9 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           blobRef: result.response.audio.blobRef,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,
+          sampleRate: result.response.audio.sampleRate,
+          channels: result.response.audio.channels,
+          duration: result.response.audio.duration,
         }
       : undefined,
     video: result.response?.video

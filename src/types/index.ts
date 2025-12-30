@@ -329,6 +329,9 @@ export interface EvaluateTableOutput {
     blobRef?: BlobRef;
     transcript?: string;
     format?: string;
+    sampleRate?: number;
+    channels?: number;
+    duration?: number;
   };
   video?: {
     id?: string; // Provider video ID (e.g., Veo operation name)
