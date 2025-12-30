@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
+import { describe, expect, it } from 'vitest';
 
 /**
  * These tests verify the logic used in src/server/routes/version.ts
