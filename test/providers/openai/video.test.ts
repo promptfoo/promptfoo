@@ -280,6 +280,10 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video).toBeDefined();
       expect(result.video?.id).toBe('video_123');
       expect(result.video?.format).toBe('mp4');
+      // Verify structured storageRef object (preferred)
+      expect(result.video?.storageRef).toBeDefined();
+      expect(result.video?.storageRef?.key).toBe('video/abc123.mp4');
+      // Verify legacy URL format for backwards compatibility
       expect(result.video?.url).toContain('storageRef:');
       expect(result.video?.thumbnail).toContain('storageRef:');
       expect(result.video?.spritesheet).toContain('storageRef:');

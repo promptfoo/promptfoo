@@ -328,6 +328,7 @@ describe('GoogleVideoProvider', () => {
       expect(result.video?.model).toBe('veo-3.1-generate-preview');
       expect(result.video?.blobRef).toBeDefined();
       expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
+      expect(result.video?.url).toBe(result.video?.blobRef?.uri); // url matches blobRef.uri
       // 3 requests: job creation, 2 polls (one in progress, one done)
       expect(mockRequest).toHaveBeenCalledTimes(3);
       // Blob storage called once

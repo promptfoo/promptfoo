@@ -517,7 +517,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         cost: 0,
         video: {
           id: undefined, // No Sora ID for cached results
-          url: videoUrl,
+          storageRef: { key: cachedVideoKey }, // Structured storage reference (preferred)
+          url: videoUrl, // Legacy URL format for backwards compatibility
           format: 'mp4',
           size,
           duration: seconds,
@@ -638,7 +639,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       cost,
       video: {
         id: videoId,
-        url: videoUrl,
+        storageRef: { key: videoRef.key }, // Structured storage reference (preferred)
+        url: videoUrl, // Legacy URL format for backwards compatibility
         format: 'mp4',
         size,
         duration: seconds,
