@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Luma Ray 2 Video Generation on AWS Bedrock'
+
+# Luma Ray 2 produces high-quality videos from text prompts.
+# Videos are generated asynchronously and stored in S3.
+#
+# Prerequisites:
+#   1. Enable Luma Ray 2 model access in AWS Bedrock console
+#   2. Create an S3 bucket for video output
+#   3. Configure IAM permissions for bedrock:StartAsyncInvoke,
+#      bedrock:GetAsyncInvoke, s3:PutObject, s3:GetObject
+#
+# Update s3OutputUri below to point to your S3 bucket.
+
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2 # Luma Ray 2 is currently only available in us-west-2
+      s3OutputUri: s3://your-bucket-name/luma-ray-outputs/
+      duration: '5s'
+      resolution: '720p'
+      aspectRatio: '16:9'
+
+prompts:
+  - 'A majestic eagle soaring through clouds at golden hour'
+  - 'Ocean waves crashing on rocky cliffs in slow motion'
+  - 'A field of sunflowers swaying gently in a summer breeze'
+
+tests:
+  - vars: {}
+    assert:
+      - type: is-valid-openai-function-call
+        value: false # Video outputs are not function calls

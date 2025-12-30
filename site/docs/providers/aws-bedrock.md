@@ -1406,6 +1406,123 @@ providers:
       enableTrace: true
 ```
 
+## Video Generation
+
+AWS Bedrock supports video generation through asynchronous invoke APIs. Videos are generated in the cloud and output to an S3 bucket that you specify.
+
+### Luma Ray 2
+
+Generate videos using Luma Ray 2, which produces high-quality videos from text prompts or images.
+
+**Provider ID:** `bedrock:video:luma.ray-v2:0`
+
+:::note
+
+Luma Ray 2 is currently available in **us-west-2** region only.
+
+:::
+
+#### Basic Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/luma-outputs/
+```
+
+#### Configuration Options
+
+| Option           | Type    | Default | Description                                |
+| ---------------- | ------- | ------- | ------------------------------------------ |
+| `s3OutputUri`    | string  | -       | **Required.** S3 bucket for video output   |
+| `duration`       | string  | "5s"    | Video duration: "5s" or "9s"               |
+| `resolution`     | string  | "720p"  | Output resolution: "540p" or "720p"        |
+| `aspectRatio`    | string  | "16:9"  | Aspect ratio (see supported ratios below)  |
+| `loop`           | boolean | false   | Whether video should seamlessly loop       |
+| `startImage`     | string  | -       | Start frame image (file:// path or base64) |
+| `endImage`       | string  | -       | End frame image (file:// path or base64)   |
+| `pollIntervalMs` | number  | 10000   | Polling interval in milliseconds           |
+| `maxPollTimeMs`  | number  | 600000  | Maximum wait time (10 min default)         |
+| `downloadFromS3` | boolean | true    | Download video from S3 after generation    |
+
+#### Supported Aspect Ratios
+
+- `1:1` - Square
+- `16:9` - Widescreen (default)
+- `9:16` - Vertical/Portrait
+- `4:3` - Standard
+- `3:4` - Portrait standard
+- `21:9` - Ultrawide
+- `9:21` - Ultra-tall
+
+#### Text-to-Video Example
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/videos/
+      duration: '5s'
+      resolution: '720p'
+      aspectRatio: '16:9'
+
+prompts:
+  - 'A majestic eagle soaring through clouds at golden hour'
+
+tests:
+  - vars: {}
+```
+
+#### Image-to-Video Example
+
+Animate images by providing start and/or end frames:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/videos/
+      startImage: file://./start-frame.jpg
+      endImage: file://./end-frame.jpg
+      duration: '5s'
+
+prompts:
+  - 'Smooth transition with camera movement'
+
+tests:
+  - vars: {}
+```
+
+#### Processing Time
+
+- **5-second videos:** 2-5 minutes
+- **9-second videos:** 4-8 minutes
+
+#### Required Permissions
+
+Your AWS credentials need these IAM permissions:
+
+```json
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:GetAsyncInvoke", "bedrock:StartAsyncInvoke"],
+      "Resource": "arn:aws:bedrock:*:*:model/luma.ray-v2:0"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::my-bucket/*"
+    }
+  ]
+}
+```
+
 ## See Also
 
 - [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
