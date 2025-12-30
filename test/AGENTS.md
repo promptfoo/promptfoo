@@ -30,6 +30,18 @@ npm run test:integration
   - Use `--sequence.shuffle=false` to disable when debugging specific failures
   - Use `--sequence.seed=12345` to reproduce a specific order
 
+## PR Conventions for Test Changes
+
+Use `test:` type for PRs that **only** contain test changes:
+
+```plaintext
+test: add smoke tests for CLI commands
+test(redteam): fix flaky plugin tests
+test: resolve lint errors in test files
+```
+
+Use `fix:` only when fixing bugs in **application code** (in `src/`), even if tests are included.
+
 ## Writing Tests
 
 **Reference files:**
