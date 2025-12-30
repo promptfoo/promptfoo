@@ -86,39 +86,6 @@ describe('CopyButton', () => {
     expect(icon).toHaveClass('h-6', 'w-6');
   });
 
-  it.skip('handles clipboard API errors gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Override clipboard to make it fail for this test
-    delete (navigator as any).clipboard;
-    Object.defineProperty(navigator, 'clipboard', {
-      value: {
-        writeText: vi.fn().mockRejectedValue(new Error('Clipboard error')),
-      },
-      writable: true,
-      configurable: true,
-    });
-
-    const user = userEvent.setup();
-    render(<CopyButton value="test text" />);
-    const button = screen.getByRole('button', { name: 'Copy' });
-
-    await user.click(button);
-
-    // Wait for error to be logged
-    await waitFor(
-      () => {
-        expect(consoleSpy).toHaveBeenCalledWith('Failed to copy to clipboard:', expect.any(Error));
-      },
-      { timeout: 1000 },
-    );
-
-    // Button should not have changed to "Copied" state
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-
-    consoleSpy.mockRestore();
-  });
-
   it('handles rapid clicks by clearing previous timeouts', async () => {
     const user = userEvent.setup();
     render(<CopyButton value="test text" />);
