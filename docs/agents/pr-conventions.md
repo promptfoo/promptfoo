@@ -149,6 +149,12 @@ gh pr create --draft --title "feat(scope): description"
 
 This allows maintainers to review and provide feedback before the PR is marked ready for merge.
 
+## GitHub Interaction Rules
+
+- **NEVER comment on GitHub issues** - Only create PRs to address issues
+- **NEVER close issues** - Let maintainers close issues after PR merge
+- Focus on creating high-quality PRs that fully address the issue
+
 ## Checklist Before Creating PR
 
 1. Is this redteam-related? → Use `(redteam)` scope

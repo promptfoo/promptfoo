@@ -143,6 +143,7 @@ npm run local -- eval -c config.yaml --no-cache
 
 - **NEVER** commit/push directly to main
 - **NEVER** use `--force` without explicit approval
+- **NEVER** comment on GitHub issues - only create PRs to address them
 - **ALWAYS create new commits** - never amend, squash, or rebase unless explicitly asked
 - All changes go through pull requests
 
