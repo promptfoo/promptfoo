@@ -1,2 +1,3 @@
 export { ResponsesProcessor } from './processor';
-export type { ProcessorConfig, ProcessorContext, ProcessedOutput } from './types';
+
+export type { ProcessedOutput, ProcessorConfig, ProcessorContext } from './types';

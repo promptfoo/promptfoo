@@ -87,6 +87,7 @@ const config: Config = {
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -214,23 +215,29 @@ const config: Config = {
               description: 'Learn about our mission and team',
             },
             {
-              href: '/blog/',
-              label: 'Blog',
-              description: 'Latest insights on AI security and testing',
-            },
-            {
               href: '/press/',
               label: 'Press',
               description: 'Media coverage and press releases',
+            },
+            {
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
             },
             {
               href: '/careers/',
               label: 'Careers',
               description: 'Join our growing team',
             },
+            {
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
+            },
           ],
         },
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: '/contact/',
@@ -354,12 +361,20 @@ const config: Config = {
               to: '/press/',
             },
             {
+              label: 'Events',
+              to: '/events/',
+            },
+            {
               label: 'Contact',
               to: '/contact/',
             },
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',

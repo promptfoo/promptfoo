@@ -18,7 +18,7 @@ keywords:
   ]
 date: 2025-09-02
 authors: [tabs]
-tags: [ai-safety, ai-security, autonomy, agency, agi, llm-security]
+tags: [ai-safety, ai-security, agents, agi]
 ---
 
 Autonomy is the concept of self-governance—the freedom to decide without external control. Agency is the extent to which an entity can exert control and act.

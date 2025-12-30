@@ -382,8 +382,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     ];
 
-    // Mock file system operations
-    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    // Mock file system operations (existsSync no longer called due to TOCTOU fix)
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
 
     provider = new VertexChatProvider('gemini-pro', {
@@ -441,7 +440,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       metadata: {},
     });
 
-    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    // Note: existsSync no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
     expect(mockRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1491,10 +1490,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
       const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toContain('Gemini API error due to reaching maximum token limit');
-      expect(response.error).toContain('1000 output tokens used');
-      expect(response.error).toContain('... (truncated)');
-      expect(response.guardrails).toBeUndefined();
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(longOutput);
+      expect(response.tokenUsage).toEqual({
+        total: 1100,
+        prompt: 100,
+        completion: 1000,
+      });
     });
 
     it('should handle MAX_TOKENS finishReason with short output (no truncation)', async () => {
@@ -1537,10 +1539,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
       const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toBe(
-        'Gemini API error due to reaching maximum token limit. 10 output tokens used. Output generated: Short response',
-      );
-      expect(response.error).not.toContain('truncated');
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(shortOutput);
+      expect(response.tokenUsage).toEqual({
+        total: 110,
+        prompt: 100,
+        completion: 10,
+      });
     });
   });
 });

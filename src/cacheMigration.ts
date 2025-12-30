@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+
 import logger from './logger';
 
 /**
@@ -72,23 +73,21 @@ function getDirSize(dirPath: string): number {
   let totalSize = 0;
 
   try {
-    if (!fs.existsSync(dirPath)) {
-      return 0;
-    }
-
-    const items = fs.readdirSync(dirPath);
-    for (const item of items) {
-      const itemPath = path.join(dirPath, item);
-      const stats = fs.statSync(itemPath);
-
-      if (stats.isDirectory()) {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const itemPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
         totalSize += getDirSize(itemPath);
       } else {
-        totalSize += stats.size;
+        // Only stat files to get size (directories don't need size)
+        totalSize += fs.statSync(itemPath).size;
       }
     }
   } catch (err) {
-    logger.warn(`[Cache Migration] Error calculating directory size: ${(err as Error).message}`);
+    // ENOENT means directory doesn't exist, which is fine
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[Cache Migration] Error calculating directory size: ${(err as Error).message}`);
+    }
   }
 
   return totalSize;
@@ -298,12 +297,11 @@ function readOldCacheEntries(cachePath: string): {
     return { entries, stats };
   }
 
-  // Find all diskstore-* directories
-  const items = fs.readdirSync(cachePath);
-  const diskstoreDirs = items.filter(
-    (item) =>
-      item.startsWith('diskstore-') && fs.statSync(path.join(cachePath, item)).isDirectory(),
-  );
+  // Find all diskstore-* directories (use withFileTypes to avoid extra stat calls)
+  const dirEntries = fs.readdirSync(cachePath, { withFileTypes: true });
+  const diskstoreDirs = dirEntries
+    .filter((dirEntry) => dirEntry.isDirectory() && dirEntry.name.startsWith('diskstore-'))
+    .map((dirEntry) => dirEntry.name);
 
   logger.info(`[Cache Migration] Found ${diskstoreDirs.length} diskstore directories`);
 
@@ -553,14 +551,18 @@ function isMigrationComplete(cacheBasePath: string, newCacheFile?: string): bool
  * Check if old cache format exists
  */
 function hasOldCacheFormat(cachePath: string): boolean {
-  if (!fs.existsSync(cachePath)) {
-    return false;
+  let dirEntries: fs.Dirent[];
+  try {
+    dirEntries = fs.readdirSync(cachePath, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw err;
   }
 
-  const items = fs.readdirSync(cachePath);
-  return items.some(
-    (item) =>
-      item.startsWith('diskstore-') && fs.statSync(path.join(cachePath, item)).isDirectory(),
+  return dirEntries.some(
+    (dirEntry) => dirEntry.isDirectory() && dirEntry.name.startsWith('diskstore-'),
   );
 }
 
@@ -568,15 +570,19 @@ function hasOldCacheFormat(cachePath: string): boolean {
  * Clean up old cache directories after successful migration
  */
 function cleanupOldCache(cachePath: string): void {
-  if (!fs.existsSync(cachePath)) {
-    return;
+  let dirEntries: fs.Dirent[];
+  try {
+    dirEntries = fs.readdirSync(cachePath, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw err;
   }
 
-  const items = fs.readdirSync(cachePath);
-  const diskstoreDirs = items.filter(
-    (item) =>
-      item.startsWith('diskstore-') && fs.statSync(path.join(cachePath, item)).isDirectory(),
-  );
+  const diskstoreDirs = dirEntries
+    .filter((dirEntry) => dirEntry.isDirectory() && dirEntry.name.startsWith('diskstore-'))
+    .map((dirEntry) => dirEntry.name);
 
   logger.info(`[Cache Migration] Cleaning up ${diskstoreDirs.length} old cache directories`);
 

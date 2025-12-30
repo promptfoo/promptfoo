@@ -1,23 +1,22 @@
+import fs from 'fs';
+
+import { Command } from 'commander';
 import {
-  Mocked,
-  MockedFunction,
-  MockInstance,
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
+  Mocked,
+  MockedFunction,
+  MockInstance,
   vi,
 } from 'vitest';
-
-import fs from 'fs';
-
-import { Command } from 'commander';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util/index';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { writeOutput } from '../../src/util/index';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -89,6 +88,23 @@ vi.mock('../../src/database', async (importOriginal) => {
     getDbInstance: vi.fn(),
   };
 });
+
+// Helper to create mock Dirent objects for fs.readdirSync with { withFileTypes: true }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createDirent(name: string, isFile: boolean = true): any {
+  return {
+    name,
+    isFile: () => isFile,
+    isDirectory: () => !isFile,
+    isBlockDevice: () => false,
+    isCharacterDevice: () => false,
+    isSymbolicLink: () => false,
+    isFIFO: () => false,
+    isSocket: () => false,
+    parentPath: '/test/config/logs',
+    path: '/test/config/logs',
+  };
+}
 
 describe('exportCommand', () => {
   let program: Command;
@@ -235,7 +251,8 @@ describe('exportCommand', () => {
 
     it('should handle invalid count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+      mockFs.readdirSync.mockReturnValue([createDirent('promptfoo-2025-01-01.log')]);
+      mockFs.statSync.mockReturnValue({ mtime: new Date('2025-01-01') } as fs.Stats);
 
       exportCommand(program);
 
@@ -247,7 +264,8 @@ describe('exportCommand', () => {
 
     it('should handle zero count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+      mockFs.readdirSync.mockReturnValue([createDirent('promptfoo-2025-01-01.log')]);
+      mockFs.statSync.mockReturnValue({ mtime: new Date('2025-01-01') } as fs.Stats);
 
       exportCommand(program);
 

@@ -78,6 +78,9 @@ export const CommandLineOptionsSchema = z.object({
   retryErrors: z.boolean().optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
+
+  // Extension hooks
+  extension: z.array(z.string()).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -144,6 +147,7 @@ export interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
+  testSuite?: TestSuite;
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 
@@ -203,6 +207,11 @@ const EvaluateOptionsSchema = z.object({
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),
+  /**
+   * When true, suppresses informational output like "Starting evaluation" messages.
+   * Useful for internal evaluations like provider validation.
+   */
+  silent: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -316,6 +325,7 @@ export interface EvaluateTableOutput {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: import('../blobs/types').BlobRef;
     transcript?: string;
     format?: string;
   };
@@ -342,6 +352,7 @@ export interface EvaluateStats {
   failures: number;
   errors: number;
   tokenUsage: Required<TokenUsage>;
+  durationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {
@@ -369,6 +380,7 @@ export type EvalTableDTO = {
   author: string | null;
   version: number;
   id: string;
+  stats?: EvaluateStats;
 };
 
 export interface ResultSuggestion {
@@ -415,6 +427,8 @@ export interface GradingResult {
     contextUnits?: string[];
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
+    // Full grading prompt sent to the grading LLM (for debugging)
+    renderedGradingPrompt?: string;
     [key: string]: any;
   };
 }

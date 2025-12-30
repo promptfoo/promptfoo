@@ -33,7 +33,7 @@ vi.mock('../../src/database/index', () => ({
   getDbSignalPath: mockGetDbSignalPath,
 }));
 
-import { updateSignalFile, readSignalEvalId } from '../../src/database/signal';
+import { readSignalEvalId, updateSignalFile } from '../../src/database/signal';
 
 describe('signal', () => {
   beforeEach(() => {

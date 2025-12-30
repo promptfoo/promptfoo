@@ -2,9 +2,9 @@ import express from 'express';
 import logger from '../logger';
 import {
   bytesToHex,
-  decodeExportTraceServiceRequest,
   type DecodedAttribute,
   type DecodedExportTraceServiceRequest,
+  decodeExportTraceServiceRequest,
 } from './protobuf';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
@@ -489,7 +489,7 @@ export class OTLPReceiver {
     }
   }
 
-  listen(port: number = 4318, host: string = '0.0.0.0'): Promise<void> {
+  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<void> {
     this.port = port;
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 

@@ -625,7 +625,7 @@ interface ProviderOptions {
   // It can be used to uniquely identify targets even if the provider id changes.
   label?: string;
 
-  // List of prompt display strings
+  // List of prompt labels to include (exact, group prefix like "group", or wildcard "group:*")
   prompts?: string[];
 
   // Transform the output, either with inline Javascript or external py/js script

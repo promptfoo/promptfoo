@@ -1,7 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-
 import NotFoundPage from './NotFoundPage';
 
 vi.mock('@app/hooks/useTelemetry', () => ({

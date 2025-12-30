@@ -1,9 +1,8 @@
-import fs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
@@ -124,6 +123,10 @@ vi.mock('node:fs', () => ({
     readFileSync: vi.fn(),
   },
   readFileSync: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn(),
 }));
 
 vi.mock('../src/cliState', () => ({
@@ -335,15 +338,15 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(mockCertContent);
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fsPromises.readFile).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -379,16 +382,14 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new Error('File not found');
-    });
+    vi.mocked(fsPromises.readFile).mockRejectedValue(new Error('File not found'));
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -468,7 +469,7 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(mockCertContent);
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
@@ -476,8 +477,8 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fsPromises.readFile).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');

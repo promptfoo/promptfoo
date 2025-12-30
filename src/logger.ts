@@ -110,7 +110,12 @@ export function getCallerLocation(): string {
   return '';
 }
 
-type StrictLogMethod = (message: string) => winston.Logger;
+/**
+ * Log input can be a simple string or a structured object with message field.
+ * Structured objects are used when setStructuredLogging(true) is enabled.
+ */
+type LogInput = string | { message: string; [key: string]: unknown };
+type StrictLogMethod = (input: LogInput) => winston.Logger;
 type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
@@ -271,10 +276,11 @@ export function initializeRunLogging(): void {
 }
 
 /**
- * Creates a logger method for the specified log level
+ * Creates a logger method for the specified log level.
+ * Accepts either a string message or a structured object with a message field.
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
-  return (message: string) => {
+  return (input: LogInput) => {
     const location =
       level === 'debug' ? getCallerLocation() : isDebugEnabled() ? getCallerLocation() : '';
 
@@ -282,6 +288,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       initializeSourceMapSupport();
     }
 
+    // Handle both string and structured object inputs
+    const message = typeof input === 'string' ? input : input.message;
     return winstonLogger[level]({ message, location });
   };
 }
@@ -350,8 +358,16 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
 }
 
 /**
- * Creates a log method that accepts an optional context parameter
- * If context is provided, it will be sanitized and formatted
+ * Creates a log method that accepts an optional context parameter.
+ * If context is provided, it will be sanitized and formatted.
+ *
+ * When structured logging is enabled (via setStructuredLogging(true)):
+ * - Passes { message, ...context } object to the logger
+ * - Ideal for cloud logging integrations that expect structured data
+ *
+ * When structured logging is disabled (default):
+ * - Formats context as JSON string appended to message
+ * - Suitable for CLI/console output
  */
 function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
@@ -368,8 +384,15 @@ function createLogMethodWithContext(
     }
 
     const sanitized = sanitizeContext(context);
-    const contextStr = safeJsonStringify(sanitized, true);
-    internalLogger[level](`${message}\n${contextStr}`);
+
+    if (useStructuredLogging) {
+      // Structured mode: pass object with message field for cloud logging systems
+      internalLogger[level]({ message, ...sanitized });
+    } else {
+      // Default mode: format as string for CLI/console output
+      const contextStr = safeJsonStringify(sanitized, true);
+      internalLogger[level](`${message}\n${contextStr}`);
+    }
   };
 }
 
@@ -435,9 +458,12 @@ export async function logRequestResponse(options: {
   };
 
   if (useStructuredLogging) {
-    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
+    // Pass message and context separately to use the wrapper's structured logging path.
+    // This ensures proper typing and consistent handling with other structured log calls.
+    const { message, ...context } = logObject;
+    logMethod(message, context);
   } else {
-    logMethod(`Api Request`, logObject);
+    logMethod('Api Request', logObject);
   }
 }
 

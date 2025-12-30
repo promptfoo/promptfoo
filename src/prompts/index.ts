@@ -1,8 +1,9 @@
 import { stat } from 'fs/promises';
+
 import { globSync } from 'glob';
 import logger from '../logger';
-import { parsePathOrGlob } from '../util/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
