@@ -452,10 +452,9 @@ describe('EvalOutputCell', () => {
         video: {
           url: '/api/output/video/test-uuid/video.mp4',
           format: 'mp4',
-          model: 'sora-2',
+          model: 'veo-3.1-generate-preview',
           size: '1280x720',
           duration: 10,
-          thumbnail: '/api/output/video/test-uuid/thumbnail.webp',
         },
       },
     };
@@ -469,7 +468,7 @@ describe('EvalOutputCell', () => {
     expect(sourceElement).toHaveAttribute('src', '/api/output/video/test-uuid/video.mp4');
     expect(sourceElement).toHaveAttribute('type', 'video/mp4');
 
-    expect(screen.getByText('Model: sora-2')).toBeInTheDocument();
+    expect(screen.getByText('Model: veo-3.1-generate-preview')).toBeInTheDocument();
     expect(screen.getByText('Size: 1280x720')).toBeInTheDocument();
     expect(screen.getByText('Duration: 10s')).toBeInTheDocument();
   });
