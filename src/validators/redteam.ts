@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import logger from '../logger';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
@@ -333,7 +332,7 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        logger.debug(
+        console.debug(
           '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
         );
 
