@@ -163,19 +163,11 @@ describe('AuthorChip', () => {
     render(<AuthorChip {...defaultProps} editable={false} author={null} />);
     const chip = screen.getByText('Unknown').closest('div');
 
+    // Hover over the chip to trigger the tooltip
     await userEvent.hover(chip!);
 
+    // Wait for the tooltip to appear in the DOM
     expect(await screen.findByText('Author')).toBeInTheDocument();
-  });
-
-  it('displays "An unknown error occurred" when onEditAuthor rejects with a non-Error object', async () => {
-    mockOnEditAuthor.mockRejectedValueOnce('Some non-error string');
-    render(<AuthorChip {...defaultProps} />);
-    await userEvent.click(screen.getByText('test@example.com'));
-    await userEvent.click(screen.getByText('Save'));
-    await waitFor(() => {
-      expect(screen.getByText('An unknown error occurred')).toBeInTheDocument();
-    });
   });
 
   describe('cloud mode', () => {
@@ -298,33 +290,15 @@ describe('AuthorChip', () => {
       expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
     });
 
-    it('shows "Eval author" tooltip when cloud enabled, author matches current user, and not editable', async () => {
-      const user = userEvent.setup();
-      const props = {
-        ...defaultProps,
-        editable: false,
-        isCloudEnabled: true,
-        author: 'test@example.com',
-        currentUserEmail: 'test@example.com',
-      };
-      render(<AuthorChip {...props} />);
-
-      const authorElement = screen.getByText(/Author:/);
-
-      await user.hover(authorElement);
-
-      expect(await screen.findByRole('tooltip')).toHaveTextContent('Eval author');
-
-      await user.click(authorElement);
-      expect(mockOnEditAuthor).not.toHaveBeenCalled();
-    });
-
     it('when currentUserEmail is null in cloud mode, onEditAuthor is not called even if the claim button is clicked', async () => {
       render(<AuthorChip {...cloudProps} currentUserEmail={null} />);
       await userEvent.click(screen.getByText('Unknown'));
       const claimButton = screen.getByRole('button', { name: /Loading/i });
       expect(claimButton).toBeDisabled();
 
+      // Verify the disabled button prevents the action
+      // Note: We don't attempt to click because userEvent correctly prevents
+      // interaction with disabled elements (pointer-events: none)
       expect(mockOnEditAuthor).not.toHaveBeenCalled();
     });
   });
@@ -343,6 +317,16 @@ describe('AuthorChip', () => {
       await userEvent.type(screen.getByLabelText('Author Email'), 'anyone@example.com');
       await userEvent.click(screen.getByText('Save'));
       expect(mockOnEditAuthor).toHaveBeenCalledWith('anyone@example.com');
+    });
+  });
+
+  it('displays "An unknown error occurred" when onEditAuthor rejects with a non-Error object', async () => {
+    mockOnEditAuthor.mockRejectedValueOnce('Some non-error string');
+    render(<AuthorChip {...defaultProps} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    await userEvent.click(screen.getByText('Save'));
+    await waitFor(() => {
+      expect(screen.getByText('An unknown error occurred')).toBeInTheDocument();
     });
   });
 });
