@@ -7,7 +7,7 @@ description: Red team shell injection vulnerabilities by testing AI systems' res
 
 The Shell Injection plugin is designed to test an AI system's vulnerability to attacks that attempt to execute unauthorized shell commands through injection of malicious system commands.
 
-This plugin helps identify potential security breaches where an attacker might exploit the system to run malicious commands, gain unauthorized access, or compromise system integrity. Shell injection (also known as command injection) is a critical security vulnerability ([OWASP Top 10 A03:2021 - Injection](https://owasp.org/Top10/A03_2021-Injection/)) and is particularly dangerous for LLM agents with access to system tools or shell commands.
+This plugin helps identify potential security breaches where an attacker might exploit the system to run malicious commands, gain unauthorized access, or compromise system integrity. Shell injection (also known as command injection) is a critical security vulnerability ([OWASP Top 10 A05:2025 - Injection](https://owasp.org/Top10/2025/A05_2025-Injection/)) and is particularly dangerous for LLM agents with access to system tools or shell commands.
 
 ## Purpose
 

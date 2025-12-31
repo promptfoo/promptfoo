@@ -7,7 +7,7 @@ description: Red team SQL injection vulnerabilities by simulating malicious data
 
 The SQL Injection red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to execute unauthorized database queries through injection of malicious SQL code.
 
-This plugin helps identify potential security breaches where an attacker might exploit the system to access, modify, or delete sensitive data through SQL injection attacks. SQL injection remains one of the most critical web application security risks ([OWASP Top 10 A03:2021 - Injection](https://owasp.org/Top10/A03_2021-Injection/)) and is particularly dangerous for LLM agents with database access.
+This plugin helps identify potential security breaches where an attacker might exploit the system to access, modify, or delete sensitive data through SQL injection attacks. SQL injection remains one of the most critical web application security risks ([OWASP Top 10 A05:2025 - Injection](https://owasp.org/Top10/2025/A05_2025-Injection/)) and is particularly dangerous for LLM agents with database access.
 
 ## Purpose
 
