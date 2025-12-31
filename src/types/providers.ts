@@ -179,6 +179,17 @@ export interface ProviderResponse {
     channels?: number;
     duration?: number;
   };
+  video?: {
+    id?: string; // Provider video ID (e.g., Veo operation name)
+    blobRef?: BlobRef; // Blob storage reference for video data
+    url?: string; // Legacy: API path to serve video (deprecated, use blobRef)
+    format?: string; // 'mp4'
+    size?: string; // '1280x720' or '720x1280'
+    duration?: number; // Seconds
+    model?: string; // Model used (e.g., 'veo-3.1-generate-preview')
+    aspectRatio?: string; // '16:9' or '9:16'
+    resolution?: string; // '720p' or '1080p'
+  };
 }
 
 export interface ProviderEmbeddingResponse {

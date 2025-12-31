@@ -33,9 +33,25 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           id: result.response.audio.id,
           expiresAt: result.response.audio.expiresAt,
           data: result.response.audio.data,
-          blobRef: (result.response.audio as any).blobRef,
+          blobRef: result.response.audio.blobRef,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,
+          sampleRate: result.response.audio.sampleRate,
+          channels: result.response.audio.channels,
+          duration: result.response.audio.duration,
+        }
+      : undefined,
+    video: result.response?.video
+      ? {
+          id: result.response.video.id,
+          blobRef: result.response.video.blobRef,
+          url: result.response.video.url,
+          format: result.response.video.format,
+          size: result.response.video.size,
+          duration: result.response.video.duration,
+          model: result.response.video.model,
+          aspectRatio: result.response.video.aspectRatio,
+          resolution: result.response.video.resolution,
         }
       : undefined,
   };

@@ -255,3 +255,21 @@ Here's the example output in JSON format:
   ]
 }
 ```
+
+## Sharing Results
+
+To get a shareable URL, set `sharing: true` along with `writeLatestResults: true`:
+
+```js
+const results = await promptfoo.evaluate({
+  prompts: ['Your prompt here'],
+  providers: ['openai:gpt-5-mini'],
+  tests: [{ vars: { input: 'test' } }],
+  writeLatestResults: true,
+  sharing: true,
+});
+
+console.log(results.shareableUrl); // https://app.promptfoo.dev/eval/abc123
+```
+
+Requires a [Promptfoo Cloud](/docs/enterprise) account or self-hosted server. For self-hosted, pass `sharing: { apiBaseUrl, appBaseUrl }` instead of `true`.

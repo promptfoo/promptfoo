@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - contains assertion (5.1.1)'
+
+providers:
+  - echo
+
+prompts:
+  - 'The quick brown fox jumps over the lazy dog'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'quick brown'
+      - type: contains
+        value: 'lazy dog'

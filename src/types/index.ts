@@ -9,6 +9,7 @@ import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../va
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
+import type { BlobRef } from '../blobs/types';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -78,6 +79,9 @@ export const CommandLineOptionsSchema = z.object({
   retryErrors: z.boolean().optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
+
+  // Extension hooks
+  extension: z.array(z.string()).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -322,9 +326,23 @@ export interface EvaluateTableOutput {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
-    blobRef?: import('../blobs/types').BlobRef;
+    blobRef?: BlobRef;
     transcript?: string;
     format?: string;
+    sampleRate?: number;
+    channels?: number;
+    duration?: number;
+  };
+  video?: {
+    id?: string; // Provider video ID (e.g., Veo operation name)
+    blobRef?: BlobRef; // Blob storage reference for video data
+    url?: string; // Legacy: API path to serve video (deprecated, use blobRef)
+    format?: string; // 'mp4'
+    size?: string; // '1280x720' or '720x1280'
+    duration?: number; // Seconds
+    model?: string; // Model used (e.g., 'veo-3.1-generate-preview')
+    aspectRatio?: string; // '16:9' or '9:16'
+    resolution?: string; // '720p' or '1080p'
   };
 }
 

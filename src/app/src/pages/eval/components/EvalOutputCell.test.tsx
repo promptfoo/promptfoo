@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell, { isImageProvider } from './EvalOutputCell';
+import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -442,6 +442,64 @@ describe('EvalOutputCell', () => {
     const sourceElement = screen.getByTestId('audio-player').querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/mp3;base64,base64audiodata');
     expect(sourceElement).toHaveAttribute('type', 'audio/mp3');
+  });
+
+  it('renders video player when video data is present', () => {
+    const videoProvider = 'google:video:veo-3.1-generate-preview';
+    const propsWithVideo: MockEvalOutputCellProps = {
+      ...defaultProps,
+      maxTextLength: 0, // Disable truncation for video output test
+      firstOutput: {
+        ...defaultProps.firstOutput,
+        provider: videoProvider,
+      },
+      output: {
+        ...defaultProps.output,
+        text: '', // Video takes precedence over text rendering
+        provider: videoProvider,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+          format: 'mp4',
+          model: 'veo-3.1-generate-preview',
+          size: '1280x720',
+          duration: 10,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithVideo} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    const sourceElement = videoElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', '/api/output/video/test-uuid/video.mp4');
+    expect(sourceElement).toHaveAttribute('type', 'video/mp4');
+
+    expect(screen.getByText('Model: veo-3.1-generate-preview')).toBeInTheDocument();
+    expect(screen.getByText('Size: 1280x720')).toBeInTheDocument();
+    expect(screen.getByText('Duration: 10s')).toBeInTheDocument();
+  });
+
+  it('handles video without optional metadata', () => {
+    const propsWithVideoNoMetadata: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithVideoNoMetadata} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    expect(screen.queryByText(/Model:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Size:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Duration:/)).not.toBeInTheDocument();
   });
 
   it('allows copying row link to clipboard', async () => {
@@ -1436,6 +1494,44 @@ describe('isImageProvider helper function', () => {
   });
 });
 
+describe('isVideoProvider helper function', () => {
+  it('should return true for Google Veo 3.1 provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
+  });
+
+  it('should return true for Google Veo 2 provider', () => {
+    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  });
+
+  it('should return true for any provider with :video: in the name', () => {
+    expect(isVideoProvider('some-provider:video:model')).toBe(true);
+  });
+
+  it('should return false for text completion providers', () => {
+    expect(isVideoProvider('openai:gpt-4')).toBe(false);
+  });
+
+  it('should return false for chat providers', () => {
+    expect(isVideoProvider('openai:chat:gpt-4')).toBe(false);
+  });
+
+  it('should return false for image providers', () => {
+    expect(isVideoProvider('openai:image:dall-e-3')).toBe(false);
+  });
+
+  it('should return false for anthropic providers', () => {
+    expect(isVideoProvider('anthropic:claude-3-opus')).toBe(false);
+  });
+
+  it('should return false for undefined provider', () => {
+    expect(isVideoProvider(undefined)).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isVideoProvider('')).toBe(false);
+  });
+});
+
 describe('EvalOutputCell provider error display', () => {
   const mockOnRating = vi.fn();
 
@@ -1789,5 +1885,152 @@ describe('EvalOutputCell pass reasons setting', () => {
 
     // Pass reasons should not be visible when setting is false (default)
     expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Tests for lightbox functionality with inline images.
+ * These tests verify the fix for issue #969 (markdown re-rendering)
+ * by testing that the lightbox toggle works correctly with useCallback.
+ * @see https://github.com/promptfoo/promptfoo/issues/969
+ */
+describe('EvalOutputCell inline image lightbox', () => {
+  const mockOnRating = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('opens lightbox when clicking on inline image and closes when clicking lightbox', async () => {
+    // Use a data URI which triggers the inline image rendering path (not markdown)
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 1000,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [],
+          pass: true,
+          reason: 'Test passed',
+          score: 1.0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: dataUri,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+
+    // Open lightbox
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Close lightbox
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
+    // Use a data URI which triggers the inline image rendering path
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 1000,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [],
+          pass: true,
+          reason: 'Test passed',
+          score: 1.0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: dataUri,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const imgElement = screen.getByRole('img');
+
+    // Toggle open
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Toggle closed
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+
+    // Toggle open again (tests useCallback stability with functional update)
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+
+    // Toggle closed again
+    await userEvent.click(container.querySelector('.lightbox')!);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+
+    // Toggle once more to ensure the pattern continues to work
+    await userEvent.click(imgElement);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 });

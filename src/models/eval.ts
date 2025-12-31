@@ -248,6 +248,12 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
 
+  /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
+
   static async latest() {
     const db = getDb();
     const db_results = await db
@@ -1443,7 +1449,7 @@ export async function getEvalSummaries(
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
