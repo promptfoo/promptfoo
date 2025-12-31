@@ -159,6 +159,25 @@ describe('AuthorChip', () => {
     expect(screen.queryByLabelText('Author Email')).not.toBeInTheDocument();
   });
 
+  it('shows "Author" tooltip when not editable and author is null', async () => {
+    render(<AuthorChip {...defaultProps} editable={false} author={null} />);
+    const chip = screen.getByText('Unknown').closest('div');
+
+    await userEvent.hover(chip!);
+
+    expect(await screen.findByText('Author')).toBeInTheDocument();
+  });
+
+  it('displays "An unknown error occurred" when onEditAuthor rejects with a non-Error object', async () => {
+    mockOnEditAuthor.mockRejectedValueOnce('Some non-error string');
+    render(<AuthorChip {...defaultProps} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    await userEvent.click(screen.getByText('Save'));
+    await waitFor(() => {
+      expect(screen.getByText('An unknown error occurred')).toBeInTheDocument();
+    });
+  });
+
   describe('cloud mode', () => {
     const cloudProps = {
       ...defaultProps,
@@ -277,6 +296,36 @@ describe('AuthorChip', () => {
       await userEvent.click(screen.getByText('other@example.com'));
       await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
       expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
+    });
+
+    it('shows "Eval author" tooltip when cloud enabled, author matches current user, and not editable', async () => {
+      const user = userEvent.setup();
+      const props = {
+        ...defaultProps,
+        editable: false,
+        isCloudEnabled: true,
+        author: 'test@example.com',
+        currentUserEmail: 'test@example.com',
+      };
+      render(<AuthorChip {...props} />);
+
+      const authorElement = screen.getByText(/Author:/);
+
+      await user.hover(authorElement);
+
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Eval author');
+
+      await user.click(authorElement);
+      expect(mockOnEditAuthor).not.toHaveBeenCalled();
+    });
+
+    it('when currentUserEmail is null in cloud mode, onEditAuthor is not called even if the claim button is clicked', async () => {
+      render(<AuthorChip {...cloudProps} currentUserEmail={null} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      const claimButton = screen.getByRole('button', { name: /Loading/i });
+      expect(claimButton).toBeDisabled();
+
+      expect(mockOnEditAuthor).not.toHaveBeenCalled();
     });
   });
 
