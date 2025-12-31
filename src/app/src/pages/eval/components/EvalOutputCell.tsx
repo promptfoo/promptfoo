@@ -809,7 +809,10 @@ function EvalOutputCell({
             aria-pressed={activeRating === true}
             aria-label="Mark test passed"
           >
-            <ThumbsUp className="h-4 w-4" />
+            <ThumbsUp
+              className={`h-4 w-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
+              fill={activeRating === true ? 'currentColor' : 'none'}
+            />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
@@ -823,7 +826,10 @@ function EvalOutputCell({
             aria-pressed={activeRating === false}
             aria-label="Mark test failed"
           >
-            <ThumbsDown className="h-4 w-4" />
+            <ThumbsDown
+              className={`h-4 w-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
+              fill={activeRating === false ? 'currentColor' : 'none'}
+            />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
@@ -906,7 +912,10 @@ function EvalOutputCell({
           </audio>
         </div>
       )}
-      <div style={contentStyle}>
+      <div
+        className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
+        style={contentStyle}
+      >
         <TruncatedText
           text={node || normalizedText}
           maxLength={
