@@ -23,7 +23,6 @@ import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
   type Prompt,
-  type ProviderOptions,
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
@@ -47,115 +46,70 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
   return typeof test === 'object' && test !== null && 'vars' in test;
 }
 
+/**
+ * JSON Schema locations in promptfoo configs that should be excluded from
+ * config-level $ref dereferencing.
+ *
+ * These schemas may contain internal refs (e.g., #/$defs/Type) that are
+ * relative to the schema root, not the config root. The LLM API expects
+ * these refs to be preserved as-is.
+ *
+ * Pattern notes:
+ * - \d+ matches array indices
+ * - [^/]+ matches provider map keys (e.g., "openai:gpt-4")
+ * - (?:/.*)?$ matches the path AND all descendants
+ *
+ * @see https://github.com/promptfoo/promptfoo/issues/364
+ */
+const JSON_SCHEMA_PATH_PATTERNS: readonly RegExp[] = [
+  // === Provider config (array syntax: { name: 'openai:gpt-4', config: {...} }) ===
+  /^#\/providers\/\d+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === Provider config (map syntax: { 'openai:gpt-4': { config: {...} } }) ===
+  /^#\/providers\/\d+\/[^/]+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/[^/]+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/providers\/\d+\/[^/]+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === defaultTest provider config ===
+  /^#\/defaultTest\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/defaultTest\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/defaultTest\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+
+  // === Per-test provider config ===
+  /^#\/tests\/\d+\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/tests\/\d+\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/tests\/\d+\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+] as const;
+
+/**
+ * Check if a $ref path should be excluded from dereferencing.
+ *
+ * We exclude refs inside known JSON Schema locations because:
+ * 1. JSON Schemas can have internal $refs (#/$defs/..., #/definitions/...)
+ * 2. These refs are relative to schema root, not config root
+ * 3. json-schema-ref-parser would fail trying to resolve them at config level
+ */
+function isJsonSchemaPath(refPath: string): boolean {
+  return JSON_SCHEMA_PATH_PATTERNS.some((pattern) => pattern.test(refPath));
+}
+
+/**
+ * Dereference config-level $refs while preserving JSON Schema internal refs.
+ *
+ * Handles the collision between:
+ * - promptfoo config refs: $ref: '#/definitions/myPrompt' (should resolve)
+ * - JSON Schema refs: $ref: '#/$defs/MyType' (should preserve)
+ */
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
   }
 
-  // Track and delete tools[i].function for each tool, preserving the rest of the properties
-  // https://github.com/promptfoo/promptfoo/issues/364
-
-  // Remove parameters from functions and tools to prevent dereferencing
-  const extractFunctionParameters = (functions: { parameters?: object }[]) => {
-    return functions.map((func) => {
-      const { parameters } = func;
-      delete func.parameters;
-      return { parameters };
-    });
-  };
-
-  const extractToolParameters = (tools: { function?: { parameters?: object } }[]) => {
-    return tools.map((tool) => {
-      const { parameters } = tool.function || {};
-      if (tool.function?.parameters) {
-        delete tool.function.parameters;
-      }
-      return { parameters };
-    });
-  };
-
-  // Restore parameters to functions and tools after dereferencing
-  const restoreFunctionParameters = (
-    functions: { parameters?: object }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    functions.forEach((func, index) => {
-      if (parametersList[index]?.parameters) {
-        func.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const restoreToolParameters = (
-    tools: { function?: { parameters?: object } }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    tools.forEach((tool, index) => {
-      if (parametersList[index]?.parameters) {
-        tool.function = tool.function || {};
-        tool.function.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const functionsParametersList: { parameters?: object }[][] = [];
-  const toolsParametersList: { parameters?: object }[][] = [];
-
-  if (Array.isArray(rawConfig.providers)) {
-    rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
-      if (Array.isArray(provider.config?.functions)) {
-        functionsParametersList[providerIndex] = extractFunctionParameters(
-          provider.config.functions,
-        );
-      }
-
-      if (Array.isArray(provider.config?.tools)) {
-        toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
-      }
-    });
-  }
-
-  // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
-
-  // Restore functions and tools parameters
-  if (Array.isArray(config.providers)) {
-    config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      if (functionsParametersList[index]) {
-        provider.config.functions = provider.config.functions || [];
-        restoreFunctionParameters(provider.config.functions, functionsParametersList[index]);
-      }
-
-      if (toolsParametersList[index]) {
-        provider.config.tools = provider.config.tools || [];
-        restoreToolParameters(provider.config.tools, toolsParametersList[index]);
-      }
-    });
-  }
-  return config;
+  return (await $RefParser.dereference(rawConfig, {
+    dereference: { excludedPathMatcher: isJsonSchemaPath },
+  })) as unknown as UnifiedConfig;
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {

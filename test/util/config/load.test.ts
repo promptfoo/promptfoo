@@ -1351,6 +1351,101 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
+  it('should preserve the response format json schema when dereferencing', async () => {
+    const rawConfig = {
+      prompts: [{ $ref: '#/definitions/prompt' }],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'kubectl_describe',
+                strict: true,
+                schema: {
+                  $defs: {
+                    KubernetesResourceKind: {
+                      enum: ['deployment', 'node'],
+                      title: 'KubernetesResourceKind',
+                      type: 'string',
+                    },
+                  },
+                  properties: {
+                    kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                    namespace: {
+                      anyOf: [{ type: 'string' }, { type: 'null' }],
+                      default: null,
+                      title: 'Namespace',
+                    },
+                    name: { title: 'Name', type: 'string' },
+                  },
+                  required: ['kind', 'name'],
+                  title: 'KubectlDescribe',
+                  type: 'object',
+                },
+              },
+            },
+          },
+        },
+      ],
+      definitions: {
+        prompt: 'hello world',
+      },
+    };
+    const expectedOutput = {
+      prompts: ['hello world'],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'kubectl_describe',
+                strict: true,
+                schema: {
+                  $defs: {
+                    KubernetesResourceKind: {
+                      enum: ['deployment', 'node'],
+                      title: 'KubernetesResourceKind',
+                      type: 'string',
+                    },
+                  },
+                  properties: {
+                    kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                    namespace: {
+                      anyOf: [{ type: 'string' }, { type: 'null' }],
+                      default: null,
+                      title: 'Namespace',
+                    },
+                    name: { title: 'Name', type: 'string' },
+                  },
+                  required: ['kind', 'name'],
+                  title: 'KubectlDescribe',
+                  type: 'object',
+                },
+              },
+            },
+          },
+        },
+      ],
+      definitions: {
+        prompt: 'hello world',
+      },
+    };
+    // Mock $RefParser to return dereferenced config (resolves #/definitions but preserves $defs)
+    mockDereference.mockResolvedValueOnce(expectedOutput);
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    expect(dereferencedConfig).toEqual(expectedOutput);
+  });
+
   it('should preserve handle string functions/tools when dereferencing', async () => {
     const rawConfig = {
       description: 'Test config with function parameters',
@@ -1370,6 +1465,209 @@ describe('dereferenceConfig', () => {
     };
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(rawConfig);
+  });
+
+  it('should preserve json schema refs in map-syntax providers', async () => {
+    const rawConfig = {
+      prompts: ['test prompt'],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          'openai:gpt-4': {
+            config: {
+              response_format: {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'test_schema',
+                  schema: {
+                    $defs: {
+                      Status: { enum: ['active', 'inactive'], type: 'string' },
+                    },
+                    properties: {
+                      status: { $ref: '#/$defs/Status' },
+                    },
+                    type: 'object',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    // The $ref inside the schema should be preserved
+    const providers = dereferencedConfig.providers as unknown[];
+    const provider = providers[0] as Record<string, unknown>;
+    const providerConfig = (provider['openai:gpt-4'] as { config: Record<string, unknown> }).config;
+    const responseFormat = providerConfig.response_format as {
+      json_schema: { schema: { properties: { status: { $ref: string } } } };
+    };
+    expect(responseFormat.json_schema.schema.properties.status.$ref).toBe('#/$defs/Status');
+  });
+
+  it('should preserve json schema refs in defaultTest provider config', async () => {
+    const rawConfig = {
+      prompts: ['test prompt'],
+      providers: ['openai:gpt-4'],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      defaultTest: {
+        options: {
+          provider: {
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'test_function',
+                    parameters: {
+                      $defs: {
+                        Priority: { enum: ['high', 'low'], type: 'string' },
+                      },
+                      properties: {
+                        priority: { $ref: '#/$defs/Priority' },
+                      },
+                      type: 'object',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    // The $ref inside the parameters should be preserved
+    const defaultTest = dereferencedConfig.defaultTest as {
+      options: {
+        provider: {
+          config: {
+            tools: Array<{
+              function: { parameters: { properties: { priority: { $ref: string } } } };
+            }>;
+          };
+        };
+      };
+    };
+    const tools = defaultTest.options.provider.config.tools;
+    expect(tools[0].function.parameters.properties.priority.$ref).toBe('#/$defs/Priority');
+  });
+
+  it('should preserve json schema refs in per-test provider config', async () => {
+    const rawConfig = {
+      prompts: ['test prompt'],
+      providers: ['openai:gpt-4'],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      tests: [
+        {
+          vars: { input: 'test' },
+          options: {
+            provider: {
+              config: {
+                functions: [
+                  {
+                    name: 'test_function',
+                    parameters: {
+                      $defs: {
+                        Level: { enum: ['info', 'warn', 'error'], type: 'string' },
+                      },
+                      properties: {
+                        level: { $ref: '#/$defs/Level' },
+                      },
+                      type: 'object',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    // The $ref inside the parameters should be preserved
+    const tests = dereferencedConfig.tests as unknown[];
+    const testCase = tests[0] as {
+      options: {
+        provider: {
+          config: { functions: Array<{ parameters: { properties: { level: { $ref: string } } } }> };
+        };
+      };
+    };
+    expect(testCase.options.provider.config.functions[0].parameters.properties.level.$ref).toBe(
+      '#/$defs/Level',
+    );
+  });
+
+  it('should preserve deeply nested json schema refs', async () => {
+    const rawConfig = {
+      prompts: ['test prompt'],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'complex_schema',
+                schema: {
+                  $defs: {
+                    Address: {
+                      type: 'object',
+                      properties: {
+                        street: { type: 'string' },
+                        city: { type: 'string' },
+                      },
+                    },
+                    Person: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        address: { $ref: '#/$defs/Address' },
+                      },
+                    },
+                  },
+                  type: 'object',
+                  properties: {
+                    people: {
+                      type: 'array',
+                      items: { $ref: '#/$defs/Person' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    // All $refs inside the schema should be preserved
+    const providers = dereferencedConfig.providers as unknown[];
+    const provider = providers[0] as {
+      config: {
+        response_format: {
+          json_schema: {
+            schema: {
+              $defs: { Person: { properties: { address: { $ref: string } } } };
+              properties: { people: { items: { $ref: string } } };
+            };
+          };
+        };
+      };
+    };
+    const schema = provider.config.response_format.json_schema.schema;
+    expect(schema.properties.people.items.$ref).toBe('#/$defs/Person');
+    expect(schema.$defs.Person.properties.address.$ref).toBe('#/$defs/Address');
   });
 });
 
