@@ -7,7 +7,6 @@ import path from 'path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import react from '@vitejs/plugin-react';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -94,15 +93,6 @@ export default defineConfig({
         plugins: [['babel-plugin-react-compiler', {}]],
       },
     }),
-    // Node.js polyfills - only include what we actually need
-    // See: https://github.com/nicolo-ribaudo/vite-plugin-node-polyfills
-    //
-    // crypto and fs are replaced by browserModulesPlugin above:
-    //   - createHash.browser.ts uses native SubtleCrypto
-    //   - logger.browser.ts uses console
-    nodePolyfills({
-      include: ['buffer', 'events', 'os', 'path', 'process', 'stream', 'util', 'vm'],
-    }),
   ],
   resolve: {
     alias: {
@@ -119,13 +109,6 @@ export default defineConfig({
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
     rollupOptions: {
-      onwarn(warning, warn) {
-        // Suppress eval warnings from vm-browserify polyfill
-        if (warning.code === 'EVAL' && warning.id?.includes('vm-browserify')) {
-          return;
-        }
-        warn(warning);
-      },
       output: {
         // Manual chunking to split vendor libraries
         manualChunks: {
@@ -134,7 +117,7 @@ export default defineConfig({
           'vendor-mui-icons': ['@mui/icons-material'],
           'vendor-mui-x': ['@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
+          'vendor-utils': ['js-yaml', 'diff'],
           'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
@@ -152,12 +135,8 @@ export default defineConfig({
     // Force vitest to transform MUI packages including CSS imports
     server: {
       deps: {
-        inline: ['@mui/x-charts', 'node-stdlib-browser'],
+        inline: ['@mui/x-charts'],
       },
-    },
-    // Fix ESM directory import issue with punycode in node-stdlib-browser
-    alias: {
-      'punycode/': 'punycode',
     },
 
     // Memory leak prevention settings
