@@ -523,7 +523,8 @@ export default class Eval {
       config: this.config,
       prompts: this.prompts,
       description: this.config.description,
-      author: this.author,
+      // Use null explicitly to ensure Drizzle updates the column (undefined may be skipped)
+      author: this.author || null,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

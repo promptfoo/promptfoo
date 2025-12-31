@@ -2,6 +2,7 @@ import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -212,6 +213,11 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
+  const {
+    data: cloudConfig,
+    isLoading: isCloudConfigLoading,
+    error: cloudConfigError,
+  } = useCloudConfig();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchValue] = useDebounce(searchText, 1000);
 
@@ -586,6 +592,37 @@ export default function ResultsView({
     }
   };
 
+  // Determine if the current user can edit the author field
+  // When cloud is enabled, allow editing unless it's already claimed by the current user
+  // When cloud is disabled, allow editing (no identity system to verify ownership)
+  const canEditAuthor = React.useMemo(() => {
+    // While cloud config is loading, default to not editable to prevent race condition
+    // where a non-owner could edit before cloud restrictions are applied
+    if (isCloudConfigLoading) {
+      return false;
+    }
+    // If cloud config fetch failed, default to not editable for security
+    // We can't determine if cloud is enabled, so assume it might be
+    if (cloudConfigError) {
+      return false;
+    }
+    if (!cloudConfig?.isEnabled) {
+      return true;
+    }
+    // Cloud is enabled:
+    // - No author: editable (anyone can claim)
+    // - Author differs from current user: editable (can claim from someone else)
+    // - Author matches current user: not editable (already yours, no self-removal)
+    if (!author) {
+      return true;
+    }
+    if (currentUserEmail === null) {
+      // Still loading current user email - be conservative
+      return false;
+    }
+    return author !== currentUserEmail;
+  }, [isCloudConfigLoading, cloudConfigError, cloudConfig?.isEnabled, author, currentUserEmail]);
+
   const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
     (event) => {
       if (event.key === 'Escape') {
@@ -664,7 +701,8 @@ export default function ResultsView({
               author={author}
               onEditAuthor={handleEditAuthor}
               currentUserEmail={currentUserEmail}
-              editable
+              editable={canEditAuthor}
+              isCloudEnabled={cloudConfig?.isEnabled ?? false}
             />
             {Object.keys(config?.tags || {}).map((tag) => (
               <Chip

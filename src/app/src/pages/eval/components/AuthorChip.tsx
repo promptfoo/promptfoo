@@ -17,6 +17,7 @@ interface AuthorChipProps {
   onEditAuthor: (newAuthor: string) => Promise<void>;
   currentUserEmail: string | null;
   editable: boolean;
+  isCloudEnabled: boolean;
 }
 
 export const AuthorChip = ({
@@ -24,6 +25,7 @@ export const AuthorChip = ({
   onEditAuthor,
   currentUserEmail,
   editable,
+  isCloudEnabled,
 }: AuthorChipProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -46,6 +48,7 @@ export const AuthorChip = ({
     setAnchorEl(null);
   };
 
+  // Handler for free-text mode (non-cloud)
   const handleSave = async () => {
     if (isLoading) {
       return;
@@ -62,10 +65,109 @@ export const AuthorChip = ({
     }
   };
 
+  // Handler for cloud mode actions (Claim/Remove)
+  const handleCloudAction = async (newAuthor: string) => {
+    if (isLoading) {
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await onEditAuthor(newAuthor);
+      handleClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleKeyPress = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter') {
       handleSave();
     }
+  };
+
+  const getTooltipTitle = () => {
+    if (!editable) {
+      if (!author) {
+        return 'Author';
+      }
+      // For your own eval in cloud mode, just label the field
+      if (isCloudEnabled && author === currentUserEmail) {
+        return 'Eval author';
+      }
+      return `This eval belongs to ${author}`;
+    }
+    if (isCloudEnabled) {
+      // In cloud mode, editable=true when no author OR author is someone else
+      return 'Click to claim this eval';
+    }
+    return author ? 'Click to edit author' : 'Click to set author';
+  };
+
+  const renderPopoverContent = () => {
+    if (isCloudEnabled) {
+      // Cloud mode: shows claim UI (popover opens for unclaimed evals or evals claimed by others)
+      return (
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            {author
+              ? `This eval is currently attributed to ${author}.`
+              : 'This eval has no author assigned.'}
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => handleCloudAction(currentUserEmail || '')}
+            disabled={isLoading || !currentUserEmail}
+          >
+            {isLoading ? (
+              <CircularProgress size={24} />
+            ) : currentUserEmail ? (
+              `Claim as mine (${currentUserEmail})`
+            ) : (
+              'Loading...'
+            )}
+          </Button>
+          {error && (
+            <Typography color="error" variant="caption" sx={{ mt: 1 }}>
+              {error}
+            </Typography>
+          )}
+        </Box>
+      );
+    }
+
+    // Non-cloud mode: keep existing free text UI
+    return (
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-end', mb: 2 }}>
+          <TextField
+            label="Author Email"
+            variant="standard"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyPress={handleKeyPress}
+            error={!!error}
+            helperText={error}
+            disabled={isLoading}
+            sx={{ flexGrow: 1, mr: 2 }}
+          />
+          <Button onClick={handleSave} disabled={isLoading || !email}>
+            {isLoading ? <CircularProgress size={24} /> : 'Save'}
+          </Button>
+        </Box>
+        {!currentUserEmail && (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
+            <Typography variant="caption">
+              {`Setting an email address will also set the default author for future evals.
+                It is changeable with \`promptfoo auth login\``}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    );
   };
 
   const open = Boolean(anchorEl);
@@ -73,9 +175,7 @@ export const AuthorChip = ({
 
   return (
     <>
-      <Tooltip
-        title={editable ? (author ? 'Click to edit author' : 'Click to set author') : 'Author'}
-      >
+      <Tooltip title={getTooltipTitle()}>
         <Box
           display="flex"
           alignItems="center"
@@ -118,33 +218,7 @@ export const AuthorChip = ({
           horizontal: 'left',
         }}
       >
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-          <Box sx={{ display: 'flex', alignItems: 'flex-end', mb: 2 }}>
-            <TextField
-              label="Author Email"
-              variant="standard"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyPress={handleKeyPress}
-              error={!!error}
-              helperText={error}
-              disabled={isLoading}
-              sx={{ flexGrow: 1, mr: 2 }}
-            />
-            <Button onClick={handleSave} disabled={isLoading || !email}>
-              {isLoading ? <CircularProgress size={24} /> : 'Save'}
-            </Button>
-          </Box>
-          {!currentUserEmail && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
-              <Typography variant="caption">
-                {`Setting an email address will also set the default author for future evals.
-                It is changeable with \`promptfoo config set email <your-email@example.com>\``}
-              </Typography>
-            </Box>
-          )}
-        </Box>
+        {renderPopoverContent()}
       </Popover>
     </>
   );

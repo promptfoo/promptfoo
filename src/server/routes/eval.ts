@@ -139,22 +139,19 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
-    if (!author) {
-      res.status(400).json({ error: 'No author provided' });
-      return;
-    }
 
-    eval_.author = author;
+    // Empty string clears the author, otherwise set it
+    eval_.author = author || undefined;
     await eval_.save();
 
-    // NOTE: Side effect. If user email is not set, set it to the author's email
-    if (!getUserEmail()) {
+    // NOTE: Side effect. If user email is not set and we're setting an author, set it
+    if (author && !getUserEmail()) {
       setUserEmail(author);
     }
 
     res.json(
       ApiSchemas.Eval.UpdateAuthor.Response.parse({
-        message: 'Author updated successfully',
+        message: author ? 'Author updated successfully' : 'Author cleared successfully',
       }),
     );
   } catch (error) {

@@ -31,6 +31,17 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));
 
+// Mock for useCloudConfig - default to cloud disabled
+const mockUseCloudConfig = vi.fn().mockReturnValue({
+  data: { appUrl: 'https://app.promptfoo.com', isEnabled: false },
+  isLoading: false,
+  error: null,
+  refetch: vi.fn(),
+});
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => mockUseCloudConfig(),
+}));
+
 vi.mock('./store', () => {
   const mockUseTableStore = vi.fn();
   const mockUseResultsViewSettingsStore = vi.fn();
@@ -77,8 +88,21 @@ vi.mock('./ResultsFilters/FiltersForm', () => ({
   default: () => <div>Filters Form</div>,
 }));
 
+// AuthorChip mock that captures props for testing canEditAuthor logic
+const mockAuthorChipProps = vi.fn();
 vi.mock('./AuthorChip', () => ({
-  AuthorChip: () => <div>Author Chip</div>,
+  AuthorChip: (props: any) => {
+    mockAuthorChipProps(props);
+    return (
+      <div
+        data-testid="author-chip"
+        data-editable={props.editable}
+        data-cloud-enabled={props.isCloudEnabled}
+      >
+        Author Chip
+      </div>
+    );
+  },
 }));
 
 vi.mock('./EvalIdChip', () => ({
@@ -1987,6 +2011,308 @@ describe('ResultsView Duration Display', () => {
     await waitFor(() => {
       expect(screen.getByText('2h')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ResultsView canEditAuthor Logic', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+  const mockRecentEvals: ResultLightweightWithLabel[] = [
+    {
+      evalId: 'eval-1',
+      datasetId: null,
+      label: 'Evaluation 1',
+      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
+      description: 'Test evaluation 1',
+      numTests: 5,
+    },
+  ];
+
+  const setupTableStore = (author: string | null = 'other@example.com') => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author,
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthorChipProps.mockClear();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    // Default: cloud disabled
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+  });
+
+  it('should set editable=false when cloud config is loading', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: null,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn(),
+    });
+    setupTableStore('other@example.com');
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(false);
+  });
+
+  it('should set editable=false when cloud config fetch fails', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: 'Failed to fetch cloud config',
+      refetch: vi.fn(),
+    });
+    setupTableStore('other@example.com');
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(false);
+  });
+
+  it('should set editable=true when cloud is disabled (non-cloud mode)', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    setupTableStore('anyone@example.com');
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(true);
+    expect(lastCall.isCloudEnabled).toBe(false);
+  });
+
+  it('should set editable=true when cloud enabled and eval has no author (unclaimed)', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: true },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    setupTableStore(null); // No author
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(true);
+    expect(lastCall.isCloudEnabled).toBe(true);
+  });
+
+  it('should set editable=false when cloud enabled and author matches current user (no self-removal)', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: true },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    // fetchUserEmail mock returns 'test@example.com'
+    // Even though author matches current user, editing is disabled in cloud mode
+    // (users cannot remove their own authorship)
+    setupTableStore('test@example.com');
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(false);
+    expect(lastCall.isCloudEnabled).toBe(true);
+  });
+
+  it('should set editable=true when cloud enabled and author does not match current user', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: true },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    // fetchUserEmail mock returns 'test@example.com', but author is different
+    // User can claim evals from other users
+    setupTableStore('other@example.com');
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.editable).toBe(true);
+    expect(lastCall.isCloudEnabled).toBe(true);
+  });
+
+  it('should pass isCloudEnabled=false when cloudConfig is null', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: 'Failed',
+      refetch: vi.fn(),
+    });
+    setupTableStore(null);
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    expect(lastCall.isCloudEnabled).toBe(false);
+  });
+
+  it('should handle empty string author same as no author when cloud enabled', async () => {
+    mockUseCloudConfig.mockReturnValue({
+      data: { appUrl: 'https://app.promptfoo.com', isEnabled: true },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    setupTableStore(''); // Empty string author
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+            defaultEvalId="test-eval-id"
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockAuthorChipProps).toHaveBeenCalled();
+    });
+
+    const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
+    // Empty string is falsy, so should be treated as "no author" -> editable
+    expect(lastCall.editable).toBe(true);
   });
 });
 
