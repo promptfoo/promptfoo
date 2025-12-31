@@ -159,9 +159,12 @@ describe('TestCasesSection', () => {
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
 
-      // Create a file larger than 50MB
-      const largeContent = 'x'.repeat(51 * 1024 * 1024);
-      const file = new File([largeContent], 'large.csv', { type: 'text/csv' });
+      // Create a file that reports a size larger than 50MB without allocating it
+      const file = new File(['x'], 'large.csv', { type: 'text/csv' });
+      Object.defineProperty(file, 'size', {
+        value: 51 * 1024 * 1024,
+        configurable: true,
+      });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
 

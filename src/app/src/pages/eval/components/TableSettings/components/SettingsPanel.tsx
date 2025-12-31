@@ -1,34 +1,18 @@
 import React, { useCallback, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import { useResultsViewSettingsStore } from '../../store';
 import CompactSlider from './CompactSlider';
 import CompactToggle from './CompactToggle';
 
 const SectionHeader = ({ children }: { children: React.ReactNode }) => {
-  const theme = useTheme();
   return (
-    <Typography
-      variant="overline"
-      sx={{
-        display: 'block',
-        fontSize: '0.6875rem',
-        fontWeight: 600,
-        letterSpacing: '0.1em',
-        color: alpha(theme.palette.text.secondary, 0.6),
-        mb: 1,
-        textTransform: 'uppercase',
-      }}
-    >
+    <span className="block text-[0.6875rem] font-semibold tracking-widest text-muted-foreground/60 mb-2 uppercase">
       {children}
-    </Typography>
+    </span>
   );
 };
 
 const SettingsPanel = () => {
-  const theme = useTheme();
   const {
     stickyHeader,
     setStickyHeader,
@@ -78,17 +62,9 @@ const SettingsPanel = () => {
   );
 
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1px 1fr',
-        gap: 2.5,
-        p: 2.5,
-        pt: 1.5,
-      }}
-    >
+    <div className="grid grid-cols-[1fr_1px_1fr] gap-5 p-5 pt-3">
       {/* Left Column - Visibility */}
-      <Box>
+      <div>
         <SectionHeader>Show</SectionHeader>
 
         <CompactToggle
@@ -126,18 +102,13 @@ const SettingsPanel = () => {
           onChange={setShowPrompts}
           tooltipText="Show the prompt that produced each output"
         />
-      </Box>
+      </div>
 
       {/* Subtle Divider */}
-      <Box
-        sx={{
-          backgroundColor: alpha(theme.palette.divider, 0.1),
-          my: 0.5,
-        }}
-      />
+      <div className="bg-border/10 my-1" />
 
       {/* Right Column - Formatting */}
-      <Box>
+      <div>
         <SectionHeader>Display</SectionHeader>
 
         <CompactToggle
@@ -161,7 +132,7 @@ const SettingsPanel = () => {
           tooltipText="Break lines at any character for narrower columns"
         />
 
-        <Box sx={{ mt: 1.5 }}>
+        <div className="mt-3">
           <CompactSlider
             label="Max text length"
             value={localMaxTextLength}
@@ -192,9 +163,9 @@ const SettingsPanel = () => {
             unit="px"
             tooltipText="Maximum image height in pixels"
           />
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 };
 

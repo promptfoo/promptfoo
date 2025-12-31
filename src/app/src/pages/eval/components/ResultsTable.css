@@ -155,13 +155,21 @@ table.results-table,
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.25rem;
   position: absolute;
-  top: 1rem;
-  left: 0;
-  right: 0.75rem;
+  top: 0.5rem;
+  right: 0.5rem;
+  max-width: 50%;
   line-height: 0;
   font-size: 1.25rem;
+  background-color: var(--background-color);
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+}
+
+/* Reserve space for action buttons when no status section is shown */
+.results-table tr .content-needs-action-clearance {
+  padding-right: 10rem;
 }
 
 .results-table tr .cell-actions [role='tooltip'] {
@@ -191,7 +199,6 @@ table.results-table,
 /* Remove default button styling - but not for MUI IconButton */
 .results-table tr button.action:not(.MuiIconButton-root) {
   background: none;
-  color: inherit;
   border: none;
   padding: 0;
   font: inherit;
@@ -497,9 +504,16 @@ table.results-table,
 
 .results-table-sticky {
   position: sticky;
-  top: 0;
+  top: 3.5rem; /* Account for navigation height (h-14) */
   z-index: 10;
   transition: transform 0.2s ease-out;
+  background: #fff;
+  /* Scroll-driven animation to show/hide dismiss button */
+  animation-name: collapseHeader;
+  animation-timeline: scroll();
+  animation-duration: 0;
+  animation-range: 0px 50px;
+  animation-fill-mode: both;
 }
 
 [data-theme='dark'] .results-table-sticky {
@@ -510,11 +524,7 @@ table.results-table,
   position: absolute;
   top: 8px;
   right: 8px;
-  cursor: pointer;
   z-index: 11;
-  padding: 4px;
-  border-radius: 100%;
-  background: #eee;
 }
 
 thead {
@@ -553,13 +563,9 @@ thead {
   }
 }
 
-[data-theme='dark'] .header-dismiss {
-  background: #333;
-}
-
-thead .header-dismiss {
+.results-table-sticky .header-dismiss {
   opacity: var(--collapsed--header-dismiss-opacity, 0);
-  pointer-events: var(--collapsed--header-dismiss-pointer-events, inherit);
+  pointer-events: var(--collapsed--header-dismiss-pointer-events, none);
   transition: opacity 0.2s ease-out;
   z-index: 100;
 }

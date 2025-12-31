@@ -33,8 +33,12 @@ function DialogContent({
   className,
   children,
   ref,
+  hideDescription = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** When true (default), adds a visually hidden description to suppress Radix a11y warnings */
+  hideDescription?: boolean;
+}) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -47,6 +51,11 @@ function DialogContent({
         )}
         {...props}
       >
+        {hideDescription && (
+          <DialogPrimitive.Description className="sr-only">
+            Dialog content
+          </DialogPrimitive.Description>
+        )}
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
           <X className="h-4 w-4" />

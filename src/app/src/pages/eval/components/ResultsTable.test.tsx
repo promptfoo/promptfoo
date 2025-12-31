@@ -1,5 +1,7 @@
 import { act } from 'react';
 
+import { TooltipProvider } from '@app/components/ui';
+import { renderWithProviders } from '@app/utils/testutils';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -120,7 +122,7 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -453,7 +455,7 @@ describe('ResultsTable Metrics Display', () => {
     });
 
     it('should render media elements in variable cells without truncation', () => {
-      render(<ResultsTable {...defaultProps} />);
+      renderWithProviders(<ResultsTable {...defaultProps} />);
 
       const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
       expect(imageElement).toBeInTheDocument();
@@ -684,7 +686,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 
     // We need to test the handleRating function directly
     // Since it's inside the component, we'll capture it through the setTable calls
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // The handleRating function is created in the component
     // We need to trigger it through the component's internal logic
@@ -761,7 +763,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify the logic for preserving non-empty componentResults
     const existingOutput = mockTable.body[0].outputs[0];
@@ -804,7 +806,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When rating with isPass = true, componentResults should be updated
     const existingOutput = mockTable.body[0].outputs[0];
@@ -891,7 +893,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When there's no existing gradingResult, it should create one
     const existingOutput = mockTable.body[0].outputs[0];
@@ -981,7 +983,7 @@ describe('ResultsTable handleRating', () => {
 
   it('should update gradingResult with manual pass and score values when a user provides a rating', () => {
     createMockTable();
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const rowIndex = 0;
     const promptIndex = 0;
@@ -1089,7 +1091,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify the logic for preserving non-empty componentResults
     const existingOutput = mockTable.body[0].outputs[0];
@@ -1212,7 +1214,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate calling handleRating with updated values
     const updatedIsPass = false;
@@ -1221,7 +1223,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
 
     // We need to test the handleRating function directly
     // Since it's inside the component, we'll capture it through the setTable calls
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate calling handleRating
     const _updatedTable = {
@@ -1353,7 +1355,7 @@ describe('ResultsTable Empty State', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
   });
 });
@@ -1405,7 +1407,9 @@ describe('ResultsTable', () => {
 
   it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
     const debouncedSearchText = 'test search';
-    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />,
+    );
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
   });
@@ -1470,7 +1474,7 @@ describe('ResultsTable Search Highlights', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
+    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
 
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toHaveAttribute('data-searchtext', newSearchText);
@@ -1537,7 +1541,7 @@ describe('ResultsTable Regex Handling', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
+    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
 
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toBeInTheDocument();
@@ -1605,7 +1609,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const elementsWithMalformedMarkdown = screen.getAllByText((_content, element) => {
       if (!element) {
@@ -1667,7 +1671,9 @@ describe('ResultsTable', () => {
 
   it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
     const debouncedSearchText = 'test search';
-    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />,
+    );
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
   });
@@ -1734,7 +1740,7 @@ describe('ResultsTable', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const newPageIndex = 1;
 
@@ -1858,7 +1864,7 @@ describe('ResultsTable Pagination', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
     const paginationElement = screen.getByText(/results per page/i);
     expect(paginationElement).toBeInTheDocument();
   });
@@ -1899,7 +1905,7 @@ describe('ResultsTable BaseNumberInput onChange undefined', () => {
       filteredResultsCount: 100,
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const input = screen.getByRole('spinbutton');
     await act(async () => {
@@ -1947,7 +1953,7 @@ describe('ResultsTable Non-Numeric Input Handling', () => {
       setPagination: setPaginationMock,
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const inputElement = screen.getByRole('spinbutton');
     await act(async () => {
@@ -1976,7 +1982,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
   };
 
   it('should maintain scroll position and focused element when zoom changes', () => {
-    const { container } = render(<ResultsTable {...defaultProps} />);
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
     const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
     const initialScrollTop = 100;
     tableContainer.scrollTop = initialScrollTop;
@@ -1987,7 +1993,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     }
 
     act(() => {
-      render(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+      renderWithProviders(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
     });
 
     expect(tableContainer.scrollTop).toBe(initialScrollTop);
@@ -2048,7 +2054,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2205,7 +2211,7 @@ describe('ResultsTable - No Filters Applied', () => {
   });
 
   it('should display only total metrics and not display filtered metrics when no filters are applied', () => {
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();
     expect(screen.getByText('$1.23')).toBeInTheDocument();
@@ -2276,7 +2282,7 @@ describe('ResultsTable Pass Rate Display', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2406,7 +2412,7 @@ describe('ResultsTable Pass Rate Highlighting', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2555,7 +2561,7 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   };
 
   beforeEach(() => {
@@ -2706,6 +2712,10 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     atInitialVerticalScrollPosition: true,
   };
 
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -2745,7 +2755,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify first eval's column headers are present
     expect(screen.getByText('website_url')).toBeInTheDocument();
@@ -2785,7 +2795,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
     }));
 
     // Fresh mount with new eval data (simulates what happens when key={evalId} changes)
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify second eval's column headers are present
     expect(screen.getByText('prompt')).toBeInTheDocument();
@@ -2832,7 +2842,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify first eval's prompt column header
     expect(screen.getByText('GPT-4 Classifier')).toBeInTheDocument();
@@ -2880,7 +2890,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify second eval's prompt column headers
     expect(screen.getByText('Claude Assistant')).toBeInTheDocument();
@@ -2920,7 +2930,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    const { unmount } = render(<ResultsTable {...defaultProps} />);
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify all columns are present
     expect(screen.getByText('col1')).toBeInTheDocument();
@@ -2960,7 +2970,7 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify only the new column is present
     expect(screen.getByText('onlyColumn')).toBeInTheDocument();
@@ -3080,7 +3090,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate handleRating being called with isPass = null
     const existingOutput = mockTable.body[0].outputs[0];
@@ -3168,7 +3178,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
@@ -3239,7 +3249,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
@@ -3275,7 +3285,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When score is provided explicitly, it should be used instead of defaulting to 0/1
     const customScore = 0.75;
@@ -3360,7 +3370,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];

@@ -12,11 +12,11 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
@@ -236,19 +236,22 @@ export default function EvalsTable({
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;
           return (
-            <Tooltip title={text} placement="top" arrow>
-              <span
-                className="text-sm block"
-                style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {text}
-              </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="text-sm block"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {text}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">{text}</TooltipContent>
             </Tooltip>
           );
         },
