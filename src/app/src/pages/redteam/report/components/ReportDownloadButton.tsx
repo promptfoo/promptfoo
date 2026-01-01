@@ -163,7 +163,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
               disabled={isDownloading}
               className="mt-1 text-muted-foreground hover:text-foreground"
             >
-              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="h-5 w-5" />}
+              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="size-5" />}
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>

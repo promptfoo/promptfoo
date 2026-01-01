@@ -36,7 +36,7 @@ const JsonTextarea = ({ label, defaultValue = '', onChange, className }: JsonTex
       <Textarea
         value={value}
         onChange={handleChange}
-        className={cn('min-h-[80px] font-mono text-sm', error && 'border-destructive')}
+        className={cn('min-h-20 font-mono text-sm', error && 'border-destructive')}
       />
       {error && <p className="text-sm text-destructive">Invalid JSON</p>}
     </div>

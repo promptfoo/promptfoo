@@ -80,7 +80,7 @@ const SettingItem = ({
                   aria-label={`Information about ${label}`}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Info className="h-3.5 w-3.5" />
+                  <Info className="size-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">{tooltipText}</TooltipContent>

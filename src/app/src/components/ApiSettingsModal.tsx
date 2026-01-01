@@ -43,7 +43,7 @@ const StatusIndicator = ({ status }: { status: ApiHealthStatus | 'loading' }) =>
 
   return (
     <div className="flex items-center gap-2">
-      <Icon className={cn('h-3 w-3', config.colorClass)} />
+      <Icon className={cn('size-3', config.colorClass)} />
       <span className="text-sm">{config.text}</span>
     </div>
   );
@@ -107,10 +107,10 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
                   size="icon"
                   onClick={() => checkHealth()}
                   disabled={isChecking}
-                  className="h-8 w-8"
+                  className="size-8"
                   aria-label="Check connection"
                 >
-                  {isChecking ? <Spinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
+                  {isChecking ? <Spinner size="sm" /> : <RefreshCw className="size-4" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Check connection</TooltipContent>
@@ -120,9 +120,9 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
           {message && status !== 'unknown' && !isChecking && (
             <Alert variant={status === 'connected' ? 'success' : 'destructive'}>
               {status === 'connected' ? (
-                <CheckCircle className="h-4 w-4" />
+                <CheckCircle className="size-4" />
               ) : (
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="size-4" />
               )}
               <AlertDescription>{message}</AlertDescription>
             </Alert>

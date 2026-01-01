@@ -469,7 +469,7 @@ const StrategyStats = ({
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
                   </p>
-                  <p className="mb-4 min-h-[40px] text-sm text-muted-foreground">
+                  <p className="mb-4 min-h-10 text-sm text-muted-foreground">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
                   </p>

@@ -32,7 +32,7 @@ export default function ReportPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-3 justify-center items-center h-36">
-        <Spinner className="h-6 w-6" />
+        <Spinner className="size-6" />
         <span className="text-sm text-muted-foreground">Waiting for report data</span>
       </div>
     );

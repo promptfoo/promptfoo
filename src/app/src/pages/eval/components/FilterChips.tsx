@@ -181,12 +181,12 @@ export function FilterChips() {
           >
             {isExpanded ? (
               <>
-                <ChevronUp className="h-3 w-3" />
+                <ChevronUp className="size-3" />
                 Show less
               </>
             ) : (
               <>
-                <ChevronDown className="h-3 w-3" />+{hiddenCount} more
+                <ChevronDown className="size-3" />+{hiddenCount} more
               </>
             )}
           </button>

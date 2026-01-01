@@ -43,9 +43,9 @@ export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
           onClick={handleCopy}
           trailingIcon={
             copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+              <Copy className="size-3.5 text-muted-foreground" />
             )
           }
         >

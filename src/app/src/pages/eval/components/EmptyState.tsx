@@ -17,11 +17,11 @@ const EmptyState = () => {
         <p className="text-muted-foreground mb-6">Get started by creating an eval or red team</p>
         <div className="flex gap-4 justify-center">
           <Button size="lg" onClick={() => navigate('/setup')}>
-            <BarChart2 className="h-5 w-5 mr-2" />
+            <BarChart2 className="size-5 mr-2" />
             Create Eval
           </Button>
           <Button variant="outline" size="lg" onClick={() => navigate('/redteam/setup')}>
-            <Shield className="h-5 w-5 mr-2" />
+            <Shield className="size-5 mr-2" />
             Create Red Team
           </Button>
         </div>
@@ -36,7 +36,7 @@ const EmptyState = () => {
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             View documentation
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className="size-4" />
           </a>
         </div>
       </Card>

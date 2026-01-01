@@ -28,7 +28,7 @@ function SearchInput({
 
   return (
     <div className={cn('relative', containerClassName)}>
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
       <Input
         type="search"
         placeholder={placeholder}
@@ -44,7 +44,7 @@ function SearchInput({
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted transition-colors"
           aria-label="Clear search"
         >
-          <X className="h-3.5 w-3.5 text-muted-foreground" />
+          <X className="size-3.5 text-muted-foreground" />
         </button>
       )}
     </div>

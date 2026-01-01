@@ -138,7 +138,7 @@ export default function ModelAuditResult() {
           <div className="flex gap-3">
             <Button asChild>
               <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
-                <ArrowBackIcon className="h-4 w-4 mr-2" />
+                <ArrowBackIcon className="size-4 mr-2" />
                 Back to History
               </RouterLink>
             </Button>
@@ -155,7 +155,7 @@ export default function ModelAuditResult() {
     <div className="flex items-center justify-between">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
-          <ArrowBackIcon className="h-4 w-4 mr-2" />
+          <ArrowBackIcon className="size-4 mr-2" />
           Back to History
         </RouterLink>
       </Button>
@@ -164,12 +164,12 @@ export default function ModelAuditResult() {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             Actions
-            <MoreVertIcon className="h-4 w-4 ml-2" />
+            <MoreVertIcon className="size-4 ml-2" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={handleDownload}>
-            <DownloadIcon className="h-4 w-4 mr-2" />
+            <DownloadIcon className="size-4 mr-2" />
             Download JSON
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -177,7 +177,7 @@ export default function ModelAuditResult() {
             onClick={() => setDeleteDialogOpen(true)}
             className="text-destructive focus:text-destructive"
           >
-            <DeleteIcon className="h-4 w-4 mr-2" />
+            <DeleteIcon className="size-4 mr-2" />
             Delete Scan
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -253,7 +253,7 @@ export default function ModelAuditResult() {
                   </>
                 ) : (
                   <>
-                    <DeleteIcon className="h-4 w-4 mr-2" />
+                    <DeleteIcon className="size-4 mr-2" />
                     Delete
                   </>
                 )}

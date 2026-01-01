@@ -53,7 +53,7 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
 
   return (
     <Alert variant="info" className={cn(className)}>
-      <Info className="h-4 w-4" />
+      <Info className="size-4" />
       <AlertDescription>
         You're using the community edition of Promptfoo's red teaming suite. For advanced
         capabilities and support, learn more about{' '}

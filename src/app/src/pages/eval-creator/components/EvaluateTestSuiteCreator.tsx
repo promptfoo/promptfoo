@@ -190,7 +190,7 @@ const EvaluateTestSuiteCreator = () => {
           <div className="container max-w-7xl mx-auto px-4 py-8">
             <div className="flex gap-8">
               {/* Left Sidebar - Step Navigation */}
-              <div className="w-64 flex-shrink-0">
+              <div className="w-64 shrink-0">
                 <div className="sticky top-8 space-y-2">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-4 px-3">
                     SETUP STEPS
@@ -200,7 +200,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(1)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 1 && 'ring-2 ring-primary',
                       normalizedProviders.length > 0
@@ -211,14 +211,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           normalizedProviders.length > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {normalizedProviders.length > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">1</span>
                         )}
@@ -238,7 +238,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(2)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 2 && 'ring-2 ring-primary',
                       normalizedPrompts.length > 0
@@ -249,14 +249,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           normalizedPrompts.length > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {normalizedPrompts.length > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">2</span>
                         )}
@@ -276,7 +276,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(3)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 3 && 'ring-2 ring-primary',
                       testCount > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-background',
@@ -285,14 +285,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           testCount > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {testCount > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">3</span>
                         )}
@@ -312,7 +312,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(4)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all cursor-pointer',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 4 && 'ring-2 ring-primary',
                       config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
@@ -323,14 +323,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
                             ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency ? (
-                          <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          <Check className="size-4 text-blue-600 dark:text-blue-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">4</span>
                         )}

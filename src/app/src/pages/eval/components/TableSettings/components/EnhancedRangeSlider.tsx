@@ -163,7 +163,7 @@ const EnhancedRangeSlider = ({
                 className="p-1 text-primary/70 hover:text-primary hover:bg-primary/10 rounded"
                 aria-label={`Information about ${label.toLowerCase()}`}
               >
-                <Info className="h-4 w-4" />
+                <Info className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">{tooltipText}</TooltipContent>

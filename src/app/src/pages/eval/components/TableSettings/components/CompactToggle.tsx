@@ -31,7 +31,7 @@ const CompactToggle = ({
   return (
     <div
       className={cn(
-        'flex items-center min-h-8 py-1 px-1 -mx-1 rounded transition-colors',
+        'flex items-center min-h-8 p-1 -mx-1 rounded transition-colors',
         disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-muted/50',
       )}
       role="listitem"
@@ -63,7 +63,7 @@ const CompactToggle = ({
               className="p-0.5 ml-1 text-muted-foreground/40 hover:text-muted-foreground"
               aria-label={`Information about ${label}`}
             >
-              <Info className="h-3.5 w-3.5" />
+              <Info className="size-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top">{tooltipText}</TooltipContent>

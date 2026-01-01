@@ -356,7 +356,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return (
       <div className="notice">
         <div>
-          <Spinner className="h-5 w-5" />
+          <Spinner className="size-5" />
         </div>
         <div>Waiting for eval data</div>
       </div>

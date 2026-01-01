@@ -536,7 +536,7 @@ const App = () => {
                   }
                 }}
               >
-                <ListOrdered className="h-5 w-5" />
+                <ListOrdered className="size-5" />
               </Button>
             </TooltipTrigger>
           )}
@@ -557,7 +557,7 @@ const App = () => {
               className="text-muted-foreground hover:text-foreground"
               onClick={() => window.print()}
             >
-              <Printer className="h-5 w-5" />
+              <Printer className="size-5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -575,7 +575,7 @@ const App = () => {
                 hasActiveFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }
             >
-              <Filter className="h-5 w-5" />
+              <Filter className="size-5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Filter results</TooltipContent>
@@ -594,7 +594,7 @@ const App = () => {
   if (!evalData || !evalId) {
     return (
       <div className="flex h-36 flex-col items-center justify-center gap-3">
-        <Spinner className="h-5 w-5" />
+        <Spinner className="size-5" />
         <span>Waiting for report data</span>
       </div>
     );
@@ -604,7 +604,7 @@ const App = () => {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6">
         <Card className="max-w-xl p-8 text-center">
-          <AlertTriangle className="mx-auto mb-4 h-16 w-16 text-amber-500" />
+          <AlertTriangle className="mx-auto mb-4 size-16 text-amber-500" />
           <h1 className="mb-6 text-2xl font-bold">Report unavailable</h1>
           <p className="text-muted-foreground">
             The {searchParams.get('evalId') ? 'selected' : 'latest'} evaluation results are not
@@ -744,7 +744,7 @@ const App = () => {
                   <h2 className="text-lg font-semibold">Filters</h2>
                   {hasActiveFilters && (
                     <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                      <X className="mr-1 h-4 w-4" />
+                      <X className="mr-1 size-4" />
                       Clear All
                     </Button>
                   )}

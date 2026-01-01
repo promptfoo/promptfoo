@@ -9,7 +9,7 @@ function CompareEvalMenuItem({ onClick }: CompareEvalMenuItemProps) {
   return (
     <DropdownMenuItem onSelect={onClick}>
       <DropdownMenuItemIcon>
-        <GitCompareArrows className="h-4 w-4" />
+        <GitCompareArrows className="size-4" />
       </DropdownMenuItemIcon>
       Compare with another eval
     </DropdownMenuItem>

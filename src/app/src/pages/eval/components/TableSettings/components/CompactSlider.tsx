@@ -48,7 +48,7 @@ const CompactSlider = ({
                   className="p-0.5 ml-1 text-muted-foreground/40 hover:text-muted-foreground"
                   aria-label={`Information about ${label}`}
                 >
-                  <Info className="h-3.5 w-3.5" />
+                  <Info className="size-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">{tooltipText}</TooltipContent>

@@ -17,12 +17,12 @@ const isValidUrl = (str: string): boolean => {
 
 const getSourceIcon = (source: string) => {
   if (isValidUrl(source)) {
-    return <Globe className="h-4 w-4" />;
+    return <Globe className="size-4" />;
   }
   if (source.includes('file:') || source.includes('s3:')) {
-    return <File className="h-4 w-4" />;
+    return <File className="size-4" />;
   }
-  return <Link className="h-4 w-4" />;
+  return <Link className="size-4" />;
 };
 
 const getSourceType = (source: string): string => {
@@ -185,9 +185,9 @@ export default function Citations({ citations }: { citations: any }) {
                   aria-label={`Copy citation content ${i + 1}`}
                 >
                   {copiedCitations[key] ? (
-                    <Check className="h-4 w-4" data-testid="CheckIcon" />
+                    <Check className="size-4" data-testid="CheckIcon" />
                   ) : (
-                    <ClipboardCopy className="h-4 w-4" />
+                    <ClipboardCopy className="size-4" />
                   )}
                 </button>
               </div>
