@@ -13,7 +13,7 @@ import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
-import type { Content, FunctionCall, Part, Tool } from './types';
+import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.

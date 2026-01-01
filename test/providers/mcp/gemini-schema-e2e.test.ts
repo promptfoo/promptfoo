@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { transformMCPToolsToGoogle } from '../../../src/providers/mcp/transform';
+
 import type { MCPTool } from '../../../src/providers/mcp/types';
 
 describe('GitHub Issue #6902 - Gemini MCP Schema Compatibility (E2E)', () => {

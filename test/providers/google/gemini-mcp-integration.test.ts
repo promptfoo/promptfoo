@@ -210,9 +210,7 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
       expect(functionDeclarations.length).toBe(2);
 
       // Verify analyze_prompt tool is sanitized
-      const analyzePromptTool = functionDeclarations.find(
-        (f: any) => f.name === 'analyze_prompt',
-      );
+      const analyzePromptTool = functionDeclarations.find((f: any) => f.name === 'analyze_prompt');
       expect(analyzePromptTool).toBeDefined();
 
       const params = analyzePromptTool.parameters;
@@ -307,6 +305,7 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
       const mcpTools = [
         {
           name: 'test_tool',
+          description: 'A test tool',
           inputSchema: {
             type: 'object',
             properties: { query: { type: 'string' } },
@@ -318,10 +317,10 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
       const result = transformMCPToolsToGoogle(mcpTools);
 
       // Verify the transformation works correctly
-      expect(result[0].functionDeclarations[0].parameters).not.toHaveProperty(
+      expect(result[0].functionDeclarations![0].parameters).not.toHaveProperty(
         'additionalProperties',
       );
-      expect(result[0].functionDeclarations[0].parameters.type).toBe('OBJECT');
+      expect(result[0].functionDeclarations![0].parameters!.type).toBe('OBJECT');
     });
   });
 

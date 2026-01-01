@@ -2010,10 +2010,10 @@ describe('util', () => {
 
       const normalized = normalizeTools(tools);
 
-      expect(normalized[0].functionDeclarations[0].parameters).not.toHaveProperty(
+      expect(normalized[0].functionDeclarations![0].parameters).not.toHaveProperty(
         'additionalProperties',
       );
-      expect(normalized[0].functionDeclarations[0].parameters).toEqual({
+      expect(normalized[0].functionDeclarations![0].parameters).toEqual({
         type: 'OBJECT',
         properties: {
           query: { type: 'STRING' },
@@ -2048,7 +2048,7 @@ describe('util', () => {
 
       const normalized = normalizeTools(tools);
 
-      const params = normalized[0].functionDeclarations[0].parameters;
+      const params = normalized[0].functionDeclarations![0].parameters as any;
       expect(params).not.toHaveProperty('additionalProperties');
       expect(params).not.toHaveProperty('$schema');
       expect(params.properties.options).not.toHaveProperty('additionalProperties');
@@ -2085,7 +2085,7 @@ describe('util', () => {
 
       const normalized = normalizeTools(tools);
 
-      expect(normalized[0].functionDeclarations[0]).toEqual({
+      expect(normalized[0].functionDeclarations![0]).toEqual({
         name: 'no_params_tool',
         description: 'Tool without parameters',
         parameters: undefined,
