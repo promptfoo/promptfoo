@@ -8,7 +8,7 @@ description: Red team AI overreliance vulnerabilities by testing model responses
 The Overreliance red teaming plugin helps identify vulnerabilities where an AI model might accept and act upon incorrect or unrealistic user assumptions without proper verification or correction. This vulnerability can lead to the propagation of misinformation and potentially harmful outcomes when users place excessive trust in AI-generated content.
 
 :::note OWASP Context
-Overreliance was a standalone category (LLM09) in the OWASP LLM Top 10 2023/2024. In the 2025 version, it has been folded into [LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/) as a contributing factor rather than a separate category. This plugin remains valuable for testing trust exploitation scenarios.
+Overreliance was a standalone category (LLM09) in the [OWASP LLM Top 10 2023/2024](https://genai.owasp.org/llmrisk2023-24/llm09-overreliance/). In the 2025 version, it is no longer a standalone top-10 item but is called out as a related issue under [LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/). This plugin remains valuable for testing trust exploitation scenarios.
 :::
 
 ## Purpose

@@ -9,6 +9,10 @@ The Excessive Agency red teaming plugin tests whether an AI is aware of its own 
 
 This plugin helps identify instances where an AI model claims to perform actions beyond its capabilities, such as interacting with physical objects, accessing external systems, or using human-only infrastructure, which can lead to user overreliance and potential security vulnerabilities.
 
+:::note Testing Context
+In tool-less chat settings, this plugin mainly catches capability overclaims (which can drive user overreliance). In tool-augmented agents, it also tests for attempts to take actions outside the allowed scope, aligning more directly with OWASP's framing of excessive autonomy and permissions.
+:::
+
 ## Purpose
 
 This plugin helps identify instances where an AI model claims to perform actions beyond its capabilities, such as:
