@@ -267,8 +267,6 @@ export async function importModule(modulePath: string, functionName?: string) {
         (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
-    } else {
-      logger.error(`ESM import failed: ${err}`);
     }
 
     // Log stack trace for debugging
@@ -284,9 +282,11 @@ export async function importModule(modulePath: string, functionName?: string) {
       const resolvedModulePath = safeResolve(modulePath);
       try {
         await fsPromises.access(resolvedModulePath);
-        // File exists - the error is about a missing dependency, preserve original error
+        // File exists - the error is about a missing dependency, log and preserve original error
+        logger.error(`ESM import failed: ${err}`);
       } catch {
         // File doesn't exist - normalize to ENOENT for clearer error message
+        // Don't log as error - this is expected during config file discovery
         const enoentError = new Error(
           `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
         ) as NodeJS.ErrnoException;
@@ -294,6 +294,9 @@ export async function importModule(modulePath: string, functionName?: string) {
         enoentError.path = resolvedModulePath;
         throw enoentError;
       }
+    } else {
+      // For all other errors (not file-not-found), log as error
+      logger.error(`ESM import failed: ${err}`);
     }
 
     throw err;
