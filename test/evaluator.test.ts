@@ -4046,6 +4046,66 @@ describe('runEval', () => {
       },
     });
   });
+
+  it('should skip rendering redteam inject variable to prevent nunjucks errors on template syntax', async () => {
+    // This tests the fix for Discord issue where redteam prompts containing {{purpose | trim}}
+    // caused "TypeError: Cannot read properties of undefined (reading 'replace')"
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          // This contains template syntax that would fail if rendered (purpose is undefined)
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          injectVar: 'prompt',
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // The inject var should be preserved as-is, not rendered
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
+    // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          // injectVar NOT set - should fall back to 'prompt'
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // Should still skip rendering the default 'prompt' var
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
 });
 
 describe('formatVarsForDisplay', () => {
