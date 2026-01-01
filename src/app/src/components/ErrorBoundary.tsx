@@ -76,8 +76,13 @@ class ErrorBoundary extends React.Component<Props, State> {
                 Please try reloading the page.
               </AlertDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={this.handleReload} className="shrink-0">
-              <RefreshCw className="h-3 w-3 mr-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={this.handleReload}
+              className="shrink-0 gap-1"
+            >
+              <RefreshCw className="h-3 w-3" />
               Reload Page
             </Button>
           </Alert>
