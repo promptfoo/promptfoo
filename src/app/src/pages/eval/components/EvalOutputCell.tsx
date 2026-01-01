@@ -804,13 +804,13 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
             aria-label="Mark test passed"
           >
             <ThumbsUp
-              className={`size-4${activeRating === true ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
               fill={activeRating === true ? 'currentColor' : 'none'}
             />
           </button>
@@ -821,13 +821,13 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
             aria-label="Mark test failed"
           >
             <ThumbsDown
-              className={`size-4${activeRating === false ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
               fill={activeRating === false ? 'currentColor' : 'none'}
             />
           </button>
@@ -866,7 +866,7 @@ function EvalOutputCell({
   return (
     <div id="eval-output-cell" className="cell" style={cellStyle}>
       {showPassFail && (
-        <div className={`status${output.pass ? 'pass' : 'fail'}`}>
+        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">
             <div className="pill">
               {passFailText}

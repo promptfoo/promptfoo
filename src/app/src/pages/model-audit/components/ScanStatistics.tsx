@@ -84,7 +84,7 @@ function StatCard({
             styles.bg,
             styles.bgHover,
             isSelected ? styles.borderSelected : styles.border,
-            isSelected && `ring-4${styles.ring}`,
+            isSelected && `ring-4 ${styles.ring}`,
             'hover:-translate-y-1 hover:shadow-lg',
             'active:translate-y-0 active:shadow-md',
           )}

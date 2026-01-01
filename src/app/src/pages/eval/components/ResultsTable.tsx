@@ -231,7 +231,7 @@ function ResultsTableHeader({
 }) {
   'use no memo';
   return (
-    <div className={`relative${stickyHeader ? 'results-table-sticky' : ''}`}>
+    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button
           type="button"
@@ -242,7 +242,7 @@ function ResultsTableHeader({
         </button>
       </div>
       <table
-        className={`results-table firefox-fix${maxTextLength <= 25 ? 'compact' : ''}`}
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
           wordBreak,
           width: `${tableWidth}px`,
@@ -274,7 +274,7 @@ function ResultsTableHeader({
                     <div
                       onMouseDown={header.getResizeHandler()}
                       onTouchStart={header.getResizeHandler()}
-                      className={`resizer${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
                     />
                   </th>
                 );
@@ -1089,7 +1089,7 @@ function ResultsTable({
                     {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
                       <div
-                        className={`highlight${
+                        className={`highlight ${
                           passRates[idx]?.filtered !== null
                             ? `success-${Math.round((passRates[idx].filtered ?? 0) / 20) * 20}`
                             : passRates[idx]?.total
@@ -1451,7 +1451,7 @@ function ResultsTable({
           <Spinner className="size-[60px]" />
         </div>
         <table
-          className={`results-table firefox-fix${maxTextLength <= 25 ? 'compact' : ''}`}
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,

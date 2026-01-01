@@ -164,9 +164,9 @@ export default function ProviderEditor({
       />
 
       <div
-        className={`mt-8 flex w-full${validationErrors ? 'justify-between' : 'justify-end'}relative`}
+        className={`mt-8 flex w-full ${validationErrors ? 'justify-between' : 'justify-end'} relative`}
       >
-        <div className={`flex gap-4${validationErrors ? 'w-full justify-between' : ''}`}>
+        <div className={`flex gap-4 ${validationErrors ? 'w-full justify-between' : ''}`}>
           {onBack && (
             <Button variant="outline" onClick={onBack} className="px-6 py-2">
               <ChevronLeft className="mr-2 size-4" />

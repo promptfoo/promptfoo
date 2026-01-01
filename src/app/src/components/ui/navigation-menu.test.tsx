@@ -137,6 +137,6 @@ describe('NavigationMenu', () => {
     );
 
     const nav = screen.getByRole('navigation');
-    expect(nav).toHaveClass('z-[var(--z-dropdown)]');
+    expect(nav).toHaveClass('z-[--z-dropdown]');
   });
 });

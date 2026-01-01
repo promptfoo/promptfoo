@@ -84,7 +84,7 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
               }}
               className={error ? 'border-destructive' : ''}
             />
-            <p className={`text-sm${error ? 'text-destructive' : 'text-muted-foreground'}`}>
+            <p className={`text-sm ${error ? 'text-destructive' : 'text-muted-foreground'}`}>
               {error || 'Example: /home/user/projects/my-provider.py'}
             </p>
           </div>
