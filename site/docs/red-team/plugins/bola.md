@@ -27,14 +27,14 @@ redteam:
   plugins:
     - id: 'bola'
       config:
-        targetIdentifiers:
+        targetSystems:
           - 'user_id_12345'
           - 'order_67890'
           - 'document_xyz123'
           - 'vehicle_vin_abc456'
 ```
 
-The `targetIdentifiers` is optional and can be used to make the test prompts more specific to object identifiers in your system.
+The `targetSystems` is optional and can be used to make the test prompts more specific to object identifiers in your system.
 
 ## How It Works
 
@@ -118,6 +118,5 @@ By incorporating the BOLA plugin in your LLM red teaming strategy, you can ident
 
 - [RBAC (Role-Based Access Control)](rbac.md)
 - [BFLA (Broken Function Level Authorization)](bfla.md)
-- [BOPLA (Broken Object Property Level Authorization)](bopla.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
