@@ -40,5 +40,7 @@ export const ROUTES = {
   DATASETS: '/datasets',
   DATASET_DETAIL: (id: string) => `/datasets?id=${id}`,
   HISTORY: '/history',
+  MEDIA: '/media',
+  MEDIA_DETAIL: (hash: string) => `/media?hash=${hash}`,
   LOGIN: '/login',
 } as const;

@@ -7,9 +7,10 @@ interface CopyButtonProps {
   value: string;
   className?: string;
   iconSize?: string;
+  title?: string;
 }
 
-export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyButtonProps) {
+export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5', title }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -45,10 +46,11 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
     <button
       onClick={handleCopy}
       className={cn(
-        'p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors',
+        'inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors',
         className,
       )}
       aria-label={copied ? 'Copied' : 'Copy'}
+      title={title}
     >
       {copied ? (
         <Check className={cn(iconSize, 'text-emerald-600 dark:text-emerald-400')} />
