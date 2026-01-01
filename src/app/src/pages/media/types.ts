@@ -2,7 +2,8 @@
  * Types for the Media Library page
  */
 
-export type MediaKind = 'image' | 'video' | 'audio' | 'other';
+// Re-export MediaKind from the shared utility to avoid duplication
+export type { MediaKind } from '@app/utils/media';
 
 export interface GraderResult {
   name: string;

@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react';
+
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MediaItem } from '../types';
 import { MediaCard } from './MediaCard';
+
+import type { MediaItem } from '../types';
 
 // Mock the API utilities
 vi.mock('@app/utils/api', () => ({
@@ -402,21 +404,17 @@ describe('MediaCard', () => {
       const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
       const card = container.querySelector('div[role="button"]');
-      expect(card).toHaveAttribute(
-        'aria-label',
-        expect.stringContaining('Image'),
-      );
+      expect(card).toHaveAttribute('aria-label', expect.stringContaining('Image'));
     });
 
     it('includes viewing state in aria-label', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isViewing={true} />);
+      const { container } = renderWithProviders(
+        <MediaCard item={item} onClick={vi.fn()} isViewing={true} />,
+      );
 
       const card = container.querySelector('div[role="button"]');
-      expect(card).toHaveAttribute(
-        'aria-label',
-        expect.stringContaining('currently viewing'),
-      );
+      expect(card).toHaveAttribute('aria-label', expect.stringContaining('currently viewing'));
     });
 
     it('includes selection state in aria-label', () => {
@@ -432,16 +430,15 @@ describe('MediaCard', () => {
       );
 
       const card = container.querySelector('div[role="button"]');
-      expect(card).toHaveAttribute(
-        'aria-label',
-        expect.stringContaining('selected'),
-      );
+      expect(card).toHaveAttribute('aria-label', expect.stringContaining('selected'));
     });
 
     it('calls onFocus callback', () => {
       const onFocus = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} onFocus={onFocus} />);
+      const { container } = renderWithProviders(
+        <MediaCard item={item} onClick={vi.fn()} onFocus={onFocus} />,
+      );
 
       // Get the main card div (not the nested download button)
       const card = container.querySelector('div[role="button"]');
@@ -452,7 +449,9 @@ describe('MediaCard', () => {
 
     it('supports custom tabIndex', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} tabIndex={-1} />);
+      const { container } = renderWithProviders(
+        <MediaCard item={item} onClick={vi.fn()} tabIndex={-1} />,
+      );
 
       // Get the main card div (not the nested download button)
       const card = container.querySelector('div[role="button"]');

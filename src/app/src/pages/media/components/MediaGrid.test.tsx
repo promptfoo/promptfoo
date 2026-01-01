@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react';
+
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MediaItem } from '../types';
 import { MediaGrid } from './MediaGrid';
+
+import type { MediaItem } from '../types';
 
 // Mock the API utilities
 vi.mock('@app/utils/api', () => ({
@@ -131,10 +133,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      expect(screen.getByRole('list')).toHaveAttribute(
-        'aria-label',
-        'Media library - 5 items',
-      );
+      expect(screen.getByRole('list')).toHaveAttribute('aria-label', 'Media library - 5 items');
     });
 
     it('renders skeletons when loading', () => {

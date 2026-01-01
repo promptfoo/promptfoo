@@ -57,6 +57,9 @@ function parseTimestamp(value: unknown): string {
     // SQLite CURRENT_TIMESTAMP format: "YYYY-MM-DD HH:MM:SS"
     return new Date(value.replace(' ', 'T') + 'Z').toISOString();
   }
+  logger.warn('parseTimestamp received unexpected value type, using current time', {
+    valueType: typeof value,
+  });
   return new Date().toISOString();
 }
 
@@ -168,7 +171,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
     `;
 
     // Get unique blob hashes first
-    const uniqueHashes = db.all<{ hash: string }>(uniqueBlobsQuery);
+    const uniqueHashes = await db.all<{ hash: string }>(uniqueBlobsQuery);
 
     if (uniqueHashes.length === 0) {
       res.json({ success: true, data: { items: [], total, hasMore: false } });

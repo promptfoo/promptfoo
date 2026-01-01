@@ -23,7 +23,7 @@ import {
 } from '@app/components/ui/dropdown-menu';
 import { Progress } from '@app/components/ui/progress';
 import { Spinner } from '@app/components/ui/spinner';
-import { getApiBaseUrl } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { generateMediaFilename } from '@app/utils/media';
 import { AlertCircle, ChevronDown, Download, MousePointerClick, RefreshCw, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -306,7 +306,6 @@ export default function Media() {
     setDownloadProgress({ current: 0, total: itemsToDownload.length, currentFile: '' });
     setDownloadErrors([]);
 
-    const baseUrl = getApiBaseUrl();
     const errors: string[] = [];
 
     try {
@@ -318,13 +317,12 @@ export default function Media() {
         }
 
         const item = itemsToDownload[i];
-        const mediaUrl = `${baseUrl}${item.url}`;
         const filename = generateMediaFilename(item.hash, item.mimeType);
 
         setDownloadProgress({ current: i, total: itemsToDownload.length, currentFile: filename });
 
         try {
-          const response = await fetch(mediaUrl, { signal });
+          const response = await callApi(`/blobs/${item.hash}`, { signal });
           if (!response.ok) {
             errors.push(`${filename}: HTTP ${response.status}`);
             continue;

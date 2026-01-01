@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { EvalOption, MediaSort, MediaTypeFilter } from '../types';
 import { MediaFilters } from './MediaFilters';
+
+import type { EvalOption, MediaSort, MediaTypeFilter } from '../types';
 
 const defaultProps = {
   typeFilter: 'all' as MediaTypeFilter,
@@ -76,9 +77,7 @@ describe('MediaFilters', () => {
     });
 
     it('shows the current sort option', () => {
-      render(
-        <MediaFilters {...defaultProps} sort={{ field: 'createdAt', order: 'desc' }} />,
-      );
+      render(<MediaFilters {...defaultProps} sort={{ field: 'createdAt', order: 'desc' }} />);
 
       expect(screen.getByText('Newest first')).toBeInTheDocument();
     });
@@ -190,7 +189,11 @@ describe('MediaFilters', () => {
       const user = userEvent.setup();
       const onEvalFilterChange = vi.fn();
       render(
-        <MediaFilters {...defaultProps} evals={mockEvals} onEvalFilterChange={onEvalFilterChange} />,
+        <MediaFilters
+          {...defaultProps}
+          evals={mockEvals}
+          onEvalFilterChange={onEvalFilterChange}
+        />,
       );
 
       await user.click(screen.getByText('All Evaluations'));
@@ -221,8 +224,10 @@ describe('MediaFilters', () => {
 
       // Click "All Evaluations" option in the popover - it's a button
       const allEvalsButtons = screen.getAllByRole('button');
-      const allEvalsOption = allEvalsButtons.find((btn) =>
-        btn.textContent === 'All Evaluations' && btn.closest('[data-radix-popper-content-wrapper]')
+      const allEvalsOption = allEvalsButtons.find(
+        (btn) =>
+          btn.textContent === 'All Evaluations' &&
+          btn.closest('[data-radix-popper-content-wrapper]'),
       );
       if (allEvalsOption) {
         await user.click(allEvalsOption);
