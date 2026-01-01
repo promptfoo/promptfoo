@@ -9,7 +9,7 @@ description: Red team memory poisoning vulnerabilities in AI agents through pers
 
 The Memory Poisoning plugin tests whether stateful agents are vulnerable to memory poisoning attacks that manipulate an agent's memory to alter its behavior in subsequent interactions.
 
-This plugin maps to **T1: Memory Poisoning** from [OWASP Agentic AI Top 10 Threats](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) and is also closely related to **LLM04:2025 Data and Model Poisoning** from the [OWASP LLM Top 10](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/), as it involves manipulating the data that influences the model's behavior and decision-making process.
+This plugin maps to **T1: Memory Poisoning** from [OWASP Agentic AI – Threats and Mitigations](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) and aligns with [ASI06: Memory and Context Poisoning](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) from the OWASP Top 10 for Agentic Applications 2026. It is also closely related to **LLM04:2025 Data and Model Poisoning** from the [OWASP LLM Top 10](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/), as it involves manipulating the data that influences the model's behavior and decision-making process.
 
 ## OWASP Context
 

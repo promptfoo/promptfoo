@@ -41,6 +41,7 @@ Promptfoo also supports various risk management frameworks based on common secur
 | [**NIST AI Risk Management Framework**](/docs/red-team/nist-ai-rmf/) | nist:ai:measure | nist:ai:measure:1.1        |
 | [**OWASP Top 10 for LLMs**](/docs/red-team/owasp-llm-top-10/)        | owasp:llm       | owasp:llm:01               |
 | [**OWASP API Security Top 10**](/docs/red-team/owasp-api-top-10/)    | owasp:api       | owasp:api:01               |
+| [**OWASP Top 10 for Agentic Applications**](/docs/red-team/owasp-agentic-ai/) | owasp:agentic | owasp:agentic:asi01 |
 | [**MITRE ATLAS**](/docs/red-team/mitre-atlas/)                       | mitre:atlas     | mitre:atlas:reconnaissance |
 | [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                       | iso:42001       | iso:42001:privacy          |
 | [**GDPR**](/docs/red-team/gdpr/)                                     | gdpr            | gdpr:art5                  |
