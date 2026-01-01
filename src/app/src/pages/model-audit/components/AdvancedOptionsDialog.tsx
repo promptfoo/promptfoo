@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -14,6 +13,7 @@ import {
 import { XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 
 import type { ScanOptions } from '../ModelAudit.types';
@@ -133,33 +133,25 @@ export default function AdvancedOptionsDialog({
             <div>
               <h3 className="text-sm font-semibold">Scan Timeout</h3>
             </div>
-            <div className="relative">
-              <BaseNumberInput
-                fullWidth
-                value={localOptions.timeout}
-                onChange={(v) =>
-                  setLocalOptions({
-                    ...localOptions,
-                    // @ts-expect-error - undefined will be clamped to 3600 onBlur.  This approach resolves issue where user cannot clear the field.  This would be better addressed using a more robust form approach and setting default on submit.
-                    timeout: v,
-                  })
-                }
-                min={0}
-                onBlur={() => {
-                  setLocalOptions(({ timeout, ...options }) => ({
-                    ...options,
-                    timeout: timeout !== undefined ? timeout : 3600,
-                  }));
-                }}
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <span className="text-sm text-muted-foreground pr-3">seconds</span>
-                    ),
-                  },
-                }}
-              />
-            </div>
+            <NumberInput
+              fullWidth
+              value={localOptions.timeout}
+              onChange={(v) =>
+                setLocalOptions({
+                  ...localOptions,
+                  // @ts-expect-error - undefined will be clamped to 3600 onBlur.  This approach resolves issue where user cannot clear the field.  This would be better addressed using a more robust form approach and setting default on submit.
+                  timeout: v,
+                })
+              }
+              min={0}
+              onBlur={() => {
+                setLocalOptions(({ timeout, ...options }) => ({
+                  ...options,
+                  timeout: timeout !== undefined ? timeout : 3600,
+                }));
+              }}
+              endAdornment={<span className="text-sm text-muted-foreground">seconds</span>}
+            />
           </div>
 
           {/* Max Size */}

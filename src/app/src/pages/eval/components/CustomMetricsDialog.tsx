@@ -2,7 +2,7 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
-import { Dialog, DialogContent } from '@app/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { FilterIcon } from '@app/components/ui/icons';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
@@ -294,6 +294,9 @@ export default function CustomMetricsDialog({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-[90vw] h-[80vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Custom Metrics</DialogTitle>
+        </DialogHeader>
         <MetricsTable onClose={onClose} />
       </DialogContent>
     </Dialog>

@@ -19,7 +19,6 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
@@ -526,6 +525,7 @@ export const CustomPoliciesSection = () => {
         const text = await file.text();
 
         // Parse CSV and take the first column regardless of header name
+        const { parse } = await import('csv-parse/browser/esm/sync');
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,

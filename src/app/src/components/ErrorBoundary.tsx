@@ -1,9 +1,14 @@
 import React from 'react';
 
+import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { cn } from '@app/lib/utils';
 import { AlertCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import { Button } from './ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
 interface Props {
   children: React.ReactNode;
@@ -65,9 +70,11 @@ class ErrorBoundary extends React.Component<Props, State> {
             <AlertCircle className="h-4 w-4" />
             <div className="flex-1">
               <AlertTitle>
-                Something went wrong{this.props.name ? ` in ${this.props.name}` : ''}.
+                Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
               </AlertTitle>
-              <AlertDescription>Please try reloading the page.</AlertDescription>
+              <AlertDescription className="text-muted-foreground">
+                Please try reloading the page.
+              </AlertDescription>
             </div>
             <Button variant="outline" size="sm" onClick={this.handleReload} className="shrink-0">
               <RefreshCw className="h-3 w-3 mr-1" />
@@ -76,27 +83,37 @@ class ErrorBoundary extends React.Component<Props, State> {
           </Alert>
 
           {isDev && (
-            <Collapsible open={this.state.showDetails} onOpenChange={this.toggleDetails}>
-              <div className="mt-4">
+            <div className="mt-4">
+              <Collapsible open={this.state.showDetails} onOpenChange={this.toggleDetails}>
                 <CollapsibleTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="mb-2 gap-1">
                     {this.state.showDetails ? (
-                      <ChevronUp className="h-3 w-3 mr-1" />
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Hide Error Details
+                      </>
                     ) : (
-                      <ChevronDown className="h-3 w-3 mr-1" />
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Show Error Details
+                      </>
                     )}
-                    {this.state.showDetails ? 'Hide' : 'Show'} Error Details
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="mt-3 p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg font-mono text-sm overflow-auto text-foreground">
+                  <div
+                    className={cn(
+                      'mt-2 p-4 rounded-md font-mono text-sm overflow-auto',
+                      'bg-zinc-100 dark:bg-zinc-900',
+                    )}
+                  >
                     <h6 className="text-base font-semibold mb-2">Error Details:</h6>
                     <pre className="m-0 whitespace-pre-wrap text-red-700 dark:text-red-400">
                       {this.state.error?.name}: {this.state.error?.message}
                     </pre>
                     {this.state.error?.stack && (
                       <>
-                        <h6 className="text-base font-semibold mb-2 mt-4">Stack Trace:</h6>
+                        <h6 className="text-base font-semibold mt-4 mb-2">Stack Trace:</h6>
                         <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
                           {this.state.error.stack}
                         </pre>
@@ -104,7 +121,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                     )}
                     {this.state.errorInfo && (
                       <>
-                        <h6 className="text-base font-semibold mb-2 mt-4">Component Stack:</h6>
+                        <h6 className="text-base font-semibold mt-4 mb-2">Component Stack:</h6>
                         <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
                           {this.state.errorInfo.componentStack}
                         </pre>
@@ -112,8 +129,8 @@ class ErrorBoundary extends React.Component<Props, State> {
                     )}
                   </div>
                 </CollapsibleContent>
-              </div>
-            </Collapsible>
+              </Collapsible>
+            </div>
           )}
         </div>
       );

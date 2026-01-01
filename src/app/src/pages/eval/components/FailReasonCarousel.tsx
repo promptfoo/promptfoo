@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 
-import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import IconButton from '@mui/material/IconButton';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import './FailReasonCarousel.css';
 
 interface FailReasonCarouselProps {
@@ -29,15 +27,23 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
     <div className="fail-reason">
       {failReasons.length > 1 && (
         <span className="fail-reason-carousel-controls">
-          <IconButton onClick={handlePrev}>
-            <ArrowBackIosIcon sx={{ fontSize: 12 }} />
-          </IconButton>
+          <button
+            type="button"
+            onClick={handlePrev}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            <ChevronLeft className="h-3 w-3" />
+          </button>
           <span>
             {currentIndex + 1}/{failReasons.length}
           </span>
-          <IconButton onClick={handleNext}>
-            <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
-          </IconButton>
+          <button
+            type="button"
+            onClick={handleNext}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            <ChevronRight className="h-3 w-3" />
+          </button>
         </span>
       )}
       {failReasons[currentIndex]

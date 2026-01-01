@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MetadataPanel } from './MetadataPanel';
 
@@ -31,7 +32,7 @@ describe('MetadataPanel', () => {
       };
     });
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText('Key')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
@@ -51,7 +52,7 @@ describe('MetadataPanel', () => {
       malformedUrlKey: malformedUrl,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText(malformedUrl)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: malformedUrl })).not.toBeInTheDocument();
@@ -68,7 +69,7 @@ describe('MetadataPanel', () => {
       appUrl: 'https://cloud.promptfoo.com',
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
     );
 
@@ -94,7 +95,7 @@ describe('MetadataPanel', () => {
       appUrl: 'https://example.com',
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
     );
 
@@ -104,7 +105,9 @@ describe('MetadataPanel', () => {
   });
 
   it('should return null when metadata is undefined', () => {
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={undefined} />);
+    const { container } = renderWithProviders(
+      <MetadataPanel {...defaultProps} metadata={undefined} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -117,7 +120,7 @@ describe('MetadataPanel', () => {
       _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText('Key')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
@@ -141,7 +144,7 @@ describe('MetadataPanel', () => {
       urlKey: 'https://www.example.com',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: 'https://www.example.com' });
     expect(linkElement).toBeInTheDocument();
@@ -158,7 +161,7 @@ describe('MetadataPanel', () => {
       longKey: { expanded: false, lastClickTime: 0 },
     };
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <MetadataPanel
         {...defaultProps}
         metadata={mockMetadata}
@@ -197,7 +200,7 @@ describe('MetadataPanel', () => {
       testKey: true,
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} copiedFields={mockCopiedFields} />,
     );
 
@@ -212,7 +215,7 @@ describe('MetadataPanel', () => {
       testField: 'testValue',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const filterButton = screen.getByRole('button', { name: 'Filter by testField' });
     fireEvent.click(filterButton);
@@ -222,7 +225,9 @@ describe('MetadataPanel', () => {
 
   it('should return null when metadata is an empty object', () => {
     const mockMetadata = {};
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const { container } = renderWithProviders(
+      <MetadataPanel {...defaultProps} metadata={mockMetadata} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -233,7 +238,7 @@ describe('MetadataPanel', () => {
       urlKey: urlWithSpecialChars,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: urlWithSpecialChars });
     expect(linkElement).toBeInTheDocument();
@@ -246,13 +251,13 @@ describe('MetadataPanel', () => {
       stringKey: 'This is a long string',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const urlCell = screen.getByText('https://www.example.com/verylongpath').closest('td');
-    expect(urlCell).toHaveStyle('word-break: break-all');
+    expect(urlCell).toHaveClass('break-all');
 
     const stringCell = screen.getByText('This is a long string').closest('td');
-    expect(stringCell).toHaveStyle('word-break: break-word');
+    expect(stringCell).toHaveClass('break-words');
   });
 
   it('should handle rendering in a very narrow container by applying word-break and overflow-wrap styles', () => {
@@ -261,7 +266,7 @@ describe('MetadataPanel', () => {
       longKey: longString,
     };
 
-    render(
+    renderWithProviders(
       <div style={{ width: '100px' }}>
         <MetadataPanel {...defaultProps} metadata={mockMetadata} />
       </div>,
@@ -272,8 +277,8 @@ describe('MetadataPanel', () => {
       .closest('td');
 
     expect(tableCell).toBeInTheDocument();
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should handle deeply nested JSON objects by wrapping the text within the table cell', () => {
@@ -295,7 +300,7 @@ describe('MetadataPanel', () => {
       nestedObjectKey: nestedJsonObject,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const stringifiedJson = JSON.stringify(nestedJsonObject);
     const tableCell = screen.getByText(new RegExp(`^${stringifiedJson.slice(0, 50)}`), {
@@ -303,8 +308,8 @@ describe('MetadataPanel', () => {
     });
 
     expect(tableCell).toBeInTheDocument();
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should render long non-URL metadata values with word-break and overflow-wrap styles', () => {
@@ -318,7 +323,7 @@ describe('MetadataPanel', () => {
       longJsonKey: longJsonString,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const valueCell = screen.getByText((content) => {
       return (
@@ -331,8 +336,8 @@ describe('MetadataPanel', () => {
     expect(valueCell).toBeInTheDocument();
 
     const tableCell = valueCell.closest('td');
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should render long URL values in a way that wraps the text within the table cell, preventing horizontal scrolling, and the cell should have the correct word-break and overflow-wrap styles applied', () => {
@@ -341,13 +346,13 @@ describe('MetadataPanel', () => {
       longUrlKey: longUrl,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: longUrl });
     expect(linkElement).toBeInTheDocument();
 
     const tableCell = linkElement.closest('td');
-    expect(tableCell).toHaveStyle('wordBreak: break-all');
-    expect(tableCell).toHaveStyle('overflowWrap: anywhere');
+    // Tailwind uses 'break-all' class for word-break: break-all
+    expect(tableCell).toHaveClass('break-all');
   });
 });

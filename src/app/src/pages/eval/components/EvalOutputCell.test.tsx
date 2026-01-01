@@ -1,9 +1,10 @@
+import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -21,7 +22,7 @@ vi.mock('./EvalOutputPromptDialog', () => ({
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
+  return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
 vi.mock('./store', () => ({
@@ -259,8 +260,6 @@ describe('EvalOutputCell', () => {
 
   it('handles highlight toggle', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-
-    await userEvent.click(screen.getByLabelText('Edit comment'));
 
     await userEvent.click(screen.getByLabelText('Toggle test highlight'));
     expect(mockOnRating).toHaveBeenNthCalledWith(

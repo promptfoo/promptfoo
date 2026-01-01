@@ -354,7 +354,10 @@ export async function runEval({
 
   try {
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+    // For redteam tests, skip rendering the inject variable to prevent double-rendering of
+    // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
+    const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider, skipRenderVars);
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);

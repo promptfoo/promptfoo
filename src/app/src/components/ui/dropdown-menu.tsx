@@ -191,6 +191,13 @@ const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTML
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
+const DropdownMenuItemIcon = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn('mr-2 h-4 w-4 [&>svg]:size-4 [&>svg]:shrink-0', className)} {...props} />
+  );
+};
+DropdownMenuItemIcon.displayName = 'DropdownMenuItemIcon';
+
 export {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -201,6 +208,7 @@ export {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuItemIcon,
   DropdownMenuGroup,
   DropdownMenuPortal,
   DropdownMenuSub,
