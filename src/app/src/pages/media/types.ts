@@ -2,8 +2,9 @@
  * Types for the Media Library page
  */
 
-// Re-export MediaKind from the shared utility to avoid duplication
-export type { MediaKind } from '@app/utils/media';
+// Import and re-export MediaKind from the shared utility to avoid duplication
+import type { MediaKind } from '@app/utils/media';
+export type { MediaKind };
 
 export interface GraderResult {
   name: string;
