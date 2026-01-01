@@ -505,9 +505,10 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
 }
 
 /**
- * Normalizes tools configuration to handle both snake_case and camelCase formats.
- * This ensures compatibility with both Google API formats while maintaining
- * consistent behavior in our codebase.
+ * Normalizes and sanitizes tools configuration for Gemini API compatibility.
+ * - Handles snake_case to camelCase conversion for backwards compatibility
+ * - Sanitizes function declaration schemas to remove unsupported JSON Schema properties
+ *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
@@ -527,6 +528,15 @@ export function normalizeTools(tools: Tool[]): Tool[] {
     // Handle google_search_retrieval -> googleSearchRetrieval conversion
     if ((tool as any).google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
       normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
+    }
+
+    // Sanitize function declarations to remove unsupported schema properties
+    // This fixes issues like GitHub #6902 where additionalProperties causes API errors
+    if (normalizedTool.functionDeclarations) {
+      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
+        ...fd,
+        parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
+      }));
     }
 
     return normalizedTool;
@@ -938,4 +948,89 @@ export function validateFunctionCall(
       );
     }
   }
+}
+
+/**
+ * Properties supported by Gemini's function calling API.
+ * Based on Google's Schema type definition and API documentation.
+ * @see https://ai.google.dev/api/caching#Schema
+ */
+const GEMINI_SUPPORTED_SCHEMA_PROPERTIES = new Set([
+  'type',
+  'format',
+  'description',
+  'nullable',
+  'enum',
+  'maxItems',
+  'minItems',
+  'properties',
+  'required',
+  'propertyOrdering',
+  'items',
+]);
+
+/**
+ * Valid JSON Schema types mapped to Gemini's expected format (uppercase).
+ */
+const JSON_SCHEMA_TYPE_MAP: Record<string, string> = {
+  string: 'STRING',
+  number: 'NUMBER',
+  integer: 'INTEGER',
+  boolean: 'BOOLEAN',
+  array: 'ARRAY',
+  object: 'OBJECT',
+  null: 'STRING', // Gemini doesn't support null type, fall back to STRING
+};
+
+/**
+ * Recursively sanitizes a JSON Schema for Gemini API compatibility.
+ *
+ * - Removes unsupported properties (additionalProperties, $schema, default, title, etc.)
+ * - Converts type values to uppercase (string → STRING, object → OBJECT)
+ * - Recursively processes nested schemas in 'properties' and 'items'
+ *
+ * @param schema - The JSON Schema object to sanitize
+ * @returns A sanitized schema compatible with Gemini's function calling API
+ */
+export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<string, any> {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  const result: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Skip properties not supported by Gemini
+    if (!GEMINI_SUPPORTED_SCHEMA_PROPERTIES.has(key)) {
+      continue;
+    }
+
+    if (key === 'type') {
+      // Convert type to uppercase for Gemini
+      if (typeof value === 'string') {
+        const lowerType = value.toLowerCase();
+        result[key] = JSON_SCHEMA_TYPE_MAP[lowerType] || value.toUpperCase();
+      } else {
+        result[key] = value;
+      }
+    } else if (key === 'properties' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize each property schema
+      result[key] = {};
+      for (const [propName, propSchema] of Object.entries(value)) {
+        if (typeof propSchema === 'object' && propSchema !== null) {
+          result[key][propName] = sanitizeSchemaForGemini(propSchema as Record<string, any>);
+        } else {
+          result[key][propName] = propSchema;
+        }
+      }
+    } else if (key === 'items' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize array item schema
+      result[key] = sanitizeSchemaForGemini(value as Record<string, any>);
+    } else {
+      // Pass through allowed primitive values (enum, required, maxItems, etc.)
+      result[key] = value;
+    }
+  }
+
+  return result;
 }
