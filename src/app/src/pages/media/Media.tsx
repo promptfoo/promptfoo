@@ -15,14 +15,14 @@ import {
 } from '@app/components/ui/alert-dialog';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
-import { Progress } from '@app/components/ui/progress';
-import { Spinner } from '@app/components/ui/spinner';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { Progress } from '@app/components/ui/progress';
+import { Spinner } from '@app/components/ui/spinner';
 import { getApiBaseUrl } from '@app/utils/api';
 import { generateMediaFilename } from '@app/utils/media';
 import { AlertCircle, ChevronDown, Download, MousePointerClick, RefreshCw, X } from 'lucide-react';
@@ -34,6 +34,7 @@ import { MediaGrid } from './components/MediaGrid';
 import { MediaModal } from './components/MediaModal';
 import { fetchMediaItemByHash, useEvalsWithMedia, useMediaItems } from './hooks/useMediaItems';
 import { clearExpiredThumbnails } from './hooks/useThumbnailCache';
+
 import type { MediaItem, MediaSort, MediaTypeFilter } from './types';
 
 export default function Media() {
@@ -55,7 +56,11 @@ export default function Media() {
   });
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0, currentFile: '' });
+  const [downloadProgress, setDownloadProgress] = useState({
+    current: 0,
+    total: 0,
+    currentFile: '',
+  });
   const [downloadErrors, setDownloadErrors] = useState<string[]>([]);
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [isDeepLinkLoading, setIsDeepLinkLoading] = useState(false);
@@ -283,9 +288,10 @@ export default function Media() {
 
   const handleBulkDownload = useCallback(async () => {
     // Use selected items if in selection mode, otherwise all items
-    const itemsToDownload = isSelectionMode && selectedHashes.size > 0
-      ? items.filter((item) => selectedHashes.has(item.hash))
-      : items;
+    const itemsToDownload =
+      isSelectionMode && selectedHashes.size > 0
+        ? items.filter((item) => selectedHashes.has(item.hash))
+        : items;
 
     if (itemsToDownload.length === 0) {
       return;
@@ -419,7 +425,9 @@ export default function Media() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={selectedHashes.size === items.length ? handleDeselectAll : handleSelectAll}
+                      onClick={
+                        selectedHashes.size === items.length ? handleDeselectAll : handleSelectAll
+                      }
                     >
                       {selectedHashes.size === items.length ? 'Deselect All' : 'Select All'}
                     </Button>
@@ -436,11 +444,7 @@ export default function Media() {
                       <Download className="h-4 w-4 mr-2" />
                       Download {selectedHashes.size > 0 ? `(${selectedHashes.size})` : ''}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleToggleSelectionMode}
-                    >
+                    <Button variant="ghost" size="sm" onClick={handleToggleSelectionMode}>
                       <X className="h-4 w-4" />
                       <span className="sr-only">Cancel selection</span>
                     </Button>
@@ -601,11 +605,15 @@ export default function Media() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Download {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length} files?
+                Download{' '}
+                {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length}{' '}
+                files?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                This will download {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length} files to your computer.
-                Each file will be saved separately. Large downloads may take a while and could be interrupted by your browser.
+                This will download{' '}
+                {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length}{' '}
+                files to your computer. Each file will be saved separately. Large downloads may take
+                a while and could be interrupted by your browser.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

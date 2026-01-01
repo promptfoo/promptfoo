@@ -19,10 +19,7 @@ const GENERATION_TIMEOUT = 10000; // 10 seconds timeout
  * Generates a thumbnail from a video URL by capturing a frame.
  * Supports cancellation via AbortSignal to prevent memory leaks.
  */
-async function generateThumbnail(
-  videoUrl: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function generateThumbnail(videoUrl: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     // Check if already aborted before starting
     if (signal?.aborted) {

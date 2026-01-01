@@ -7,9 +7,10 @@ import { cn } from '@app/lib/utils';
 import { getApiBaseUrl } from '@app/utils/api';
 import { downloadMediaItem, formatBytes, getKindIcon, getKindLabel } from '@app/utils/media';
 import { Check, CheckCircle, Download, Music, Video, XCircle } from 'lucide-react';
-import type { MediaItem } from '../types';
 import { AudioPreviewButton } from './AudioPreviewButton';
 import { VideoHoverPreview } from './VideoHoverPreview';
+
+import type { MediaItem } from '../types';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -130,9 +131,7 @@ export function MediaCard({
       <div className="relative aspect-square overflow-hidden rounded-t-xl bg-muted/30">
         {item.kind === 'image' && !imageError ? (
           <>
-            {!imageLoaded && (
-              <Skeleton className="absolute inset-0 rounded-none" />
-            )}
+            {!imageLoaded && <Skeleton className="absolute inset-0 rounded-none" />}
             <img
               src={mediaUrl}
               alt={item.context.evalDescription || 'Generated image'}
@@ -197,7 +196,11 @@ export function MediaCard({
         {isPlayable && (
           <div className="absolute bottom-2 right-2">
             <Badge variant="secondary" className="bg-black/70 text-white text-xs px-1.5 py-0.5">
-              {item.kind === 'video' ? <Video className="h-3 w-3" /> : <Music className="h-3 w-3" />}
+              {item.kind === 'video' ? (
+                <Video className="h-3 w-3" />
+              ) : (
+                <Music className="h-3 w-3" />
+              )}
             </Badge>
           </div>
         )}
@@ -227,7 +230,8 @@ export function MediaCard({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 {item.context.pass ? 'Passed' : 'Failed'}
-                {item.context.score !== undefined && ` (Score: ${(item.context.score * 100).toFixed(1)}%)`}
+                {item.context.score !== undefined &&
+                  ` (Score: ${(item.context.score * 100).toFixed(1)}%)`}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -246,14 +250,10 @@ export function MediaCard({
                   {item.context.provider}
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {item.context.provider}
-              </TooltipContent>
+              <TooltipContent side="bottom">{item.context.provider}</TooltipContent>
             </Tooltip>
           ) : (
-            <span className="text-xs text-muted-foreground truncate">
-              {item.mimeType}
-            </span>
+            <span className="text-xs text-muted-foreground truncate">{item.mimeType}</span>
           )}
         </div>
 
@@ -261,7 +261,8 @@ export function MediaCard({
         <Tooltip>
           <TooltipTrigger asChild>
             <p className="text-sm font-medium truncate">
-              {item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
+              {item.context.evalDescription ||
+                `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
             </p>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">

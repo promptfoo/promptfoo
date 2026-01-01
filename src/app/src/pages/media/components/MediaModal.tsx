@@ -34,8 +34,9 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { GraderResult, MediaItem } from '../types';
 import { AudioWaveform } from './AudioWaveform';
+
+import type { GraderResult, MediaItem } from '../types';
 
 interface MediaModalProps {
   item: MediaItem | null;
@@ -339,7 +340,15 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           break;
       }
     },
-    [item, handlePrevious, handleNext, handleDownload, handleZoomIn, handleZoomOut, handleZoomReset],
+    [
+      item,
+      handlePrevious,
+      handleNext,
+      handleDownload,
+      handleZoomIn,
+      handleZoomOut,
+      handleZoomReset,
+    ],
   );
 
   // Reset state when item changes
@@ -767,8 +776,11 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Cell</span>
                       <span className="font-mono">
-                        {item.context.testIdx !== undefined ? `Row ${item.context.testIdx + 1}` : '—'}
-                        {item.context.promptIdx !== undefined && `, Col ${item.context.promptIdx + 1}`}
+                        {item.context.testIdx !== undefined
+                          ? `Row ${item.context.testIdx + 1}`
+                          : '—'}
+                        {item.context.promptIdx !== undefined &&
+                          `, Col ${item.context.promptIdx + 1}`}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

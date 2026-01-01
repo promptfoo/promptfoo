@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -12,7 +13,20 @@ import {
 } from '@app/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
-import { ArrowDownAZ, ArrowUpAZ, Check, ChevronDown, FileIcon, ImageIcon, LayoutGrid, Music, Search, Video, X } from 'lucide-react';
+import {
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Check,
+  ChevronDown,
+  FileIcon,
+  ImageIcon,
+  LayoutGrid,
+  Music,
+  Search,
+  Video,
+  X,
+} from 'lucide-react';
+
 import type { EvalOption, MediaSort, MediaTypeFilter } from '../types';
 
 interface MediaFiltersProps {
@@ -56,11 +70,12 @@ export function MediaFilters({
   const currentSortValue = `${sort.field}:${sort.order}`;
 
   // Filter evals based on search query
-  const filteredEvals = evals.filter((e) =>
-    e.evalId &&
-    (evalSearchQuery === '' ||
-      e.description?.toLowerCase().includes(evalSearchQuery.toLowerCase()) ||
-      e.evalId.toLowerCase().includes(evalSearchQuery.toLowerCase()))
+  const filteredEvals = evals.filter(
+    (e) =>
+      e.evalId &&
+      (evalSearchQuery === '' ||
+        e.description?.toLowerCase().includes(evalSearchQuery.toLowerCase()) ||
+        e.evalId.toLowerCase().includes(evalSearchQuery.toLowerCase())),
   );
 
   // Find selected eval for display
@@ -70,10 +85,7 @@ export function MediaFilters({
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
         {/* Type Filter Tabs */}
-        <Tabs
-          value={typeFilter}
-          onValueChange={(v) => onTypeFilterChange(v as MediaTypeFilter)}
-        >
+        <Tabs value={typeFilter} onValueChange={(v) => onTypeFilterChange(v as MediaTypeFilter)}>
           <TabsList className="h-9">
             {typeOptions.map((option) => (
               <TabsTrigger
@@ -176,12 +188,7 @@ export function MediaFilters({
                   setEvalSearchQuery('');
                 }}
               >
-                <Check
-                  className={cn(
-                    'mr-2 h-4 w-4',
-                    !evalFilter ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
+                <Check className={cn('mr-2 h-4 w-4', evalFilter ? 'opacity-0' : 'opacity-100')} />
                 <span>All Evaluations</span>
               </button>
 

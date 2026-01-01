@@ -4,8 +4,9 @@ import { Skeleton } from '@app/components/ui/skeleton';
 import { Spinner } from '@app/components/ui/spinner';
 import { cn } from '@app/lib/utils';
 import { MEDIA_INFINITE_SCROLL_MARGIN } from '@app/utils/media';
-import type { MediaItem } from '../types';
 import { MediaCard } from './MediaCard';
+
+import type { MediaItem } from '../types';
 
 interface MediaGridProps {
   items: MediaItem[];
@@ -24,10 +25,18 @@ interface MediaGridProps {
 /** Calculate items per row based on viewport width (matches Tailwind breakpoints) */
 function getItemsPerRow(): number {
   const width = window.innerWidth;
-  if (width >= 1280) return 6; // xl
-  if (width >= 1024) return 5; // lg
-  if (width >= 768) return 4; // md
-  if (width >= 640) return 3; // sm
+  if (width >= 1280) {
+    return 6; // xl
+  }
+  if (width >= 1024) {
+    return 5; // lg
+  }
+  if (width >= 768) {
+    return 4; // md
+  }
+  if (width >= 640) {
+    return 3; // sm
+  }
   return 2; // default
 }
 
@@ -63,7 +72,9 @@ export function MediaGrid({
   // Handle keyboard navigation within the grid
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (items.length === 0) return;
+      if (items.length === 0) {
+        return;
+      }
 
       const itemsPerRow = getItemsPerRow();
       let newIndex = focusedIndex;
@@ -196,7 +207,9 @@ export function MediaGrid({
             <MediaCard
               item={item}
               onClick={() => onItemClick(item)}
-              tabIndex={focusedIndex === -1 ? (index === 0 ? 0 : -1) : (focusedIndex === index ? 0 : -1)}
+              tabIndex={
+                focusedIndex === -1 ? (index === 0 ? 0 : -1) : focusedIndex === index ? 0 : -1
+              }
               onFocus={() => setFocusedIndex(index)}
               isSelectionMode={isSelectionMode}
               isSelected={selectedHashes.has(item.hash)}

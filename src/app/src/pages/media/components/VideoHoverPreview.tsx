@@ -61,7 +61,7 @@ export function VideoHoverPreview({
   });
 
   // Handle video playback based on hover state (desktop) or touch state (mobile)
-  const shouldPlay = isTouchDevice ? isTouchPlaying : (isIntentional && isVideoLoaded);
+  const shouldPlay = isTouchDevice ? isTouchPlaying : isIntentional && isVideoLoaded;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -131,8 +131,12 @@ export function VideoHoverPreview({
           // On touch devices: always show when not playing, hide when playing
           // On hover devices: controlled by hover state
           isTouchDevice
-            ? (isVideoPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100')
-            : (isVideoPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-none'),
+            ? isVideoPlaying
+              ? 'opacity-0 pointer-events-none'
+              : 'opacity-100'
+            : isVideoPlaying
+              ? 'opacity-0 pointer-events-none'
+              : 'opacity-100 pointer-events-none',
         )}
       >
         <button

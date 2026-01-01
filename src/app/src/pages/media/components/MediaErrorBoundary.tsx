@@ -52,12 +52,7 @@ export class MediaErrorBoundary extends Component<Props, State> {
               <p className="text-sm mb-4">
                 {this.state.error?.message || 'An error occurred while loading media content.'}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={this.handleReset}
-                className="gap-2"
-              >
+              <Button variant="outline" size="sm" onClick={this.handleReset} className="gap-2">
                 <RefreshCw className="h-4 w-4" />
                 Try again
               </Button>
