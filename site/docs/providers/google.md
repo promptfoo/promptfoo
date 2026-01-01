@@ -7,7 +7,7 @@ description: Configure Google's Gemini models with support for text, images, and
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
-If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
+If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](vertex.md).
 
 ## Authentication
 
@@ -272,7 +272,7 @@ providers:
       region: us-central1
 ```
 
-See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
+See the [Vertex AI provider documentation](vertex.md) for detailed setup instructions.
 
 ## Available Models
 
@@ -1166,7 +1166,7 @@ For more details, see the [Google Live API documentation](https://ai.google.dev/
 
 ## See Also
 
-- [Vertex AI Provider](/docs/providers/vertex) - For enterprise features and advanced Google AI capabilities
+- [Vertex AI Provider](vertex.md) - For enterprise features and advanced Google AI capabilities
 - [Google Examples](https://github.com/promptfoo/promptfoo/tree/main/examples) - Browse working examples for Google AI Studio
 - [Gemini API Documentation](https://ai.google.dev/docs) - Official Google AI documentation
-- [Configuration Reference](/docs/configuration/reference) - Complete configuration options for promptfoo
+- [Configuration Reference](../configuration/reference) - Complete configuration options for promptfoo
