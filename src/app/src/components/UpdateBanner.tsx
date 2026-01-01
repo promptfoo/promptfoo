@@ -99,7 +99,7 @@ export default function UpdateBanner() {
       ref={bannerRef}
       variant="info"
       className={cn(
-        'rounded-none py-2 px-4 relative z-[--z-banner]',
+        'rounded-none py-2 px-4 relative z-(--z-banner)',
         'flex items-center justify-between gap-4',
       )}
     >

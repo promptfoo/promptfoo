@@ -244,7 +244,7 @@ export function TagInput({
       {showDropdown && (
         <div
           className={cn(
-            'absolute left-0 right-0 z-[--z-dropdown] mt-1',
+            'absolute left-0 right-0 z-(--z-dropdown) mt-1',
             'overflow-hidden rounded-md border border-border bg-white dark:bg-zinc-900 shadow-lg',
           )}
         >

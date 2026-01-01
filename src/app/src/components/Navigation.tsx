@@ -157,7 +157,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
 
   return (
     <>
-      <header className="sticky top-0 z-[--z-appbar] w-full border-b border-border bg-card shadow-sm">
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
         <div className="flex h-14 items-center justify-between px-4">
           {/* Left section: Logo and Navigation */}
           <div className="flex items-center gap-6">

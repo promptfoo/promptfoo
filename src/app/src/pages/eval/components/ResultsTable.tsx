@@ -148,7 +148,7 @@ function TableHeader({
     setPromptOpen(false);
   };
   return (
-    <div className={`${className || ''}flex items-center gap-1`}>
+    <div className={`${className || ''} flex items-center gap-1`}>
       {expandedText ? (
         <Tooltip>
           <TooltipTrigger asChild>

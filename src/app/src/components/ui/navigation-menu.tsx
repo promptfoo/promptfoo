@@ -15,7 +15,7 @@ function NavigationMenu({
     <NavigationMenuPrimitive.Root
       ref={ref}
       className={cn(
-        'relative z-[--z-dropdown] flex max-w-max flex-1 items-center justify-center',
+        'relative z-(--z-dropdown) flex max-w-max flex-1 items-center justify-center',
         className,
       )}
       {...props}
