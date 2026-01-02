@@ -13,8 +13,9 @@ providers:
       # seed: 12345
 
 prompts:
-  - 'Closeup of a large seashell in the sand. Gentle waves flow around the shell. Camera slowly zooms in.'
-  - 'A hummingbird hovering near colorful flowers in slow motion, shallow depth of field, golden hour lighting'
+  # Promptfoo red panda mascot themed prompts
+  - 'A cute red panda sitting at a desk reviewing documents, wearing small round glasses, soft warm lighting, camera slowly zooms in on the focused expression'
+  - 'An adorable red panda mascot walking through a futuristic data center with glowing servers, purple and teal ambient lighting, camera follows alongside'
 
 tests:
   - vars: {}
