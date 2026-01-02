@@ -51,6 +51,7 @@ const EnhancedRangeSlider = ({
   }, [debouncedValue, onChange, safeValue]);
 
   // Safely update input value when external value changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalValue(safeValue);
     setInputValue(isUnlimited ? 'Unlimited' : String(safeValue));

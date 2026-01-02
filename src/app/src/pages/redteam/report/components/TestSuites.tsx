@@ -107,6 +107,7 @@ const TestSuites = ({
 
   const customPoliciesById = useCustomPoliciesMap(plugins);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const allRows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)

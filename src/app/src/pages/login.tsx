@@ -103,6 +103,7 @@ export default function LoginPage() {
       setEmail(state.email);
       handleRedirect();
     }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [state.success, state.email, setEmail, handleRedirect]);
 
   // Redirect if already logged in
@@ -110,6 +111,7 @@ export default function LoginPage() {
     if (!isLoading && email) {
       handleRedirect();
     }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [isLoading, email, handleRedirect]);
 
   if (isLoading || (!isLoading && email)) {

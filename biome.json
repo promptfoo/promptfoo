@@ -102,7 +102,7 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useExhaustiveDependencies": "off",
+        "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
         "useJsxKeyInIterable": "error"
       },
