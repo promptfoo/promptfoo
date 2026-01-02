@@ -70,6 +70,8 @@ export function isImageProvider(provider: string | undefined): boolean {
 /**
  * Detects if the provider is a video generation provider.
  * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
  * - 'google:video:veo-2-generate' (Google Veo 2)
  * Used to skip truncation for video content.
@@ -78,7 +80,7 @@ export function isVideoProvider(provider: string | undefined): boolean {
   if (!provider) {
     return false;
   }
-  // Check for :video: namespace (Google Veo)
+  // Check for :video: namespace (OpenAI Sora, Google Veo)
   return provider.includes(':video:');
 }
 
@@ -365,15 +367,18 @@ function EvalOutputCell({
         </div>
       );
     }
-  } else if (output.video) {
-    // Video can use blob storage (blobRef) or legacy URL paths
-    const videoSource = resolveVideoSource(output.video);
+  } else if (output.video || output.response?.video) {
+    // Support both top-level video (new format) and response.video (fallback)
+    // Video can use blob storage (blobRef), storage refs (storageRef), or legacy URL paths
+    const videoData = output.video || output.response?.video;
+    const videoSource = resolveVideoSource(videoData);
     if (videoSource) {
       node = (
         <div className="video-output">
           <video
             controls
             style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+            poster={videoSource.poster}
             data-testid="video-player"
           >
             <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
@@ -383,13 +388,11 @@ function EvalOutputCell({
             className="video-metadata"
             style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
           >
-            {output.video.model && (
-              <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+            {videoData?.model && (
+              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
             )}
-            {output.video.size && (
-              <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
-            )}
-            {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
           </div>
         </div>
       );
