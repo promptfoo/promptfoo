@@ -3,13 +3,12 @@ import * as fs from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateVideoCost,
-  checkVideoCache,
-  generateVideoCacheKey,
   OpenAiVideoProvider,
   SORA_COSTS,
   validateVideoSeconds,
   validateVideoSize,
 } from '../../../src/providers/openai/video';
+import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -101,14 +100,16 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should reject invalid size', () => {
-      const result = validateVideoSize('1920x1080');
+      // Cast to test runtime validation with invalid values
+      const result = validateVideoSize('1920x1080' as '1280x720');
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid video size');
       expect(result.message).toContain('1920x1080');
     });
 
     it('should reject non-standard sizes', () => {
-      const result = validateVideoSize('500x500');
+      // Cast to test runtime validation with invalid values
+      const result = validateVideoSize('500x500' as '1280x720');
       expect(result.valid).toBe(false);
     });
   });
@@ -127,7 +128,8 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should reject invalid duration like 5 seconds', () => {
-      const result = validateVideoSeconds(5);
+      // Cast to test runtime validation with invalid values
+      const result = validateVideoSeconds(5 as 4);
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid video duration');
       expect(result.message).toContain('5');
@@ -135,12 +137,14 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should reject 10 seconds', () => {
-      const result = validateVideoSeconds(10);
+      // Cast to test runtime validation with invalid values
+      const result = validateVideoSeconds(10 as 4);
       expect(result.valid).toBe(false);
     });
 
     it('should reject 0 seconds', () => {
-      const result = validateVideoSeconds(0);
+      // Cast to test runtime validation with invalid values
+      const result = validateVideoSeconds(0 as 4);
       expect(result.valid).toBe(false);
     });
   });
@@ -614,49 +618,147 @@ describe('OpenAiVideoProvider', () => {
 
   describe('generateVideoCacheKey', () => {
     it('should generate deterministic cache key for same inputs', () => {
-      const key1 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
-      const key2 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       expect(key1).toBe(key2);
     });
 
     it('should generate different keys for different prompts', () => {
-      const key1 = generateVideoCacheKey('prompt one', 'sora-2', '1280x720', 8);
-      const key2 = generateVideoCacheKey('prompt two', 'sora-2', '1280x720', 8);
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'prompt one',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'prompt two',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       expect(key1).not.toBe(key2);
     });
 
     it('should generate different keys for different models', () => {
-      const key1 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
-      const key2 = generateVideoCacheKey('test prompt', 'sora-2-pro', '1280x720', 8);
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2-pro',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       expect(key1).not.toBe(key2);
     });
 
     it('should generate different keys for different sizes', () => {
-      const key1 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
-      const key2 = generateVideoCacheKey('test prompt', 'sora-2', '720x1280', 8);
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '720x1280',
+        seconds: 8,
+      });
 
       expect(key1).not.toBe(key2);
     });
 
     it('should generate different keys for different durations', () => {
-      const key1 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 4);
-      const key2 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 4,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       expect(key1).not.toBe(key2);
     });
 
     it('should generate different keys with and without input_reference', () => {
-      const key1 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
-      const key2 = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8, 'base64imagedata');
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+        inputReference: 'base64imagedata',
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should generate different keys for different providers', () => {
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'azure',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       expect(key1).not.toBe(key2);
     });
 
     it('should return 12-character hex string', () => {
-      const key = generateVideoCacheKey('test prompt', 'sora-2', '1280x720', 8);
+      const key = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      });
 
       // Should be 12 hex characters
       expect(key).toMatch(/^[0-9a-f]{12}$/);
@@ -1020,8 +1122,22 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should generate different cache keys for same prompt with different input_reference', async () => {
-      const key1 = generateVideoCacheKey('animate', 'sora-2', '1280x720', 8, 'imageDataA');
-      const key2 = generateVideoCacheKey('animate', 'sora-2', '1280x720', 8, 'imageDataB');
+      const key1 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'animate',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+        inputReference: 'imageDataA',
+      });
+      const key2 = generateVideoCacheKey({
+        provider: 'openai',
+        prompt: 'animate',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+        inputReference: 'imageDataB',
+      });
 
       expect(key1).not.toBe(key2);
     });

@@ -28,6 +28,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
+import { AzureVideoProvider } from './azure/video';
 import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
@@ -327,8 +328,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'video') {
+        return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
+      }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
