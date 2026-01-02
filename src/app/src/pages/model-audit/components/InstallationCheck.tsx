@@ -6,7 +6,7 @@ export default function InstallationCheck() {
   return (
     <div className="container max-w-3xl mx-auto mt-16">
       <Card className="p-12 text-center">
-        <SecurityIcon className="h-16 w-16 text-destructive mx-auto mb-6" />
+        <SecurityIcon className="size-16 text-destructive mx-auto mb-6" />
         <h1 className="text-3xl font-bold mb-2">ModelAudit Not Installed</h1>
         <p className="text-muted-foreground mb-6">
           The ModelAudit Python package is required to scan ML models for security vulnerabilities.

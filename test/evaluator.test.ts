@@ -1786,6 +1786,96 @@ describe('evaluator', () => {
     );
   });
 
+  it('evaluator should correctly count named scores with template metric variables', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for template metrics')],
+      tests: [
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{metricCategory}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScores: expect.objectContaining({
+              Accuracy: expect.any(Number),
+            }),
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 3, // 2 assertions in first test + 1 in second
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should handle mixed static and template metrics correctly', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test mixed metrics')],
+      tests: [
+        {
+          vars: { category: 'Dynamic' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{category}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Static',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Dynamic: 1,
+              Static: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3954,6 +4044,161 @@ describe('runEval', () => {
           rejectedPrediction: 0,
         },
       },
+    });
+  });
+
+  it('should skip rendering redteam inject variable to prevent nunjucks errors on template syntax', async () => {
+    // This tests the fix for Discord issue where redteam prompts containing {{purpose | trim}}
+    // caused "TypeError: Cannot read properties of undefined (reading 'replace')"
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          // This contains template syntax that would fail if rendered (purpose is undefined)
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          injectVar: 'prompt',
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // The inject var should be preserved as-is, not rendered
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
+    // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          // injectVar NOT set - should fall back to 'prompt'
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // Should still skip rendering the default 'prompt' var
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  describe('latencyMs handling', () => {
+    it('should use provider-supplied latencyMs when available', async () => {
+      const providerWithLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 5000,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(5000);
+    });
+
+    it('should use provider-supplied latencyMs for cached responses', async () => {
+      const cachedProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Cached output',
+          cached: true,
+          latencyMs: 3500,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: cachedProvider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(3500);
+      expect(results[0].response?.cached).toBe(true);
+    });
+
+    it('should fall back to measured latency when provider does not supply latencyMs', async () => {
+      const providerWithoutLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('no-latency-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return {
+            output: 'Test output',
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+          };
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithoutLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      // Should have measured latency (>= 50ms since we added a delay)
+      expect(results[0].latencyMs).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should respect provider latencyMs of 0', async () => {
+      const providerWithZeroLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('zero-latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 0,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithZeroLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(0);
     });
   });
 });

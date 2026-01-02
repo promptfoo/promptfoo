@@ -634,7 +634,7 @@ export default function Review({
                       }}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}
@@ -699,7 +699,7 @@ export default function Review({
                       }}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}
@@ -752,7 +752,7 @@ export default function Review({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 shrink-0"
+                          className="size-6 shrink-0"
                           onClick={() => {
                             const policyToMatch =
                               typeof policy.config.policy === 'string'
@@ -773,7 +773,7 @@ export default function Review({
                             updateConfig('plugins', newPlugins);
                           }}
                         >
-                          <X className="h-4 w-4" />
+                          <X className="size-4" />
                         </Button>
                       </div>
                     );
@@ -797,7 +797,7 @@ export default function Review({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute right-1 top-1 h-6 w-6"
+                        className="absolute right-1 top-1 size-6"
                         onClick={() => {
                           const intentPlugin = config.plugins.find(
                             (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
@@ -823,7 +823,7 @@ export default function Review({
                           }
                         }}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="size-4" />
                       </Button>
                     </div>
                   ))}
@@ -849,7 +849,7 @@ export default function Review({
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
             <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
+                <Info className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Application Details</h3>
                 {config.purpose && (
                   <Badge
@@ -872,7 +872,7 @@ export default function Review({
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isPurposeExpanded && 'rotate-180',
                 )}
               />
@@ -936,7 +936,7 @@ export default function Review({
                           <span className="text-sm font-medium">{section.title}</span>
                           <ChevronDown
                             className={cn(
-                              'h-4 w-4 transition-transform',
+                              'size-4 transition-transform',
                               expandedPurposeSections.has(section.title) && 'rotate-180',
                             )}
                           />
@@ -1008,7 +1008,7 @@ export default function Review({
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
             <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Sliders className="h-4 w-4 text-muted-foreground" />
+                <Sliders className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Advanced Configuration</h3>
                 <Badge variant="outline" className="text-xs">
                   Optional
@@ -1016,7 +1016,7 @@ export default function Review({
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isAdvancedConfigExpanded && 'rotate-180',
                 )}
               />
@@ -1036,12 +1036,12 @@ export default function Review({
           <Collapsible open={isRunOptionsExpanded} onOpenChange={setIsRunOptionsExpanded}>
             <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 text-muted-foreground" />
+                <Play className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Run Options</h3>
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isRunOptionsExpanded && 'rotate-180',
                 )}
               />
@@ -1094,11 +1094,11 @@ export default function Review({
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
               <Button onClick={handleSaveYaml} className="gap-2">
-                <Save className="h-4 w-4" />
+                <Save className="size-4" />
                 Save YAML
               </Button>
               <Button variant="outline" onClick={handleOpenYamlDialog} className="gap-2">
-                <Eye className="h-4 w-4" />
+                <Eye className="size-4" />
                 View YAML
               </Button>
             </div>
@@ -1133,7 +1133,7 @@ export default function Review({
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
-                        {isRunning ? <Spinner className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
                         {isRunning ? 'Running...' : 'Run Now'}
                       </Button>
                     </span>
@@ -1142,7 +1142,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="h-4 w-4" />
+                    <Square className="size-4" />
                     Cancel
                   </Button>
                 )}
@@ -1150,13 +1150,13 @@ export default function Review({
                   <>
                     <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
                       <a href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}>
-                        <BarChart2 className="h-4 w-4" />
+                        <BarChart2 className="size-4" />
                         View Report
                       </a>
                     </Button>
                     <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
                       <a href={EVAL_ROUTES.DETAIL(evalId)}>
-                        <Search className="h-4 w-4" />
+                        <Search className="size-4" />
                         View Probes
                       </a>
                     </Button>

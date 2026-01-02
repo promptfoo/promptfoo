@@ -455,7 +455,7 @@ export default function RedTeamSetupPage() {
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}
-        <div className="flex flex-grow transition-[margin] duration-200">
+        <div className="flex grow transition-[margin] duration-200">
           {/* Outer sidebar container */}
           <div
             className="flex h-full flex-col border-r border-border"
@@ -502,7 +502,7 @@ export default function RedTeamSetupPage() {
               </div>
 
               {/* Tabs container */}
-              <div className="flex-grow overflow-y-auto">
+              <div className="grow overflow-y-auto">
                 <Tabs
                   value={String(value)}
                   onValueChange={handleTabChange}
@@ -522,7 +522,7 @@ export default function RedTeamSetupPage() {
                             'hover:bg-muted/50',
                           )}
                         >
-                          <Icon className="h-[18px] w-[18px]" />
+                          <Icon className="size-[18px]" />
                           {getTabLabel(tab)}
                         </TabsTrigger>
                       );
@@ -535,29 +535,29 @@ export default function RedTeamSetupPage() {
               <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setSaveDialogOpen(true)}
                 >
-                  <Save className="mr-2 h-[18px] w-[18px]" />
+                  <Save className="mr-2 size-[18px]" />
                   Save Config
                 </Button>
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     loadConfigs();
                     setLoadDialogOpen(true);
                   }}
                 >
-                  <FolderOpen className="mr-2 h-[18px] w-[18px]" />
+                  <FolderOpen className="mr-2 size-[18px]" />
                   Load Config
                 </Button>
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setResetDialogOpen(true)}
                 >
-                  <RotateCcw className="mr-2 h-[18px] w-[18px]" />
+                  <RotateCcw className="mr-2 size-[18px]" />
                   Reset Config
                 </Button>
               </div>
@@ -565,7 +565,7 @@ export default function RedTeamSetupPage() {
           </div>
 
           {/* Tab content */}
-          <div className="relative flex flex-grow flex-col transition-[margin] duration-200">
+          <div className="relative flex grow flex-col transition-[margin] duration-200">
             {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
@@ -627,11 +627,11 @@ export default function RedTeamSetupPage() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={handleDownloadYaml} className="flex-1">
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 size-4" />
                   Export YAML
                 </Button>
                 <Button onClick={handleSaveConfig} disabled={!configName} className="flex-1">
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 size-4" />
                   Save
                 </Button>
               </div>

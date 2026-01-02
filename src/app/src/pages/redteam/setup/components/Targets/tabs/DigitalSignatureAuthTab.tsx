@@ -122,7 +122,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 >
                   <Upload
                     className={cn(
-                      'h-6 w-6 mb-2',
+                      'size-6 mb-2',
                       selectedTarget.config.signatureAuth?.keyInputType === 'upload'
                         ? 'text-primary'
                         : 'text-muted-foreground',
@@ -148,7 +148,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 >
                   <File
                     className={cn(
-                      'h-6 w-6 mb-2',
+                      'size-6 mb-2',
                       selectedTarget.config.signatureAuth?.keyInputType === 'path'
                         ? 'text-primary'
                         : 'text-muted-foreground',
@@ -176,7 +176,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 >
                   <Key
                     className={cn(
-                      'h-6 w-6 mb-2',
+                      'size-6 mb-2',
                       selectedTarget.config.signatureAuth?.keyInputType === 'base64'
                         ? 'text-primary'
                         : 'text-muted-foreground',
@@ -254,7 +254,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                           })
                         }
                       >
-                        <X className="mr-2 h-4 w-4" />
+                        <X className="mr-2 size-4" />
                         Remove Key
                       </Button>
                     </>
@@ -266,7 +266,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       <label htmlFor="private-key-upload">
                         <Button variant="outline" asChild>
                           <span>
-                            <KeyRound className="mr-2 h-4 w-4" />
+                            <KeyRound className="mr-2 size-4" />
                             Choose File
                           </span>
                         </Button>
@@ -360,7 +360,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       }
                     }}
                   >
-                    <Check className="mr-2 h-4 w-4" />
+                    <Check className="mr-2 size-4" />
                     Format & Validate
                   </Button>
                 </div>
@@ -463,7 +463,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                           keyPath: undefined,
                         });
                       }}
-                      className="h-4 w-4 text-primary"
+                      className="size-4 text-primary"
                     />
                     <span>PFX/P12 File</span>
                   </label>
@@ -481,7 +481,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                           pfxPassword: undefined,
                         });
                       }}
-                      className="h-4 w-4 text-primary"
+                      className="size-4 text-primary"
                     />
                     <span>Separate CRT/KEY Files</span>
                   </label>

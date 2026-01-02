@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { Info } from 'lucide-react';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import { getProviderType } from './helpers';
@@ -29,12 +27,12 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   );
 
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(() => {
-    // If we have a complete saved config, use it. Otherwise start fresh without a label
+    // If we have a complete saved config, use it. Otherwise start fresh with empty selection
     if (hasCompleteSavedConfig) {
       return config.target!;
     }
-    // Clear the label if we don't have a complete config to ensure consistent state
-    return { ...(config.target || DEFAULT_HTTP_TARGET), label: '' };
+    // Start with empty target - no default provider selected
+    return { id: '', label: '', config: {} };
   });
 
   // Only show target type section if we have a complete saved configuration
@@ -51,9 +49,14 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   }, []);
 
   const handleProviderChange = (provider: ProviderOptions, providerType: string) => {
-    setSelectedTarget(provider);
+    // Preserve the user's entered label when switching providers
+    const updatedProvider = {
+      ...provider,
+      label: provider.label || selectedTarget.label,
+    };
+    setSelectedTarget(updatedProvider);
     setProviderType(providerType);
-    updateConfig('target', provider);
+    updateConfig('target', updatedProvider);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
@@ -85,7 +88,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
   const isValidSelection = () => {
     // For custom providers, we allow empty id since it will be configured in the next step
-    if (selectedTarget.id === '' && selectedTarget.label?.trim()) {
+    // But only if providerType is explicitly set to 'custom'
+    if (providerType === 'custom' && selectedTarget.label?.trim()) {
       return true; // Custom provider with a label is valid
     }
     return selectedTarget.id && selectedTarget.id.trim() !== '';
@@ -95,7 +99,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
   const getNextButtonText = () => {
-    return 'Next: Configure Target';
+    return 'Next';
   };
 
   const isNextButtonDisabled = () => {
@@ -128,21 +132,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   return (
     <PageWrapper
       title="Target Setup"
-      description={
-        <span className="text-base">
-          A target is the AI system you want to red team. It could be an API endpoint, a language
-          model, a custom script, or any other{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            supported provider
-          </a>
-          . Choose a descriptive name to identify your target throughout the testing process.
-        </span>
-      }
+      description="Configure the AI system you want to test"
       onNext={shouldShowFooterButton() ? handleNext : undefined}
       onBack={onBack}
       nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
@@ -152,35 +142,24 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       }
     >
       <div className="flex flex-col gap-6">
-        {/* Quick Start Section */}
-        <Alert variant="info" className="[&>svg]:hidden">
-          <AlertDescription className="flex w-full flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Info className="h-4 w-4 shrink-0" />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
-                <span className="min-w-[300px] flex-1 text-sm">
-                  <strong>New to Promptfoo</strong> and want to see it in action? Load an example
-                  configuration to get started immediately.
-                </span>
-                <LoadExampleButton />
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              <strong>Have an existing YAML config?</strong> Use the <strong>"Load Config"</strong>{' '}
-              button in the sidebar to import it and pre-fill the form.
-            </p>
-          </AlertDescription>
-        </Alert>
+        {/* Quick Start */}
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted px-4 py-3">
+          <p className="text-sm text-foreground">
+            New to red teaming? Load an example to explore the setup.
+          </p>
+          <LoadExampleButton />
+        </div>
 
-        {/* Provider Name Field */}
-        <div className="w-[360px] space-y-2">
-          <Label htmlFor="target-name">
+        {/* Target Name */}
+        <div className="space-y-2">
+          <Label htmlFor="target-name" className="text-sm font-semibold">
             Target Name <span className="text-destructive">*</span>
           </Label>
           <Input
             id="target-name"
+            className="max-w-md"
             value={selectedTarget?.label ?? ''}
-            placeholder="e.g. 'customer-service-agent'"
+            placeholder="e.g. support-agent or booking-assistant"
             onChange={(e) => {
               const newTarget = { ...selectedTarget, label: e.target.value };
               setSelectedTarget(newTarget);
@@ -198,9 +177,9 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
           />
         </div>
 
-        {/* Inline Next Button for first step */}
+        {/* Continue button - shown before target type is revealed */}
         {hasTargetName && !showTargetTypeSection && (
-          <div className="flex justify-start">
+          <div>
             <Button
               onClick={() => {
                 setShowTargetTypeSection(true);
@@ -208,64 +187,23 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   feature: 'redteam_config_target_type_section_revealed',
                 });
               }}
-              className="min-w-[200px]"
             >
-              Next: Select Target Type
+              Continue
             </Button>
           </div>
         )}
 
-        {/* Only show target type selection after user clicks to reveal it */}
+        {/* Target Type Selection */}
         {showTargetTypeSection && (
-          <div className="mt-6 space-y-4">
-            <h2 className="mt-6 text-xl font-bold">Select Target Type</h2>
-            <p className="text-base">
-              Select the type that best matches your target. Don't see what you need? Try 'Custom
-              Target' to access{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                more providers
-              </a>
-              . You can also create your own using{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/python/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                Python
-              </a>
-              ,{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/custom-api/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                JavaScript
-              </a>
-              , or{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/custom-script/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                shell scripts
-              </a>
-              .
-            </p>
-            {/* Provider Type Selection */}
+          <section className="space-y-4">
+            <Label className="text-sm font-semibold">Select Target Type</Label>
+
             <ProviderTypeSelector
               provider={selectedTarget}
               setProvider={handleProviderChange}
               providerType={providerType}
             />
-          </div>
+          </section>
         )}
       </div>
     </PageWrapper>
