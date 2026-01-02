@@ -140,7 +140,7 @@ export default function AgentFrameworkConfiguration({
   return (
     <div>
       <Alert variant="info" className="mb-6">
-        <Info className="h-4 w-4" />
+        <Info className="size-4" />
         <AlertDescription>
           <p className="mb-2 font-semibold">{frameworkDetails.name} Agent Configuration</p>
           <p className="mb-3">{frameworkDetails.description}</p>
@@ -182,7 +182,7 @@ export default function AgentFrameworkConfiguration({
             needs.
           </p>
           <Button onClick={handleOpenTemplateModal}>
-            <Code className="mr-2 h-4 w-4" />
+            <Code className="mr-2 size-4" />
             Generate Template File
           </Button>
         </div>
@@ -199,7 +199,7 @@ export default function AgentFrameworkConfiguration({
 
           <div className="space-y-4">
             <Alert variant="warning">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="size-4" />
               <AlertDescription>
                 <p className="font-semibold">Next Steps:</p>
                 <ol className="ml-5 mt-2 list-decimal">
@@ -239,11 +239,11 @@ export default function AgentFrameworkConfiguration({
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={handleCopyTemplate} disabled={copied}>
-              <Copy className="mr-2 h-4 w-4" />
+              <Copy className="mr-2 size-4" />
               {copied ? 'Copied!' : 'Copy Template'}
             </Button>
             <Button onClick={handleDownloadTemplate}>
-              <Download className="mr-2 h-4 w-4" />
+              <Download className="mr-2 size-4" />
               Download {templateFilename}
             </Button>
           </DialogFooter>

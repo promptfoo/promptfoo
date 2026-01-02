@@ -443,7 +443,7 @@ export default function PluginsTab({
           {/* Search and Filter section */}
           <div className="mb-6 flex items-center gap-4">
             <div className="relative min-w-[300px] shrink-0">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search plugins..."
                 value={searchTerm}
@@ -601,7 +601,7 @@ export default function PluginsTab({
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                'h-8 w-8',
+                                'size-8',
                                 hasConfigError ? 'text-destructive' : 'text-muted-foreground',
                               )}
                               onClick={(e) => {
@@ -609,7 +609,7 @@ export default function PluginsTab({
                                 handleConfigClick(plugin);
                               }}
                             >
-                              <Settings className="h-4 w-4" />
+                              <Settings className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -659,13 +659,13 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className="size-8"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(getPluginDocumentationUrl(plugin), '_blank');
                               }}
                             >
-                              <HelpCircle className="h-4 w-4" />
+                              <HelpCircle className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>View documentation</TooltipContent>
@@ -727,7 +727,7 @@ export default function PluginsTab({
                           )}
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                            <AlertCircle className="size-4 shrink-0 text-destructive" />
                             <span className="text-sm font-medium text-destructive">
                               {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                             </span>
@@ -736,24 +736,24 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 text-destructive hover:text-destructive"
+                              className="size-6 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleConfigClick(plugin);
                               }}
                             >
-                              <Settings className="h-4 w-4" />
+                              <Settings className="size-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6"
+                              className="size-6"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handlePluginToggle(plugin);
                               }}
                             >
-                              <Minus className="h-4 w-4" />
+                              <Minus className="size-4" />
                             </Button>
                           </div>
                         </div>
@@ -782,10 +782,10 @@ export default function PluginsTab({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="ml-2 h-6 w-6"
+                            className="ml-2 size-6"
                             onClick={() => handlePluginToggle(plugin)}
                           >
-                            <Minus className="h-4 w-4" />
+                            <Minus className="size-4" />
                           </Button>
                         </div>
                       ))}

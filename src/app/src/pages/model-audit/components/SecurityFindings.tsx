@@ -128,7 +128,7 @@ function IssueCard({ issue }: { issue: ScanIssue }) {
       )}
     >
       <div className="flex items-start gap-3">
-        <Icon className={cn('h-5 w-5 mt-0.5 shrink-0', config.iconColor)} />
+        <Icon className={cn('size-5 mt-0.5 shrink-0', config.iconColor)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
             <span className="font-semibold text-foreground">{issue.message}</span>
@@ -184,7 +184,7 @@ function FileGroup({
         {/* File Header */}
         <div className={cn('p-4 border-b', headerConfig.headerBg)}>
           <div className="flex items-center gap-3">
-            <FileIcon className={cn('h-5 w-5', headerConfig.iconColor)} />
+            <FileIcon className={cn('size-5', headerConfig.iconColor)} />
             <div className="flex-1 min-w-0">
               <h3
                 className={cn(
@@ -219,9 +219,9 @@ function FileGroup({
             className="w-full p-3 flex items-center gap-2 text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           >
             {isExpanded ? (
-              <ExpandLessIcon className="h-4 w-4" />
+              <ExpandLessIcon className="size-4" />
             ) : (
-              <ExpandMoreIcon className="h-4 w-4" />
+              <ExpandMoreIcon className="size-4" />
             )}
             {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length !== 1 ? 's' : ''}
           </button>
@@ -330,7 +330,7 @@ export default function SecurityFindings({
     <div className="space-y-6">
       {scanResults.issues.length > 0 && (
         <Alert variant="info">
-          <InfoIcon className="h-4 w-4" />
+          <InfoIcon className="size-4" />
           <AlertDescription>{getIssueSummaryText(scanResults.issues)}</AlertDescription>
         </Alert>
       )}
@@ -342,9 +342,9 @@ export default function SecurityFindings({
 
         <Button variant="outline" size="sm" onClick={() => setGroupByFile(!groupByFile)}>
           {groupByFile ? (
-            <FileIcon className="h-4 w-4 mr-2" />
+            <FileIcon className="size-4 mr-2" />
           ) : (
-            <CodeIcon className="h-4 w-4 mr-2" />
+            <CodeIcon className="size-4 mr-2" />
           )}
           {groupByFile ? 'Group by File' : 'Flat List'}
         </Button>
@@ -352,9 +352,9 @@ export default function SecurityFindings({
         {groupByFile && Object.keys(issuesByFile).length > 1 && (
           <Button variant="outline" size="sm" onClick={toggleAllFiles}>
             {expandedFiles.size === Object.keys(issuesByFile).length ? (
-              <ExpandLessIcon className="h-4 w-4 mr-2" />
+              <ExpandLessIcon className="size-4 mr-2" />
             ) : (
-              <ExpandMoreIcon className="h-4 w-4 mr-2" />
+              <ExpandMoreIcon className="size-4 mr-2" />
             )}
             {expandedFiles.size === Object.keys(issuesByFile).length
               ? 'Collapse All'
@@ -379,12 +379,12 @@ export default function SecurityFindings({
         </Select>
 
         <Button variant="outline" size="sm" onClick={handleDownloadResults}>
-          <DownloadIcon className="h-4 w-4 mr-2" />
+          <DownloadIcon className="size-4 mr-2" />
           Export CSV
         </Button>
 
         <Button variant="outline" size="sm" onClick={onToggleRawOutput}>
-          <CodeIcon className="h-4 w-4 mr-2" />
+          <CodeIcon className="size-4 mr-2" />
           {showRawOutput ? 'Hide' : 'Show'} Raw
         </Button>
       </div>
@@ -394,7 +394,7 @@ export default function SecurityFindings({
       {/* Content */}
       {filteredIssues.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
-          <CheckCircleIcon className="h-16 w-16 text-emerald-600 dark:text-emerald-400 mb-4" />
+          <CheckCircleIcon className="size-16 text-emerald-600 dark:text-emerald-400 mb-4" />
           <h3 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues found`

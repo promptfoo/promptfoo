@@ -55,7 +55,7 @@ export default function Setup({ open, onClose }: SetupProps) {
             </a>
             <Button onClick={onClose} className="px-6">
               Get Started
-              <ChevronRight className="ml-1 h-4 w-4" />
+              <ChevronRight className="ml-1 size-4" />
             </Button>
           </div>
         </div>

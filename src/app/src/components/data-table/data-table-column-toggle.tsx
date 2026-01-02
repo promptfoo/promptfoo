@@ -14,7 +14,7 @@ export function DataTableColumnToggle<TData>({ table }: DataTableColumnTogglePro
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
-          <Columns3 className="mr-2 h-4 w-4" />
+          <Columns3 className="mr-2 size-4" />
           Columns
         </Button>
       </DropdownMenuTrigger>

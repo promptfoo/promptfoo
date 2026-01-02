@@ -1,3 +1,4 @@
+import { sanitizeSchemaForGemini } from '../google/util';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -83,17 +84,28 @@ export function transformMCPToolsToAnthropic(tools: MCPTool[]): Anthropic.Tool[]
 export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
   const functionDeclarations: GoogleFunctionDeclaration[] = tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
-    let parameters: GoogleSchema = { type: 'OBJECT', properties: {} };
-    if (schema && typeof schema === 'object' && 'properties' in schema) {
-      // Remove $schema field if present
-      const { $schema: _$schema, ...cleanSchema } = schema;
-      parameters = { type: 'OBJECT', ...cleanSchema };
+    let parameters: GoogleSchema;
+
+    if (schema && typeof schema === 'object') {
+      // Sanitize schema for Gemini compatibility:
+      // - Removes unsupported properties (additionalProperties, $schema, default, etc.)
+      // - Converts types to uppercase (string → STRING)
+      // - Recursively processes nested schemas
+      parameters = sanitizeSchemaForGemini(schema) as GoogleSchema;
+
+      // Ensure type is OBJECT at root level for function parameters
+      if (!parameters.type) {
+        parameters.type = 'OBJECT';
+      }
+
+      // Ensure properties exists
+      if (!parameters.properties) {
+        parameters.properties = {};
+      }
     } else {
-      parameters = {
-        type: 'OBJECT',
-        properties: (schema as Record<string, any>) || {},
-      };
+      parameters = { type: 'OBJECT', properties: {} };
     }
+
     return {
       name: tool.name,
       description: tool.description,

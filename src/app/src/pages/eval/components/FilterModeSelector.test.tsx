@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { FilterModeSelector } from './FilterModeSelector';
-import type { SelectChangeEvent } from '@mui/material/Select';
 
 const noop = () => {};
 
@@ -15,8 +14,8 @@ describe('FilterModeSelector', () => {
     const select = screen.getByRole('combobox');
     await user.click(select);
 
-    // Check that "Show different outputs" option is not present
-    expect(screen.queryByText('Show different outputs')).not.toBeInTheDocument();
+    // Check that "Different outputs" option is not present
+    expect(screen.queryByText('Different outputs')).not.toBeInTheDocument();
   });
 
   it('shows different option when showDifferentOption is true', async () => {
@@ -27,8 +26,8 @@ describe('FilterModeSelector', () => {
     const select = screen.getByRole('combobox');
     await user.click(select);
 
-    // Check that "Show different outputs" option is present
-    expect(screen.getByText('Show different outputs')).toBeInTheDocument();
+    // Check that "Different outputs" option is present
+    expect(screen.getByText('Different outputs')).toBeInTheDocument();
   });
 
   it('includes passes option', async () => {
@@ -38,7 +37,7 @@ describe('FilterModeSelector', () => {
     const select = screen.getByRole('combobox');
     await user.click(select);
 
-    expect(screen.getByText('Show passes only')).toBeInTheDocument();
+    expect(screen.getByText('Passes only')).toBeInTheDocument();
   });
 
   it('handles invalid filterMode value', () => {
@@ -68,7 +67,7 @@ describe('FilterModeSelector', () => {
     const select = screen.getByRole('combobox');
     await user.click(select);
 
-    expect(screen.getByRole('option', { name: 'Show highlights only' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Highlights only' })).toBeInTheDocument();
   });
 
   it('should call onChange when a different filter mode is selected', async () => {
@@ -79,11 +78,10 @@ describe('FilterModeSelector', () => {
     const select = screen.getByRole('combobox');
     await user.click(select);
 
-    const failuresOption = screen.getByText('Show failures only');
+    const failuresOption = screen.getByText('Failures only');
     await user.click(failuresOption);
 
     expect(onChange).toHaveBeenCalledTimes(1);
-    const event = onChange.mock.calls[0][0] as SelectChangeEvent;
-    expect(event.target.value).toBe('failures');
+    expect(onChange).toHaveBeenCalledWith('failures');
   });
 });

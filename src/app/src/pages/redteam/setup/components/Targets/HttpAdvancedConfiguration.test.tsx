@@ -1,8 +1,8 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -40,17 +40,9 @@ vi.mock('dedent', () => ({
   default: vi.fn((strings: TemplateStringsArray) => strings.join('')),
 }));
 
-const theme = createTheme({ palette: { mode: 'light' } });
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <ThemeProvider theme={theme}>
-    <TooltipProvider>{children}</TooltipProvider>
-  </ThemeProvider>
+const _AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
 );
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  return render(ui, { wrapper: AllProviders });
-};
 
 describe('HttpAdvancedConfiguration', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
@@ -98,7 +90,7 @@ describe('HttpAdvancedConfiguration', () => {
         config: config as ProviderOptions['config'],
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <HttpAdvancedConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -123,7 +115,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -150,7 +142,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -174,7 +166,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -209,7 +201,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -238,7 +230,7 @@ describe('HttpAdvancedConfiguration', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <HttpAdvancedConfiguration
           selectedTarget={selectedTarget}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -268,7 +260,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -296,7 +288,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -331,7 +323,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -375,7 +367,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -415,7 +407,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -472,7 +464,7 @@ describe('HttpAdvancedConfiguration', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}

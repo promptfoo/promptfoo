@@ -89,10 +89,10 @@ function CodeDisplay({
             variant="ghost"
             size="icon"
             onClick={onCopy}
-            className="absolute right-2 top-2 h-8 w-8 bg-background shadow-sm hover:shadow"
+            className="absolute right-2 top-2 size-8 bg-background shadow-sm hover:shadow"
             aria-label={`Copy ${title.toLowerCase()}`}
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
         )}
       </div>
@@ -392,9 +392,9 @@ export default function EvalOutputPromptDialog({
             size="icon"
             onClick={onClose}
             aria-label="close"
-            className="h-8 w-8 ml-2"
+            className="size-8 ml-2"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </Button>
         </SheetHeader>
 
