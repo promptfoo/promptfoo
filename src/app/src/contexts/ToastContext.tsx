@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
@@ -22,6 +22,50 @@ const severityStyles: Record<ToastSeverity, { bg: string; icon: React.ElementTyp
     icon: Info,
   },
 };
+
+interface ToastNotificationProps {
+  open: boolean;
+  message: string;
+  severity: ToastSeverity;
+  onClose: () => void;
+}
+
+const ToastNotification = React.memo(
+  ({ open, message, severity, onClose }: ToastNotificationProps) => {
+    const { bg, icon: Icon } = severityStyles[severity];
+
+    return (
+      <div
+        className={cn(
+          'fixed top-4 left-1/2 -translate-x-1/2 z-[9999] transition-all duration-300',
+          open ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none',
+        )}
+        role="alert"
+        aria-live="polite"
+      >
+        <div
+          className={cn(
+            'flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg max-w-xl',
+            bg,
+          )}
+        >
+          <Icon className="size-5 shrink-0" />
+          <p className="text-sm whitespace-pre-line flex-1">{message}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </div>
+    );
+  },
+);
+
+ToastNotification.displayName = 'ToastNotification';
 
 export const ToastProvider = ({ children }: ToastProviderProps) => {
   const [open, setOpen] = useState(false);
@@ -53,38 +97,12 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
     }
   }, [open, duration]);
 
-  const { bg, icon: Icon } = severityStyles[severity];
+  const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
-      {/* Toast notification */}
-      <div
-        className={cn(
-          'fixed top-4 left-1/2 -translate-x-1/2 z-[9999] transition-all duration-300',
-          open ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none',
-        )}
-        role="alert"
-        aria-live="polite"
-      >
-        <div
-          className={cn(
-            'flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg max-w-xl',
-            bg,
-          )}
-        >
-          <Icon className="size-5 shrink-0" />
-          <p className="text-sm whitespace-pre-line flex-1">{message}</p>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="shrink-0 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            aria-label="Dismiss"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      </div>
-    </ToastContext>
+      <ToastNotification open={open} message={message} severity={severity} onClose={handleClose} />
+    </ToastContext.Provider>
   );
 };

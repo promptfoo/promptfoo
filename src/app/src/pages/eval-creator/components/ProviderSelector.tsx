@@ -833,7 +833,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           </PopoverTrigger>
 
           <PopoverContent
-            className="w-[--radix-popover-trigger-width] p-0 max-h-[400px] overflow-y-auto"
+            className="w-[var(--radix-popover-trigger-width)] p-0 max-h-[400px] overflow-y-auto"
             align="start"
           >
             {/* Custom provider option when typing */}
