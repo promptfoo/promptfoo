@@ -16,6 +16,7 @@ import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
+import { useToast } from '@app/hooks/useToast';
 import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
@@ -29,6 +30,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
@@ -183,7 +185,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
       } catch {
-        console.error('URL contains invalid JSON-encoded filters');
+        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
         return;
       }
       filters.forEach((filter: ResultsFilter) => {
@@ -322,7 +324,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setInComparisonMode,
     setComparisonEvalIds,
     setIsStreaming,
-    // Note: resetFilters, addFilter, showToast are accessed via getState() to avoid dependency issues
+    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({

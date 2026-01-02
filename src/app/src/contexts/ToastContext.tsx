@@ -100,9 +100,9 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
   const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext value={value}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastNotification open={open} message={message} severity={severity} onClose={handleClose} />
-    </ToastContext>
+    </ToastContext.Provider>
   );
 };
