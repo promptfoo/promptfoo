@@ -2,7 +2,7 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
-import { Dialog, DialogContent } from '@app/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { FilterIcon } from '@app/components/ui/icons';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
@@ -143,7 +143,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             <div className="flex justify-end items-center h-full">
               <span
                 className={cn(
-                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                   classes,
                 )}
               >
@@ -198,7 +198,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           <div className="flex justify-end items-center h-full">
             <span
               className={cn(
-                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                 classes,
               )}
             >
@@ -221,9 +221,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               variant="ghost"
               size="sm"
               onClick={() => handleMetricFilterClick(row.original.metric)}
-              className="filter-icon h-8 w-8 p-0"
+              className="filter-icon size-8 p-0"
             >
-              <FilterIcon className="h-4 w-4" />
+              <FilterIcon className="size-4" />
             </Button>
           </div>
         );
@@ -294,6 +294,9 @@ export default function CustomMetricsDialog({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-[90vw] h-[80vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Custom Metrics</DialogTitle>
+        </DialogHeader>
         <MetricsTable onClose={onClose} />
       </DialogContent>
     </Dialog>

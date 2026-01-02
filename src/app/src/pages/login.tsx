@@ -127,7 +127,7 @@ export default function LoginPage() {
           {/* Logo and Header */}
           <div className="mb-8 flex flex-col items-center space-y-4 text-center">
             <div className="flex items-center gap-2">
-              <img src={logoPanda} alt="Promptfoo" className="h-10 w-10" />
+              <img src={logoPanda} alt="Promptfoo" className="size-10" />
               <h1 className="text-2xl font-semibold tracking-tight">promptfoo</h1>
             </div>
 
@@ -164,7 +164,7 @@ export default function LoginPage() {
                 <Label htmlFor="apiKey">API Key</Label>
                 <div className="relative">
                   <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    <KeyIcon className="h-4 w-4" />
+                    <KeyIcon className="size-4" />
                   </div>
                   <Input
                     id="apiKey"
@@ -186,9 +186,9 @@ export default function LoginPage() {
                     aria-label="toggle API key visibility"
                   >
                     {showApiKey ? (
-                      <VisibilityOffIcon className="h-4 w-4" />
+                      <VisibilityOffIcon className="size-4" />
                     ) : (
-                      <VisibilityIcon className="h-4 w-4" />
+                      <VisibilityIcon className="size-4" />
                     )}
                   </button>
                 </div>
@@ -236,7 +236,7 @@ export default function LoginPage() {
                 className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
               >
                 Get your API key
-                <OpenInNewIcon className="h-4 w-4" />
+                <OpenInNewIcon className="size-4" />
               </a>
             </div>
           </div>

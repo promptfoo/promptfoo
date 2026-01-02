@@ -132,7 +132,7 @@ function SelectFilterInput({
                     onClick={() => handleMultiSelectToggle(option.value)}
                   >
                     <div
-                      className={`h-4 w-4 border rounded flex items-center justify-center ${
+                      className={`size-4 border rounded flex items-center justify-center ${
                         isSelected
                           ? 'bg-primary border-primary text-primary-foreground'
                           : 'border-input'
@@ -235,7 +235,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
       operator: isSelectFilter ? 'equals' : 'contains',
       value: isSelectFilter ? '' : '',
     };
-    setActiveFilters([...activeFilters, newFilter]);
+    setActiveFilters((prevFilters) => [...prevFilters, newFilter]);
   };
 
   // Apply filter with operator
@@ -259,36 +259,64 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     [table],
   );
 
-  const removeFilter = (id: string) => {
-    const filter = activeFilters.find((f) => f.id === id);
-    if (filter) {
-      // Clear the column filter
-      const column = table.getColumn(filter.columnId);
-      column?.setFilterValue(undefined);
-    }
-    setActiveFilters(activeFilters.filter((f) => f.id !== id));
-  };
+  const removeFilter = React.useCallback(
+    (id: string) => {
+      setActiveFilters((prevFilters) => {
+        const filter = prevFilters.find((f) => f.id === id);
+        const remainingFilters = prevFilters.filter((f) => f.id !== id);
 
-  const updateFilter = (id: string, updates: Partial<ActiveFilter>) => {
-    setActiveFilters(
-      activeFilters.map((f) => {
-        if (f.id === id) {
-          const updated = { ...f, ...updates };
-          applyFilter(updated);
-          return updated;
+        if (filter) {
+          // Only clear column filter if no other filters reference this column
+          queueMicrotask(() => {
+            const otherFiltersOnSameColumn = remainingFilters.filter(
+              (f) => f.columnId === filter.columnId,
+            );
+            if (otherFiltersOnSameColumn.length === 0) {
+              const column = table.getColumn(filter.columnId);
+              column?.setFilterValue(undefined);
+            }
+          });
         }
-        return f;
-      }),
-    );
-  };
+        return remainingFilters;
+      });
+    },
+    [table],
+  );
 
-  const clearAllFilters = () => {
-    activeFilters.forEach((filter) => {
-      const column = table.getColumn(filter.columnId);
-      column?.setFilterValue(undefined);
+  const updateFilter = React.useCallback(
+    (id: string, updates: Partial<ActiveFilter>) => {
+      setActiveFilters((prevFilters) => {
+        const updatedFilters = prevFilters.map((f) => {
+          if (f.id === id) {
+            return { ...f, ...updates };
+          }
+          return f;
+        });
+
+        // Apply the filter after state update (in a microtask to avoid setState during render)
+        const updatedFilter = updatedFilters.find((f) => f.id === id);
+        if (updatedFilter) {
+          queueMicrotask(() => applyFilter(updatedFilter));
+        }
+
+        return updatedFilters;
+      });
+    },
+    [applyFilter],
+  );
+
+  const clearAllFilters = React.useCallback(() => {
+    setActiveFilters((prevFilters) => {
+      // Clear all filters after state update
+      queueMicrotask(() => {
+        prevFilters.forEach((filter) => {
+          const column = table.getColumn(filter.columnId);
+          column?.setFilterValue(undefined);
+        });
+      });
+      return [];
     });
-    setActiveFilters([]);
-  };
+  }, [table]);
 
   const activeFilterCount = activeFilters.filter((f) => {
     return Array.isArray(f.value) ? f.value.length > 0 : Boolean(f.value);
@@ -314,10 +342,10 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="relative">
-          <Filter className="mr-2 h-4 w-4" />
+          <Filter className="mr-2 size-4" />
           Filters
           {activeFilterCount > 0 && (
-            <span className="ml-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+            <span className="ml-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
               {activeFilterCount}
             </span>
           )}
@@ -352,9 +380,14 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                     <Select
                       value={filter.columnId}
                       onValueChange={(value) => {
-                        // Clear old column filter
-                        const oldColumn = table.getColumn(filter.columnId);
-                        oldColumn?.setFilterValue(undefined);
+                        // Only clear old column filter if no other filters are using it
+                        const otherFiltersOnSameColumn = activeFilters.filter(
+                          (f) => f.id !== filter.id && f.columnId === filter.columnId,
+                        );
+                        if (otherFiltersOnSameColumn.length === 0) {
+                          const oldColumn = table.getColumn(filter.columnId);
+                          oldColumn?.setFilterValue(undefined);
+                        }
                         // Update to new column
                         updateFilter(filter.id, { columnId: value, value: '' });
                       }}
@@ -413,9 +446,9 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                       variant="ghost"
                       size="sm"
                       onClick={() => removeFilter(filter.id)}
-                      className="h-8 w-8 p-0 shrink-0"
+                      className="size-8 p-0 shrink-0"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="size-4" />
                     </Button>
                   </div>
                 );
@@ -430,7 +463,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
             className="w-full"
             disabled={filterableColumns.length === 0}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 size-4" />
             Add filter
           </Button>
         </div>

@@ -139,6 +139,13 @@ export function DataTable<TData, TValue = unknown>({
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
+  const [isPending, startTransition] = React.useTransition();
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Scroll to top when page changes
+  React.useEffect(() => {
+    scrollContainerRef.current?.scrollTo?.({ top: 0 });
+  }, [pagination.pageIndex]);
 
   // Use controlled or internal row selection state
   const rowSelection = controlledRowSelection ?? internalRowSelection;
@@ -219,7 +226,11 @@ export function DataTable<TData, TValue = unknown>({
     onColumnVisibilityChange: setColumnVisibility,
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: setPagination,
+    onPaginationChange: (updater) => {
+      startTransition(() => {
+        setPagination(updater);
+      });
+    },
     getRowId: getRowId ? (row) => getRowId(row) : undefined,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -230,7 +241,7 @@ export function DataTable<TData, TValue = unknown>({
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[400px] gap-3">
-        <Spinner className="h-8 w-8" />
+        <Spinner className="size-8" />
         <p className="text-sm text-muted-foreground">Loading data...</p>
       </div>
     );
@@ -239,7 +250,7 @@ export function DataTable<TData, TValue = unknown>({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
-        <AlertTriangle className="h-12 w-12 text-destructive" />
+        <AlertTriangle className="size-12 text-destructive" />
         <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
         <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
       </div>
@@ -267,7 +278,7 @@ export function DataTable<TData, TValue = unknown>({
           />
         )}
         <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-muted/50">
-          <Search className="h-12 w-12 text-muted-foreground" />
+          <Search className="size-12 text-muted-foreground" />
           <h3 className="text-lg font-semibold">No data found</h3>
           <p className="text-sm text-muted-foreground max-w-md text-center">{emptyMessage}</p>
         </div>
@@ -278,7 +289,7 @@ export function DataTable<TData, TValue = unknown>({
   return (
     <div className={cn('flex flex-col gap-4 flex-1 min-h-0', className)}>
       {showToolbar && (
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <DataTableToolbar
             table={table}
             globalFilter={globalFilter}
@@ -294,6 +305,7 @@ export function DataTable<TData, TValue = unknown>({
       )}
 
       <div
+        ref={scrollContainerRef}
         className={cn(
           'rounded-lg border border-border bg-white dark:bg-zinc-900 overflow-auto flex-1 min-h-0',
         )}
@@ -326,11 +338,11 @@ export function DataTable<TData, TValue = unknown>({
                           {canSort && (
                             <span className="ml-1">
                               {sortDirection === 'asc' ? (
-                                <ArrowUp className="h-4 w-4" />
+                                <ArrowUp className="size-4" />
                               ) : sortDirection === 'desc' ? (
-                                <ArrowDown className="h-4 w-4" />
+                                <ArrowDown className="size-4" />
                               ) : (
-                                <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
+                                <ArrowUpDown className="size-4 text-muted-foreground/50" />
                               )}
                             </span>
                           )}
@@ -355,7 +367,7 @@ export function DataTable<TData, TValue = unknown>({
               </tr>
             ))}
           </thead>
-          <tbody>
+          <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
             {hasData ? (
               table.getRowModel().rows.map((row) => (
                 <tr
@@ -392,7 +404,7 @@ export function DataTable<TData, TValue = unknown>({
               <tr>
                 <td colSpan={allColumns.length} className="h-[200px] text-center">
                   <div className="flex flex-col items-center justify-center gap-2">
-                    <Search className="h-8 w-8 text-muted-foreground" />
+                    <Search className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">No results match your search</p>
                   </div>
                 </td>
@@ -403,8 +415,19 @@ export function DataTable<TData, TValue = unknown>({
       </div>
 
       {showPagination && hasData && (
-        <div className="flex-shrink-0">
-          <DataTablePagination table={table} />
+        <div className="shrink-0">
+          <DataTablePagination
+            table={table}
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            pageCount={table.getPageCount()}
+            totalRows={table.getFilteredRowModel().rows.length}
+            onPageSizeChange={(newPageSize) => {
+              startTransition(() => {
+                setPagination((prev) => ({ ...prev, pageSize: newPageSize, pageIndex: 0 }));
+              });
+            }}
+          />
         </div>
       )}
     </div>

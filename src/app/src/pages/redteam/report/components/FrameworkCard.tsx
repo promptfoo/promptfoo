@@ -119,14 +119,14 @@ const FrameworkCard = ({
             <h3 className="text-lg font-semibold">{FRAMEWORK_NAMES[framework]}</h3>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Info className="h-4 w-4 text-muted-foreground opacity-70" />
+                <Info className="size-4 text-muted-foreground opacity-70" />
               </TooltipTrigger>
               <TooltipContent>{FRAMEWORK_DESCRIPTIONS[framework] || ''}</TooltipContent>
             </Tooltip>
           </div>
           <div className="flex items-center">
             {isCompliant ? (
-              <CheckCircle className="icon-compliant h-5 w-5 text-emerald-600 dark:text-emerald-500" />
+              <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -60,11 +60,11 @@ export function ConfigPreview() {
           <Tabs value={view} onValueChange={(v) => setView(v as 'preview' | 'yaml')}>
             <TabsList className="h-8">
               <TabsTrigger value="preview" className="text-xs">
-                <Eye className="h-3 w-3 mr-1" />
+                <Eye className="size-3 mr-1" />
                 Preview
               </TabsTrigger>
               <TabsTrigger value="yaml" className="text-xs">
-                <Code className="h-3 w-3 mr-1" />
+                <Code className="size-3 mr-1" />
                 YAML
               </TabsTrigger>
             </TabsList>

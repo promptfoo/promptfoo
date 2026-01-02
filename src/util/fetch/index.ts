@@ -1,4 +1,4 @@
-import fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
@@ -111,7 +111,7 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {

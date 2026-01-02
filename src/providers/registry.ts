@@ -54,6 +54,7 @@ import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
+import { GoogleVideoProvider } from './google/video';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -85,6 +86,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
@@ -918,9 +920,12 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'image') {
         return new OpenAiImageProvider(modelName, providerOptions);
       }
+      if (modelType === 'video') {
+        return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);
+      }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1200,6 +1205,9 @@ export const providerMap: ProviderFactory[] = [
         } else if (serviceType === 'image') {
           // This is an Imagen image generation request
           return new GoogleImageProvider(modelName, providerOptions);
+        } else if (serviceType === 'video') {
+          // This is a Veo video generation request
+          return new GoogleVideoProvider(modelName, providerOptions);
         }
       }
 

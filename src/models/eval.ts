@@ -248,6 +248,12 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
 
+  /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
+
   static async latest() {
     const db = getDb();
     const db_results = await db

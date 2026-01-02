@@ -136,23 +136,23 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   }, [code, originalCode]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
-              <SaveIcon className="h-4 w-4 mr-2" />
+              <SaveIcon className="size-4 mr-2" />
               Save
             </Button>
             <Button variant="outline" size="sm" onClick={handleCancel}>
-              <CancelIcon className="h-4 w-4 mr-2" />
+              <CancelIcon className="size-4 mr-2" />
               Reset to UI State
             </Button>
             <label>
               <Button variant="ghost" size="sm" asChild>
                 <span className="cursor-pointer">
-                  <UploadIcon className="h-4 w-4 mr-2" />
+                  <UploadIcon className="size-4 mr-2" />
                   Upload File
                 </span>
               </Button>
@@ -175,10 +175,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       )}
 
       {/* Editor Container */}
-      <div className="relative">
+      <div className="relative min-w-0">
         <div
           className={cn(
-            'rounded-lg overflow-hidden',
+            'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
             hasUnsavedChanges ? 'border-primary' : 'border-border',
           )}
@@ -187,6 +187,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
+              if (readOnly) {
+                return;
+              }
               setCode(newCode);
               if (parseError) {
                 setParseError(null);
@@ -205,14 +208,15 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              minHeight: '400px',
+              minHeight: '300px',
             }}
-            className="bg-background"
+            className={cn('bg-background', readOnly && 'cursor-default select-text')}
+            disabled={readOnly}
           />
         </div>
 
-        {/* Copy button */}
-        <div className="absolute top-2 right-2">
+        {/* Copy button - offset to avoid scrollbar */}
+        <div className="absolute top-2 right-5">
           <CopyButton value={code} />
         </div>
       </div>
