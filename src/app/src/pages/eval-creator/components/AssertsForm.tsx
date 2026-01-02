@@ -146,7 +146,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     className="shrink-0"
                     aria-label="Remove assertion"
                   >
-                    <DeleteIcon className="h-4 w-4" />
+                    <DeleteIcon className="size-4" />
                   </Button>
                 </div>
 
@@ -197,7 +197,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       setAsserts(newAsserts);
                       onAdd(newAsserts);
                     }}
-                    className="min-h-[80px] resize-y"
+                    className="min-h-20 resize-y"
                   />
                 </div>
               </div>

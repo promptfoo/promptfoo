@@ -67,7 +67,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="p-4 max-w-full">
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <div className="flex-1">
               <AlertTitle>
                 Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
@@ -82,7 +82,7 @@ class ErrorBoundary extends React.Component<Props, State> {
               onClick={this.handleReload}
               className="shrink-0 gap-1"
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="size-3" />
               Reload Page
             </Button>
           </Alert>
@@ -94,12 +94,12 @@ class ErrorBoundary extends React.Component<Props, State> {
                   <Button variant="outline" size="sm" className="mb-2 gap-1">
                     {this.state.showDetails ? (
                       <>
-                        <ChevronUp className="h-4 w-4" />
+                        <ChevronUp className="size-4" />
                         Hide Error Details
                       </>
                     ) : (
                       <>
-                        <ChevronDown className="h-4 w-4" />
+                        <ChevronDown className="size-4" />
                         Show Error Details
                       </>
                     )}

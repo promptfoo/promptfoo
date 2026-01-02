@@ -52,7 +52,7 @@ export default function InstallationGuide({
     <Card className="border-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20">
       <CardContent className="p-6">
         <Alert variant="warning" className="mb-6">
-          <WarningIcon className="h-4 w-4" />
+          <WarningIcon className="size-4" />
           <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
           <AlertDescription>
             {error ||
@@ -77,9 +77,9 @@ export default function InstallationGuide({
                 aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
               >
                 {copied ? (
-                  <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                  <CheckCircleIcon className="size-4 text-green-600" />
                 ) : (
-                  <ContentCopyIcon className="h-4 w-4" />
+                  <ContentCopyIcon className="size-4" />
                 )}
               </Button>
             </TooltipTrigger>
@@ -103,7 +103,7 @@ export default function InstallationGuide({
               rel="noopener noreferrer"
             >
               View Documentation
-              <OpenInNewIcon className="h-4 w-4 ml-2" />
+              <OpenInNewIcon className="size-4 ml-2" />
             </a>
           </Button>
         </div>

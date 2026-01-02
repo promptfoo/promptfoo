@@ -714,7 +714,7 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
           onClick={() => handleHideCharts()}
           aria-label="Hide charts"
         >
-          <X className="h-5 w-5" />
+          <X className="size-5" />
         </button>
         <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>

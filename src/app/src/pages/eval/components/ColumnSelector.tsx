@@ -85,7 +85,7 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
   return (
     <>
       <Button onClick={handleOpen} variant="outline" size="sm">
-        <Columns3 className="h-4 w-4 mr-2" />
+        <Columns3 className="size-4 mr-2" />
         Columns ({selectedColumns.length})
       </Button>
 
@@ -107,9 +107,9 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
                         variant={variablesVisible ? 'default' : 'outline'}
                       >
                         {variablesVisible ? (
-                          <EyeOff className="h-4 w-4 mr-1" />
+                          <EyeOff className="size-4 mr-1" />
                         ) : (
-                          <Eye className="h-4 w-4 mr-1" />
+                          <Eye className="size-4 mr-1" />
                         )}
                         Variables
                       </Button>

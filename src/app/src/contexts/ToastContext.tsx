@@ -73,7 +73,7 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
             bg,
           )}
         >
-          <Icon className="h-5 w-5 shrink-0" />
+          <Icon className="size-5 shrink-0" />
           <p className="text-sm whitespace-pre-line flex-1">{message}</p>
           <button
             type="button"
@@ -81,7 +81,7 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
             className="shrink-0 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
             aria-label="Dismiss"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
       </div>

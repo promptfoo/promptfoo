@@ -165,7 +165,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
                   className="p-2 rounded hover:bg-muted transition-colors"
                   aria-label="Copy share URL"
                 >
-                  {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                  {copied ? <Check className="size-5" /> : <Copy className="size-5" />}
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">

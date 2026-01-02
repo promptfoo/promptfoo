@@ -90,7 +90,7 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
         </>
       ) : (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>
             {providerResponse?.error || 'No response from provider'}
           </AlertDescription>

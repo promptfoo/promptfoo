@@ -109,7 +109,7 @@ const CustomMetrics = ({
                         className="flex items-center gap-1 text-primary hover:underline"
                       >
                         <span>View policy in Promptfoo Cloud</span>
-                        <ExternalLink className="h-3.5 w-3.5" />
+                        <ExternalLink className="size-3.5" />
                       </a>
                     </p>
                   )}

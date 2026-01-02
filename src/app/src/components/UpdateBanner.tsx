@@ -99,12 +99,12 @@ export default function UpdateBanner() {
       ref={bannerRef}
       variant="info"
       className={cn(
-        'rounded-none py-2 px-4 relative z-[var(--z-banner)]',
+        'rounded-none py-2 px-4 relative z-(--z-banner)',
         'flex items-center justify-between gap-4',
       )}
     >
       <div className="flex items-center gap-3">
-        <RefreshCw className="h-4 w-4 shrink-0" />
+        <RefreshCw className="size-4 shrink-0" />
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium">
             Update available: v{versionInfo.latestVersion}
@@ -122,7 +122,7 @@ export default function UpdateBanner() {
             rel="noopener noreferrer"
           >
             Release Notes
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="size-3" />
           </a>
         </Button>
         {versionInfo?.updateCommands?.primary && (
@@ -134,9 +134,9 @@ export default function UpdateBanner() {
             className="gap-1.5 text-xs"
           >
             {copied ? (
-              <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <Copy className="h-3 w-3" />
+              <Copy className="size-3" />
             )}
             {versionInfo.commandType === 'docker'
               ? 'Copy Docker Command'
@@ -151,13 +151,13 @@ export default function UpdateBanner() {
           aria-label="Dismiss update notification"
           title="Don't remind me for this version"
           className={cn(
-            'inline-flex h-6 w-6 items-center justify-center rounded-md',
+            'inline-flex size-6 items-center justify-center rounded-md',
             'text-current opacity-70 hover:opacity-100',
             'hover:bg-black/10 dark:hover:bg-white/10',
             'transition-colors',
           )}
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </button>
       </div>
     </Alert>

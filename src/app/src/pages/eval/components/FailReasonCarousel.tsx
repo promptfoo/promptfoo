@@ -32,7 +32,7 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
             onClick={handlePrev}
             className="p-1 rounded hover:bg-muted transition-colors"
           >
-            <ChevronLeft className="h-3 w-3" />
+            <ChevronLeft className="size-3" />
           </button>
           <span>
             {currentIndex + 1}/{failReasons.length}
@@ -42,7 +42,7 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
             onClick={handleNext}
             className="p-1 rounded hover:bg-muted transition-colors"
           >
-            <ChevronRight className="h-3 w-3" />
+            <ChevronRight className="size-3" />
           </button>
         </span>
       )}

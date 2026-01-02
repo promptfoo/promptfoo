@@ -133,7 +133,7 @@ export default function TraceView({
     <div>
       <div className="flex justify-end mb-4">
         <Button variant="outline" size="sm" onClick={() => handleExportTraces(filteredTraces)}>
-          <Download className="h-4 w-4 mr-2" />
+          <Download className="size-4 mr-2" />
           Export Traces
         </Button>
       </div>

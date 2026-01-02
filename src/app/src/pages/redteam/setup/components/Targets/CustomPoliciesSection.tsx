@@ -638,10 +638,10 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="size-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Edit</TooltipContent>
@@ -684,12 +684,12 @@ export const CustomPoliciesSection = () => {
   const toolbarActions = (
     <>
       <Button size="sm" onClick={handleAddPolicy}>
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="mr-2 size-4" />
         Add Policy
       </Button>
       <Button variant="outline" size="sm" asChild disabled={isUploadingCsv}>
         <label className="cursor-pointer">
-          <Upload className="mr-2 h-4 w-4" />
+          <Upload className="mr-2 size-4" />
           {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
           <input
             type="file"
@@ -710,7 +710,7 @@ export const CustomPoliciesSection = () => {
           className="text-destructive"
           onClick={handleDeleteSelected}
         >
-          <Trash2 className="mr-2 h-4 w-4" />
+          <Trash2 className="mr-2 size-4" />
           Delete ({selectedCount})
         </Button>
       )}
@@ -772,7 +772,7 @@ export const CustomPoliciesSection = () => {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               Delete
             </Button>
           </DialogFooter>

@@ -44,16 +44,16 @@ export function ProgressIndicator() {
                 <div className="flex flex-col items-center gap-2">
                   <div
                     className={cn(
-                      'flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all',
+                      'flex items-center justify-center size-10 rounded-full border-2 transition-all',
                       isComplete
                         ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                         : 'bg-white border-border dark:bg-zinc-900',
                     )}
                   >
                     {isComplete ? (
-                      <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      <Check className="size-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground" />
+                      <Circle className="size-5 text-muted-foreground" />
                     )}
                   </div>
                   <span

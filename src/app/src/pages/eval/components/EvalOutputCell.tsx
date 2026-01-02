@@ -727,7 +727,7 @@ function EvalOutputCell({
                 onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
               >
-                {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
@@ -741,7 +741,7 @@ function EvalOutputCell({
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Toggle test highlight"
               >
-                <Star className="h-4 w-4" />
+                <Star className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
@@ -755,7 +755,7 @@ function EvalOutputCell({
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Share output"
               >
-                {linked ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Share output</TooltipContent>
@@ -772,7 +772,7 @@ function EvalOutputCell({
                 onClick={handlePromptOpen}
                 aria-label="View output and test details"
               >
-                <Search className="h-4 w-4" />
+                <Search className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>View output and test details</TooltipContent>
@@ -810,7 +810,7 @@ function EvalOutputCell({
             aria-label="Mark test passed"
           >
             <ThumbsUp
-              className={`h-4 w-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
               fill={activeRating === true ? 'currentColor' : 'none'}
             />
           </button>
@@ -827,7 +827,7 @@ function EvalOutputCell({
             aria-label="Mark test failed"
           >
             <ThumbsDown
-              className={`h-4 w-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
               fill={activeRating === false ? 'currentColor' : 'none'}
             />
           </button>
@@ -842,7 +842,7 @@ function EvalOutputCell({
             onClick={handleSetScore}
             aria-label="Set test score"
           >
-            <Hash className="h-4 w-4" />
+            <Hash className="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent>Set test score</TooltipContent>
@@ -855,7 +855,7 @@ function EvalOutputCell({
             onClick={handleCommentOpen}
             aria-label="Edit comment"
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil className="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>

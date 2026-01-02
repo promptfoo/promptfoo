@@ -90,7 +90,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="h-4 w-4" />
+        <Spinner className="size-4" />
         <span className="text-xs text-muted-foreground">Loading audio...</span>
       </div>
     );
@@ -177,7 +177,7 @@ function TableHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="size-4" />
                 </Link>
               </TooltipTrigger>
               <TooltipContent>View other evals and datasets for this prompt</TooltipContent>
@@ -238,7 +238,7 @@ function ResultsTableHeader({
           onClick={() => setStickyHeader(false)}
           className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </button>
       </div>
       <table
@@ -1448,7 +1448,7 @@ function ResultsTable({
             isFetching ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
           )}
         >
-          <Spinner className="h-[60px] w-[60px]" />
+          <Spinner className="size-[60px]" />
         </div>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
@@ -1599,7 +1599,7 @@ function ResultsTable({
               }}
               disabled={filteredResultsCount <= 10}
             >
-              <SelectTrigger className="w-[80px] h-8">
+              <SelectTrigger className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1663,7 +1663,7 @@ function ResultsTable({
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="size-4" />
             </Button>
             <Button
               variant="outline"
@@ -1679,7 +1679,7 @@ function ResultsTable({
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
             >
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="size-4" />
             </Button>
           </div>
         </div>

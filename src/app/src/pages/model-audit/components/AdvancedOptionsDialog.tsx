@@ -120,7 +120,7 @@ export default function AdvancedOptionsDialog({
                       className="ml-1 hover:bg-secondary-foreground/20 rounded-full p-0.5"
                       aria-label={`Remove ${pattern}`}
                     >
-                      <XIcon className="h-3 w-3" />
+                      <XIcon className="size-3" />
                     </button>
                   </Badge>
                 ))}

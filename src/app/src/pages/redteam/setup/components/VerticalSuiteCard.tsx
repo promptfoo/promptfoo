@@ -150,9 +150,9 @@ export default function VerticalSuiteCard({
               : 'border-border hover:border-primary/20',
         isLocked ? 'bg-gradient-to-br from-amber-500/[0.03] to-transparent' : 'bg-background',
         isLocked
-          ? 'hover:shadow-lg hover:shadow-amber-500/15'
+          ? 'hover:shadow-amber-500/15'
           : allSelected
-            ? 'hover:shadow-lg hover:shadow-primary/15'
+            ? 'hover:shadow-primary/15'
             : 'hover:shadow-sm',
       )}
     >
@@ -178,7 +178,7 @@ export default function VerticalSuiteCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Badge className="h-6 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.65rem] font-bold tracking-wider text-white shadow-md">
-                      <Lock className="h-3 w-3" />
+                      <Lock className="size-3" />
                       ENTERPRISE
                     </Badge>
                   </TooltipTrigger>
@@ -220,7 +220,7 @@ export default function VerticalSuiteCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                      <div className="size-1.5 rounded-full bg-red-500" />
                       <span className="text-xs font-medium">
                         {severityCounts[Severity.Critical]} Critical
                       </span>
@@ -233,7 +233,7 @@ export default function VerticalSuiteCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <div className="size-1.5 rounded-full bg-amber-500" />
                       <span className="text-xs font-medium">
                         {severityCounts[Severity.High]} High
                       </span>
@@ -246,7 +246,7 @@ export default function VerticalSuiteCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      <div className="size-1.5 rounded-full bg-blue-500" />
                       <span className="text-xs font-medium">
                         {severityCounts[Severity.Medium]} Medium
                       </span>
@@ -259,7 +259,7 @@ export default function VerticalSuiteCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                      <div className="size-1.5 rounded-full bg-green-500" />
                       <span className="text-xs font-medium">
                         {severityCounts[Severity.Low]} Low
                       </span>
@@ -280,7 +280,7 @@ export default function VerticalSuiteCard({
                         onClick={handleUpgradeClick}
                         className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 font-semibold text-white shadow-md hover:from-amber-600 hover:to-amber-700 hover:shadow-lg"
                       >
-                        <Lock className="h-4 w-4" />
+                        <Lock className="size-4" />
                         Upgrade to Enterprise
                       </Button>
                     </TooltipTrigger>
@@ -294,7 +294,7 @@ export default function VerticalSuiteCard({
                   >
                     {expanded ? 'Collapse' : 'View Details'}
                     <ChevronDown
-                      className={cn('h-5 w-5 transition-transform', expanded && 'rotate-180')}
+                      className={cn('size-5 transition-transform', expanded && 'rotate-180')}
                     />
                   </Button>
                 </>
@@ -316,7 +316,7 @@ export default function VerticalSuiteCard({
                   >
                     {expanded ? 'Collapse' : 'Expand'}
                     <ChevronDown
-                      className={cn('h-5 w-5 transition-transform', expanded && 'rotate-180')}
+                      className={cn('size-5 transition-transform', expanded && 'rotate-180')}
                     />
                   </Button>
                 </>
@@ -409,7 +409,7 @@ export default function VerticalSuiteCard({
                                     variant="ghost"
                                     size="icon"
                                     className={cn(
-                                      'h-8 w-8',
+                                      'size-8',
                                       requiresConfig && !isPluginConfigured(plugin)
                                         ? 'text-destructive'
                                         : 'text-muted-foreground',
@@ -419,7 +419,7 @@ export default function VerticalSuiteCard({
                                       onConfigClick(plugin);
                                     }}
                                   >
-                                    <Settings className="h-4 w-4" />
+                                    <Settings className="size-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -470,13 +470,13 @@ export default function VerticalSuiteCard({
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-muted-foreground"
+                                    className="size-8 text-muted-foreground"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       window.open(getPluginDocumentationUrl(plugin), '_blank');
                                     }}
                                   >
-                                    <HelpCircle className="h-4 w-4" />
+                                    <HelpCircle className="size-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>View documentation</TooltipContent>

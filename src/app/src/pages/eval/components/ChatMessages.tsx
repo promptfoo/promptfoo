@@ -156,7 +156,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                className="size-1.5 bg-white rounded-full animate-bounce"
                 style={{ animationDelay: `${i * 0.16}s` }}
               />
             ))}
