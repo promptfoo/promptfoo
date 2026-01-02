@@ -244,6 +244,9 @@
           },
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
@@ -316,6 +319,9 @@
           "style": {
             "noRestrictedGlobals": "off",
             "useBlockStatements": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
