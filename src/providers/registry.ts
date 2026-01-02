@@ -367,13 +367,20 @@ export const providerMap: ProviderFactory[] = [
       }
 
       // Handle Luma Ray video model
-      if (modelType.includes('luma.ray')) {
+      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
+      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
+      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
         const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
-        const videoModelName = modelName || 'luma.ray-v2:0';
+        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
+        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        const videoModelName = modelName.includes('luma.ray')
+          ? modelName
+          : splits.slice(1).join(':') || 'luma.ray-v2:0';
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
       // Handle Nova Reel video model
+      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
       if (modelType === 'video' || modelType.includes('amazon.nova-reel')) {
         const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
         const videoModelName = modelName || 'amazon.nova-reel-v1:1';

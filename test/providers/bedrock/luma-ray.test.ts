@@ -542,7 +542,7 @@ describe('LumaRayVideoProvider', () => {
       // Mock Date.now to simulate timeout
       const originalDateNow = Date.now;
       let callCount = 0;
-      vi.spyOn(Date, 'now').mockImplementation(() => {
+      const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
         callCount++;
         return callCount > 2 ? originalDateNow() + 1000 : originalDateNow();
       });
@@ -551,7 +551,7 @@ describe('LumaRayVideoProvider', () => {
 
       expect(result.error).toContain('timed out');
 
-      vi.spyOn(Date, 'now').mockRestore();
+      dateNowSpy.mockRestore();
     });
 
     it('should handle missing output location in response', async () => {
