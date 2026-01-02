@@ -256,6 +256,8 @@ export class XAIResponsesProvider implements ApiProvider {
       } else {
         textFormat = { format: { type: 'text' } };
       }
+    } else {
+      textFormat = { format: { type: 'text' } };
     }
 
     // Load tools from external file if needed
@@ -274,7 +276,7 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(loadedTools && loadedTools.length > 0 ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      ...(textFormat ? { text: textFormat } : {}),
+      text: textFormat,
       ...('parallel_tool_calls' in config
         ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
         : {}),

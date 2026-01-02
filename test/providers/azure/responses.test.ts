@@ -1,28 +1,18 @@
-import fs from 'fs';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadResponseFormatFromExternalFile,
-} from '../../../src/util/file';
-import type { Mocked, MockedFunction } from 'vitest';
+import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import type { MockedFunction } from 'vitest';
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/file');
-vi.mock('fs');
 
 const mockFetchWithCache = fetchWithCache as MockedFunction<typeof fetchWithCache>;
-const _mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as MockedFunction<
-  typeof maybeLoadFromExternalFile
->;
 const mockMaybeLoadResponseFormatFromExternalFile =
   maybeLoadResponseFormatFromExternalFile as MockedFunction<
     typeof maybeLoadResponseFormatFromExternalFile
   >;
-const _mockFs = fs as Mocked<typeof fs>;
 let authHeadersValue: Record<string, string>;
 
 describe('AzureResponsesProvider', () => {

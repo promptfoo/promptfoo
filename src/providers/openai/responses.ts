@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
@@ -309,14 +309,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let timeout = REQUEST_TIMEOUT_MS;
     const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
     if (isLongRunningModel) {
-      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
-      // otherwise default to 10 minutes (600,000ms)
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      if (evalTimeout > 0) {
-        timeout = evalTimeout;
-      } else {
-        timeout = 600_000; // 10 minutes default for long-running models
-      }
+      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
