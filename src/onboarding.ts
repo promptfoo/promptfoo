@@ -14,6 +14,7 @@ import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
+import type { ProviderOptions } from './types/providers';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -265,8 +266,10 @@ function recordOnboardingStep(step: string, properties: EventProperties = {}) {
  * Iterate through user choices and determine if the user has selected a provider that needs an API key
  * but has not set and API key in their environment.
  */
-export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
-  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
+export function reportProviderAPIKeyWarnings(
+  providerChoices: (string | ProviderOptions)[],
+): string[] {
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c.id ?? '') : c));
 
   const map: Record<string, keyof EnvOverrides> = {
     openai: 'OPENAI_API_KEY',
@@ -397,7 +400,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
     }
 
-    const choices: { name: string; value: (string | object)[] }[] = [
+    const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
       {
         name: '[OpenAI] GPT 5, GPT 4.1, ...',
@@ -507,7 +510,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       loop: false,
       pageSize: process.stdout.rows - 6,
     });
-    const providerChoices: (string | object)[] = Array.isArray(providerChoice)
+    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
       ? providerChoice
       : [providerChoice];
 

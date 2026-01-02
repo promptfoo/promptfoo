@@ -52,6 +52,7 @@ import type {
   ProviderResponse,
   ProviderType,
   ProviderTypeMap,
+  TestCase,
   TokenUsage,
 } from './types/index';
 
@@ -104,7 +105,7 @@ export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
-  vars: Record<string, any>,
+  vars: Record<string, string | object>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
   return provider.callApi(prompt, {
@@ -172,11 +173,12 @@ export async function getGradingProvider(
     }
   } else {
     // No provider specified - check defaultTest.options.provider as fallback
-    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const defaultTest = cliState.config?.defaultTest;
+    const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const cfg =
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      defaultTestObj?.provider ||
+      defaultTestObj?.options?.provider?.text ||
+      defaultTestObj?.options?.provider ||
       undefined;
 
     if (cfg) {
@@ -663,7 +665,7 @@ export async function matchesLlmRubric(
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  let jsonObjects: any[] = [];
+  let jsonObjects: object[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
@@ -1826,7 +1828,7 @@ export async function matchesSearchRubric(
       pass?: boolean;
       score?: number;
       reason?: string;
-      searchResults?: any;
+      searchResults?: unknown;
     };
 
     // Apply threshold if specified
