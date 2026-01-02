@@ -61,6 +61,13 @@ const SettingsPanel = () => {
     [setMaxTextLength],
   );
 
+  const handleWordBreakChange = useCallback(
+    (checked: boolean) => {
+      setWordBreak(checked ? 'break-all' : 'break-word');
+    },
+    [setWordBreak],
+  );
+
   return (
     <div className="grid grid-cols-[1fr_1px_1fr] gap-5 p-5 pt-3">
       {/* Left Column - Visibility */}
@@ -128,7 +135,7 @@ const SettingsPanel = () => {
         <CompactToggle
           label="Force line breaks"
           checked={wordBreak === 'break-all'}
-          onChange={(checked) => setWordBreak(checked ? 'break-all' : 'break-word')}
+          onChange={handleWordBreakChange}
           tooltipText="Break lines at any character for narrower columns"
         />
 

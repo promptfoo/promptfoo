@@ -16,7 +16,6 @@ import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
-import { useToast } from '@app/hooks/useToast';
 import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
@@ -30,7 +29,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showToast } = useToast();
 
   const {
     table,
@@ -42,8 +40,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
-    resetFilters,
-    addFilter,
     setIsStreaming,
   } = useTableStore();
 
@@ -174,7 +170,10 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
 
-    resetFilters();
+    // Use getState() to avoid adding functions to dependencies
+    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
+
+    doResetFilters();
 
     // Read search params
     const filtersParam = _searchParams.get('filter');
@@ -184,11 +183,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
       } catch {
-        showToast('URL contains invalid JSON-encoded filters', 'error');
+        console.error('URL contains invalid JSON-encoded filters');
         return;
       }
       filters.forEach((filter: ResultsFilter) => {
-        addFilter(filter);
+        doAddFilter(filter);
       });
     }
 
@@ -322,8 +321,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    resetFilters,
     setIsStreaming,
+    // Note: resetFilters, addFilter, showToast are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({

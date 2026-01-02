@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 
 import { useSearchParamState } from '@app/hooks/useSearchParamState';
 import { z } from 'zod';
@@ -28,14 +28,14 @@ export default function FilterModeProvider({ children }: { children: React.React
     filterModeSchema,
     DEFAULT_FILTER_MODE,
   );
-  return (
-    <FilterModeContext
-      value={{
-        filterMode: filterMode ?? DEFAULT_FILTER_MODE,
-        setFilterMode,
-      }}
-    >
-      {children}
-    </FilterModeContext>
+
+  const value = useMemo(
+    () => ({
+      filterMode: filterMode ?? DEFAULT_FILTER_MODE,
+      setFilterMode,
+    }),
+    [filterMode, setFilterMode],
   );
+
+  return <FilterModeContext value={value}>{children}</FilterModeContext>;
 }
