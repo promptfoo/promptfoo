@@ -220,7 +220,7 @@ const RiskCategoryDrawer = ({
                 setSuggestionsDialogOpen(true);
               }}
             >
-              <Lightbulb className="h-4 w-4 text-primary" />
+              <Lightbulb className="size-4 text-primary" />
             </button>
           )}
         </div>

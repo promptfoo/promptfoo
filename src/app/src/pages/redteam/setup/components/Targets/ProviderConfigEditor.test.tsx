@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
@@ -36,11 +36,6 @@ vi.mock('./CommonConfigurationOptions', () => ({
   },
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
-
 describe('ProviderConfigEditor', () => {
   describe('validate method', () => {
     it('should return true from validate() for a valid http provider', () => {
@@ -59,7 +54,7 @@ describe('ProviderConfigEditor', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <ProviderConfigEditor
           provider={validHttpProvider}
           setProvider={mockSetProvider}
@@ -90,7 +85,7 @@ describe('ProviderConfigEditor', () => {
         config: {},
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <ProviderConfigEditor
           provider={whitespaceProvider}
           setProvider={mockSetProvider}
@@ -121,7 +116,7 @@ describe('ProviderConfigEditor', () => {
         config: {},
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <ProviderConfigEditor
           provider={validGoProvider}
           setProvider={mockSetProvider}
@@ -152,7 +147,7 @@ describe('ProviderConfigEditor', () => {
         config: {},
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <ProviderConfigEditor
           provider={validAgentProvider}
           setProvider={mockSetProvider}
@@ -183,7 +178,7 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
-    const { container } = renderWithTheme(
+    const { container } = renderWithProviders(
       <ProviderConfigEditor
         provider={emptyProvider}
         setProvider={mockSetProvider}
@@ -213,7 +208,7 @@ describe('ProviderConfigEditor', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <ProviderConfigEditor
         provider={invalidHttpProvider}
         setProvider={mockSetProvider}
@@ -240,7 +235,7 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
-    const { getByTestId } = renderWithTheme(
+    const { getByTestId } = renderWithProviders(
       <ProviderConfigEditor
         provider={goProvider}
         setProvider={mockSetProvider}
@@ -269,7 +264,7 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderConfigEditor
         provider={validGoProvider}
         setProvider={mockSetProvider}
@@ -283,18 +278,16 @@ describe('ProviderConfigEditor', () => {
     );
 
     rerender(
-      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
-        <ProviderConfigEditor
-          provider={validGoProvider}
-          setProvider={mockSetProvider}
-          setError={mockSetError}
-          onValidate={mockOnValidate}
-          onValidationRequest={(validator) => {
-            validateFn = validator;
-          }}
-          providerType="custom"
-        />
-      </ThemeProvider>,
+      <ProviderConfigEditor
+        provider={validGoProvider}
+        setProvider={mockSetProvider}
+        setError={mockSetError}
+        onValidate={mockOnValidate}
+        onValidationRequest={(validator) => {
+          validateFn = validator;
+        }}
+        providerType="custom"
+      />,
     );
 
     const isValid = validateFn!();
@@ -333,7 +326,7 @@ describe('ProviderConfigEditor', () => {
       );
     };
 
-    renderWithTheme(<TestComponent />);
+    renderWithProviders(<TestComponent />);
 
     expect(screen.getByTestId('custom-config')).toBeInTheDocument();
 
@@ -380,7 +373,7 @@ describe('ProviderConfigEditor', () => {
       );
     };
 
-    renderWithTheme(<TestComponent />);
+    renderWithProviders(<TestComponent />);
 
     expect(screen.getByTestId('agent-config')).toBeInTheDocument();
 
@@ -403,7 +396,7 @@ describe('ProviderConfigEditor', () => {
       },
     };
 
-    renderWithTheme(
+    renderWithProviders(
       <ProviderConfigEditor
         provider={updatedProvider}
         setProvider={mockSetProvider}
@@ -434,7 +427,7 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
-    const { getByTestId } = renderWithTheme(
+    const { getByTestId } = renderWithProviders(
       <ProviderConfigEditor
         provider={emptyProvider}
         setProvider={mockSetProvider}

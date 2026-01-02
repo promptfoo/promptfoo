@@ -27,7 +27,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
       {/* Header - fixed */}
       <div className="shrink-0 border-b bg-muted/50 p-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-muted-foreground" />
+          <Sparkles className="size-5 text-muted-foreground" />
           <h3 className="font-semibold">Suggested Policies</h3>
         </div>
       </div>
@@ -41,7 +41,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
               Generate AI-powered policy suggestions based on your application.
             </p>
             <Button className="w-full" onClick={onGeneratePolicies} disabled={isGeneratingPolicies}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 size-4" />
               Generate Suggestions
             </Button>
           </div>
@@ -49,7 +49,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
 
         {isGeneratingPolicies && suggestedPolicies.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-8">
-            <Spinner className="h-8 w-8" />
+            <Spinner className="size-8" />
             <p className="text-center text-sm text-muted-foreground">
               Analyzing your application to generate relevant policies...
             </p>
@@ -66,7 +66,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
               >
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <Plus className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Plus className="mt-0.5 size-4 shrink-0 text-primary" />
                     <div className="flex-1">
                       <h4 className="mb-1 font-semibold">{policy.name}</h4>
                       <p className="text-sm leading-relaxed text-muted-foreground">{policy.text}</p>
@@ -82,7 +82,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
                             onRemoveSuggestedPolicy(policy);
                           }}
                         >
-                          <ThumbsDown className="h-4 w-4" />
+                          <ThumbsDown className="size-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>Dismiss suggestion</TooltipContent>

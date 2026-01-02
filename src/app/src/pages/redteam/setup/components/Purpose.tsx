@@ -67,7 +67,7 @@ function DiscoveryResult({
           </p>
         </div>
         <Button size="sm" onClick={handleApply} disabled={applied}>
-          <Sparkles className="mr-2 h-3.5 w-3.5" />
+          <Sparkles className="mr-2 size-3.5" />
           Apply
         </Button>
       </div>
@@ -301,12 +301,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               {!discoveryResult && (
                 <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 shadow-sm">
                   {/* Subtle decorative element */}
-                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+                  <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
 
                   <div className="relative space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                        <Sparkles className="h-5 w-5 text-primary" />
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Sparkles className="size-5 text-primary" />
                       </div>
                       <div>
                         <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
@@ -344,7 +344,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
                     {isDiscovering && showSlowDiscoveryMessage && (
                       <Alert variant="info">
-                        <Info className="h-4 w-4" />
+                        <Info className="size-4" />
                         <AlertDescription>
                           Discovery is taking a little while. This is normal for complex
                           applications.
@@ -353,7 +353,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     )}
                     {!hasTargetConfigured && (
                       <Alert variant="warning">
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTriangle className="size-4" />
                         <AlertDescription>
                           You must configure a target to run auto-discovery.
                         </AlertDescription>
@@ -361,7 +361,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     )}
                     {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                       <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTriangle className="size-4" />
                         <AlertDescription>
                           Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
                           connection.
@@ -371,7 +371,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     {discoveryError && (
                       <>
                         <Alert variant="destructive">
-                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTriangle className="size-4" />
                           <AlertDescription>{discoveryError}</AlertDescription>
                         </Alert>
                         <div className="rounded-lg border border-border bg-background/80 p-4">
@@ -452,12 +452,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Core Application Details')}
                       </span>
                       {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Core Application Details') && 'rotate-180',
                       )}
                     />
@@ -498,7 +498,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('industry', e.target.value)}
                           placeholder="e.g. Healthcare, Financial Services, Education, E-commerce, Government, Legal..."
                           rows={1}
-                          className="min-h-[40px] resize-y"
+                          className="min-h-10 resize-y"
                         />
                       </div>
 
@@ -550,12 +550,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Access & Permissions')}
                       </span>
                       {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Access & Permissions') && 'rotate-180',
                       )}
                     />
@@ -665,12 +665,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Data & Content')}
                       </span>
                       {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Data & Content') && 'rotate-180',
                       )}
                     />
@@ -779,12 +779,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Business Context')}
                       </span>
                       {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Business Context') && 'rotate-180',
                       )}
                     />
@@ -869,7 +869,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
           ) : (
             <div>
               <Alert variant="info">
-                <Info className="h-4 w-4" />
+                <Info className="size-4" />
                 <AlertDescription>
                   When testing a model directly, you don't need to provide application details. You
                   can proceed to configure the model and test scenarios in the next steps.

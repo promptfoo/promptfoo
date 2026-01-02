@@ -1,17 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
-import CloseIcon from '@mui/icons-material/Close';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import { useTheme } from '@mui/material/styles';
 import {
   BarController,
   BarElement,
@@ -26,6 +24,7 @@ import {
   Tooltip,
   type TooltipItem,
 } from 'chart.js';
+import { X } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
@@ -355,27 +354,43 @@ function ScatterChart({ table }: ChartProps) {
 
   return (
     <>
-      <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Compare prompt outputs</DialogTitle>
-        <DialogContent>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((_prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Compare prompt outputs</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-4 py-4">
+            <Select
+              value={String(xAxisPrompt)}
+              onValueChange={(val) => setXAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((_prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+            <Select
+              value={String(yAxisPrompt)}
+              onValueChange={(val) => setYAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
+          </div>
         </DialogContent>
       </Dialog>
       <canvas
@@ -637,7 +652,6 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 }
 
 function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
-  const theme = useTheme();
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
@@ -646,8 +660,9 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   // Update Chart.js defaults when theme changes
   // useLayoutEffect ensures defaults are set before charts render
   useLayoutEffect(() => {
-    Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
-  }, [theme.palette.mode]);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    Chart.defaults.color = isDark ? '#aaa' : '#666';
+  }, []);
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
   // non-null.
@@ -692,14 +707,16 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
 
   return (
     <ErrorBoundary fallback={null}>
-      <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-        <IconButton
-          style={{ position: 'absolute', right: 0, top: 0 }}
+      <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
+        <button
+          type="button"
+          className="absolute right-2 top-2 p-1 rounded hover:bg-muted transition-colors"
           onClick={() => handleHideCharts()}
+          aria-label="Hide charts"
         >
-          <CloseIcon />
-        </IconButton>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <X className="size-5" />
+        </button>
+        <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
           </div>
@@ -720,7 +737,7 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
             </div>
           )}
         </div>
-      </Paper>
+      </div>
     </ErrorBoundary>
   );
 }

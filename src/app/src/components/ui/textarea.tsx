@@ -11,7 +11,7 @@ function Textarea({ className, ref, ...props }: TextareaProps) {
     <textarea
       className={cn(
         // Base layout and sizing
-        'flex min-h-[80px] w-full rounded-md border px-3 py-2',
+        'flex min-h-20 w-full rounded-md border px-3 py-2',
         // Background - solid colors to match Input component
         'bg-white dark:bg-zinc-900',
         // Typography

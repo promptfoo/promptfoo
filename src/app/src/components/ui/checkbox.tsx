@@ -43,7 +43,7 @@ function Checkbox({
       onCheckedChange={handleCheckedChange}
       onClick={handleClick}
       className={cn(
-        'peer h-4 w-4 shrink-0 rounded border border-border cursor-pointer',
+        'peer size-4 shrink-0 rounded border border-border cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground',
@@ -57,7 +57,7 @@ function Checkbox({
       {...props}
     >
       <CheckboxPrimitive.Indicator className="flex items-center justify-center">
-        {indeterminate ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+        {indeterminate ? <Minus className="size-3" /> : <Check className="size-3" />}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

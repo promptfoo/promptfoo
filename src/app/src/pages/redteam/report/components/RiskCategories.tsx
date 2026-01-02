@@ -146,15 +146,15 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
       {/* Status Icon - same w-5 as category */}
       <div className="w-5 shrink-0 flex justify-center">
         {isPassing ? (
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+          <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-500" />
         ) : (
-          <XCircle className="h-4 w-4 text-destructive" />
+          <XCircle className="size-4 text-destructive" />
         )}
       </div>
 
       {/* Chevron - in w-4 container to match category spacer */}
       <div className="w-4 shrink-0 flex justify-center print:hidden">
-        <ChevronRight className="h-3 w-3 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
+        <ChevronRight className="size-3 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
       </div>
     </button>
   );
@@ -184,18 +184,14 @@ const RiskCategoryRow = ({
         <button
           type="button"
           className={cn(
-            'flex w-full items-center gap-4 px-4 py-4 text-left transition-colors cursor-pointer',
+            'flex w-full items-center gap-4 p-4 text-left transition-colors cursor-pointer',
             'hover:bg-muted/50',
             isExpanded && 'bg-muted/30',
           )}
         >
           {/* Expand/Collapse Icon */}
           <div className="shrink-0 text-muted-foreground print:hidden">
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+            {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           </div>
 
           {/* Category Name & Description */}
@@ -232,9 +228,9 @@ const RiskCategoryRow = ({
           {/* Status Icon */}
           <div className="w-5 shrink-0 flex justify-center">
             {hasFailed ? (
-              <XCircle className="h-4 w-4 text-destructive" />
+              <XCircle className="size-4 text-destructive" />
             ) : (
-              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+              <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-500" />
             )}
           </div>
 
