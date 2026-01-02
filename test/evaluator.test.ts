@@ -4106,6 +4106,101 @@ describe('runEval', () => {
     // Should still skip rendering the default 'prompt' var
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
+
+  describe('latencyMs handling', () => {
+    it('should use provider-supplied latencyMs when available', async () => {
+      const providerWithLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 5000,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(5000);
+    });
+
+    it('should use provider-supplied latencyMs for cached responses', async () => {
+      const cachedProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Cached output',
+          cached: true,
+          latencyMs: 3500,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: cachedProvider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(3500);
+      expect(results[0].response?.cached).toBe(true);
+    });
+
+    it('should fall back to measured latency when provider does not supply latencyMs', async () => {
+      const providerWithoutLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('no-latency-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return {
+            output: 'Test output',
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+          };
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithoutLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      // Should have measured latency (>= 50ms since we added a delay)
+      expect(results[0].latencyMs).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should respect provider latencyMs of 0', async () => {
+      const providerWithZeroLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('zero-latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 0,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithZeroLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(0);
+    });
+  });
 });
 
 describe('formatVarsForDisplay', () => {

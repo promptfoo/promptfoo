@@ -461,7 +461,7 @@ export async function runEval({
       failureReason: ResultFailureReason.NONE,
       score: 0,
       namedScores: {},
-      latencyMs,
+      latencyMs: response.latencyMs ?? latencyMs,
       cost: response.cost,
       metadata: {
         ...test.metadata,
