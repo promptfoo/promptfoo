@@ -17,7 +17,7 @@ keywords:
   - promptfoo
 ---
 
-Benchmark AI video generation models with promptfoo. Generate videos across providers, then score prompt adherence, motion quality, and temporal consistency using repeatable rubrics and an automated multimodal judge.
+Benchmark Sora, Veo, Amazon Nova Reel, and Luma Ray with promptfoo. Generate text-to-video and image-to-video outputs, then score prompt adherence, motion quality, and temporal consistency using repeatable rubrics and an automated multimodal judge.
 
 ## Why Use promptfoo for Video Evaluation
 
@@ -25,28 +25,46 @@ Benchmark AI video generation models with promptfoo. Generate videos across prov
 - **Regression testing**: Catch quality drops when prompts or models change
 - **Automated scoring**: LLM-as-a-judge eliminates manual review for most cases
 - **CI-friendly**: Run evaluations on every commit or scheduled jobs
-- **Cost tracking**: Compare generation costs alongside quality scores
+
+## Core Concepts
+
+Before diving in, here's how promptfoo's primitives map to video evaluation:
+
+| Concept       | Description                                                                 |
+| ------------- | --------------------------------------------------------------------------- |
+| **Prompt**    | Text instruction (and optional keyframe images) sent to the video generator |
+| **Provider**  | Video model being benchmarked (Sora, Veo, Nova Reel, Ray)                   |
+| **Test case** | One prompt + variables + assertions                                         |
+| **Assertion** | Scoring rule applied to the output (`video-rubric`)                         |
+| **Judge**     | Multimodal LLM that analyzes the video and returns a score (Gemini)         |
+| **Threshold** | Minimum score for pass/fail gating in CI                                    |
+| **Repeat**    | Number of generations per test case for variance measurement                |
 
 ## Quick Start
 
 ### Prerequisites
 
+**Install promptfoo:**
+
 ```bash
 npm install -g promptfoo
 ```
 
-Set environment variables for the providers you want to test:
+**Set up credentials for each provider you want to test:**
 
-| Provider  | Required Variables                                         |
-| --------- | ---------------------------------------------------------- |
-| Sora      | `OPENAI_API_KEY`                                           |
-| Veo       | `GOOGLE_PROJECT_ID` + `gcloud auth application-default login` |
-| Nova Reel | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
-| Ray       | `LUMA_API_KEY`                                             |
+- **Sora**: Set `OPENAI_API_KEY`
+- **Veo**: Set `GOOGLE_PROJECT_ID` and run `gcloud auth application-default login`
+- **Nova Reel**: Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`. Enable model access in the AWS Bedrock console.
+- **Ray**: Set `LUMA_API_KEY`
 
-For the judge model (Gemini), set either:
-- `GOOGLE_PROJECT_ID` (Vertex AI) or
-- `GEMINI_API_KEY` (AI Studio)
+**Set up credentials for the judge model (Gemini):**
+
+- Vertex AI: Set `GOOGLE_PROJECT_ID` (uses application default credentials)
+- AI Studio: Set `GEMINI_API_KEY`
+
+:::note
+Some video models are preview/limited access and require enablement or may be region-restricted. Check each provider's documentation for availability.
+:::
 
 ### Run Your First Eval
 
@@ -79,18 +97,40 @@ promptfoo view
 
 - Per-provider pass/fail and numeric scores (0.0–1.0)
 - Judge reasoning explaining the score
-- Links to generated video files
+- Generated video files in the output directory
 - Side-by-side comparison in the web viewer
 
-Common issues: API quota limits, authentication errors, timeouts on long generations. Check `--verbose` output for details.
+## Automated Video Evaluation with LLM-as-a-Judge
 
-## How video-rubric Works
-
-The `video-rubric` assertion sends generated videos to a multimodal judge model (Gemini 3.0 Flash Preview by default) along with your rubric criteria.
+The `video-rubric` assertion sends generated videos to a multimodal judge model along with your rubric criteria.
 
 :::note
-**Terminology**: In this guide, "providers" are the video generators being compared (Sora, Veo, etc.). The "judge model" is the separate LLM that scores the output—configured via the `provider` field inside assertions.
+**Terminology**: In this guide, "providers" are the video generators being compared (Sora, Veo, etc.). The "judge" is the separate multimodal LLM that scores the output—configured via the `provider` field inside assertions.
 :::
+
+### Inputs and Outputs
+
+**Inputs to the judge:**
+
+- Video file (base64-encoded, up to 20MB)
+- Your rubric text
+- Original prompt (via `{{prompt}}` variable)
+- Optional: reference images for keyframe comparisons
+
+**Outputs from the judge:**
+
+- `score`: Numeric value 0.0–1.0
+- `pass`: Boolean based on threshold comparison
+- `reason`: Text explanation of the score
+
+### Scoring Semantics
+
+Understanding how scores are computed and aggregated:
+
+- **Per-assertion scoring**: Each `video-rubric` assertion produces an independent score
+- **Threshold application**: `threshold: 0.7` means scores ≥ 0.7 pass, < 0.7 fail
+- **Repeat aggregation**: When using `repeat: N`, promptfoo generates N videos and reports individual scores. Use this to measure variance, not to auto-average.
+- **Multiple assertions**: Each assertion is evaluated separately. A test case passes only if all assertions pass.
 
 ```yaml
 tests:
@@ -98,6 +138,7 @@ tests:
       prompt: A dog running through a field
     assert:
       - type: video-rubric
+        threshold: 0.7
         value: |
           Evaluate the video:
           1. Subject: A dog is clearly visible
@@ -109,25 +150,29 @@ tests:
 
 ### Overriding the Judge Model
 
+The default judge is Gemini 3 Flash Preview. Override it per-assertion or globally:
+
 ```yaml
 # Per-assertion
 assert:
   - type: video-rubric
-    provider: vertex:gemini-3-pro-preview  # Judge model, not the video generator
+    provider: vertex:gemini-3-pro-preview  # Judge, not the video generator
     value: ...
 
-# Or set a default judge for all assertions
+# Global default for all assertions
 defaultTest:
   options:
     provider: vertex:gemini-3-flash-preview
 ```
 
-### Reliability Considerations
+See the [video-rubric reference](/docs/configuration/expected-outputs/model-graded/video-rubric) for full configuration options.
+
+### Reliability and Variance
 
 LLM judges can miss subtle motion artifacts or misinterpret prompts. For higher confidence:
 
-- **Run multiple generations**: Use promptfoo's `repeat` option to generate 3–5 samples per prompt
-- **Average scores**: Report mean and variance across samples
+- **Run multiple generations**: Use `repeat` to generate 3–5 samples per prompt
+- **Compare scores**: Look for high variance as a signal of ambiguous rubrics
 - **Maintain a validation set**: Periodically compare judge scores to human ratings
 - **Use specific rubrics**: Vague criteria produce inconsistent scores
 
@@ -136,18 +181,18 @@ tests:
   - vars:
       prompt: A cat playing with yarn
     options:
-      repeat: 3  # Generate 3 videos, average scores
+      repeat: 3  # Generate 3 videos, compare scores
     assert:
       - type: video-rubric
         threshold: 0.7
         value: ...
 ```
 
-## Provider Configuration
+## Configure Sora, Veo, Nova Reel, and Ray
 
 Config keys map directly to each vendor's API, so field names and casing differ by provider.
 
-### Text-to-Video
+### Text-to-Video Evaluation
 
 ```yaml
 providers:
@@ -176,9 +221,9 @@ providers:
       duration: '5s'
 ```
 
-### Image-to-Video (Start Keyframe)
+### Image-to-Video Evaluation
 
-Generate video starting from a reference image:
+Generate video starting from a reference image (start keyframe):
 
 ```yaml
 providers:
@@ -208,7 +253,7 @@ providers:
           url: '{{start_image}}'
 ```
 
-### Start and End Keyframes
+### Start and End Keyframe Interpolation
 
 Interpolate between two images:
 
@@ -236,7 +281,7 @@ providers:
       end_image: '{{end_image}}'
 ```
 
-### Camera Motion
+### Camera Motion Configuration
 
 ```yaml
 providers:
@@ -267,6 +312,65 @@ providers:
       aspectRatio: '16:9'
       duration: '5s'
       loop: true
+```
+
+## Sora vs Veo Benchmark Example
+
+Compare OpenAI Sora and Google Veo head-to-head with multiple evaluation dimensions:
+
+```yaml title="sora-vs-veo.yaml"
+description: Sora vs Veo benchmark
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora 2
+    config:
+      size: '1280x720'
+      seconds: 5
+  - id: vertex:video:veo-3.1-generate-preview
+    label: Veo 3.1
+    config:
+      aspectRatio: '16:9'
+      durationSeconds: 5
+
+defaultTest:
+  options:
+    repeat: 3  # Generate 3 samples per provider for variance
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  - vars:
+      prompt: A golden retriever running on a beach at sunset
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Prompt adherence:
+          1. Dog (golden retriever or similar) is visible
+          2. Beach setting with sand and water
+          3. Dog is running, not walking
+          4. Sunset lighting (warm colors)
+          Score 0.25 per criterion. Wrong subject: 0.0.
+
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Temporal consistency:
+          1. Dog maintains consistent appearance throughout
+          2. No flickering or morphing artifacts
+          3. Lighting stays consistent
+          4. No objects appearing/disappearing unexpectedly
+          Score 1.0 if consistent. Any flickering: max 0.5. Identity change: 0.0.
+```
+
+Run and compare:
+
+```bash
+promptfoo eval -c sora-vs-veo.yaml
+promptfoo view
 ```
 
 ## Rubric Templates
@@ -393,16 +497,19 @@ For image-to-video evaluation:
     Score 1.0 if perfect loop. Minor seam visible: 0.5. Obvious cut: 0.0.
 ```
 
-## CI/Regression Testing
+## CI/CD Integration
+
+### Basic CI Workflow
 
 Run video evaluations in CI to catch regressions:
 
 ```yaml title=".github/workflows/video-eval.yml"
 name: Video Eval
 on:
-  push:
+  pull_request:
     paths:
       - 'prompts/**'
+      - 'video-eval.yaml'
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 6am
 
@@ -415,151 +522,160 @@ jobs:
         with:
           node-version: '20'
       - run: npm install -g promptfoo
-      - run: promptfoo eval -c video-eval.yaml --no-cache
+
+      - name: Run video evaluation
+        run: promptfoo eval -c video-eval.yaml -o results.json --no-cache
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      - run: promptfoo eval --output results.json
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
         with:
           name: video-eval-results
-          path: results.json
+          path: |
+            results.json
+            output/  # Contains generated videos
 ```
 
-Best practices for CI:
-- Use a fixed prompt set for consistent baselines
-- Set `threshold` on assertions to fail the build on regressions
-- Compare against a known-good baseline run
-- Cache generated videos to reduce costs on reruns
+### PR vs Scheduled Runs
 
-## Complete Examples
+For cost efficiency, use different configurations:
 
-### Compare Text-to-Video Providers
+**PR runs (fast smoke test):**
 
-```yaml title="compare-providers.yaml"
-description: Compare video generation across providers
-
-prompts:
-  - '{{prompt}}'
-
+```yaml title="video-eval-pr.yaml"
 providers:
   - id: openai:video:sora-2
     config:
-      size: '1280x720'
-      seconds: 5
+      seconds: 5  # Shorter duration
+
+tests:
+  - vars:
+      prompt: Quick smoke test prompt
+    assert:
+      - type: video-rubric
+        threshold: 0.6  # Looser threshold for smoke tests
+        value: Basic quality check...
+```
+
+**Scheduled runs (full regression):**
+
+```yaml title="video-eval-full.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      seconds: 10
   - id: vertex:video:veo-3.1-generate-preview
     config:
-      aspectRatio: '16:9'
-      durationSeconds: 5
-  - id: bedrock:video:amazon.nova-reel-v1:1
-    config:
-      durationSeconds: 6
-      dimension: '1280x720'
+      durationSeconds: 8
 
 defaultTest:
   options:
-    provider: vertex:gemini-3-flash-preview
+    repeat: 3  # Multiple samples for variance
 
 tests:
+  # Full prompt set with strict thresholds
   - vars:
-      prompt: A serene mountain lake at sunrise with mist rising from the water
+      prompt: ...
     assert:
       - type: video-rubric
-        value: |
-          1. Mountain lake is visible
-          2. Sunrise lighting present (warm colors, low sun angle)
-          3. Mist or fog effect visible over water
-          4. Motion is smooth and calm
-          Score 0.25 per criterion met. Deduct 0.1 for any visual artifacts.
-
-  - vars:
-      prompt: A chef preparing sushi in a Japanese restaurant
-    assert:
-      - type: video-rubric
-        value: |
-          1. Chef figure visible and identifiable
-          2. Sushi preparation action shown
-          3. Restaurant setting recognizable
-          4. Hand movements appear realistic
-          Score 0.25 per criterion. Uncanny hand motion caps at 0.5.
+        threshold: 0.8
+        value: ...
 ```
 
-### Evaluate Image-to-Video Fidelity
+## Troubleshooting
 
-```yaml title="image-to-video-eval.yaml"
-description: Test image-to-video fidelity
+### Authentication Failures
 
-prompts:
-  - 'Animate this image: {{animation_prompt}}'
+**Vertex AI / Veo:**
 
-providers:
-  - id: luma:video:ray-2
-    config:
-      aspectRatio: '16:9'
-      duration: '5s'
-      keyframes:
-        frame0:
-          type: image
-          url: '{{reference_image}}'
-
-tests:
-  - vars:
-      reference_image: https://example.com/product-photo.jpg
-      animation_prompt: Slowly rotate the product with soft lighting
-    assert:
-      - type: video-rubric
-        value: |
-          A reference image was provided as the start frame.
-
-          1. First frame matches the reference image closely
-          2. Product identity maintained throughout video
-          3. Rotation motion is smooth and gradual
-          4. Lighting remains soft and consistent
-
-          Score 1.0 if faithful to reference. Identity drift caps at 0.5. Wrong first frame: 0.0.
+```
+Error: Could not load the default credentials
 ```
 
-### Compare Camera Motion Execution
+Run `gcloud auth application-default login` and ensure `GOOGLE_PROJECT_ID` is set.
 
-```yaml title="camera-motion-eval.yaml"
-description: Evaluate camera motion accuracy
+**AWS Bedrock / Nova Reel:**
 
-prompts:
-  - 'A red sports car parked in a showroom'
-
-providers:
-  - id: bedrock:video:amazon.nova-reel-v1:1
-    label: Nova - Orbit Left
-    config:
-      durationSeconds: 6
-      camera:
-        motion: 'orbit_left'
-
-  - id: bedrock:video:amazon.nova-reel-v1:1
-    label: Nova - Zoom In
-    config:
-      durationSeconds: 6
-      camera:
-        motion: 'zoom_in'
-
-  - id: luma:video:ray-2
-    label: Ray - Orbit
-    config:
-      duration: '5s'
-      cameraMotion: 'orbit left slow'
-
-tests:
-  - assert:
-      - type: video-rubric
-        value: |
-          Evaluate camera motion execution:
-          1. Camera performs the intended motion type (orbit or zoom)
-          2. Motion is smooth without jitter or shake
-          3. Subject (car) stays centered and well-framed
-          4. Speed is consistent throughout
-
-          Score 1.0 if correct motion executed smoothly. Wrong motion type: 0.0. Shaky: 0.5 max.
 ```
+Error: Access denied to model
+```
+
+Enable model access in the AWS Bedrock console. Model access is per-region and requires explicit approval.
+
+**OpenAI / Sora:**
+
+```
+Error: Invalid API key
+```
+
+Verify `OPENAI_API_KEY` is set and has access to the Sora API (may require specific plan).
+
+### Quota and Timeout Issues
+
+- **Timeouts on long generations**: Start with `seconds: 5` and increase gradually
+- **Rate limits**: Reduce concurrent providers while iterating
+- **Queue delays**: Video generation latency varies significantly; expect 30s–3min per video
+
+### Artifact Storage
+
+Generated videos are stored in the promptfoo output directory (default: `~/.promptfoo/output/`). To manage disk space:
+
+```bash
+# View cache location
+promptfoo cache path
+
+# Clear old results (use cautiously)
+promptfoo cache clear
+```
+
+### Judge Disagreements
+
+If scores seem inconsistent:
+
+1. **Tighten rubric wording**: Remove ambiguous terms
+2. **Add explicit caps**: "If X, max score is Y"
+3. **Increase repeat count**: Compare variance across samples
+4. **Try a stronger judge**: Use `gemini-3-pro-preview` for complex evaluations
+
+## Provider Comparison
+
+:::note
+Specifications vary by API version, account tier, and region. Information below is approximate as of January 2025. Recommendations are subjective and change over time.
+:::
+
+### Capabilities
+
+| Feature          | Sora    | Veo 3.1 | Nova Reel | Ray 2   |
+| ---------------- | ------- | ------- | --------- | ------- |
+| Text-to-Video    | ✓       | ✓       | ✓         | ✓       |
+| Image-to-Video   | ✓       | ✓       | ✓         | ✓       |
+| Start Keyframe   | ✓       | ✓       | ✓         | ✓       |
+| End Keyframe     | ✓       | ✗       | ✗         | ✓       |
+| Camera Controls  | ✗       | ✗       | ✓         | ✓       |
+| Video Extension  | ✓       | ✗       | ✗         | ✓       |
+| Audio Generation | ✗       | ✓ (preview) | ✗     | ✗       |
+| Looping          | ✓       | ✗       | ✗         | ✓       |
+
+### Specifications (Approximate)
+
+| Provider  | Resolution  | Duration | Aspect Ratios   |
+| --------- | ----------- | -------- | --------------- |
+| Sora      | 480p–1080p  | 5–20s    | 16:9, 9:16, 1:1 |
+| Veo 3.1   | 720p–1080p  | 5–8s     | 16:9, 9:16      |
+| Nova Reel | 720p        | 6s       | 16:9, 9:16      |
+| Ray 2     | 540p–720p   | 5–9s     | 16:9, 9:16, 1:1 |
+
+### Provider Selection Guide
+
+| Use Case               | Recommended                |
+| ---------------------- | -------------------------- |
+| Highest visual quality | Sora, Veo 3.1              |
+| Fastest iteration      | Nova Reel                  |
+| Keyframe interpolation | Ray 2, Sora                |
+| Camera motion control  | Nova Reel, Ray 2           |
+| Audio + video          | Veo 3.1 (audio in preview) |
 
 ## Best Practices
 
@@ -584,49 +700,18 @@ defaultTest:
     provider: vertex:gemini-3-flash-preview
 ```
 
-### Provider Selection Guide
+### Rubric Design
 
-| Use Case               | Recommended                |
-| ---------------------- | -------------------------- |
-| Highest visual quality | Sora, Veo 3.1              |
-| Fastest iteration      | Nova Reel                  |
-| Keyframe interpolation | Ray 2, Sora                |
-| Camera motion control  | Nova Reel, Ray 2           |
-| Audio + video          | Veo 3 (audio preview)      |
-
-## Provider Comparison
-
-:::note
-Specifications vary by API version, account tier, and region. Information below is approximate as of January 2025.
-:::
-
-### Capabilities
-
-| Feature          | Sora    | Veo 3.1 | Nova Reel | Ray 2   |
-| ---------------- | ------- | ------- | --------- | ------- |
-| Text-to-Video    | ✓       | ✓       | ✓         | ✓       |
-| Image-to-Video   | ✓       | ✓       | ✓         | ✓       |
-| Start Keyframe   | ✓       | ✓       | ✓         | ✓       |
-| End Keyframe     | ✓       | ✗       | ✗         | ✓       |
-| Camera Controls  | ✗       | ✗       | ✓         | ✓       |
-| Video Extension  | ✓       | ✗       | ✗         | ✓       |
-| Audio Generation | ✗       | ✓       | ✗         | ✗       |
-| Looping          | ✓       | ✗       | ✗         | ✓       |
-
-### Specifications (Approximate)
-
-| Provider  | Resolution  | Duration | Aspect Ratios   |
-| --------- | ----------- | -------- | --------------- |
-| Sora      | 480p–1080p  | 5–20s    | 16:9, 9:16, 1:1 |
-| Veo 3.1   | 720p–1080p  | 5–8s     | 16:9, 9:16      |
-| Nova Reel | 720p        | 6s       | 16:9, 9:16      |
-| Ray 2     | 540p–720p   | 5–9s     | 16:9, 9:16, 1:1 |
+- **One dimension per rubric**: Easier to diagnose failures
+- **Explicit scoring**: Always include "Score X if Y"
+- **Failure caps**: "If subject wrong, max 0.5"
+- **Reference variables**: Use `{{prompt}}` for context
 
 ## FAQ
 
 ### How do I compare Sora vs Veo for prompt adherence?
 
-Add both providers to your config and use a prompt adherence rubric. Run `promptfoo eval` to generate videos from each and score them against the same criteria. The web viewer shows side-by-side results.
+Add both providers to your config and use a prompt adherence rubric. Run `promptfoo eval` to generate videos from each and score them against the same criteria. See the [Sora vs Veo benchmark example](#sora-vs-veo-benchmark-example) above.
 
 ### What is LLM-as-a-judge for video evaluation?
 
@@ -634,20 +719,29 @@ Instead of manually watching videos, you send them to a multimodal LLM (like Gem
 
 ### How do I evaluate temporal consistency?
 
-Use a rubric that checks for object permanence, color stability, and lighting consistency across frames. See the [Temporal Consistency](#temporal-consistency) template above.
+Use a rubric that checks for object permanence, color stability, and lighting consistency across frames. See the [Temporal Consistency](#temporal-consistency) template.
+
+### How do I benchmark image-to-video keyframe fidelity?
+
+Configure your provider with a start keyframe image, then use the [Keyframe Fidelity](#keyframe-fidelity) rubric template. The rubric checks that the first frame matches your reference and that subject identity is maintained throughout.
+
+### What thresholds should I use for video evals?
+
+Start with `threshold: 0.7` for initial testing. Tighten to `0.8` for production regression tests. Use `0.6` for exploratory smoke tests. Adjust based on your rubric's scoring granularity.
 
 ### How can I reduce the cost of video benchmarking?
 
-Use shorter video durations (5s instead of 20s) during development. Enable caching to avoid regenerating identical prompts. Use Gemini Flash instead of Pro for judging.
+Use shorter video durations (5s instead of 20s) during development. Enable caching to avoid regenerating identical prompts. Use Gemini Flash instead of Pro for judging. Run fewer providers in PR checks, full comparisons in scheduled jobs.
 
 ### Can I run video evals in CI?
 
-Yes. Set up a GitHub Action or similar workflow that runs `promptfoo eval` with your video config. Set `threshold` values on assertions to fail builds when scores drop below acceptable levels. See [CI/Regression Testing](#ciregression-testing).
+Yes. Set up a GitHub Action or similar workflow that runs `promptfoo eval` with your video config. Set `threshold` values on assertions to fail builds when scores drop below acceptable levels. See [CI/CD Integration](#cicd-integration).
 
-## Related
+## Next Steps
 
-- [video-rubric assertion reference](/docs/configuration/expected-outputs/model-graded/video-rubric)
-- [OpenAI Sora provider](/docs/providers/openai#video-generation-sora)
-- [Google Veo provider](/docs/providers/vertex#video-generation-veo)
-- [Amazon Nova Reel provider](/docs/providers/aws-bedrock#video-generation-nova-reel)
-- [Luma Ray provider](/docs/providers/luma)
+- **[video-rubric reference](/docs/configuration/expected-outputs/model-graded/video-rubric)**: Full assertion configuration options
+- **[OpenAI Sora provider](/docs/providers/openai#video-generation-sora)**: Sora-specific configuration
+- **[Google Veo provider](/docs/providers/vertex#video-generation-veo)**: Veo-specific configuration
+- **[Amazon Nova Reel provider](/docs/providers/aws-bedrock#video-generation-nova-reel)**: Nova Reel configuration
+- **[Luma Ray provider](/docs/providers/luma)**: Ray configuration
+- **[CI/CD guide](/docs/integrations/ci-cd)**: General CI integration patterns
