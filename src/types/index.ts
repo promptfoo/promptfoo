@@ -303,9 +303,6 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
-  // Optional redteam context, useful for error rows and UI display
-  pluginId?: string | null;
-  strategyId?: string | null;
 }
 
 export interface EvaluateTableOutput {

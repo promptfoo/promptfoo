@@ -3900,13 +3900,13 @@ describe('runEval', () => {
 
     expect(result.success).toBe(false);
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(result.pluginId).toBe('plugin-123');
-    expect(result.strategyId).toBe('basic');
     expect(result.metadata).toMatchObject({
       providerId: 'failing-provider',
       providerLabel: 'Azure GPT 5',
       status: 400,
       statusText: 'Bad Request',
+      pluginId: 'plugin-123',
+      strategyId: 'basic',
     });
     expect(result.metadata?.responseSnippet).toContain('Invalid payload');
     expect(result.error).toContain('Request failed with status code 400');

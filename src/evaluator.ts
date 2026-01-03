@@ -598,37 +598,18 @@ export async function runEval({
 
     return [ret];
   } catch (err) {
-    const error = err as any;
-    const providerId = provider.id();
-    const providerLabel = provider.label;
-    const status = error?.response?.status;
-    const statusText = error?.response?.statusText;
-    const responseData = error?.response?.data;
-    const responseSnippet = (() => {
-      if (responseData == null) {
-        return undefined;
-      }
-      const asString =
-        typeof responseData === 'string' ? responseData : safeJsonStringify(responseData);
-      if (!asString) {
-        return undefined;
-      }
-      return asString.length > 500 ? `${asString.slice(0, 500)}...` : asString;
-    })();
-    const errorMessage = String(error);
-    const stack = (error as Error)?.stack;
-    const errorWithStack =
-      stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+    const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
+      error: err,
+      provider,
+      test,
+      promptIdx,
+      testIdx,
+    });
 
-    logger.error(
-      `Provider call failed: ${providerId}${providerLabel ? ` (${providerLabel})` : ''} ` +
-        `[promptIdx=${promptIdx}, testIdx=${testIdx}` +
-        `${test.metadata?.pluginId ? `, pluginId=${test.metadata.pluginId}` : ''}` +
-        `${test.metadata?.strategyId ? `, strategyId=${test.metadata.strategyId}` : ''}] ` +
-        `${status ? `status=${status}` : ''}${statusText ? ` ${statusText}` : ''} ` +
-        `${responseSnippet ? `response=${responseSnippet}` : ''} ` +
-        `error=${errorMessage}`,
-    );
+    logger.error({
+      message: 'Provider call failed during eval',
+      ...logContext,
+    });
 
     return [
       {
@@ -643,19 +624,69 @@ export async function runEval({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
-        pluginId: test.metadata?.pluginId ?? null,
-        strategyId: test.metadata?.strategyId ?? null,
-        metadata: {
-          ...(test.metadata || {}),
-          providerId,
-          providerLabel,
-          status,
-          statusText,
-          responseSnippet,
-        },
+        metadata,
       },
     ];
   }
+}
+
+function buildProviderErrorContext({
+  error,
+  provider,
+  test,
+  promptIdx,
+  testIdx,
+}: {
+  error: any;
+  provider: any;
+  test: any;
+  promptIdx: number;
+  testIdx: number;
+}) {
+  const providerId = provider.id();
+  const providerLabel = provider.label;
+  const status = error?.response?.status;
+  const statusText = error?.response?.statusText;
+  const responseData = error?.response?.data;
+  const responseSnippet = (() => {
+    if (responseData == null) {
+      return undefined;
+    }
+    const asString =
+      typeof responseData === 'string' ? responseData : safeJsonStringify(responseData);
+    if (!asString) {
+      return undefined;
+    }
+    return asString.length > 500 ? `${asString.slice(0, 500)}...` : asString;
+  })();
+  const errorMessage = String(error);
+  const stack = (error as Error)?.stack;
+  const errorWithStack =
+    stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+
+  return {
+    errorWithStack,
+    metadata: {
+      ...(test.metadata || {}),
+      providerId,
+      providerLabel,
+      status,
+      statusText,
+      responseSnippet,
+    },
+    logContext: {
+      providerId,
+      providerLabel,
+      status,
+      statusText,
+      responseSnippet,
+      promptIdx,
+      testIdx,
+      pluginId: test.metadata?.pluginId,
+      strategyId: test.metadata?.strategyId,
+      error,
+    },
+  };
 }
 
 /**
