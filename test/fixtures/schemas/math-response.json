@@ -1,0 +1,19 @@
+{
+  "name": "math_response",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "answer": {
+        "type": "number",
+        "description": "The numerical answer"
+      },
+      "explanation": {
+        "type": "string",
+        "description": "Brief explanation"
+      }
+    },
+    "required": ["answer", "explanation"],
+    "additionalProperties": false
+  }
+}
