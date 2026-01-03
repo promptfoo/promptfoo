@@ -606,10 +606,7 @@ export async function runEval({
       testIdx,
     });
 
-    logger.error({
-      message: 'Provider call failed during eval',
-      ...logContext,
-    });
+    logger.error('Provider call failed during eval', logContext);
 
     return [
       {
@@ -673,6 +670,8 @@ function buildProviderErrorContext({
       status,
       statusText,
       responseSnippet,
+      pluginId: test.metadata?.pluginId,
+      strategyId: test.metadata?.strategyId,
     },
     logContext: {
       providerId,
