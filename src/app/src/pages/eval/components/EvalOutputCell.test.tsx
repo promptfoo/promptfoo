@@ -1757,6 +1757,76 @@ describe('EvalOutputCell provider error display', () => {
     // No fail-reason element should be present
     expect(container.querySelector('.fail-reason')).not.toBeInTheDocument();
   });
+
+  it('does not duplicate error when failureReason is ASSERT (assertion failure)', () => {
+    // This tests the fix for GitHub issue #6915
+    // When an assertion fails, output.error is set to the same reason as the failed assertion
+    // The UI should NOT show duplicates - the error should only appear once via componentResults
+    const propsWithAssertionFailure: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: 'Some output',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                type: 'contains' as AssertionType,
+                value: 'expected value',
+              },
+              pass: false,
+              reason: 'Output does not contain expected value',
+              score: 0,
+            },
+          ],
+          pass: false,
+          reason: 'Output does not contain expected value',
+          score: 0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: 'Some output',
+        testCase: {},
+        // This is the key: output.error is set to the same reason as the assertion failure
+        // (this happens in evaluator.ts when assertions fail)
+        error: 'Output does not contain expected value',
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAssertionFailure} />);
+
+    // The error message should appear exactly once (from componentResults, not duplicated from output.error)
+    const errorMessages = screen.getAllByText('Output does not contain expected value');
+    expect(errorMessages).toHaveLength(1);
+
+    // Verify the fail reason carousel does NOT show pagination (1/2, etc.) since there's only one reason
+    expect(screen.queryByText(/1\/2/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/2\/2/)).not.toBeInTheDocument();
+  });
 });
 
 describe('EvalOutputCell thumbs up/down toggle functionality', () => {

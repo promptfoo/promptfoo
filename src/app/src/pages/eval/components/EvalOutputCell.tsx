@@ -257,7 +257,8 @@ function EvalOutputCell({
   }
 
   // Include provider-level error if present (e.g., from Python provider returning error)
-  if (output.error) {
+  // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
+  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     failReasons.unshift(output.error);
   }
 
