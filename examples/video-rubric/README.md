@@ -2,7 +2,7 @@
 
 Demonstrates using `video-rubric` assertion to evaluate generated videos using LLM-as-a-judge.
 
-The `video-rubric` assertion uses a multimodal LLM (Gemini 3.0 Flash Preview by default) to evaluate video outputs against a custom rubric. This is useful for:
+The `video-rubric` assertion uses a multimodal LLM (Gemini 2.5 Flash by default) to evaluate video outputs against a custom rubric. This is useful for:
 
 - Quality assessment of AI-generated videos
 - Checking if generated videos match the prompt
