@@ -598,10 +598,43 @@ export async function runEval({
 
     return [ret];
   } catch (err) {
+    const error = err as any;
+    const providerId = provider.id();
+    const providerLabel = provider.label;
+    const status = error?.response?.status;
+    const statusText = error?.response?.statusText;
+    const responseData = error?.response?.data;
+    const responseSnippet = (() => {
+      if (responseData == null) {
+        return undefined;
+      }
+      const asString =
+        typeof responseData === 'string' ? responseData : safeJsonStringify(responseData);
+      return asString.length > 500 ? `${asString.slice(0, 500)}...` : asString;
+    })();
+    const errorMessage = String(error);
+    const stack = (error as Error)?.stack;
+    const errorWithStack =
+      stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+
+    logger.error({
+      message: 'Provider call failed during eval',
+      providerId,
+      providerLabel,
+      status,
+      statusText,
+      responseSnippet,
+      promptIdx,
+      testIdx,
+      pluginId: test.metadata?.pluginId,
+      strategyId: test.metadata?.strategyId,
+      error,
+    });
+
     return [
       {
         ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
+        error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
         score: 0,
@@ -611,6 +644,16 @@ export async function runEval({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
+        pluginId: test.metadata?.pluginId ?? null,
+        strategyId: test.metadata?.strategyId ?? null,
+        metadata: {
+          ...(test.metadata || {}),
+          providerId,
+          providerLabel,
+          status,
+          statusText,
+          responseSnippet,
+        },
       },
     ];
   }
