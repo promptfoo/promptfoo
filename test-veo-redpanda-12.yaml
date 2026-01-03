@@ -1,0 +1,176 @@
+# 12 Code Review Red Panda Videos - Flat 2D Animation Style
+# Run with: npm run local -- eval -c test-veo-redpanda-12.yaml --no-cache
+# Style: Flat 2D digital animation like Bojack Horseman / Tuca and Bertie
+
+description: Promptfoo Red Panda Code Review Videos (Veo 3.1)
+
+providers:
+  - id: google:video:veo-3.1-fast-generate-preview
+    label: Veo 3.1 Fast Preview
+    config:
+      projectId: promptfoo
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: 720p
+      durationSeconds: 6
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  # 1. LGTM Approval
+  - vars:
+      prompt: >
+        Flat 2D animated red panda character in Bojack Horseman style. Bold
+        outlines, flat colors, no gradients. The anthropomorphic red panda
+        wears oversized glasses, sits at a minimalist desk, reviews code on
+        a flat-design monitor, nods approvingly, and gives a big thumbs up.
+        A green "LGTM" badge pops up with motion lines. Purple background,
+        teal desk, orange fur highlights. Vector art, adult animation TV
+        series aesthetic.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 2. Finding a Bug
+  - vars:
+      prompt: >
+        2D flat animation of a red panda detective in Tuca and Bertie style.
+        Clean vector lines, bold flat colors. The red panda wears a tiny
+        detective hat, holds a magnifying glass, and examines floating code.
+        A cartoon bug crawls out from the code. The red panda's eyes widen
+        with discovery. Simple geometric shapes, limited animation. Deep
+        purple and teal color scheme with orange accents.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 3. Merge Celebration
+  - vars:
+      prompt: >
+        Flat 2D animated red panda in Bojack Horseman adult animation style.
+        Simple shapes, thick outlines, flat colors. The red panda in a hoodie
+        presses a big green button labeled "MERGE". Flat geometric confetti
+        and stars burst out. The red panda raises both paws in celebration.
+        Minimalist office background with flat shapes. Purple, teal, orange
+        palette. Motion graphics meets character animation.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 4. Typing Code Review Comments
+  - vars:
+      prompt: >
+        2D vector animation of a red panda at a keyboard in Tuca and Bertie
+        style. Bold flat colors, no shading. The red panda types rapidly,
+        speech bubbles with code symbols appear above. The red panda pauses,
+        thinks, types more feedback. Simple desk setup, flat design monitor
+        shows a diff view. Purple background, teal accents, orange on the
+        red panda's fur. Clean illustrative look.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 5. Reviewing a Diff
+  - vars:
+      prompt: >
+        Flat 2D animated red panda in Bojack Horseman aesthetic. Clean vector
+        art, bold outlines. The red panda scrolls through a code diff on
+        screen - red and green lines visible. The red panda's expression
+        changes from curious to understanding to nodding approval. Minimalist
+        flat-design office. Purple and teal color scheme. Adult animation TV
+        style, limited frame animation.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 6. Rejecting a PR
+  - vars:
+      prompt: >
+        2D flat animation of a red panda in Tuca and Bertie style. Bold flat
+        colors, thick outlines. The red panda reviews code, shakes head
+        disapprovingly. A big red "X" or "CHANGES REQUESTED" badge appears
+        with dramatic effect. The red panda sighs and starts typing feedback.
+        Simple geometric background. Purple, teal, orange palette. Vector
+        art, no 3D rendering.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 7. Pointing at a Bug in Code
+  - vars:
+      prompt: >
+        Flat 2D animated red panda in Bojack Horseman style. Bold outlines,
+        flat colors. The red panda stands at a whiteboard covered in code,
+        points emphatically at a specific line, and circles it in red marker.
+        The red panda looks back at camera with a "found it" expression.
+        Deep purple wall, teal and orange accents. Clean vector animation,
+        adult animation aesthetic.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 8. Approving with Minor Suggestions
+  - vars:
+      prompt: >
+        2D vector animation of a red panda in Tuca and Bertie style. Clean
+        flat colors, no gradients. The red panda reviews code, gives a
+        wavering "so-so" hand gesture, then types a few notes. A yellow
+        "APPROVED WITH SUGGESTIONS" badge appears. The red panda gives a
+        reassuring nod. Purple background, teal desk, orange highlights.
+        Limited animation style.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 9. Debugging Confusion
+  - vars:
+      prompt: >
+        Flat 2D animated red panda in Bojack Horseman aesthetic. Bold flat
+        colors, thick outlines. The red panda stares at code with a puzzled
+        expression, scratches head, question marks float around. The red
+        panda leans closer to the screen, squints. Simple flat office
+        background. Purple and teal with orange fur accents. Vector art,
+        adult animation TV style.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 10. Ship It Deploy
+  - vars:
+      prompt: >
+        2D flat animation of a red panda in Tuca and Bertie style. Clean
+        vector lines, bold colors. The red panda in a captain's hat presses
+        a big blue "DEPLOY" or "SHIP IT" button. A flat-design rocket
+        launches upward with simple motion trails. The red panda salutes.
+        Minimalist background, purple, teal, orange palette. No gradients,
+        motion graphics style.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 11. Coffee While Reviewing
+  - vars:
+      prompt: >
+        Flat 2D animated red panda in Bojack Horseman style. Bold outlines,
+        flat colors. The red panda holds a steaming coffee mug with one paw
+        while scrolling through code with the other. Takes a sip, nods
+        thoughtfully at the screen. Simple minimalist desk setup. Deep
+        purple background, teal mug, orange fur highlights. Adult animation
+        TV aesthetic, vector art.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+
+  # 12. Pair Code Review
+  - vars:
+      prompt: >
+        2D flat animation of two red panda characters in Tuca and Bertie
+        style. Bold flat colors, clean vector lines. Two red pandas sit
+        side by side at one screen, one points at code while the other nods
+        and types. They high-five when done. Simple geometric office
+        background. Purple, teal, and orange color scheme. Limited animation,
+        adult animation aesthetic.
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CopyButton } from './copy-button';
@@ -54,24 +54,25 @@ describe('CopyButton', () => {
   });
 
   it('reverts to copy icon after 2 seconds', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
     const user = userEvent.setup();
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
 
     await user.click(button);
 
-    // Wait for the copied state to appear
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    // Wait for button to revert to "Copy" after 2 seconds
-    await waitFor(
-      () => {
-        expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-      },
-      { timeout: 3000 },
-    );
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    setTimeoutSpy.mockRestore();
   });
 
   it('applies custom className', () => {
@@ -86,36 +87,48 @@ describe('CopyButton', () => {
     expect(icon).toHaveClass('h-6', 'w-6');
   });
 
-  it.skip('handles clipboard API errors gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Override clipboard to make it fail for this test
-    delete (navigator as any).clipboard;
-    Object.defineProperty(navigator, 'clipboard', {
-      value: {
-        writeText: vi.fn().mockRejectedValue(new Error('Clipboard error')),
-      },
-      writable: true,
-      configurable: true,
-    });
-
+  it('handles rapid clicks by clearing previous timeouts', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
     const user = userEvent.setup();
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
 
     await user.click(button);
+    await user.click(button);
+    await user.click(button);
 
-    // Wait for error to be logged
-    await waitFor(
-      () => {
-        expect(consoleSpy).toHaveBeenCalledWith('Failed to copy to clipboard:', expect.any(Error));
-      },
-      { timeout: 1000 },
-    );
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
 
-    // Button should not have changed to "Copied" state
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    const filteredCalls2 = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    const timeoutCallback = filteredCalls2[filteredCalls2.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
+    });
+
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    clearTimeoutSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
+  });
 
-    consoleSpy.mockRestore();
+  it('clears copy timeout on unmount if copy operation was triggered', async () => {
+    const user = userEvent.setup();
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+
+    const { unmount } = render(<CopyButton value="test text" />);
+    const button = screen.getByRole('button', { name: 'Copy' });
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    });
+
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 });

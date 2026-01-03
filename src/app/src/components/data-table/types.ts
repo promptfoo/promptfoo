@@ -1,4 +1,10 @@
-import type { ColumnDef, RowSelectionState, SortingState, Table } from '@tanstack/react-table';
+import type {
+  ColumnDef,
+  RowSelectionState,
+  SortingState,
+  Table,
+  VisibilityState,
+} from '@tanstack/react-table';
 
 // Extend TanStack Table's ColumnMeta to include our custom filter metadata
 declare module '@tanstack/react-table' {
@@ -18,6 +24,7 @@ export interface DataTableProps<TData, TValue = unknown> {
   emptyMessage?: string;
   className?: string;
   initialSorting?: SortingState;
+  initialColumnVisibility?: VisibilityState;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
   showToolbar?: boolean;
@@ -51,6 +58,11 @@ export interface DataTableToolbarProps<TData> {
 
 export interface DataTablePaginationProps<TData> {
   table: Table<TData>;
+  pageIndex: number;
+  pageSize: number;
+  pageCount: number;
+  totalRows: number;
+  onPageSizeChange: (pageSize: number) => void;
 }
 
 export interface DataTableColumnToggleProps<TData> {

@@ -1,26 +1,25 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
+import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
@@ -526,6 +525,7 @@ export const CustomPoliciesSection = () => {
         const text = await file.text();
 
         // Parse CSV and take the first column regardless of header name
+        const { parse } = await import('csv-parse/browser/esm/sync');
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,
@@ -632,19 +632,19 @@ export const CustomPoliciesSection = () => {
         size: 160,
         enableSorting: false,
         cell: ({ row }) => (
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 0.5,
-              alignItems: 'center',
-              height: '100%',
-              py: 1,
-            }}
-          >
-            <Tooltip title="Edit">
-              <IconButton size="small" onClick={() => handleEditPolicy(row.original)}>
-                <EditIcon fontSize="small" />
-              </IconButton>
+          <div className="flex h-full items-center gap-1 py-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => handleEditPolicy(row.original)}
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Edit</TooltipContent>
             </Tooltip>
             <TestCaseGenerateButton
               onClick={() => handleGenerateTestCase(row.original)}
@@ -659,7 +659,7 @@ export const CustomPoliciesSection = () => {
                   : 'Promptfoo Cloud connection is required for test generation'
               }
             />
-          </Box>
+          </div>
         ),
       },
     ],
@@ -683,43 +683,34 @@ export const CustomPoliciesSection = () => {
   // Custom toolbar actions
   const toolbarActions = (
     <>
-      <Button
-        startIcon={<AddIcon />}
-        onClick={handleAddPolicy}
-        variant="contained"
-        color="primary"
-        size="small"
-      >
+      <Button size="sm" onClick={handleAddPolicy}>
+        <Plus className="mr-2 size-4" />
         Add Policy
       </Button>
-      <Button
-        component="label"
-        variant="outlined"
-        startIcon={isUploadingCsv ? null : <FileUploadIcon />}
-        disabled={isUploadingCsv}
-        size="small"
-      >
-        {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
-        <input
-          type="file"
-          hidden
-          accept=".csv"
-          onChange={handleCsvUpload}
-          onClick={(e) => {
-            (e.target as HTMLInputElement).value = '';
-          }}
-          disabled={isUploadingCsv}
-        />
+      <Button variant="outline" size="sm" asChild disabled={isUploadingCsv}>
+        <label className="cursor-pointer">
+          <Upload className="mr-2 size-4" />
+          {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
+          <input
+            type="file"
+            hidden
+            accept=".csv"
+            onChange={handleCsvUpload}
+            onClick={(e) => {
+              (e.target as HTMLInputElement).value = '';
+            }}
+            disabled={isUploadingCsv}
+          />
+        </label>
       </Button>
       {selectedCount > 0 && (
         <Button
-          color="error"
-          variant="outlined"
-          size="small"
+          variant="ghost"
+          size="sm"
+          className="text-destructive"
           onClick={handleDeleteSelected}
-          startIcon={<DeleteIcon />}
-          sx={{ border: 0 }}
         >
+          <Trash2 className="mr-2 size-4" />
           Delete ({selectedCount})
         </Button>
       )}
@@ -727,18 +718,17 @@ export const CustomPoliciesSection = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
-      <Box
-        sx={{
-          display: 'grid',
+    <div className="flex flex-col gap-4" ref={containerRef}>
+      <div
+        className="grid gap-4"
+        style={{
           gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
-          gap: 2,
           height: 600,
           minHeight: 400,
         }}
       >
         {/* Main table area */}
-        <Box sx={{ height: '100%', minWidth: 0 }}>
+        <div className="min-w-0" style={{ height: '100%' }}>
           <DataTable
             data={rows}
             columns={columns}
@@ -751,7 +741,7 @@ export const CustomPoliciesSection = () => {
             showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
-        </Box>
+        </div>
 
         {/* Suggested Policies Sidebar */}
         {showSuggestionsSidebar && (
@@ -763,91 +753,94 @@ export const CustomPoliciesSection = () => {
             onRemoveSuggestedPolicy={handleRemoveSuggestedPolicy}
           />
         )}
-      </Box>
+      </div>
 
       {/* Delete confirmation dialog */}
-      <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
-        <DialogTitle>
-          Delete {selectedCount} polic{selectedCount === 1 ? 'y' : 'ies'}?
-        </DialogTitle>
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete the selected polic
-            {selectedCount === 1 ? 'y' : 'ies'}? This action cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedCount} polic{selectedCount === 1 ? 'y' : 'ies'}?
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the selected polic
+              {selectedCount === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelDelete}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              <Trash2 className="mr-2 size-4" />
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelDelete} variant="outlined">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmDelete}
-            color="error"
-            variant="contained"
-            startIcon={<DeleteIcon />}
-          >
-            Delete
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Policy edit/create dialog */}
-      <Dialog open={policyDialog.open} onClose={handleClosePolicyDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {policyDialog.mode === 'create' ? 'Add New Policy' : 'Edit Policy'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <TextField
-              label="Name"
-              value={policyDialog.formData.name}
-              onChange={(e) =>
-                setPolicyDialog((prev) => ({
-                  ...prev,
-                  formData: { ...prev.formData, name: e.target.value },
-                  errors: { ...prev.errors, name: undefined },
-                }))
+      <Dialog open={policyDialog.open} onOpenChange={(open) => !open && handleClosePolicyDialog()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {policyDialog.mode === 'create' ? 'Add New Policy' : 'Edit Policy'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="policy-name">Name</Label>
+              <Input
+                id="policy-name"
+                value={policyDialog.formData.name}
+                onChange={(e) =>
+                  setPolicyDialog((prev) => ({
+                    ...prev,
+                    formData: { ...prev.formData, name: e.target.value },
+                    errors: { ...prev.errors, name: undefined },
+                  }))
+                }
+                placeholder="e.g., Data Privacy Policy"
+              />
+              {policyDialog.errors.name && (
+                <p className="text-sm text-destructive">{policyDialog.errors.name}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="policy-text">Policy Text</Label>
+              <Textarea
+                id="policy-text"
+                value={policyDialog.formData.policyText}
+                onChange={(e) =>
+                  setPolicyDialog((prev) => ({
+                    ...prev,
+                    formData: { ...prev.formData, policyText: e.target.value },
+                    errors: { ...prev.errors, policyText: undefined },
+                  }))
+                }
+                rows={8}
+                placeholder="Enter the policy text that describes what should be checked..."
+              />
+              {policyDialog.errors.policyText && (
+                <p className="text-sm text-destructive">{policyDialog.errors.policyText}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleClosePolicyDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSavePolicy}
+              disabled={
+                !policyDialog.formData.name.trim() || !policyDialog.formData.policyText.trim()
               }
-              error={!!policyDialog.errors.name}
-              helperText={policyDialog.errors.name}
-              placeholder="e.g., Data Privacy Policy"
-              fullWidth
-            />
-            <TextField
-              label="Policy Text"
-              value={policyDialog.formData.policyText}
-              onChange={(e) =>
-                setPolicyDialog((prev) => ({
-                  ...prev,
-                  formData: { ...prev.formData, policyText: e.target.value },
-                  errors: { ...prev.errors, policyText: undefined },
-                }))
-              }
-              error={!!policyDialog.errors.policyText}
-              helperText={policyDialog.errors.policyText}
-              multiline
-              rows={8}
-              fullWidth
-              placeholder="Enter the policy text that describes what should be checked..."
-            />
-          </Box>
+            >
+              Save
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClosePolicyDialog} variant="outlined">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSavePolicy}
-            variant="contained"
-            color="primary"
-            disabled={
-              !policyDialog.formData.name.trim() || !policyDialog.formData.policyText.trim()
-            }
-          >
-            Save
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
   );
 };

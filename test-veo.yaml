@@ -1,0 +1,30 @@
+# Test configuration for Google Veo video generation provider
+# Run with: npm run local -- eval -c test-veo.yaml --no-cache
+#
+# Verified working models:
+#   - veo-2.0-generate-exp (Veo 2 experimental)
+#   - veo-3.0-fast-generate-001 (Veo 3 Fast GA)
+#   - veo-3.1-fast-generate-preview (Veo 3.1 Fast Preview)
+
+description: Google Veo Video Generation Test
+
+providers:
+  - id: google:video:veo-3.0-fast-generate-001
+    config:
+      projectId: promptfoo
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: 720p
+      durationSeconds: 4
+
+prompts:
+  - 'Generate a video of: {{scene}}'
+
+tests:
+  - vars:
+      scene: 'A golden retriever running through a field of sunflowers on a sunny day'
+    assert:
+      - type: contains
+        value: 'promptfoo://blob/'
+      - type: contains
+        value: '[Video:'

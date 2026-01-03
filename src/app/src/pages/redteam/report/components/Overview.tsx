@@ -1,7 +1,5 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import { type Plugin as PluginType, Severity } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { type TestResultStats } from './FrameworkComplianceUtils';
@@ -49,14 +47,15 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
       setSeverityFilter(null);
     } else {
       setSeverityFilter(severity);
+      // Only scroll when applying a filter, not when clearing
+      vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
-    <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
+    <div className="flex flex-col gap-4 sm:flex-row">
       {Object.values(Severity).map((severity) => (
-        <Box key={severity} flex={1}>
+        <div key={severity} className="flex-1">
           <SeverityCard
             severity={severity}
             issueCount={severityCounts[severity]}
@@ -65,9 +64,9 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
             isActive={severityFilter === severity}
             hasActiveFilter={severityFilter !== null}
           />
-        </Box>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 };
 

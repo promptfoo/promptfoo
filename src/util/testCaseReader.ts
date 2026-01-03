@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
 
@@ -46,7 +46,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
@@ -147,7 +147,7 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
     const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
     try {
@@ -195,7 +195,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
     const jsonData = yaml.load(fileContent) as any;
     const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
     return testCases.map((item, idx) => ({
@@ -209,7 +209,7 @@ export async function readStandaloneTestsFile(
       feature: 'jsonl tests file',
     });
 
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
 
     return fileContent
       .split('\n')
@@ -225,7 +225,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    const rawContent = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8'));
+    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as any;
   }
 
@@ -260,7 +260,7 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
-    const rawContent = yaml.load(fs.readFileSync(testFilePath, 'utf-8'));
+    const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
@@ -370,11 +370,11 @@ export async function loadTestsFromGlob(
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      const rawContent = yaml.load(fs.readFileSync(testFile, 'utf-8'));
+      const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
-      const fileContent = fs.readFileSync(testFile, 'utf-8');
+      const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = fileContent
         .split('\n')
         .filter((line) => line.trim())
@@ -382,7 +382,7 @@ export async function loadTestsFromGlob(
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = JSON.parse(fs.readFileSync(testFile, 'utf8'));
+      const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {

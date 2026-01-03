@@ -332,13 +332,9 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Fire-and-forget async import to avoid circular dependency at module load time
-        (async () => {
-          const { default: logger } = await import('../logger');
-          logger.debug(
-            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-          );
-        })();
+        console.debug(
+          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+        );
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate

@@ -134,7 +134,7 @@ src/app/src/
 | `Select`       | `@radix-ui/react-select`        |                         |
 | `Autocomplete` | `cmdk` or custom combobox       | Complex - later phase   |
 | `Dialog`       | `@radix-ui/react-dialog`        |                         |
-| `Drawer`       | `vaul` or custom                |                         |
+| `Drawer`       | Sheet (`components/ui/sheet`)   | ✅ Created              |
 | `Menu`         | `@radix-ui/react-dropdown-menu` |                         |
 | `Tooltip`      | `@radix-ui/react-tooltip`       |                         |
 | `Popover`      | `@radix-ui/react-popover`       |                         |
@@ -750,8 +750,10 @@ We define z-index values as CSS custom properties in `index.css`:
 ```css
 :root {
   /* Z-index scale for layered components
-   * Modal < Dropdown ensures nested dropdowns appear above modals
-   * Values >= 1300 for MUI compatibility during migration */
+   * Banner < AppBar < Modal < Dropdown ensures proper stacking
+   * Values >= 1100 for MUI compatibility during migration */
+  --z-banner: 1100;
+  --z-appbar: 1200;
   --z-modal-backdrop: 1300;
   --z-modal: 1310;
   --z-dropdown: 1400;
@@ -761,9 +763,15 @@ We define z-index values as CSS custom properties in `index.css`:
 
 #### Usage in Components
 
-Use the `z-[var(--z-*)]` syntax in Tailwind classes:
+Use the semantic z-index tokens (e.g., `z-[var(--z-dropdown)]`) in Tailwind classes:
 
 ```tsx
+// Navigation.tsx - sticky header
+<header className="sticky top-0 z-[var(--z-appbar)] ..." />
+
+// UpdateBanner.tsx - notification banner (styled component)
+zIndex: 'var(--z-banner)',
+
 // dialog.tsx
 <DialogPrimitive.Overlay className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/50 ..." />
 <DialogPrimitive.Content className="fixed ... z-[var(--z-modal)] ..." />
@@ -777,18 +785,25 @@ Use the `z-[var(--z-*)]` syntax in Tailwind classes:
 
 #### Z-Index Stacking Order
 
-| Layer          | CSS Variable         | Value | Components                    |
-| -------------- | -------------------- | ----- | ----------------------------- |
-| Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                |
-| Modal Content  | `--z-modal`          | 1310  | Dialog content                |
-| Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu |
-| Tooltips       | `--z-tooltip`        | 1500  | Tooltip                       |
+| Layer          | CSS Variable         | Value | Components                      |
+| -------------- | -------------------- | ----- | ------------------------------- |
+| Banner         | `--z-banner`         | 1100  | UpdateBanner, notification bars |
+| App Bar        | `--z-appbar`         | 1200  | Navigation header (sticky)      |
+| Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                  |
+| Modal Content  | `--z-modal`          | 1310  | Dialog content                  |
+| Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu   |
+| Tooltips       | `--z-tooltip`        | 1500  | Tooltip                         |
 
-**Key insight**: Dropdowns (1400) are **above** modals (1310) so that dropdowns inside modals work correctly.
+**Key insights**:
+
+- **Banner < AppBar**: The sticky header (and its dropdown menus) must appear above notification banners
+- **Dropdowns (1400) > Modals (1310)**: Nested dropdowns inside modals work correctly
+- **Tooltip highest**: Tooltips should always be visible, even over dropdowns
 
 #### Why These Values?
 
-- **>= 1300**: MUI modals use z-index 1300, so our components stack correctly during migration
+- **>= 1100**: MUI uses z-index 1100 for appBar, so our components stack correctly during migration
+- **AppBar > Banner**: Nav dropdown menus must not be obscured by banners
 - **Modal < Dropdown**: Nested dropdowns must appear above parent modals
 - **Tooltip highest**: Tooltips should always be visible, even over dropdowns
 
@@ -938,6 +953,111 @@ Use gradient backgrounds to convey overall status at a glance:
 ```
 
 Use `/50` opacity in dark mode for subtle, non-overwhelming gradients.
+
+---
+
+## Page-Level Migration Checklist
+
+### ✅ Phase A: Core Pages (COMPLETED)
+
+- [x] **Evals page** (`/evals/page.tsx`) - PageContainer, PageHeader, DataTable
+- [x] **Model Audit Setup** (`/model-audit-setup/`) - Card, Alert, Spinner, Tooltip
+- [x] **Model Audit Result** (`/model-audit-result/`) - Dialog, DropdownMenu, Alert
+- [x] **Model Audit History** (`/model-audit-history/`) - DataTable, Badge, Dialog
+- [x] **Model Audit Latest** (`/model-audit-latest/`) - Alert, Card, Button
+- [x] **History page** (`/history/`) - DataTable, PageHeader, CopyButton, Dialog
+- [x] **Datasets page** (`/datasets/`) - DataTable, PageHeader
+- [x] **Prompts page** (`/prompts/`) - DataTable, PageHeader
+
+### ✅ Phase B: Quick Wins (Medium Priority)
+
+- [x] **Login page** (`/login.tsx`) - ~~15 MUI imports~~ → 0 MUI imports
+  - [x] Replace TextField → Input component with Label + icon composition
+  - [x] Replace Button → ui/Button
+  - [x] Replace Box/Stack/Container → Tailwind layout divs
+  - [x] Replace MUI icons → Lucide (Key, ExternalLink, Eye, EyeOff)
+  - [x] Replace Typography → Tailwind text classes
+  - [x] Remove InputAdornment, use absolute positioning
+  - [x] Replace CircularProgress → Spinner
+  - _Completed_
+
+- [x] **Launcher page** (`/launcher/page.tsx`) - ~~11 MUI imports + styled()~~ → 0 MUI imports
+  - [x] Remove styled() components (StyledPaper, StyledHeading, StyledText, CodeBlock, ListItem) → Tailwind classes
+  - [x] Remove createTheme/ThemeProvider → use native dark mode with data-theme
+  - [x] Replace Box/Paper → Tailwind layout divs + Card
+  - [x] Replace MUI icons → Lucide (Globe, Terminal)
+  - [x] Replace Alert/Collapse → ui/Alert with CSS transition
+  - [x] Replace CircularProgress → Spinner
+  - [x] Replace useMediaQuery → Tailwind responsive classes + native matchMedia
+  - _Completed_
+
+### 🔄 Phase C: Red Team Report Components
+
+Page wrapper is clean, nested components being migrated progressively
+
+#### ✅ Easy Components (Completed)
+
+- [x] **Overview.tsx** - Box/Stack → Tailwind flex
+- [x] **RiskCategories.tsx** - Stack/Typography → Tailwind
+- [x] **FrameworkCsvExporter.tsx** - Button/DownloadIcon → ui/Button + Lucide
+- [x] **PluginStrategyFlow.tsx** - useTheme → CSS variables
+- [x] **ToolsDialog.tsx** - Dialog/List/Button → ui/Dialog + Tailwind
+
+#### ✅ Medium Components (Completed)
+
+- [x] **ReportSettingsDialogButton.tsx** - Dialog/Checkbox/Label → ui components, native HTML range slider
+- [x] **ReportDownloadButton.tsx** - Menu → DropdownMenu, Tooltip → ui/Tooltip
+- [x] **SuggestionsDialog.tsx** - Dialog + Accordion → Collapsible + CopyButton
+
+#### ✅ Hard Components (Completed)
+
+- [x] **SeverityCard.tsx** - Card/Tooltip → ui components, severity colors via Tailwind classes
+- [x] **FrameworkPluginResult.tsx** - List → div, icons → Lucide, severity borders via Tailwind
+- [x] **FrameworkCompliance.tsx** - Grid → Tailwind grid, LinearProgress → custom progress div
+- [x] **RiskCategoryDrawer.tsx** - Drawer → new Sheet component, Tabs → ui/Tabs, Chip → Badge
+
+#### ✅ Complex Components (Completed)
+
+- [x] **FrameworkCard.tsx** - Nested lists, Badge, Tooltip → Tailwind + ui components
+
+#### ✅ Complex Components (Part 2 - Completed)
+
+- [x] **StrategyStats.tsx** - styled() → Tailwind, MUI Drawer → Sheet, MUI Tabs → ui/Tabs, MUI Table → HTML table with Tailwind
+- [x] **RiskCard.tsx** - MUI Gauge → custom SVG Gauge component, Card/Grid/List → ui/Card + Tailwind, deleted RiskCard.css
+- [x] **Report.tsx** - Main orchestrator fully migrated: Box/Container/Stack → Tailwind layout, MUI Select → ui/Select, Chip → Badge, TextField → Input, IconButton → Button, deleted Report.css
+
+#### ✅ Phase C Complete!
+
+All Red Team Report components have been migrated from MUI to the new design system.
+
+### 📋 Phase D: High Complexity (Schedule Later)
+
+- [ ] **Red Team Setup** (`/redteam/setup/page.tsx`) - 24+ MUI imports, 30+ component files
+  - Complex multi-step form with tabs and dialogs
+  - Sub-components: Setup.tsx, TargetConfiguration.tsx, Strategies.tsx, etc.
+  - _Estimated: 12-15 hours_
+
+- [ ] **Eval Creator** (`/eval-creator/page.tsx`) - 7+ component files with MUI
+  - Form-heavy with dialogs: TestCaseDialog, PromptDialog, ProviderConfigDialog
+  - Sub-components: VarsForm, PromptsSection, TestCasesSection
+  - _Estimated: 8-12 hours_
+
+### 📋 Phase E: Eval Results (Final Phase)
+
+The largest and most complex feature - 175+ MUI imports across 33+ files
+
+- [ ] **Eval page** (`/eval/page.tsx`) - orchestrator component
+  - [ ] Eval.tsx (main component)
+  - [ ] ResultsView.tsx
+  - [ ] ResultsTable.tsx (680 lines CSS)
+  - [ ] ChatMessages.tsx
+  - [ ] CustomMetrics.tsx
+  - [ ] EvaluationPanel.tsx
+  - [ ] MetadataPanel.tsx
+  - [ ] OutputsPanel.tsx
+  - [ ] TableSettings/ (multiple components)
+  - [ ] All remaining sub-components
+  - _Estimated: 20-40 hours_
 
 ---
 

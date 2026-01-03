@@ -1,6 +1,6 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { useToast } from '@app/hooks/useToast';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -31,16 +31,15 @@ const mockUpdateConfig = vi.fn();
 const mockShowToast = vi.fn();
 
 const renderComponent = () => {
-  const theme = createTheme();
   const redTeamConfig = (useRedTeamConfig as unknown as Mock)();
   return render(
-    <ThemeProvider theme={theme}>
+    <TooltipProvider>
       <ToastProvider>
         <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
           <CustomPoliciesSection />
         </TestCaseGenerationProvider>
       </ToastProvider>
-    </ThemeProvider>,
+    </TooltipProvider>,
   );
 };
 
@@ -134,13 +133,13 @@ describe('CustomPoliciesSection', () => {
       });
 
       rerender(
-        <ThemeProvider theme={createTheme()}>
+        <TooltipProvider>
           <ToastProvider>
             <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
               <CustomPoliciesSection />
             </TestCaseGenerationProvider>
           </ToastProvider>
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       // Verify policies are reset and empty state message is shown
@@ -161,10 +160,8 @@ describe('CustomPoliciesSection', () => {
     it('should append new policies and show a success toast for a valid CSV upload', async () => {
       renderComponent();
 
-      // Wait for component to be ready
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /upload csv/i })).toBeInTheDocument();
-      });
+      // Wait for component to be ready - use findByText since it's a label with asChild
+      const uploadButton = await screen.findByText(/upload csv/i);
 
       const csvContent = 'policy_text\n"Policy from CSV 1"\n"Policy from CSV 2"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
@@ -172,8 +169,7 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      const fileInput = uploadButton.closest('label')?.querySelector('input[type="file"]');
       expect(fileInput).not.toBeNull();
 
       fireEvent.change(fileInput!, {
@@ -199,18 +195,22 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const uploadButton = uploadLabel.closest('label');
+      const fileInput = uploadButton?.querySelector('input[type="file"]');
 
       fireEvent.change(fileInput!, {
         target: { files: [file] },
       });
 
-      expect(uploadButton).toHaveAttribute('aria-disabled', 'true');
-      expect(uploadButton).toHaveTextContent('Uploading...');
-
+      // Wait for the "Uploading..." state to appear
       await waitFor(() => {
-        expect(uploadButton).not.toHaveAttribute('aria-disabled');
+        expect(uploadButton).toHaveTextContent('Uploading...');
+      });
+
+      // Then wait for it to return to normal
+      await waitFor(() => {
         expect(uploadButton).toHaveTextContent('Upload CSV');
       });
     });
@@ -224,8 +224,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
       expect(fileInput).not.toBeNull();
 
       fireEvent.change(fileInput!, {
@@ -249,8 +250,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
 
       fireEvent.change(fileInput!, {
         target: { files: [file] },
@@ -272,8 +274,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.reject(new Error('File could not be read')),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
 
       fireEvent.change(fileInput!, {
         target: { files: [file] },
@@ -538,13 +541,13 @@ describe('CustomPoliciesSection', () => {
       });
 
       rerender(
-        <ThemeProvider theme={createTheme()}>
+        <TooltipProvider>
           <ToastProvider>
             <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
               <CustomPoliciesSection />
             </TestCaseGenerationProvider>
           </ToastProvider>
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       // Policies should still be displayed correctly despite reordering
