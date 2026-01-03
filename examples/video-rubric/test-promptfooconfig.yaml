@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test video-rubric assertion with mock provider
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - file://test-mock-provider.js
+
+tests:
+  - vars:
+      prompt: A scenic landscape video
+    assert:
+      - type: video-rubric
+        value: |
+          Evaluate if this video shows any outdoor scenery.
+          The video should contain:
+          1. Outdoor elements (sky, nature, buildings, etc.)
+          2. Moving elements (motion of some kind)
+          Score 1.0 if criteria are met, 0.5 if partially met, 0.0 if not met.
