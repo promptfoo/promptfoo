@@ -214,17 +214,17 @@ tests:
 
 ### Grading Provider
 
-By default, `video-rubric` uses Gemini 2.5 Flash. Override with:
+By default, `video-rubric` uses Gemini 3.0 Flash Preview. Override with:
 
 ```yaml
 defaultTest:
   options:
-    provider: vertex:gemini-2.5-pro
+    provider: vertex:gemini-3-pro-preview
 
 # Or per-assertion
 assert:
   - type: video-rubric
-    provider: vertex:gemini-2.5-pro
+    provider: vertex:gemini-3-pro-preview
     value: ...
 ```
 
@@ -378,7 +378,7 @@ providers:
 
 defaultTest:
   options:
-    provider: vertex:gemini-2.5-flash
+    provider: vertex:gemini-3-flash-preview
 
 tests:
   - vars:
@@ -513,7 +513,7 @@ providers:
 # Use Flash for grading (cheaper than Pro)
 defaultTest:
   options:
-    provider: vertex:gemini-2.5-flash
+    provider: vertex:gemini-3-flash-preview
 ```
 
 ### Provider Selection

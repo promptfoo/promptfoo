@@ -40,8 +40,8 @@ Under the hood, `video-rubric`:
 
 The grading model must support video understanding. By default, it uses:
 
-- **Vertex AI credentials**: `gemini-2.5-flash` (recommended for video analysis)
-- **Google AI Studio API key**: `gemini-2.5-flash`
+- **Vertex AI credentials**: `gemini-3-flash-preview` (recommended for video analysis)
+- **Google AI Studio API key**: `gemini-3-flash-preview`
 
 ## Supported video providers
 
@@ -61,7 +61,7 @@ You can specify a different multimodal model for grading:
 assert:
   - type: video-rubric
     value: Does the video show smooth motion without artifacts?
-    provider: vertex:gemini-2.5-pro
+    provider: vertex:gemini-3-pro-preview
 ```
 
 Or set a default grading provider for all tests:
@@ -70,7 +70,7 @@ Or set a default grading provider for all tests:
 defaultTest:
   options:
     provider:
-      id: vertex:gemini-2.5-flash
+      id: vertex:gemini-3-flash-preview
       config:
         generationConfig:
           response_mime_type: application/json
@@ -130,7 +130,7 @@ providers:
 
 defaultTest:
   options:
-    provider: vertex:gemini-2.5-flash
+    provider: vertex:gemini-3-flash-preview
 
 tests:
   - vars:
