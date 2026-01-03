@@ -101,8 +101,13 @@ async function fetchRemoteTestCases(
     version: VERSION,
     email: getUserEmail(),
   });
+
+  interface PluginGenerationResponse {
+    result?: TestCase[];
+  }
+
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -117,7 +122,7 @@ async function fetchRemoteTestCases(
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
     }
-    const ret = (data as { result: TestCase[] }).result;
+    const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
