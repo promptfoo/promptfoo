@@ -1,12 +1,6 @@
-import CodeIcon from '@mui/icons-material/Code';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import SettingsIcon from '@mui/icons-material/Settings';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Badge } from '@app/components/ui/badge';
+import { Code, File, FolderOpen, Settings } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 /**
@@ -14,7 +8,6 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
  * Shows summary information about the codebase analysis.
  */
 export default function ReconSummaryBanner() {
-  const theme = useTheme();
   const { reconContext } = useRedTeamConfig();
 
   // Only render if we have recon context
@@ -43,68 +36,48 @@ export default function ReconSummaryBanner() {
   };
 
   return (
-    <Alert
-      severity="info"
-      icon={<CodeIcon />}
-      sx={{
-        backgroundColor:
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.info.main, 0.1)
-            : alpha(theme.palette.info.main, 0.05),
-        border: `1px solid ${
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.info.main, 0.3)
-            : alpha(theme.palette.info.main, 0.2)
-        }`,
-        '& .MuiAlert-icon': {
-          color: theme.palette.info.main,
-        },
-        '& .MuiAlert-message': {
-          width: '100%',
-        },
-      }}
-    >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography
-          variant="subtitle2"
-          sx={{ fontWeight: 'medium', color: theme.palette.info.main }}
-        >
+    <Alert variant="info">
+      <Code className="h-5 w-5" />
+      <div className="flex flex-col gap-2 w-full">
+        <AlertTitle className="text-blue-700 dark:text-blue-300">
           Configuration loaded from Recon CLI
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-          {reconContext.codebaseDirectory && (
-            <Chip
-              size="small"
-              icon={<FolderOpenIcon />}
-              label={truncateDirectory(reconContext.codebaseDirectory)}
-              variant="outlined"
-              sx={{ borderColor: alpha(theme.palette.info.main, 0.3) }}
-            />
-          )}
-          {reconContext.keyFilesAnalyzed !== undefined && reconContext.keyFilesAnalyzed > 0 && (
-            <Chip
-              size="small"
-              icon={<InsertDriveFileIcon />}
-              label={`${reconContext.keyFilesAnalyzed} key files analyzed`}
-              variant="outlined"
-              sx={{ borderColor: alpha(theme.palette.info.main, 0.3) }}
-            />
-          )}
-          {reconContext.fieldsPopulated !== undefined && reconContext.fieldsPopulated > 0 && (
-            <Chip
-              size="small"
-              icon={<SettingsIcon />}
-              label={`${reconContext.fieldsPopulated} fields populated`}
-              variant="outlined"
-              sx={{ borderColor: alpha(theme.palette.info.main, 0.3) }}
-            />
-          )}
-        </Box>
-        <Typography variant="caption" color="text.secondary">
-          Analyzed on {formatDate(reconContext.timestamp)}. Review and adjust the details below as
-          needed.
-        </Typography>
-      </Box>
+        </AlertTitle>
+        <AlertDescription>
+          <div className="flex flex-wrap gap-2 items-center">
+            {reconContext.codebaseDirectory && (
+              <Badge
+                variant="outline"
+                className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+              >
+                <FolderOpen className="h-3 w-3 mr-1" />
+                {truncateDirectory(reconContext.codebaseDirectory)}
+              </Badge>
+            )}
+            {reconContext.keyFilesAnalyzed !== undefined && reconContext.keyFilesAnalyzed > 0 && (
+              <Badge
+                variant="outline"
+                className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+              >
+                <File className="h-3 w-3 mr-1" />
+                {reconContext.keyFilesAnalyzed} key files analyzed
+              </Badge>
+            )}
+            {reconContext.fieldsPopulated !== undefined && reconContext.fieldsPopulated > 0 && (
+              <Badge
+                variant="outline"
+                className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+              >
+                <Settings className="h-3 w-3 mr-1" />
+                {reconContext.fieldsPopulated} fields populated
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+            Analyzed on {formatDate(reconContext.timestamp)}. Review and adjust the details below as
+            needed.
+          </p>
+        </AlertDescription>
+      </div>
     </Alert>
   );
 }

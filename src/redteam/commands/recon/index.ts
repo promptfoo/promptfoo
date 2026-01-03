@@ -5,10 +5,12 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import open from 'open';
 import ora from 'ora';
+import { getLocalAppUrl } from '../../../constants';
 import logger from '../../../logger';
-import { getConfigDirectoryPath } from '../../../util/config/manage';
 import { writePromptfooConfig } from '../../../util/config/writer';
 import { buildRedteamConfig } from './config';
+import { displayResults } from './output';
+import { buildPendingConfig, writePendingReconConfig } from './pending';
 import { buildReconPrompt } from './prompt';
 import {
   createAnthropicReconProvider,
@@ -18,82 +20,13 @@ import {
 } from './providers';
 import { createScratchpad } from './scratchpad';
 
-import type { PendingReconConfig } from '../../../validators/recon';
 import type { ReconOptions, ReconResult } from './types';
-
-/** Default port for the promptfoo web server */
-const DEFAULT_SERVER_PORT = 15500;
-
-/** Filename for pending recon config */
-const PENDING_RECON_FILENAME = 'pending-recon.json';
-
-/**
- * Writes the recon result to a pending file for the web UI to pick up.
- * This enables the CLI → Browser handoff flow.
- *
- * Uses PendingReconConfig type from shared validators to ensure
- * data structure is consistent between CLI and server.
- */
-function writePendingReconConfig(
-  config: Record<string, unknown>,
-  result: ReconResult,
-  codebaseDirectory: string,
-): string {
-  const configDir = getConfigDirectoryPath(true);
-  const pendingPath = path.join(configDir, PENDING_RECON_FILENAME);
-
-  // Type-safe pending config structure
-  // Include applicationDefinition and reconDetails in metadata for UI consumption
-  const pendingData: PendingReconConfig = {
-    config,
-    metadata: {
-      source: 'recon-cli',
-      timestamp: Date.now(),
-      codebaseDirectory,
-      keyFilesAnalyzed: result.keyFiles?.length || 0,
-      // Application definition fields for UI form population
-      applicationDefinition: {
-        purpose: result.purpose,
-        features: result.features,
-        industry: result.industry,
-        systemPrompt: result.systemPrompt,
-        hasAccessTo: result.hasAccessTo,
-        doesNotHaveAccessTo: result.doesNotHaveAccessTo,
-        userTypes: result.userTypes,
-        securityRequirements: result.securityRequirements,
-        sensitiveDataTypes: result.sensitiveDataTypes,
-        exampleIdentifiers: result.exampleIdentifiers,
-        criticalActions: result.criticalActions,
-        forbiddenTopics: result.forbiddenTopics,
-        attackConstraints: result.attackConstraints,
-        competitors: result.competitors,
-        connectedSystems: result.connectedSystems,
-        redteamUser: result.redteamUser,
-      },
-      // Recon-specific details (stateful, tools, security notes)
-      reconDetails: {
-        stateful: result.stateful,
-        entities: result.entities,
-        discoveredTools: result.discoveredTools,
-        securityNotes: result.securityNotes,
-        keyFiles: result.keyFiles,
-        suggestedPlugins: result.suggestedPlugins,
-      },
-    },
-    reconResult: result,
-  };
-
-  fs.writeFileSync(pendingPath, JSON.stringify(pendingData, null, 2));
-  logger.debug(`Wrote pending recon config to ${pendingPath}`);
-
-  return pendingPath;
-}
 
 /**
  * Opens the web UI with the recon source parameter
  */
 async function openBrowserWithRecon(): Promise<void> {
-  const url = `http://localhost:${DEFAULT_SERVER_PORT}/redteam/setup?source=recon`;
+  const url = getLocalAppUrl('/redteam/setup', { source: 'recon' });
 
   try {
     await open(url);
@@ -181,7 +114,8 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     logger.info(`\nConfig written to ${chalk.green(outputPath)}`);
 
     // Write pending recon config for web UI handoff
-    writePendingReconConfig(config, result, directory);
+    const pendingConfig = buildPendingConfig(config, result, directory);
+    writePendingReconConfig(pendingConfig);
 
     // Open browser if not disabled
     if (options.open !== false) {
@@ -198,79 +132,6 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
   } finally {
     // Always cleanup scratchpad
     scratchpad.cleanup();
-  }
-}
-
-/**
- * Displays the reconnaissance results to the console
- */
-function displayResults(result: ReconResult, verbose?: boolean): void {
-  logger.info(chalk.bold.green('\n=== Reconnaissance Results ===\n'));
-
-  if (result.purpose) {
-    logger.info(chalk.bold('Purpose:'));
-    logger.info(`  ${result.purpose}\n`);
-  }
-
-  if (result.features) {
-    logger.info(chalk.bold('Features:'));
-    logger.info(`  ${result.features}\n`);
-  }
-
-  if (result.industry) {
-    logger.info(chalk.bold('Industry:'));
-    logger.info(`  ${result.industry}\n`);
-  }
-
-  if (result.systemPrompt) {
-    logger.info(chalk.bold('System Prompt Found:'));
-    const truncated =
-      result.systemPrompt.length > 200
-        ? `${result.systemPrompt.substring(0, 200)}...`
-        : result.systemPrompt;
-    logger.info(chalk.dim(`  ${truncated}`));
-    logger.info('');
-  }
-
-  if (result.hasAccessTo) {
-    logger.info(chalk.bold('Has Access To:'));
-    logger.info(`  ${result.hasAccessTo}\n`);
-  }
-
-  if (result.discoveredTools && result.discoveredTools.length > 0) {
-    logger.info(chalk.bold(`Discovered Tools (${result.discoveredTools.length}):`));
-    for (const tool of result.discoveredTools) {
-      logger.info(`  - ${tool.name}: ${tool.description}`);
-      if (tool.file && verbose) {
-        logger.info(chalk.dim(`    File: ${tool.file}`));
-      }
-    }
-    logger.info('');
-  }
-
-  if (result.suggestedPlugins && result.suggestedPlugins.length > 0) {
-    logger.info(chalk.bold('Suggested Plugins:'));
-    logger.info(`  ${result.suggestedPlugins.join(', ')}\n`);
-  }
-
-  if (result.entities && result.entities.length > 0) {
-    logger.info(chalk.bold('Entities:'));
-    logger.info(`  ${result.entities.join(', ')}\n`);
-  }
-
-  if (result.securityNotes && result.securityNotes.length > 0) {
-    logger.info(chalk.bold.yellow('Security Notes:'));
-    for (const note of result.securityNotes) {
-      logger.info(`  - ${note}`);
-    }
-    logger.info('');
-  }
-
-  if (verbose && result.keyFiles && result.keyFiles.length > 0) {
-    logger.info(chalk.bold('Key Files Analyzed:'));
-    for (const file of result.keyFiles) {
-      logger.info(`  ${file}`);
-    }
   }
 }
 

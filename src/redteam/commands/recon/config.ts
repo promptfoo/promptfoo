@@ -1,3 +1,4 @@
+import logger from '../../../logger';
 import {
   ALL_PLUGINS,
   BIAS_PLUGINS,
@@ -11,8 +12,65 @@ import {
 } from '../../constants/plugins';
 
 import type { UnifiedConfig } from '../../../types/index';
-import type { ReconApplicationDefinition, ReconDetails, ReconMetadata } from './metadata';
+import type { RedteamPluginObject, RedteamStrategyObject } from '../../types';
 import type { ReconResult } from './types';
+
+/**
+ * Metadata structure for recon output that enables UI import.
+ * This is persisted in the YAML output under `metadata:`.
+ *
+ * Note: This uses the same field structure as PendingReconMetadata from
+ * validators/recon.ts but with slightly different field names for YAML output.
+ * The source schema (validators/recon.ts) is the canonical source of truth.
+ */
+interface ReconMetadata {
+  version: 1;
+  source: 'recon-cli';
+  generatedAt: string;
+  scannedDirectory: string;
+  applicationDefinition: ReconApplicationDefinition;
+  reconDetails: ReconDetails;
+}
+
+/**
+ * Application definition fields for YAML metadata output.
+ * Mirrors ApplicationDefinition from validators/recon.ts.
+ */
+interface ReconApplicationDefinition {
+  purpose?: string;
+  features?: string;
+  industry?: string;
+  systemPrompt?: string;
+  hasAccessTo?: string;
+  doesNotHaveAccessTo?: string;
+  userTypes?: string;
+  securityRequirements?: string;
+  sensitiveDataTypes?: string;
+  exampleIdentifiers?: string;
+  criticalActions?: string;
+  forbiddenTopics?: string;
+  attackConstraints?: string;
+  competitors?: string;
+  connectedSystems?: string;
+  redteamUser?: string;
+}
+
+/**
+ * Recon details for YAML metadata output.
+ * Mirrors the reconDetails structure from validators/recon.ts.
+ */
+interface ReconDetails {
+  stateful?: boolean;
+  discoveredTools?: Array<{
+    name: string;
+    description: string;
+    parameters?: string;
+  }>;
+  securityNotes?: string[];
+  keyFiles?: string[];
+  suggestedPlugins?: string[];
+  entities?: string[];
+}
 
 /**
  * Set of all valid plugin IDs for validation - derived from constants
@@ -142,7 +200,7 @@ export function filterValidPlugins(suggestedPlugins: string[]): string[] {
 
   if (invalid.length > 0) {
     // Log for debugging but don't fail
-    console.warn(`Filtered out invalid plugins: ${invalid.join(', ')}`);
+    logger.warn(`Filtered out invalid plugins: ${invalid.join(', ')}`);
   }
 
   return valid;
@@ -378,9 +436,6 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
   return sections.join('\n\n');
 }
 
-/** Plugin can be a string ID or an object with config */
-type PluginConfig = string | { id: string; config: Record<string, unknown> };
-
 /**
  * Checks if a system prompt is meaningful (not empty or a placeholder)
  */
@@ -407,7 +462,7 @@ function isValidSystemPrompt(systemPrompt: string | undefined): boolean {
  * Determines appropriate plugins based on recon findings
  * Returns plugins with configuration when needed (e.g., prompt-extraction with systemPrompt)
  */
-function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
+function suggestPluginsFromFindings(result: ReconResult): RedteamPluginObject[] {
   const pluginIds = new Set<string>();
 
   // Start with any agent-suggested plugins (filtered for validity)
@@ -524,7 +579,7 @@ function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
   }
 
   // Convert to plugin configs, adding configuration where needed
-  const plugins: PluginConfig[] = [];
+  const plugins: RedteamPluginObject[] = [];
   for (const id of pluginIds) {
     if (id === 'prompt-extraction' && isValidSystemPrompt(result.systemPrompt)) {
       // Configure prompt-extraction with the discovered system prompt
@@ -534,7 +589,8 @@ function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
         config: { systemPrompt: result.systemPrompt! },
       });
     } else {
-      plugins.push(id);
+      // Convert string plugin IDs to plugin objects
+      plugins.push({ id });
     }
   }
 
@@ -546,23 +602,17 @@ function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
  *
  * @param stateful - Whether the app supports multi-turn conversations
  */
-function buildStrategies(
-  stateful: boolean,
-): Array<string | { id: string; config?: Record<string, unknown> }> {
-  const strategies: Array<string | { id: string; config?: Record<string, unknown> }> = [
+function buildStrategies(stateful: boolean): RedteamStrategyObject[] {
+  const strategies: RedteamStrategyObject[] = [
     // Single-turn strategies - always included
-    'basic',
+    { id: 'basic' },
     {
       id: 'jailbreak:meta',
-      config: {
-        // Meta strategy iteratively refines jailbreak attempts
-      },
+      // Meta strategy iteratively refines jailbreak attempts
     },
     {
       id: 'jailbreak:composite',
-      config: {
-        // Composite combines multiple jailbreak techniques
-      },
+      // Composite combines multiple jailbreak techniques
     },
   ];
 
@@ -636,8 +686,8 @@ export function buildRedteamConfig(
 
     redteam: {
       purpose,
-      plugins: plugins as any,
-      strategies: strategies as any,
+      plugins,
+      strategies,
       numTests: 5,
     },
   };

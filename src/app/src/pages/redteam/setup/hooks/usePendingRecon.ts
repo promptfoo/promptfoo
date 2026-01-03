@@ -4,6 +4,7 @@ import { callApi } from '@app/utils/api';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SETUP_TAB_INDICES } from '../constants';
+import { countPopulatedFields } from '../utils/applicationDefinition';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './useRedTeamConfig';
 import type { PendingReconConfig } from '@promptfoo/validators/recon';
 
@@ -87,13 +88,7 @@ export function usePendingRecon(
       };
 
       // Count meaningful fields for the ReconContext
-      const meaningfulFields = Object.entries(applicationDefinition).filter(
-        ([key, value]) =>
-          value &&
-          typeof value === 'string' &&
-          value.trim() !== '' &&
-          !['accessToData', 'forbiddenData', 'accessToActions', 'forbiddenActions'].includes(key),
-      ).length;
+      const meaningfulFields = countPopulatedFields(applicationDefinition);
 
       const fullConfig: Config = {
         description: reconConfig.description || 'Red Team Configuration (from Recon)',

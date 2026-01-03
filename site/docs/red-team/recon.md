@@ -73,10 +73,10 @@ promptfoo redteam recon --dir ./path/to/app
 
 The command automatically selects a provider based on available API keys:
 
-| Provider         | Required Environment Variable       | Default Model              |
-| ---------------- | ----------------------------------- | -------------------------- |
-| OpenAI Codex SDK | `OPENAI_API_KEY` or `CODEX_API_KEY` | `o3`                       |
-| Claude Agent SDK | `ANTHROPIC_API_KEY`                 | `claude-sonnet-4-22k-0514` |
+| Provider         | Required Environment Variable       | Default Model   |
+| ---------------- | ----------------------------------- | --------------- |
+| OpenAI Codex SDK | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex` |
+| Claude Agent SDK | `ANTHROPIC_API_KEY`                 | `opus`          |
 
 To force a specific provider:
 

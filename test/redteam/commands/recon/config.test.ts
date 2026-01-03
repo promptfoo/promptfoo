@@ -115,8 +115,8 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('pii:direct');
-    expect(config.redteam?.plugins).toContain('sql-injection');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:direct' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'sql-injection' });
   });
 
   it('should add PII plugins when sensitive data detected', () => {
@@ -126,8 +126,8 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('pii:direct');
-    expect(config.redteam?.plugins).toContain('pii:session');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:direct' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:session' });
   });
 
   it('should add SQL injection plugin when database detected', () => {
@@ -137,7 +137,7 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('sql-injection');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'sql-injection' });
   });
 
   it('should add SSRF plugin when HTTP calls detected', () => {
@@ -147,7 +147,7 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('ssrf');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'ssrf' });
   });
 
   it('should add RBAC plugins when admin users detected', () => {
@@ -157,9 +157,9 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('rbac');
-    expect(config.redteam?.plugins).toContain('bola');
-    expect(config.redteam?.plugins).toContain('bfla');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'rbac' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'bola' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'bfla' });
   });
 
   it('should add excessive-agency when tools discovered', () => {
@@ -169,8 +169,8 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('excessive-agency');
-    expect(config.redteam?.plugins).toContain('tool-discovery');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'excessive-agency' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'tool-discovery' });
   });
 
   it('should include entities when provided', () => {
@@ -196,27 +196,21 @@ describe('buildRedteamConfig', () => {
     const result: ReconResult = { purpose: 'Test' };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('harmful:violent-crime');
-    expect(config.redteam?.plugins).toContain('harmful:illegal-activities');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'harmful:violent-crime' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'harmful:illegal-activities' });
   });
 
   it('should include only single-turn strategies for stateless apps', () => {
     const result: ReconResult = { purpose: 'Test', stateful: false };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.strategies).toContain('basic');
-    const strategies = config.redteam?.strategies as Array<
-      string | { id: string; config?: unknown }
-    >;
-    const metaStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'jailbreak:meta');
-    const compositeStrategy = strategies.find(
-      (s) => typeof s === 'object' && s.id === 'jailbreak:composite',
-    );
+    expect(config.redteam?.strategies).toContainEqual({ id: 'basic' });
+    const strategies = config.redteam?.strategies as Array<{ id: string; config?: unknown }>;
+    const metaStrategy = strategies.find((s) => s.id === 'jailbreak:meta');
+    const compositeStrategy = strategies.find((s) => s.id === 'jailbreak:composite');
     // Multi-turn strategies should NOT be included for stateless apps
-    const hydraStrategy = strategies.find(
-      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
-    );
-    const crescendoStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'crescendo');
+    const hydraStrategy = strategies.find((s) => s.id === 'jailbreak:hydra');
+    const crescendoStrategy = strategies.find((s) => s.id === 'crescendo');
 
     expect(metaStrategy).toBeDefined();
     expect(compositeStrategy).toBeDefined();
@@ -228,21 +222,15 @@ describe('buildRedteamConfig', () => {
     const result: ReconResult = { purpose: 'Test', stateful: true };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.strategies).toContain('basic');
-    const strategies = config.redteam?.strategies as Array<
-      string | { id: string; config?: unknown }
-    >;
+    expect(config.redteam?.strategies).toContainEqual({ id: 'basic' });
+    const strategies = config.redteam?.strategies as Array<{ id: string; config?: unknown }>;
     // Single-turn strategies should be included
-    const metaStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'jailbreak:meta');
-    const compositeStrategy = strategies.find(
-      (s) => typeof s === 'object' && s.id === 'jailbreak:composite',
-    );
+    const metaStrategy = strategies.find((s) => s.id === 'jailbreak:meta');
+    const compositeStrategy = strategies.find((s) => s.id === 'jailbreak:composite');
     // Multi-turn strategies should be included for stateful apps
-    const hydraStrategy = strategies.find(
-      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
-    );
-    const crescendoStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'crescendo');
-    const goatStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'goat');
+    const hydraStrategy = strategies.find((s) => s.id === 'jailbreak:hydra');
+    const crescendoStrategy = strategies.find((s) => s.id === 'crescendo');
+    const goatStrategy = strategies.find((s) => s.id === 'goat');
 
     expect(metaStrategy).toBeDefined();
     expect(compositeStrategy).toBeDefined();
@@ -257,12 +245,8 @@ describe('buildRedteamConfig', () => {
     const result: ReconResult = { purpose: 'Test' }; // stateful not set
     const config = buildRedteamConfig(result);
 
-    const strategies = config.redteam?.strategies as Array<
-      string | { id: string; config?: unknown }
-    >;
-    const hydraStrategy = strategies.find(
-      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
-    );
+    const strategies = config.redteam?.strategies as Array<{ id: string; config?: unknown }>;
+    const hydraStrategy = strategies.find((s) => s.id === 'jailbreak:hydra');
 
     // Should default to stateless (no multi-turn strategies)
     expect(hydraStrategy).toBeUndefined();
@@ -276,12 +260,12 @@ describe('buildRedteamConfig', () => {
     const config = buildRedteamConfig(result);
 
     // Valid plugins should be included
-    expect(config.redteam?.plugins).toContain('pii:direct');
-    expect(config.redteam?.plugins).toContain('sql-injection');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:direct' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'sql-injection' });
     // prompt-injection is a strategy, not a plugin - should be filtered
-    expect(config.redteam?.plugins).not.toContain('prompt-injection');
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'prompt-injection' });
     // Invalid plugins should be filtered
-    expect(config.redteam?.plugins).not.toContain('invalid-plugin');
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'invalid-plugin' });
   });
 
   it('should configure prompt-extraction with systemPrompt when discovered', () => {
@@ -303,21 +287,19 @@ describe('buildRedteamConfig', () => {
     ).toBe('You are a helpful car dealership assistant.');
   });
 
-  it('should use simple string for prompt-extraction when no systemPrompt', () => {
+  it('should use object without config for prompt-extraction when no systemPrompt', () => {
     const result: ReconResult = {
       purpose: 'Test',
       // systemPrompt not provided
     };
     const config = buildRedteamConfig(result);
 
-    // prompt-extraction should be a simple string, not an object
-    expect(config.redteam?.plugins).toContain('prompt-extraction');
-    // Verify it's not an object
-    const plugins = config.redteam?.plugins as Array<string | { id: string; config?: unknown }>;
-    const promptExtractionObject = plugins.find(
-      (p) => typeof p === 'object' && p.id === 'prompt-extraction',
-    );
-    expect(promptExtractionObject).toBeUndefined();
+    // prompt-extraction should be an object without config
+    const plugins = config.redteam?.plugins as Array<{ id: string; config?: unknown }>;
+    const promptExtractionPlugin = plugins.find((p) => p.id === 'prompt-extraction');
+    expect(promptExtractionPlugin).toBeDefined();
+    // Should not have systemPrompt config
+    expect(promptExtractionPlugin?.config).toBeUndefined();
   });
 
   it('should skip prompt-extraction config for placeholder systemPrompt', () => {
@@ -329,13 +311,12 @@ describe('buildRedteamConfig', () => {
     };
     const config = buildRedteamConfig(result);
 
-    // prompt-extraction should be a simple string, not configured with the placeholder
-    expect(config.redteam?.plugins).toContain('prompt-extraction');
-    const plugins = config.redteam?.plugins as Array<string | { id: string; config?: unknown }>;
-    const promptExtractionObject = plugins.find(
-      (p) => typeof p === 'object' && p.id === 'prompt-extraction',
-    );
-    expect(promptExtractionObject).toBeUndefined();
+    // prompt-extraction should not be configured with the placeholder
+    const plugins = config.redteam?.plugins as Array<{ id: string; config?: unknown }>;
+    const promptExtractionPlugin = plugins.find((p) => p.id === 'prompt-extraction');
+    expect(promptExtractionPlugin).toBeDefined();
+    // Should not have systemPrompt config (placeholder was ignored)
+    expect(promptExtractionPlugin?.config).toBeUndefined();
   });
 
   it('should infer plugins from security notes', () => {
@@ -350,13 +331,13 @@ describe('buildRedteamConfig', () => {
     const config = buildRedteamConfig(result);
 
     // Should infer auth-related plugins
-    expect(config.redteam?.plugins).toContain('rbac');
-    expect(config.redteam?.plugins).toContain('bola');
-    expect(config.redteam?.plugins).toContain('bfla');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'rbac' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'bola' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'bfla' });
     // Should infer PII plugins from payment mention
-    expect(config.redteam?.plugins).toContain('pii:api-db');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:api-db' });
     // Should infer cross-session from session mention
-    expect(config.redteam?.plugins).toContain('cross-session-leak');
+    expect(config.redteam?.plugins).toContainEqual({ id: 'cross-session-leak' });
   });
 });
 

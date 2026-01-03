@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { ReconResultSchema } from '../../../validators/recon';
 import { ReconOutputSchema } from './schema';
 
 import type { ProviderChoice, ReconResult, Scratchpad } from './types';
@@ -202,19 +203,40 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
 }
 
 /**
- * Parses the raw output from the agent into a ReconResult
+ * Parses the raw output from the agent into a ReconResult.
+ * Uses Zod validation to ensure type safety.
+ *
+ * @internal Exported for testing
  */
-function parseReconOutput(output: unknown): ReconResult {
+export function parseReconOutput(output: unknown): ReconResult {
+  let parsed: unknown = output;
+
+  // If string, try to parse as JSON
   if (typeof output === 'string') {
     try {
-      return JSON.parse(output);
+      parsed = JSON.parse(output);
     } catch {
       // If it's not JSON, treat the string as the purpose
       return { purpose: output };
     }
   }
-  if (output && typeof output === 'object') {
-    return output as ReconResult;
+
+  // Validate against schema
+  const result = ReconResultSchema.safeParse(parsed);
+  if (result.success) {
+    return result.data;
   }
+
+  // Log validation errors but attempt to return partial result
+  logger.warn('Recon output validation failed, using raw output', {
+    errors: result.error.flatten().fieldErrors,
+  });
+
+  // Fall back to type assertion if object (for partial compatibility)
+  // Arrays are technically objects in JS, but not valid ReconResults
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    return parsed as ReconResult;
+  }
+
   throw new Error('Invalid recon output: expected JSON object');
 }
