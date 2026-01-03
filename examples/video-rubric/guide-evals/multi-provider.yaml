@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Multi-Provider Comparison - Compare all video providers'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 5
+
+  - id: vertex:video:veo-3.1-generate-preview
+    label: Veo
+    config:
+      aspectRatio: '16:9'
+      durationSeconds: 5
+
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    label: Nova Reel
+    config:
+      durationSeconds: 6
+      dimension: '1280x720'
+
+  - id: luma:video:ray-2
+    label: Ray
+    config:
+      aspectRatio: '16:9'
+      duration: '5s'
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- PROMPT ADHERENCE TEST ---
+  - vars:
+      prompt: >
+        Cartoon red panda software engineer giving a thumbs up
+        next to a laptop showing a green checkmark.
+        2D cartoon style, clean lines, bright colors.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Prompt adherence:
+          1. Red panda character visible (not generic animal)
+          2. Thumbs up gesture shown
+          3. Laptop or computer visible
+          4. Green checkmark or approval indicator
+          5. 2D cartoon style (not photorealistic)
+          6. Clean, bright aesthetic
+
+          Quality:
+          7. Smooth animation
+          8. Consistent character throughout
+
+          Score 0.125 per criterion. Wrong animal: 0.0.
+          Compare how well each provider follows the prompt.
+
+  # --- IDENTITY CONSISTENCY TEST ---
+  - vars:
+      prompt: >
+        Cartoon red panda walks from left side of screen to right side,
+        sits down at a desk, and starts typing on a laptop.
+        Keep the red panda's appearance exactly the same throughout.
+        2D cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Identity consistency (critical):
+          1. Red panda appears at start
+          2. Same red panda at end (colors, proportions, style)
+          3. No identity drift mid-video
+          4. Consistent art style throughout
+
+          Action sequence:
+          5. Walking motion shown
+          6. Sitting action
+          7. Typing action
+          8. Desk/laptop visible
+
+          Score: Identity worth 0.5 (criteria 1-4). Sequence worth 0.5 (5-8).
+          Identity changes: max 0.4. Compare which providers maintain identity best.
+
+  # --- MOTION QUALITY TEST ---
+  - vars:
+      prompt: >
+        Cartoon red panda does a happy dance, spinning and jumping,
+        then stops and bows.
+        Fluid animation, 2D cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.5
+        value: |
+          Motion quality:
+          1. Dancing motion visible
+          2. Spinning or turning action
+          3. Jumping or bouncy motion
+          4. Stopping/ending pose
+          5. Bowing or similar gesture
+
+          Animation quality:
+          6. Fluid, smooth motion (no jitter)
+          7. Physics appear natural
+          8. No sudden teleportation or jumps
+
+          Score 0.125 per criterion. This tests motion generation.
+          Jerky/robotic motion: max 0.5. Compare fluidity across providers.
+
+  # --- TEXT RENDERING COMPARISON ---
+  - vars:
+      prompt: >
+        Cartoon red panda holds a sign that says 'LGTM' in bold letters.
+        The sign is clearly readable.
+        2D cartoon, high contrast.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Text rendering:
+          1. Sign or placard visible
+          2. Text present on sign
+          3. 'LGTM' readable (4 letters)
+          4. Text stable (no morphing)
+          5. High contrast (readable)
+
+          Character:
+          6. Red panda holding sign
+          7. Consistent character
+          8. 2D cartoon style
+
+          Score 0.125 per criterion. Text is the hardest dimension.
+          Compare which providers render text best.
+          No readable text: max 0.4.

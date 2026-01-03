@@ -1,0 +1,181 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Red Panda PR Review - Hero eval for video guide'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 5
+  - id: vertex:video:veo-3.1-generate-preview
+    label: Veo
+    config:
+      aspectRatio: '16:9'
+      durationSeconds: 5
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- SINGLE-SHOT APPROVAL (Easy) ---
+  - vars:
+      prompt: >
+        Cartoon red panda software engineer at a laptop reviewing a pull request,
+        then stamps a big green 'APPROVED' stamp on screen.
+        2D cartoon style, clean lines, smooth motion.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Character identity:
+          1. Red panda character visible throughout
+          2. Consistent appearance (colors, proportions, style)
+          3. 2D cartoon aesthetic maintained
+
+          Action sequence:
+          4. Laptop/computer visible
+          5. Reviewing action shown (looking at screen, scrolling)
+          6. Approval action occurs (stamp, checkmark, or similar)
+
+          Score 0.15 per criterion (max 0.9). Bonus 0.1 if 'APPROVED' text is readable.
+          No red panda visible: 0.0. Identity changes mid-video: max 0.4.
+
+  # --- LGTM SPEECH BUBBLE (Text rendering) ---
+  - vars:
+      prompt: >
+        Cartoon red panda reading a code diff on a laptop.
+        A speech bubble appears that says 'LGTM' in bold letters.
+        Hold the bubble steady for the last 2 seconds.
+        2D cartoon, flat colors.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Text rendering (critical):
+          1. Speech bubble or text element appears
+          2. Text reads 'LGTM' (case-insensitive acceptable)
+          3. Text is legible for at least 1 second
+          4. No letter morphing or flickering
+
+          Character & scene:
+          5. Red panda character present
+          6. Laptop/screen visible
+          7. Reading/reviewing action shown
+
+          Score: Text criteria worth 0.6 total (0.15 each). Scene criteria worth 0.3 total.
+          Text completely unreadable or missing: max 0.3.
+          Wrong text (not LGTM): max 0.4.
+
+  # --- STORYBOARD: Open → Scroll → Approve (Medium) ---
+  - vars:
+      prompt: >
+        Cartoon red panda opens a pull request on a laptop,
+        scrolls through a code diff, pauses thoughtfully,
+        then stamps 'APPROVED' with a green stamp.
+        Keep the red panda's appearance consistent throughout.
+        2D cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Sequence continuity (in order):
+          1. Opening/starting action (clicking, opening)
+          2. Scrolling/reading action (looking at content)
+          3. Pause or consideration moment
+          4. Approval action (stamp, click, or gesture)
+
+          Identity consistency:
+          5. Same red panda character throughout (no style drift)
+          6. Consistent environment (same desk/laptop)
+
+          Quality:
+          7. Smooth transitions between actions
+          8. No teleportation or sudden jumps
+
+          Score 0.125 per criterion. Sequence out of order: max 0.5.
+          Character identity changes: max 0.4.
+
+  # --- REQUEST CHANGES (Alternative outcome) ---
+  - vars:
+      prompt: >
+        Cartoon red panda reviewing a PR on a laptop.
+        The panda shakes its head disapprovingly,
+        then a red label appears that says 'CHANGES' in all caps.
+        2D cartoon style, expressive animation.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Emotional expression:
+          1. Red panda shows disapproval (head shake, frown, or similar)
+          2. Expression is clear and readable
+
+          Text rendering:
+          3. Text/label element appears
+          4. Text contains 'CHANGES' or similar rejection message
+          5. Text is legible
+
+          Scene coherence:
+          6. Laptop/PR context visible
+          7. Red panda consistent throughout
+
+          Score 0.14 per criterion. No disapproval expression: max 0.6.
+          Text missing or unreadable: max 0.5.
+
+  # --- CI PASS → APPROVE (Two-beat sequence) ---
+  - vars:
+      prompt: >
+        Cartoon red panda watches a CI status indicator flip from red to green 'PASS',
+        smiles with relief, then types 'LGTM' and stamps 'APPROVED'.
+        2D cartoon, smooth animation.
+    assert:
+      - type: video-rubric
+        threshold: 0.5
+        value: |
+          Sequence (in order):
+          1. CI/status indicator visible (any representation)
+          2. Status changes from fail to pass (red to green, X to check, etc.)
+          3. Panda reacts positively (smile, relief, celebration)
+          4. Typing or approval action
+
+          Text rendering (bonus):
+          5. 'PASS', 'LGTM', or 'APPROVED' readable at some point
+
+          Identity:
+          6. Red panda consistent throughout
+
+          Score: Sequence worth 0.6 (0.15 each). Text bonus 0.2. Identity 0.2.
+          This is a complex prompt - partial success is acceptable.
+          No CI status change shown: max 0.4.
+
+  # --- STICKY NOTE (Text + action) ---
+  - vars:
+      prompt: >
+        Cartoon red panda places a sticky note on the laptop screen
+        that reads 'ADD TESTS' in big block letters.
+        The panda looks satisfied after placing it.
+        2D cartoon, bright colors.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Text rendering:
+          1. Sticky note or note-like element appears
+          2. Text is present on the note
+          3. Text relates to testing or code review (any relevant message acceptable)
+          4. Text is legible for at least 1 second
+
+          Action:
+          5. Placing/sticking action shown
+          6. Red panda interacts with the note
+
+          Character:
+          7. Red panda consistent throughout
+          8. Satisfied/pleased expression at end
+
+          Score 0.125 per criterion. No note visible: max 0.3.
+          Text completely illegible: max 0.5.

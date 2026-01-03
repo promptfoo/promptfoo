@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Negative Test - Verify rubrics correctly fail mismatched videos'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 5
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- WRONG SUBJECT (Should fail) ---
+  # Generate a red panda video, but rubric asks for a cat
+  - vars:
+      prompt: >
+        Cartoon red panda at a laptop reviewing code.
+        2D cartoon style, office setting.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          This video MUST show:
+          1. A CAT (not a dog, not a panda, specifically a cat)
+          2. Indoor kitchen setting with countertops
+          3. The cat eating from a food bowl
+          4. Cat food visible
+
+          Score 1.0 only if ALL criteria are met.
+          Wrong animal (anything other than a cat): 0.0
+          Wrong setting (not a kitchen): max 0.2
+          No eating action: max 0.3
+
+          This test should FAIL because the video shows a red panda at a laptop,
+          not a cat in a kitchen.
+
+  # --- WRONG ACTION (Should fail) ---
+  # Generate approval action, but rubric asks for rejection
+  - vars:
+      prompt: >
+        Cartoon red panda gives enthusiastic approval with a big green checkmark.
+        Happy expression, thumbs up, celebratory.
+        2D cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          This video MUST show:
+          1. Rejection or disapproval action
+          2. Red X or rejection symbol
+          3. Angry or disappointed expression
+          4. Shaking head "no"
+
+          Score 1.0 only if rejection is clearly shown.
+          Approval shown instead of rejection: 0.0
+          Neutral (neither approval nor rejection): max 0.3
+
+          This test should FAIL because the video shows approval,
+          not rejection.
+
+  # --- WRONG TEXT (Should fail) ---
+  # Generate LGTM, but rubric asks for REJECTED
+  - vars:
+      prompt: >
+        Cartoon red panda holds a sign that says 'LGTM' in green letters.
+        Approval, positive, thumbs up.
+        2D cartoon.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Text requirement:
+          1. Sign must say 'REJECTED' (8 letters)
+          2. Text must be in RED color
+          3. Disapproving expression on character
+
+          Score 1.0 only if 'REJECTED' text is visible and red.
+          'LGTM' or approval text shown: 0.0
+          Any approval sentiment: max 0.2
+
+          This test should FAIL because the video shows 'LGTM',
+          not 'REJECTED'.
+
+  # --- MISSING REQUIRED ELEMENT (Should fail) ---
+  # Generate simple scene, but rubric requires specific element
+  - vars:
+      prompt: >
+        Cartoon red panda sitting quietly at an empty desk.
+        No laptop, no computer, just the panda and desk.
+        Minimal, simple scene.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Required elements:
+          1. Laptop or computer MUST be visible
+          2. Screen showing code or text
+          3. Typing action on keyboard
+          4. Monitor with bright display
+
+          Score 1.0 only if computer/laptop is clearly shown with active screen.
+          No computer visible: 0.0
+          Computer present but screen off: max 0.3
+
+          This test should FAIL because the prompt explicitly
+          says "no laptop, no computer".
