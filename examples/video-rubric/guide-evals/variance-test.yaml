@@ -9,7 +9,7 @@ providers:
     label: Sora
     config:
       size: '1280x720'
-      seconds: 5
+      seconds: 4
 
 defaultTest:
   options:

@@ -9,7 +9,7 @@ providers:
     label: Sora
     config:
       size: '1280x720'
-      seconds: 5
+      seconds: 4
   - id: vertex:video:veo-3.1-generate-preview
     label: Veo
     config:

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Quick Start Test - Matches guide example'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 4
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  - vars:
+      prompt: A cat playing with a ball of yarn
+    assert:
+      - type: video-rubric
+        value: |
+          1. A cat is visible throughout the video
+          2. The cat interacts with yarn or a ball
+          3. Motion is smooth without jitter
+          Score 1.0 if all criteria met, 0.5 if one missing, 0.0 if two or more missing.

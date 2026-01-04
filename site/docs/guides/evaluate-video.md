@@ -200,7 +200,7 @@ providers:
   - id: openai:video:sora-2
     config:
       size: '1280x720'
-      seconds: 5
+      seconds: 4
 
   # Google Veo
   - id: vertex:video:veo-3.1-generate-preview
@@ -231,7 +231,7 @@ providers:
   - id: openai:video:sora-2
     config:
       size: '1280x720'
-      seconds: 10
+      seconds: 8
       image: '{{start_image}}'
 
   # Nova Reel with start image
@@ -276,7 +276,7 @@ providers:
   - id: openai:video:sora-2
     config:
       size: '1280x720'
-      seconds: 10
+      seconds: 8
       image: '{{start_image}}'
       end_image: '{{end_image}}'
 ```
@@ -314,6 +314,24 @@ providers:
       loop: true
 ```
 
+## What Works Well
+
+Based on testing, these prompt patterns produce reliable, high-scoring results:
+
+| Pattern | Example | Typical Score |
+| ------- | ------- | ------------- |
+| Simple subject + action | "A cat playing with yarn" | 1.0 |
+| Character + gesture | "Red panda giving thumbs up" | 1.0 |
+| Text overlays | "Sign that says 'LGTM'" | 0.9–1.0 |
+| Approval/rejection actions | "Stamps 'APPROVED' on screen" | 0.98–1.0 |
+| Identity consistency | "Same character throughout" | 0.875+ |
+
+**Challenging patterns** (lower scores or failures):
+
+- State transitions: "Status changes from red to green" — often shows final state only
+- Complex sequences: Multiple distinct actions in order
+- Precise timing: "Hold for 2 seconds" — variable results
+
 ## Sora vs Veo Benchmark Example
 
 Compare OpenAI Sora and Google Veo head-to-head with multiple evaluation dimensions:
@@ -329,7 +347,7 @@ providers:
     label: Sora 2
     config:
       size: '1280x720'
-      seconds: 5
+      seconds: 4
   - id: vertex:video:veo-3.1-generate-preview
     label: Veo 3.1
     config:
@@ -548,7 +566,7 @@ For cost efficiency, use different configurations:
 providers:
   - id: openai:video:sora-2
     config:
-      seconds: 5  # Shorter duration
+      seconds: 4  # Shorter duration
 
 tests:
   - vars:
@@ -565,7 +583,7 @@ tests:
 providers:
   - id: openai:video:sora-2
     config:
-      seconds: 10
+      seconds: 12
   - id: vertex:video:veo-3.1-generate-preview
     config:
       durationSeconds: 8
@@ -596,6 +614,12 @@ Error: Could not load the default credentials
 
 Run `gcloud auth application-default login` and ensure `GOOGLE_PROJECT_ID` is set.
 
+```
+Error: invalid_grant - reauth related error (invalid_rapt)
+```
+
+Your credentials have expired. Re-run `gcloud auth application-default login` to refresh.
+
 **AWS Bedrock / Nova Reel:**
 
 ```
@@ -612,11 +636,27 @@ Error: Invalid API key
 
 Verify `OPENAI_API_KEY` is set and has access to the Sora API (may require specific plan).
 
+### Sora Configuration
+
+```
+Error: Invalid video duration "5". Valid options: 4, 8, 12
+```
+
+Sora only accepts specific duration values: `4`, `8`, or `12` seconds. Other values will fail.
+
 ### Quota and Timeout Issues
 
-- **Timeouts on long generations**: Start with `seconds: 5` and increase gradually
+- **Timeouts on long generations**: Start with `seconds: 4` and increase gradually
 - **Rate limits**: Reduce concurrent providers while iterating
 - **Queue delays**: Video generation latency varies significantly; expect 30s–3min per video
+
+### Moderation Blocks
+
+```
+Error: Your request was blocked by our moderation system
+```
+
+Some prompts trigger content moderation even when innocuous. Try rephrasing or simplifying the prompt.
 
 ### Artifact Storage
 
@@ -635,9 +675,13 @@ promptfoo cache clear
 If scores seem inconsistent:
 
 1. **Tighten rubric wording**: Remove ambiguous terms
-2. **Add explicit caps**: "If X, max score is Y"
+2. **Add explicit caps**: "If X, max score is Y" — the judge correctly applies these rules
 3. **Increase repeat count**: Compare variance across samples
-4. **Try a stronger judge**: Use `gemini-3-pro-preview` for complex evaluations
+4. **Try a stronger judge**: Use `vertex:gemini-3-pro-preview` for complex evaluations
+
+### Complex Prompts
+
+Multi-step sequences (e.g., "status changes from red to green, then user reacts") are challenging for video generators. If a video shows the final state without the transition, the judge will correctly identify the missing sequence and apply score caps.
 
 ## Provider Comparison
 
@@ -660,12 +704,12 @@ Specifications vary by API version, account tier, and region. Information below 
 
 ### Specifications (Approximate)
 
-| Provider  | Resolution  | Duration | Aspect Ratios   |
-| --------- | ----------- | -------- | --------------- |
-| Sora      | 480p–1080p  | 5–20s    | 16:9, 9:16, 1:1 |
-| Veo 3.1   | 720p–1080p  | 5–8s     | 16:9, 9:16      |
-| Nova Reel | 720p        | 6s       | 16:9, 9:16      |
-| Ray 2     | 540p–720p   | 5–9s     | 16:9, 9:16, 1:1 |
+| Provider  | Resolution  | Duration     | Aspect Ratios   |
+| --------- | ----------- | ------------ | --------------- |
+| Sora      | 480p–1080p  | 4, 8, or 12s | 16:9, 9:16, 1:1 |
+| Veo 3.1   | 720p–1080p  | 5–8s         | 16:9, 9:16      |
+| Nova Reel | 720p        | 6s           | 16:9, 9:16      |
+| Ray 2     | 540p–720p   | 5–9s         | 16:9, 9:16, 1:1 |
 
 ### Provider Selection Guide
 
@@ -692,7 +736,7 @@ evaluateOptions:
 providers:
   - id: openai:video:sora-2
     config:
-      seconds: 5  # Start short, increase for final eval
+      seconds: 4  # Start short, increase for final eval
 
 # Use Flash for judging (faster and cheaper than Pro)
 defaultTest:
@@ -706,6 +750,25 @@ defaultTest:
 - **Explicit scoring**: Always include "Score X if Y"
 - **Failure caps**: "If subject wrong, max 0.5"
 - **Reference variables**: Use `{{prompt}}` for context
+
+### Negative Testing
+
+Verify your rubrics catch content mismatches by testing prompts that intentionally violate criteria:
+
+```yaml
+tests:
+  # Generate a red panda, but require a cat
+  - vars:
+      prompt: Cartoon red panda at a laptop
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          This video MUST show a CAT (not a panda).
+          Wrong animal: 0.0
+```
+
+The judge correctly scores this 0.0 with reasoning: "fails all criteria: does not show a cat."
 
 ## FAQ
 
