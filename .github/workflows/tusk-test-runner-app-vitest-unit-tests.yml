@@ -87,23 +87,29 @@ jobs:
             set -e
 
             FILE_PATH="{{file}}"
+
+            # Validate no shell metacharacters in file path
+            if [[ "$FILE_PATH" =~ [\;\|\&\$\`\<\>\(\)] ]]; then
+              echo "Error: Invalid characters in file path: $FILE_PATH"
+              exit 1
+            fi
+
             EXT="${FILE_PATH##*.}"
             FULL_PATH="src/app/$FILE_PATH"
 
             cd ../..
 
-            # Format based on file extension
+            # Format based on file extension (use -- to prevent flag injection)
             case "$EXT" in
               js|jsx|mjs|cjs|ts|tsx|json)
-                npx @biomejs/biome format --write "$FULL_PATH"
-                npx @biomejs/biome lint --write "$FULL_PATH"
+                npx @biomejs/biome format --write -- "$FULL_PATH"
+                npx @biomejs/biome lint --write -- "$FULL_PATH"
                 ;;
               css|scss|html|md|mdc|mdx|yaml|yml)
-                npx prettier --write "$FULL_PATH"
+                npx prettier --write -- "$FULL_PATH"
                 ;;
               *)
-                # For other extensions, try Biome first
-                npx @biomejs/biome check --write "$FULL_PATH" 2>/dev/null || true
+                echo "Skipping unsupported file type: $FILE_PATH"
                 ;;
             esac
 
