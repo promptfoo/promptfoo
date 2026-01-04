@@ -2,7 +2,6 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
-import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -44,6 +43,32 @@ function getKindFromMimeType(mimeType: string): BlobKind {
   return mimeType.startsWith('audio/') ? 'audio' : 'image';
 }
 
+/**
+ * Normalize audio format to proper MIME type.
+ * Some providers return just 'wav' instead of 'audio/wav'.
+ */
+function normalizeAudioMimeType(format: string | undefined): string {
+  if (!format) {
+    return 'audio/wav';
+  }
+  // Already a proper MIME type
+  if (format.includes('/')) {
+    return format;
+  }
+  // Normalize common formats
+  const formatLower = format.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    aac: 'audio/aac',
+    m4a: 'audio/mp4',
+    webm: 'audio/webm',
+  };
+  return mimeMap[formatLower] || `audio/${formatLower}`;
+}
+
 function parseBinary(
   base64OrDataUrl: string,
   defaultMimeType: string,
@@ -76,26 +101,11 @@ async function maybeStore(
     return null;
   }
 
-  // Try uploading to the cloud server when logged into Promptfoo Cloud
-  if (shouldAttemptRemoteBlobUpload()) {
-    const remote = await uploadBlobRemote(
-      parsed.buffer,
-      parsed.mimeType || 'application/octet-stream',
-      {
-        ...context,
-        location,
-        kind,
-      },
-    );
-    if (remote?.ref) {
-      return remote.ref;
-    }
-  }
-
   if (!isBlobStorageEnabled()) {
     return null;
   }
 
+  // Store blobs locally (like videos). Media files are not uploaded to cloud.
   const { ref } = await storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
     ...context,
     location,
@@ -188,7 +198,7 @@ export async function extractAndStoreBinaryData(
   if (response.audio?.data && typeof response.audio.data === 'string') {
     const stored = await maybeStore(
       response.audio.data,
-      response.audio.format || 'audio/wav',
+      normalizeAudioMimeType(response.audio.format),
       blobContext,
       'response.audio.data',
       'audio',
@@ -212,7 +222,7 @@ export async function extractAndStoreBinaryData(
         if (turn?.audio?.data && typeof turn.audio.data === 'string') {
           const stored = await maybeStore(
             turn.audio.data,
-            turn.audio.format || 'audio/wav',
+            normalizeAudioMimeType(turn.audio.format),
             blobContext,
             `response.turns[${idx}].audio.data`,
             'audio',

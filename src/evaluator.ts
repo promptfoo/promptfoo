@@ -302,6 +302,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  evalId,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -533,6 +534,7 @@ export async function runEval({
 
       // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
       const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        evalId,
         testIdx,
         promptIdx,
       });
@@ -1169,6 +1171,7 @@ class Evaluator {
                 isRedteam: testSuite.redteam != null,
                 concurrency,
                 abortSignal: options.abortSignal,
+                evalId: this.evalRecord.id,
               });
               promptIdx++;
             }
