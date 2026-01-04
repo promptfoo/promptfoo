@@ -10,24 +10,51 @@ vi.mock('../../src/matchers', () => ({
 
 import { matchesVideoRubric } from '../../src/matchers';
 
+// Helper to create minimal valid AssertionParams
+function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
+  const test = overrides.test ?? { vars: {}, options: {} };
+  const providerResponse = overrides.providerResponse ?? { output: 'test output' };
+  return {
+    assertion: { type: 'video-rubric', value: 'test rubric' },
+    baseType: 'video-rubric',
+    renderedValue: 'test rubric',
+    assertionValueContext: {
+      prompt: undefined,
+      vars: {},
+      test,
+      logProbs: undefined,
+      provider: undefined,
+      providerResponse,
+    },
+    inverse: false,
+    output: 'test output',
+    outputString: 'test output',
+    test,
+    providerResponse,
+    providerCallContext: {} as any,
+    ...overrides,
+  };
+}
+
+// Helper to create valid BlobRef
+function createBlobRef(overrides: Partial<{ uri: string; hash: string; mimeType: string; sizeBytes: number; provider: string }> = {}) {
+  return {
+    uri: 'blob://test/video.mp4',
+    hash: 'abc123',
+    mimeType: 'video/mp4',
+    sizeBytes: 1024,
+    provider: 'test',
+    ...overrides,
+  };
+}
+
 describe('handleVideoRubric', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should fail when no video is in the response', async () => {
-    const params: AssertionParams = {
-      assertion: { type: 'video-rubric', value: 'test rubric' },
-      renderedValue: 'test rubric',
-      test: {
-        vars: {},
-        options: {},
-      },
-      providerResponse: {
-        output: 'test output',
-      },
-      providerCallContext: {} as any,
-    };
+    const params = createParams();
 
     const result = await handleVideoRubric(params);
 
@@ -44,28 +71,22 @@ describe('handleVideoRubric', () => {
     };
     vi.mocked(matchesVideoRubric).mockResolvedValue(mockResult);
 
-    const params: AssertionParams = {
-      assertion: { type: 'video-rubric', value: 'test rubric' },
-      renderedValue: 'test rubric',
-      test: {
-        vars: {},
-        options: {},
-      },
+    const blobRef = createBlobRef();
+    const params = createParams({
       providerResponse: {
         output: 'test output',
         video: {
-          blobRef: { hash: 'abc123', mimeType: 'video/mp4' },
+          blobRef,
           format: 'mp4',
         },
       },
-      providerCallContext: {} as any,
-    };
+    });
 
     const result = await handleVideoRubric(params);
 
     expect(matchesVideoRubric).toHaveBeenCalledWith(
       'test rubric',
-      expect.objectContaining({ blobRef: { hash: 'abc123', mimeType: 'video/mp4' } }),
+      expect.objectContaining({ blobRef }),
       expect.any(Object),
       expect.any(Object),
       expect.any(Object),
@@ -87,13 +108,9 @@ describe('handleVideoRubric', () => {
       minScore: 0.7,
     };
 
-    const params: AssertionParams = {
+    const params = createParams({
       assertion: { type: 'video-rubric', value: rubricObject },
       renderedValue: rubricObject,
-      test: {
-        vars: {},
-        options: {},
-      },
       providerResponse: {
         output: 'test output',
         video: {
@@ -101,8 +118,7 @@ describe('handleVideoRubric', () => {
           format: 'mp4',
         },
       },
-      providerCallContext: {} as any,
-    };
+    });
 
     const result = await handleVideoRubric(params);
 
@@ -126,7 +142,8 @@ describe('handleVideoRubric', () => {
     };
     vi.mocked(matchesVideoRubric).mockResolvedValue(mockResult);
 
-    const params: AssertionParams = {
+    const blobRef = createBlobRef({ hash: 'xyz789' });
+    const params = createParams({
       assertion: { type: 'video-rubric' },
       renderedValue: undefined,
       test: {
@@ -138,11 +155,10 @@ describe('handleVideoRubric', () => {
       providerResponse: {
         output: 'test output',
         video: {
-          blobRef: { hash: 'xyz789', mimeType: 'video/mp4' },
+          blobRef,
         },
       },
-      providerCallContext: {} as any,
-    };
+    });
 
     const result = await handleVideoRubric(params);
 
