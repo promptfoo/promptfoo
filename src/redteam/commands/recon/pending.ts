@@ -62,8 +62,8 @@ export function readPendingReconConfig(): PendingReconConfig | null {
     logger.warn('Pending recon config validation failed', {
       errors: result.error.flatten().fieldErrors,
     });
-    // Return the parsed data anyway for backwards compatibility
-    return parsed as PendingReconConfig;
+    // Return null for invalid data - server will handle as 404
+    return null;
   }
 
   return result.data;
