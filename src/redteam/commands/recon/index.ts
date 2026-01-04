@@ -52,36 +52,37 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     throw new Error(`Path is not a directory: ${directory}`);
   }
 
-  // Create scratchpad for agent notes
-  const scratchpad = createScratchpad();
-
   logger.info(`\nReconnaissance target: ${chalk.cyan(directory)}`);
   logger.info(chalk.dim('Agent can read files, search web, and take notes\n'));
 
-  // Select provider based on available API keys or forced choice
-  const providerChoice = selectProvider(options.provider);
-  logger.info(`Provider: ${chalk.cyan(providerChoice.type)} (${providerChoice.model})`);
-
-  // Create the appropriate provider with progress callback
-  const modelOverride = options.model || providerChoice.model;
-
-  // Run analysis with spinner
-  const spinner = ora('Analyzing codebase...').start();
-
-  // Progress callback updates the spinner text
-  const onProgress: ReconProgressCallback = (event) => {
-    spinner.text = event.message;
-  };
-
-  const provider =
-    providerChoice.type === 'openai'
-      ? await createOpenAIReconProvider(directory, scratchpad, modelOverride, onProgress)
-      : await createAnthropicReconProvider(directory, scratchpad, modelOverride, onProgress);
-
-  // Build the analysis prompt
-  const prompt = buildReconPrompt(scratchpad.path, options.exclude);
+  // Create scratchpad for agent notes - wrapped in try/finally to ensure cleanup
+  const scratchpad = createScratchpad();
+  let spinner: ReturnType<typeof ora> | undefined;
 
   try {
+    // Select provider based on available API keys or forced choice
+    const providerChoice = selectProvider(options.provider);
+    logger.info(`Provider: ${chalk.cyan(providerChoice.type)} (${providerChoice.model})`);
+
+    // Create the appropriate provider with progress callback
+    const modelOverride = options.model || providerChoice.model;
+
+    // Run analysis with spinner
+    spinner = ora('Analyzing codebase...').start();
+
+    // Progress callback updates the spinner text
+    const onProgress: ReconProgressCallback = (event) => {
+      spinner!.text = event.message;
+    };
+
+    const provider =
+      providerChoice.type === 'openai'
+        ? await createOpenAIReconProvider(directory, scratchpad, modelOverride, onProgress)
+        : await createAnthropicReconProvider(directory, scratchpad, modelOverride, onProgress);
+
+    // Build the analysis prompt
+    const prompt = buildReconPrompt(scratchpad.path, options.exclude);
+
     const result = await provider.analyze(directory, prompt);
     spinner.succeed('Analysis complete');
 
@@ -134,8 +135,14 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     }
 
     return result;
+  } catch (error) {
+    // Fail the spinner on error to provide clear feedback
+    if (spinner) {
+      spinner.fail('Analysis failed');
+    }
+    throw error;
   } finally {
-    // Always cleanup scratchpad
+    // Always cleanup scratchpad - prevents /tmp/promptfoo-recon-* leaks
     scratchpad.cleanup();
   }
 }

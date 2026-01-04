@@ -169,14 +169,18 @@ export async function createAnthropicReconProvider(
       }
     : undefined;
 
+  // SECURITY: Use 'default' permission mode to require user confirmation for edits.
+  // The recon command is read-only reconnaissance - it should not modify the target repo.
+  // Only the scratchpad directory (a temp dir) is provided for note-taking.
+  // We explicitly do NOT use 'acceptEdits' to prevent unattended modifications.
   const provider = new ClaudeCodeSDKProvider({
     config: {
-      working_dir: directory,
-      additional_directories: [scratchpad.dir],
+      working_dir: scratchpad.dir, // Agent writes only to temp scratchpad
+      additional_directories: [directory], // Target repo is read-only via additional_directories
       model: model || DEFAULT_ANTHROPIC_MODEL,
       max_budget_usd: DEFAULT_ANTHROPIC_BUDGET_USD,
       append_allowed_tools: ['WebFetch', 'WebSearch'],
-      permission_mode: 'acceptEdits', // Allow writing to scratchpad
+      permission_mode: 'default', // Require confirmation for any edits outside scratchpad
       output_format: {
         type: 'json_schema',
         schema: ReconOutputSchema,

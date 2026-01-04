@@ -56,26 +56,67 @@ export class InvalidPendingReconError extends Error {
 /**
  * Reads and validates pending recon config from the file system.
  *
+ * If the file exists but is corrupted (malformed JSON or invalid schema),
+ * it will be automatically deleted to prevent repeated failures.
+ *
+ * @param options.deleteOnError - If true (default), delete corrupted files
  * @returns The parsed and validated config, or null if file doesn't exist
  * @throws InvalidPendingReconError if file exists but contains invalid data
  * @throws Error if file exists but contains malformed JSON
  */
-export function readPendingReconConfig(): PendingReconConfig | null {
+export function readPendingReconConfig(
+  options: { deleteOnError?: boolean } = {},
+): PendingReconConfig | null {
+  const { deleteOnError = true } = options;
   const pendingPath = getPendingReconPath();
 
   if (!fs.existsSync(pendingPath)) {
     return null;
   }
 
-  const content = fs.readFileSync(pendingPath, 'utf-8');
-  const parsed = JSON.parse(content);
+  let content: string;
+  let parsed: unknown;
+
+  try {
+    content = fs.readFileSync(pendingPath, 'utf-8');
+    parsed = JSON.parse(content);
+  } catch {
+    // Malformed JSON - delete the corrupted file
+    if (deleteOnError) {
+      logger.warn('Pending recon config contains malformed JSON, deleting corrupted file', {
+        path: pendingPath,
+      });
+      try {
+        fs.unlinkSync(pendingPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    throw new InvalidPendingReconError('Pending recon file contains malformed JSON', {
+      parse: ['File is not valid JSON. Run `promptfoo redteam recon` again to regenerate.'],
+    });
+  }
 
   // Validate against schema
   const result = PendingReconConfigSchema.safeParse(parsed);
   if (!result.success) {
     const fieldErrors = result.error.flatten().fieldErrors;
     logger.warn('Pending recon config validation failed', { errors: fieldErrors });
-    throw new InvalidPendingReconError('Invalid pending recon file format', fieldErrors);
+
+    // Delete corrupted file to prevent repeated failures
+    if (deleteOnError) {
+      logger.warn('Deleting invalid pending recon config', { path: pendingPath });
+      try {
+        fs.unlinkSync(pendingPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+
+    throw new InvalidPendingReconError(
+      'Invalid pending recon file format. Run `promptfoo redteam recon` again to regenerate.',
+      fieldErrors,
+    );
   }
 
   return result.data;

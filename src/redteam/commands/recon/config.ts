@@ -667,7 +667,17 @@ export function buildRedteamConfig(
 ): Partial<UnifiedConfig> {
   const purpose = applicationDefinitionToPurpose(result);
   const plugins = suggestPluginsFromFindings(result);
-  const strategies = buildStrategies(result.stateful ?? false);
+
+  // Warn if stateful detection was inconclusive - user may miss multi-turn attack coverage
+  const stateful = result.stateful ?? false;
+  if (result.stateful === undefined) {
+    logger.warn(
+      'Could not determine if application supports multi-turn conversations. ' +
+        'Multi-turn attack strategies (Hydra, Crescendo, GOAT) will be excluded. ' +
+        'If your application is conversational, manually add these strategies to your config.',
+    );
+  }
+  const strategies = buildStrategies(stateful);
 
   // Truncate purpose for description (first sentence or 100 chars)
   const purposeSummary = (result.purpose ?? 'AI application').split('.')[0].trim();
