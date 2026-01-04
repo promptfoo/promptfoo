@@ -71,6 +71,10 @@ providers:
       apiKey: your_api_key_here
 ```
 
+:::note Environment Variable Priority
+When both `GOOGLE_API_KEY` and `GEMINI_API_KEY` are set, `GOOGLE_API_KEY` takes precedence. This aligns with the [Python Google GenAI SDK](https://ai.google.dev/gemini-api/docs/quickstart?lang=python).
+:::
+
 **Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
 
 If you need to explicitly reference an environment variable in your config, use Nunjucks template syntax:
