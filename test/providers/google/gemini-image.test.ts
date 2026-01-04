@@ -15,6 +15,7 @@ vi.mock('../../../src/providers/google/util', () => ({
     contents: [{ parts: [{ text: prompt }], role: 'user' }],
     systemInstruction: undefined,
   })),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 describe('GeminiImageProvider', () => {

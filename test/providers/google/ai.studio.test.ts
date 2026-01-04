@@ -17,6 +17,7 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 vi.mock('../../../src/providers/google/util', async () => ({
   ...(await vi.importActual('../../../src/providers/google/util')),
   maybeCoerceToGeminiFormat: vi.fn(),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('../../../src/util/templates', async (importOriginal) => {

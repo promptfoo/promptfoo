@@ -37,6 +37,7 @@ vi.mock('../../../src/providers/google/util', async () => ({
     credentials: {},
   }),
   loadCredentials: vi.fn().mockReturnValue({}),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('../../../src/util/templates', async (importOriginal) => {
