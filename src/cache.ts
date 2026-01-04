@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -121,6 +122,64 @@ export type FetchWithCacheResult<T> = {
   deleteFromCache?: () => Promise<void>;
 };
 
+/**
+ * Auth-related header names that should be included in cache key.
+ * These headers affect which user/credentials the request is made with,
+ * so different auth headers should result in different cache entries.
+ */
+const AUTH_HEADER_NAMES = new Set([
+  'authorization',
+  'x-goog-api-key',
+  'x-api-key',
+  'api-key',
+  'x-goog-user-project',
+]);
+
+/**
+ * Extract auth-related headers and create a hash for cache key inclusion.
+ * This prevents different API keys from sharing cached responses.
+ *
+ * @param headers - Request headers (HeadersInit format)
+ * @returns Hash string of auth headers, or empty string if no auth headers
+ */
+function getAuthHeadersHash(headers?: HeadersInit): string {
+  if (!headers) {
+    return '';
+  }
+
+  // Normalize headers to a simple object
+  let headerObj: Record<string, string> = {};
+
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      headerObj[key.toLowerCase()] = value;
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) {
+      headerObj[key.toLowerCase()] = value;
+    }
+  } else {
+    headerObj = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  }
+
+  // Extract only auth-related headers
+  const authHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headerObj)) {
+    if (AUTH_HEADER_NAMES.has(key)) {
+      authHeaders[key] = value;
+    }
+  }
+
+  // If no auth headers, return empty string
+  if (Object.keys(authHeaders).length === 0) {
+    return '';
+  }
+
+  // Create a stable hash of the auth headers
+  const authString = JSON.stringify(authHeaders, Object.keys(authHeaders).sort());
+  return crypto.createHash('sha256').update(authString).digest('hex').substring(0, 16);
+}
+
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
@@ -154,7 +213,11 @@ export async function fetchWithCache<T = unknown>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+
+  // Include auth headers hash in cache key to prevent different API keys from sharing cache
+  const authHash = getAuthHeadersHash(options.headers);
+  const authSuffix = authHash ? `:auth:${authHash}` : '';
+  const cacheKey = `fetch:v3:${url}:${JSON.stringify(copy)}${authSuffix}`;
   const cache = await getCache();
 
   let cached = true;
