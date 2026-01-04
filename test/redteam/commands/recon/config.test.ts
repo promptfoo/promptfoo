@@ -7,9 +7,9 @@ import {
   buildRedteamConfig,
   filterValidPlugins,
   isValidPlugin,
-  isValueMeaningful,
   SUGGESTED_PLUGIN_LIST,
 } from '../../../../src/redteam/commands/recon/config';
+import { isValueMeaningful } from '../../../../src/validators/recon-constants';
 
 import type { ReconResult } from '../../../../src/redteam/commands/recon/types';
 

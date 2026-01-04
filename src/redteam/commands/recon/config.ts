@@ -1,4 +1,5 @@
 import logger from '../../../logger';
+import { isValueMeaningful, SECTION_HEADERS } from '../../../validators/recon-constants';
 import {
   ALL_PLUGINS,
   BIAS_PLUGINS,
@@ -213,32 +214,6 @@ export function filterValidPlugins(suggestedPlugins: string[]): string[] {
 }
 
 /**
- * Checks if a field value is meaningful (not empty or a placeholder)
- */
-export function isValueMeaningful(value: string | undefined): boolean {
-  if (!value) {
-    return false;
-  }
-  const lower = value.toLowerCase().trim();
-  // Skip empty or placeholder values
-  // Note: We use word boundary checks to avoid false positives like "nosql" or "notify"
-  if (
-    lower === '' ||
-    lower === 'none' ||
-    lower === 'n/a' ||
-    lower === 'na' ||
-    lower.startsWith('not ') || // "not specified", "not mentioned", "not provided", "not applicable", "not found"
-    lower.startsWith('none ') || // "none mentioned", "none specified"
-    /^no\s+(formal|built-in|additional|specific|explicit|dedicated|documented|known|particular|special)\b/.test(
-      lower,
-    ) // "no formal", "no built-in", etc. but NOT "nosql database"
-  ) {
-    return false;
-  }
-  return true;
-}
-
-/**
  * Formats discovered tools as a string for the hasAccessTo field
  */
 function formatToolsForAccessDescription(
@@ -361,85 +336,53 @@ export function buildReconMetadata(result: ReconResult, scannedDirectory: string
 }
 
 /**
+ * Helper to format a section with header and code block.
+ * Uses the shared SECTION_HEADERS constant for consistency with the parser.
+ */
+function formatSection(
+  field: keyof typeof SECTION_HEADERS,
+  value: string | undefined,
+): string | null {
+  if (!isValueMeaningful(value)) {
+    return null;
+  }
+  const header = SECTION_HEADERS[field];
+  return `${header}:\n\`\`\`\n${value}\n\`\`\``;
+}
+
+/**
  * Converts a ReconResult to the purpose string format expected by promptfoo redteam
  *
  * This matches the format used by the web UI's applicationDefinitionToPurpose function.
+ * Uses SECTION_HEADERS from validators/recon-constants for header strings.
  * Skips sections with placeholder values to reduce verbosity.
  */
 export function applicationDefinitionToPurpose(result: ReconResult): string {
-  const sections: string[] = [];
+  // Define the order of fields to include in the purpose string.
+  // Some fields are intentionally skipped:
+  // - securityRequirements: often boilerplate
+  // - exampleIdentifiers: useful for agent but verbose in output
+  // - competitors: often empty/not applicable
+  // - systemPrompt: handled separately in the config, not in purpose string
+  // - UI aliases (accessToData, forbiddenData, accessToActions, forbiddenActions): not used in CLI output
+  const fieldsToInclude: (keyof typeof SECTION_HEADERS)[] = [
+    'purpose',
+    'features',
+    'industry',
+    'attackConstraints',
+    'hasAccessTo',
+    'doesNotHaveAccessTo',
+    'userTypes',
+    'sensitiveDataTypes',
+    'criticalActions',
+    'forbiddenTopics',
+    'redteamUser',
+    'connectedSystems',
+  ];
 
-  // Always include core fields if present
-  if (isValueMeaningful(result.purpose)) {
-    sections.push(`Application Purpose:\n\`\`\`\n${result.purpose}\n\`\`\``);
-  }
-
-  if (isValueMeaningful(result.features)) {
-    sections.push(`Key Features and Capabilities:\n\`\`\`\n${result.features}\n\`\`\``);
-  }
-
-  if (isValueMeaningful(result.industry)) {
-    sections.push(`Industry/Domain:\n\`\`\`\n${result.industry}\n\`\`\``);
-  }
-
-  // Include security-relevant fields if meaningful
-  if (isValueMeaningful(result.attackConstraints)) {
-    sections.push(
-      `System Rules and Constraints for Attackers:\n\`\`\`\n${result.attackConstraints}\n\`\`\``,
-    );
-  }
-
-  if (isValueMeaningful(result.hasAccessTo)) {
-    sections.push(
-      `Systems and Data the Application Has Access To:\n\`\`\`\n${result.hasAccessTo}\n\`\`\``,
-    );
-  }
-
-  // Skip doesNotHaveAccessTo, userTypes, securityRequirements if not meaningful
-  // These are often boilerplate and add noise
-  if (isValueMeaningful(result.doesNotHaveAccessTo)) {
-    sections.push(
-      `Systems and Data the Application Should NOT Have Access To:\n\`\`\`\n${result.doesNotHaveAccessTo}\n\`\`\``,
-    );
-  }
-
-  if (isValueMeaningful(result.userTypes)) {
-    sections.push(
-      `Types of Users Who Interact with the Application:\n\`\`\`\n${result.userTypes}\n\`\`\``,
-    );
-  }
-
-  // Skip securityRequirements - often boilerplate
-
-  if (isValueMeaningful(result.sensitiveDataTypes)) {
-    sections.push(`Types of Sensitive Data Handled:\n\`\`\`\n${result.sensitiveDataTypes}\n\`\`\``);
-  }
-
-  // Skip exampleIdentifiers - useful for agent but verbose in output
-
-  if (isValueMeaningful(result.criticalActions)) {
-    sections.push(
-      `Critical or Dangerous Actions the Application Can Perform:\n\`\`\`\n${result.criticalActions}\n\`\`\``,
-    );
-  }
-
-  if (isValueMeaningful(result.forbiddenTopics)) {
-    sections.push(
-      `Content and Topics the Application Should Never Discuss:\n\`\`\`\n${result.forbiddenTopics}\n\`\`\``,
-    );
-  }
-
-  // Skip competitors - often empty/not applicable
-
-  if (isValueMeaningful(result.redteamUser)) {
-    sections.push(`Red Team User Persona:\n\`\`\`\n${result.redteamUser}\n\`\`\``);
-  }
-
-  if (isValueMeaningful(result.connectedSystems)) {
-    sections.push(
-      `Connected Systems the LLM Agent Has Access To:\n\`\`\`\n${result.connectedSystems}\n\`\`\``,
-    );
-  }
+  const sections = fieldsToInclude
+    .map((field) => formatSection(field, result[field]))
+    .filter((section): section is string => section !== null);
 
   return sections.join('\n\n');
 }
