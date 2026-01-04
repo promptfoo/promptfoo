@@ -7,6 +7,22 @@ import { ReconOutputSchema } from './schema';
 import type { ProviderChoice, ReconResult, Scratchpad } from './types';
 
 /**
+ * Default model for OpenAI Codex SDK
+ */
+export const DEFAULT_OPENAI_MODEL = 'gpt-5.2-codex';
+
+/**
+ * Default model for Claude Agent SDK
+ */
+export const DEFAULT_ANTHROPIC_MODEL = 'opus';
+
+/**
+ * Default budget limit for Claude Agent SDK (in USD)
+ * This caps the maximum spend per recon run to prevent runaway costs.
+ */
+export const DEFAULT_ANTHROPIC_BUDGET_USD = 25.0;
+
+/**
  * Callback for streaming progress events during analysis
  */
 export type ReconProgressCallback = (event: { type: string; message: string }) => void;
@@ -62,14 +78,22 @@ export async function createOpenAIReconProvider(
   model?: string,
   onProgress?: ReconProgressCallback,
 ): Promise<ReconProvider> {
-  const { OpenAICodexSDKProvider } = await import('../../../providers/openai/codex-sdk');
+  let OpenAICodexSDKProvider: any;
+  try {
+    const module = await import('../../../providers/openai/codex-sdk');
+    OpenAICodexSDKProvider = module.OpenAICodexSDKProvider;
+  } catch (err) {
+    throw new Error(
+      `Failed to load OpenAI Codex SDK provider. Ensure the provider is available: ${err instanceof Error ? err.message : err}`,
+    );
+  }
 
   const provider = new OpenAICodexSDKProvider({
     config: {
       working_dir: directory,
       additional_directories: [scratchpad.dir],
       skip_git_repo_check: true,
-      model: model || 'gpt-5.1-codex',
+      model: model || DEFAULT_OPENAI_MODEL,
       output_schema: ReconOutputSchema,
       enable_streaming: !!onProgress,
       on_event: onProgress
@@ -103,7 +127,15 @@ export async function createAnthropicReconProvider(
   model?: string,
   onProgress?: ReconProgressCallback,
 ): Promise<ReconProvider> {
-  const { ClaudeCodeSDKProvider } = await import('../../../providers/claude-agent-sdk');
+  let ClaudeCodeSDKProvider: any;
+  try {
+    const module = await import('../../../providers/claude-agent-sdk');
+    ClaudeCodeSDKProvider = module.ClaudeCodeSDKProvider;
+  } catch (err) {
+    throw new Error(
+      `Failed to load Claude Agent SDK provider. Ensure the provider is available: ${err instanceof Error ? err.message : err}`,
+    );
+  }
 
   // Build hooks for progress updates if callback provided
   const hooks = onProgress
@@ -141,8 +173,8 @@ export async function createAnthropicReconProvider(
     config: {
       working_dir: directory,
       additional_directories: [scratchpad.dir],
-      model: model || 'opus',
-      max_budget_usd: 25.0,
+      model: model || DEFAULT_ANTHROPIC_MODEL,
+      max_budget_usd: DEFAULT_ANTHROPIC_BUDGET_USD,
       append_allowed_tools: ['WebFetch', 'WebSearch'],
       permission_mode: 'acceptEdits', // Allow writing to scratchpad
       output_format: {
@@ -174,25 +206,25 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
     if (!getEnvString('OPENAI_API_KEY') && !getEnvString('CODEX_API_KEY')) {
       throw new Error('OPENAI_API_KEY or CODEX_API_KEY required for OpenAI provider');
     }
-    return { type: 'openai', model: 'gpt-5.1-codex' };
+    return { type: 'openai', model: DEFAULT_OPENAI_MODEL };
   }
 
   if (forcedProvider === 'anthropic') {
     if (!getEnvString('ANTHROPIC_API_KEY')) {
       throw new Error('ANTHROPIC_API_KEY required for Anthropic provider');
     }
-    return { type: 'anthropic', model: 'opus' };
+    return { type: 'anthropic', model: DEFAULT_ANTHROPIC_MODEL };
   }
 
   // Auto-detect: prefer OpenAI
   if (getEnvString('OPENAI_API_KEY') || getEnvString('CODEX_API_KEY')) {
     logger.info('Using OpenAI Codex SDK (OPENAI_API_KEY detected)');
-    return { type: 'openai', model: 'gpt-5.1-codex' };
+    return { type: 'openai', model: DEFAULT_OPENAI_MODEL };
   }
 
   if (getEnvString('ANTHROPIC_API_KEY')) {
     logger.info('Using Claude Agent SDK (ANTHROPIC_API_KEY detected)');
-    return { type: 'anthropic', model: 'opus' };
+    return { type: 'anthropic', model: DEFAULT_ANTHROPIC_MODEL };
   }
 
   throw new Error(dedent`
@@ -232,10 +264,78 @@ export function parseReconOutput(output: unknown): ReconResult {
     errors: result.error.flatten().fieldErrors,
   });
 
-  // Fall back to type assertion if object (for partial compatibility)
+  // Fall back to partial result extraction if object
   // Arrays are technically objects in JS, but not valid ReconResults
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    return parsed as ReconResult;
+    // Extract only known fields to avoid passing through unexpected data
+    const raw = parsed as Record<string, unknown>;
+    const safeResult: ReconResult = {};
+
+    // Copy known string fields
+    const stringFields = [
+      'purpose',
+      'features',
+      'industry',
+      'systemPrompt',
+      'hasAccessTo',
+      'doesNotHaveAccessTo',
+      'userTypes',
+      'securityRequirements',
+      'sensitiveDataTypes',
+      'exampleIdentifiers',
+      'criticalActions',
+      'forbiddenTopics',
+      'attackConstraints',
+      'competitors',
+      'connectedSystems',
+      'redteamUser',
+    ] as const;
+
+    for (const field of stringFields) {
+      if (typeof raw[field] === 'string') {
+        safeResult[field] = raw[field] as string;
+      }
+    }
+
+    // Copy known array fields
+    if (Array.isArray(raw.entities)) {
+      safeResult.entities = raw.entities.filter((e): e is string => typeof e === 'string');
+    }
+    if (Array.isArray(raw.suggestedPlugins)) {
+      safeResult.suggestedPlugins = raw.suggestedPlugins.filter(
+        (p): p is string => typeof p === 'string',
+      );
+    }
+    if (Array.isArray(raw.securityNotes)) {
+      safeResult.securityNotes = raw.securityNotes.filter(
+        (n): n is string => typeof n === 'string',
+      );
+    }
+    if (Array.isArray(raw.keyFiles)) {
+      safeResult.keyFiles = raw.keyFiles.filter((f): f is string => typeof f === 'string');
+    }
+
+    // Copy discoveredTools with validation
+    if (Array.isArray(raw.discoveredTools)) {
+      safeResult.discoveredTools = raw.discoveredTools
+        .filter(
+          (t): t is { name: string; description: string } =>
+            t && typeof t === 'object' && typeof t.name === 'string' && typeof t.description === 'string',
+        )
+        .map((t) => ({
+          name: t.name,
+          description: t.description,
+          file: typeof (t as any).file === 'string' ? (t as any).file : undefined,
+          parameters: typeof (t as any).parameters === 'string' ? (t as any).parameters : undefined,
+        }));
+    }
+
+    // Copy boolean field
+    if (typeof raw.stateful === 'boolean') {
+      safeResult.stateful = raw.stateful;
+    }
+
+    return safeResult;
   }
 
   throw new Error('Invalid recon output: expected JSON object');

@@ -98,7 +98,7 @@ You need at least one of:
 
 | Provider                     | Environment Variable                | Recommended Model                |
 | ---------------------------- | ----------------------------------- | -------------------------------- |
-| OpenAI (Codex SDK)           | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex`                  |
+| OpenAI (Codex SDK)           | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.2-codex`                  |
 | Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY`                 | SDK default (override with `-m`) |
 
 Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) and [Claude Agent SDK](/docs/providers/claude-agent-sdk/) for current defaults and configuration options.

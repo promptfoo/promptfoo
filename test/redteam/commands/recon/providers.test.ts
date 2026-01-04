@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { parseReconOutput, selectProvider } from '../../../../src/redteam/commands/recon/providers';
+import {
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_OPENAI_MODEL,
+  parseReconOutput,
+  selectProvider,
+} from '../../../../src/redteam/commands/recon/providers';
 
 // Mock the envars module
 vi.mock('../../../../src/envars', () => ({
@@ -41,7 +46,7 @@ describe('selectProvider', () => {
     const result = selectProvider();
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex');
+    expect(result.model).toBe(DEFAULT_OPENAI_MODEL);
   });
 
   it('should select OpenAI when CODEX_API_KEY is set', () => {
@@ -55,7 +60,7 @@ describe('selectProvider', () => {
     const result = selectProvider();
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex');
+    expect(result.model).toBe(DEFAULT_OPENAI_MODEL);
   });
 
   it('should select Anthropic when only ANTHROPIC_API_KEY is set', () => {
@@ -69,7 +74,7 @@ describe('selectProvider', () => {
     const result = selectProvider();
 
     expect(result.type).toBe('anthropic');
-    expect(result.model).toBe('opus');
+    expect(result.model).toBe(DEFAULT_ANTHROPIC_MODEL);
   });
 
   it('should prefer OpenAI when both keys are set', () => {
@@ -108,7 +113,7 @@ describe('selectProvider', () => {
     const result = selectProvider('anthropic');
 
     expect(result.type).toBe('anthropic');
-    expect(result.model).toBe('opus');
+    expect(result.model).toBe(DEFAULT_ANTHROPIC_MODEL);
   });
 
   it('should respect forced provider override to openai', () => {
@@ -125,7 +130,7 @@ describe('selectProvider', () => {
     const result = selectProvider('openai');
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex');
+    expect(result.model).toBe(DEFAULT_OPENAI_MODEL);
   });
 
   it('should throw when forced to anthropic but no ANTHROPIC_API_KEY', () => {

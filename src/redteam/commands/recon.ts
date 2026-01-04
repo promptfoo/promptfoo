@@ -3,6 +3,7 @@ import { z } from 'zod';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { doRecon } from './recon/index';
+import { DEFAULT_ANTHROPIC_BUDGET_USD } from './recon/providers';
 import type { Command } from 'commander';
 
 const COMMAND = 'recon';
@@ -33,6 +34,8 @@ export function reconCommand(program: Command): void {
 
         The agent can read files, search the web for documentation, and take notes in a scratchpad.
 
+        Budget: Anthropic provider is capped at $${DEFAULT_ANTHROPIC_BUDGET_USD} per run.
+
         Examples:
           $ promptfoo redteam recon
           $ promptfoo redteam recon --dir ./my-agent
@@ -48,8 +51,8 @@ export function reconCommand(program: Command): void {
     .option('--no-open', 'Do not open browser after analysis')
     // Note: --verbose and --env-file are added automatically by addCommonOptionsRecursively
     .action(async (rawArgs) => {
+      const startTime = Date.now();
       telemetry.record('command_used', { name: `redteam ${COMMAND}` });
-      telemetry.record('redteam recon', {});
 
       const { success, data: args, error } = ArgsSchema.safeParse(rawArgs);
       if (!success) {
@@ -58,14 +61,30 @@ export function reconCommand(program: Command): void {
           logger.error(`  ${issue.path.join('.')}: ${issue.message}`);
         });
         process.exitCode = 1;
+        telemetry.record('redteam recon', { success: false, error: 'invalid_args' });
         return;
       }
 
       try {
-        await doRecon(args);
+        const result = await doRecon(args);
+        const durationMs = Date.now() - startTime;
+        telemetry.record('redteam recon', {
+          success: true,
+          provider: args.provider || 'auto',
+          durationMs,
+          discoveredToolsCount: result.discoveredTools?.length ?? 0,
+          suggestedPluginsCount: result.suggestedPlugins?.length ?? 0,
+          keyFilesCount: result.keyFiles?.length ?? 0,
+          stateful: result.stateful ?? false,
+        });
       } catch (err) {
         logger.error(`Recon failed: ${err instanceof Error ? err.message : err}`);
         process.exitCode = 1;
+        telemetry.record('redteam recon', {
+          success: false,
+          provider: args.provider || 'auto',
+          error: err instanceof Error ? err.message : 'unknown',
+        });
       }
     });
 }

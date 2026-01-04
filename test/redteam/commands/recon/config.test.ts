@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applicationDefinitionToPurpose,
   buildApplicationDefinition,
@@ -12,6 +12,16 @@ import {
 } from '../../../../src/redteam/commands/recon/config';
 
 import type { ReconResult } from '../../../../src/redteam/commands/recon/types';
+
+// Mock logger to suppress expected warnings during tests
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('applicationDefinitionToPurpose', () => {
   afterEach(() => {

@@ -16,6 +16,12 @@ import type { RedteamPluginObject, RedteamStrategyObject } from '../../types';
 import type { ReconResult } from './types';
 
 /**
+ * Maximum number of tools to include in the purpose string output.
+ * Prevents overly verbose output when many tools are discovered.
+ */
+const MAX_TOOLS_IN_PURPOSE = 20;
+
+/**
  * Metadata structure for recon output that enables UI import.
  * This is persisted in the YAML output under `metadata:`.
  *
@@ -243,8 +249,7 @@ function formatToolsForAccessDescription(
   }
 
   // Limit tools to prevent overly verbose output
-  const MAX_TOOLS = 20;
-  const toolsToInclude = tools.slice(0, MAX_TOOLS);
+  const toolsToInclude = tools.slice(0, MAX_TOOLS_IN_PURPOSE);
 
   const lines = toolsToInclude.map((tool) => {
     let line = `- ${tool.name}`;
@@ -254,8 +259,8 @@ function formatToolsForAccessDescription(
     return line;
   });
 
-  if (tools.length > MAX_TOOLS) {
-    lines.push(`... and ${tools.length - MAX_TOOLS} more tools`);
+  if (tools.length > MAX_TOOLS_IN_PURPOSE) {
+    lines.push(`... and ${tools.length - MAX_TOOLS_IN_PURPOSE} more tools`);
   }
 
   return lines.join('\n');
