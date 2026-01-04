@@ -87,6 +87,7 @@ import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { handleVideoRubric } from './videoRubric';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -110,6 +111,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'video-rubric',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -193,6 +195,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
+  'video-rubric': handleVideoRubric,
   webhook: handleWebhook,
 };
 
