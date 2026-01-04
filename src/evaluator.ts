@@ -36,6 +36,7 @@ import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -46,7 +47,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { isApiProvider } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
@@ -635,17 +636,21 @@ function buildProviderErrorContext({
   promptIdx,
   testIdx,
 }: {
-  error: any;
-  provider: any;
-  test: any;
+  error: unknown;
+  provider: ApiProvider;
+  test: AtomicTestCase;
   promptIdx: number;
   testIdx: number;
 }) {
   const providerId = provider.id();
   const providerLabel = provider.label;
-  const status = error?.response?.status;
-  const statusText = error?.response?.statusText;
-  const responseData = error?.response?.data;
+  // Type guard for errors with HTTP response information
+  const errorWithResponse = error as {
+    response?: { status?: number; statusText?: string; data?: unknown };
+  };
+  const status = errorWithResponse?.response?.status;
+  const statusText = errorWithResponse?.response?.statusText;
+  const responseData = errorWithResponse?.response?.data;
   const responseSnippet = (() => {
     if (responseData == null) {
       return undefined;
