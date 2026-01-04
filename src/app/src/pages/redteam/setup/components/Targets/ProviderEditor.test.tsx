@@ -1,8 +1,7 @@
 import React from 'react';
 
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
@@ -65,25 +64,6 @@ vi.mock('./providerOptions', () => ({
   ],
 }));
 
-vi.mock('@mui/icons-material/Search', () => ({
-  default: () => <div data-testid="search-icon" />,
-}));
-vi.mock('@mui/icons-material/CheckCircle', () => ({
-  default: () => <div data-testid="check-circle-icon" />,
-}));
-
-const theme = createTheme();
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <ThemeProvider theme={theme}>
-    <TooltipProvider>{children}</TooltipProvider>
-  </ThemeProvider>
-);
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  return render(ui, { wrapper: AllProviders });
-};
-
 describe('ProviderEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -96,7 +76,7 @@ describe('ProviderEditor', () => {
     };
     const setProvider = vi.fn();
 
-    renderWithTheme(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
+    renderWithProviders(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
 
     const textField = screen.getByRole('textbox', { name: /Provider Name/i });
     expect(textField).toBeInTheDocument();
@@ -117,25 +97,21 @@ describe('ProviderEditor', () => {
     };
     const setProvider = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor provider={initialProvider} setProvider={setProvider} />,
     );
 
     const configEditor = screen.getByTestId('provider-config-editor');
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
 
-    // Component starts in collapsed view showing the selected provider, click Change to expand
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    // Now we can find the OpenAI provider in the expanded view
-    const openAiProviderCard = screen.getByText('OpenAI').closest('.cursor-pointer');
+    // Provider list is always expanded - find and click OpenAI
+    const openAiProviderCard = screen.getByText('OpenAI').closest('[role="button"]');
     expect(openAiProviderCard).toBeInTheDocument();
     fireEvent.click(openAiProviderCard!);
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-4o',
+      id: 'openai:gpt-5.2',
       config: {},
       label: 'My Test Provider',
     };
@@ -152,7 +128,7 @@ describe('ProviderEditor', () => {
     const onActionButtonClick = vi.fn();
     const initialProvider: ProviderOptions = defaultHttpTarget();
 
-    renderWithTheme(
+    renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={vi.fn()}
@@ -174,7 +150,7 @@ describe('ProviderEditor', () => {
     const setProvider = vi.fn();
     const setError = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={setProvider}

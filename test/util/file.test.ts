@@ -271,7 +271,11 @@ describe('file utilities', () => {
     });
 
     it('should throw error when file does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
+        throw enoentError;
+      });
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
         `File does not exist: ${path.resolve('/mock/base/path', 'nonexistent.yaml')}`,
@@ -298,7 +302,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -312,7 +315,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -322,12 +324,9 @@ describe('file utilities', () => {
       process.env.TEST_ROOT_PATH = '/root/dir';
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
       maybeLoadFromExternalFile(input);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       delete process.env.TEST_ROOT_PATH;
@@ -341,7 +340,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
       const expectedPath = path.resolve('/absolute/path/test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -357,11 +355,6 @@ describe('file utilities', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileData);
 
       maybeLoadFromExternalFile(input);
-
-      expect(fs.existsSync).toHaveBeenCalledTimes(3);
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(3);
       expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
@@ -646,7 +639,6 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://test.py');
 
       expect(result).toBe('file contents');
-      expect(fs.existsSync).toHaveBeenCalled();
       expect(fs.readFileSync).toHaveBeenCalled();
     });
 
@@ -660,14 +652,13 @@ describe('file utilities', () => {
     });
 
     it('should handle non-Python/JS files with colons normally', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('{"data": "test"}');
 
       // JSON file with colon should still load normally (not treated as function)
       const result = maybeLoadFromExternalFile('file://data:test.json');
 
       expect(result).toEqual({ data: 'test' });
-      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
     });
 
     it('should preserve function references in config objects (integration test)', () => {
@@ -1088,7 +1079,6 @@ describe('file utilities', () => {
 
       maybeLoadToolsFromExternalFile(tools, vars);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
     });
 
@@ -1097,7 +1087,6 @@ describe('file utilities', () => {
 
       await maybeLoadToolsFromExternalFile(tools);
 
-      expect(fs.existsSync).toHaveBeenCalledTimes(2);
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 

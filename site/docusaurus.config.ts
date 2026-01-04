@@ -152,36 +152,11 @@ const config: Config = {
             },
           ],
         },
-        /*
         {
           type: 'custom-navMenuCard',
           label: 'Solutions',
           position: 'left',
           items: [
-            {
-              to: '/solutions/',
-              label: 'Overview',
-              description: 'Comprehensive AI security solutions',
-            },
-            {
-              type: 'section-header',
-              label: 'By Role',
-            },
-            {
-              to: '/solutions/security-leaders/',
-              label: 'Security Leaders',
-              description: 'AI security governance and compliance',
-            },
-            {
-              to: '/solutions/developers/',
-              label: 'Developers',
-              description: 'Secure AI development tools',
-            },
-            {
-              to: '/solutions/ai-teams/',
-              label: 'AI Product Teams',
-              description: 'End-to-end AI security testing',
-            },
             {
               type: 'section-header',
               label: 'By Industry',
@@ -189,21 +164,20 @@ const config: Config = {
             {
               to: '/solutions/healthcare/',
               label: 'Healthcare',
-              description: 'HIPAA-compliant AI security',
+              description: 'HIPAA-compliant medical AI security',
             },
             {
               to: '/solutions/finance/',
-              label: 'Finance',
-              description: 'Financial services AI protection',
+              label: 'Financial Services',
+              description: 'FINRA-aligned security testing',
             },
             {
               to: '/solutions/insurance/',
               label: 'Insurance',
-              description: 'Insurance industry AI security',
+              description: 'PHI protection & compliance',
             },
           ],
         },
-        */
         {
           type: 'custom-navMenuCard',
           label: 'Company',
@@ -228,6 +202,11 @@ const config: Config = {
               href: '/careers/',
               label: 'Careers',
               description: 'Join our growing team',
+            },
+            {
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
             },
           ],
         },
@@ -292,6 +271,23 @@ const config: Config = {
             {
               label: 'Status',
               href: 'https://status.promptfoo.app/',
+            },
+          ],
+        },
+        {
+          title: 'Solutions',
+          items: [
+            {
+              label: 'Healthcare',
+              to: '/solutions/healthcare/',
+            },
+            {
+              label: 'Financial Services',
+              to: '/solutions/finance/',
+            },
+            {
+              label: 'Insurance',
+              to: '/solutions/insurance/',
             },
           ],
         },
@@ -366,6 +362,10 @@ const config: Config = {
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',

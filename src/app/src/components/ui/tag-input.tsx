@@ -207,7 +207,7 @@ export function TagInput({
                 className="ml-0.5 rounded-full p-0.5 hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring"
                 aria-label={`Remove ${v}`}
               >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
               </button>
             )}
           </Badge>
@@ -244,7 +244,7 @@ export function TagInput({
       {showDropdown && (
         <div
           className={cn(
-            'absolute left-0 right-0 z-[var(--z-dropdown)] mt-1',
+            'absolute left-0 right-0 z-(--z-dropdown) mt-1',
             'overflow-hidden rounded-md border border-border bg-white dark:bg-zinc-900 shadow-lg',
           )}
         >

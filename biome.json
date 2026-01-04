@@ -143,7 +143,7 @@
         }
       },
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "error",
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
@@ -244,6 +244,9 @@
           },
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
@@ -268,6 +271,41 @@
       }
     },
     {
+      "includes": [
+        "src/app/**/*",
+        "src/providers/**/*",
+        "src/redteam/**/*",
+        "src/util/**/*",
+        "src/commands/**/*",
+        "src/types/**/*",
+        "src/tracing/**/*",
+        "src/validators/**/*",
+        "src/python/**/*",
+        "src/models/**/*",
+        "src/integrations/**/*",
+        "src/assertions/**/*",
+        "src/server/**/*",
+        "src/blobs/**/*",
+        "src/globalConfig/**/*",
+        "src/prompts/**/*",
+        "src/database/**/*",
+        "src/ruby/**/*",
+        "src/cacheMigration.ts",
+        "src/csv.ts",
+        "src/esm.ts",
+        "src/evaluator.ts",
+        "src/evaluatorHelpers.ts",
+        "src/logger.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
@@ -280,6 +318,9 @@
           "style": {
             "noRestrictedGlobals": "off",
             "useBlockStatements": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }

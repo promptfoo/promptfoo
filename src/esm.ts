@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -266,13 +267,36 @@ export async function importModule(modulePath: string, functionName?: string) {
         (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
-    } else {
-      logger.error(`ESM import failed: ${err}`);
     }
 
     // Log stack trace for debugging
     if ((err as any).stack) {
       logger.debug((err as any).stack);
+    }
+
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
+    // (vs a dependency inside the file being missing).
+    // This provides clearer error messages for users when their files don't exist.
+    const nodeError = err as NodeJS.ErrnoException;
+    if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
+      const resolvedModulePath = safeResolve(modulePath);
+      try {
+        await fsPromises.access(resolvedModulePath);
+        // File exists - the error is about a missing dependency, log and preserve original error
+        logger.error(`ESM import failed: ${err}`);
+      } catch {
+        // File doesn't exist - normalize to ENOENT for clearer error message
+        // Don't log as error - this is expected during config file discovery
+        const enoentError = new Error(
+          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+        ) as NodeJS.ErrnoException;
+        enoentError.code = 'ENOENT';
+        enoentError.path = resolvedModulePath;
+        throw enoentError;
+      }
+    } else {
+      // For all other errors (not file-not-found), log as error
+      logger.error(`ESM import failed: ${err}`);
     }
 
     throw err;

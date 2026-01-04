@@ -272,7 +272,7 @@ describe('OpenAI assertions', () => {
         validateFunctionCall(functionOutput, fileProvider.config.functions, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.yaml',
         'utf8',

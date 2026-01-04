@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,8 +11,6 @@ vi.mock('./ChecksSection', () => ({
 }));
 
 const MockedChecksSection = vi.mocked(ChecksSection);
-
-const theme = createTheme();
 
 describe('ResultsTab', () => {
   beforeEach(() => {
@@ -33,11 +30,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // Check heading with count
     expect(screen.getByText(/Findings/i)).toBeInTheDocument();
@@ -70,11 +63,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // All issues should be visible
     expect(screen.getByText('Critical issue')).toBeInTheDocument();
@@ -98,11 +87,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     const rawButton = screen.getByRole('button', { name: /Raw/i });
     await user.click(rawButton);
@@ -127,11 +112,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     expect(MockedChecksSection).toHaveBeenCalledTimes(1);
     expect(MockedChecksSection.mock.calls[0][0]).toMatchObject({
@@ -155,11 +136,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     const filesButton = screen.getByRole('button', { name: /Files/i });
     await user.click(filesButton);
@@ -178,9 +155,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -197,9 +172,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -219,11 +192,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     // Critical and warning should be visible
     expect(screen.getByText('Critical issue')).toBeInTheDocument();

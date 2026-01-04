@@ -142,7 +142,9 @@ npm run local -- eval -c config.yaml --no-cache
 ## Git Workflow (CRITICAL)
 
 - **NEVER** commit/push directly to main
-- **NEVER** use `--force` or `--amend` without explicit approval
+- **NEVER** use `--force` without explicit approval
+- **NEVER** comment on GitHub issues - only create PRs to address them
+- **ALWAYS create new commits** - never amend, squash, or rebase unless explicitly asked
 - All changes go through pull requests
 
 **Standard workflow:**

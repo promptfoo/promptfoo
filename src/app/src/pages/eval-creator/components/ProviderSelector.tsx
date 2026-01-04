@@ -772,7 +772,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           <PopoverTrigger asChild>
             <div
               className={cn(
-                'flex-1 min-h-[56px] rounded-md border border-input bg-background px-3 py-2 cursor-text',
+                'flex-1 min-h-14 rounded-md border border-input bg-background px-3 py-2 cursor-text',
                 'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
               )}
               onClick={() => setIsDropdownOpen(true)}
@@ -802,7 +802,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
                               handleRemoveProvider(index);
                             }}
                           >
-                            <XIcon className="h-3 w-3" />
+                            <XIcon className="size-3" />
                           </button>
                         </Badge>
                       </TooltipTrigger>
@@ -827,7 +827,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
                   className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={(e) => e.stopPropagation()}
                 />
-                <ChevronDownIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                <ChevronDownIcon className="size-4 text-muted-foreground shrink-0" />
               </div>
             </div>
           </PopoverTrigger>
@@ -893,7 +893,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           onClick={() => setIsAddLocalDialogOpen(true)}
           className="h-14 whitespace-nowrap px-4"
         >
-          <FolderOpenIcon className="h-4 w-4 mr-2" />
+          <FolderOpenIcon className="size-4 mr-2" />
           Reference Local Provider
         </Button>
       </div>

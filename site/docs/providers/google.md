@@ -390,6 +390,148 @@ Key differences from Imagen:
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
 
+### Video Generation Models (Veo)
+
+Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix:
+
+#### Available Models
+
+| Model                                   | Description                                       | Duration Support |
+| --------------------------------------- | ------------------------------------------------- | ---------------- |
+| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
+| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                                | 4, 6, 8 seconds  |
+| `google:video:veo-3-generate`           | Veo 3.0 standard model                            | 4, 6, 8 seconds  |
+| `google:video:veo-3-fast`               | Veo 3.0 fast model                                | 4, 6, 8 seconds  |
+| `google:video:veo-2-generate`           | Veo 2.0 model                                     | 5, 6, 8 seconds  |
+
+#### Basic Usage
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9' # or '9:16'
+      resolution: '720p' # or '1080p'
+      durationSeconds: 6 # 4, 6, or 8 for Veo 3.x; 5, 6, or 8 for Veo 2
+
+prompts:
+  - 'Generate a video of {{subject}}'
+
+tests:
+  - vars:
+      subject: 'a cat playing with a ball of yarn'
+```
+
+#### Configuration Options
+
+| Option             | Type   | Description                                                        |
+| ------------------ | ------ | ------------------------------------------------------------------ |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                     |
+| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                      |
+| `durationSeconds`  | number | Video duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2             |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`              |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                           |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)     |
+| `image`            | string | Source image for image-to-video generation                         |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                     |
+| `extendVideoId`    | string | Operation ID from previous Veo generation to extend (Veo 3.1 only) |
+
+#### Image-to-Video Generation
+
+Generate videos from a starting image:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start-frame.jpg
+      aspectRatio: '16:9'
+      durationSeconds: 6
+
+prompts:
+  - 'Animate this image: {{animation_description}}'
+
+tests:
+  - vars:
+      animation_description: 'the character slowly turns to face the camera'
+```
+
+#### Video Interpolation (First and Last Frame)
+
+Generate video that transitions between two images:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start.jpg # First frame
+      lastImage: file://assets/end.jpg # Last frame
+      durationSeconds: 6
+
+prompts:
+  - 'Create a smooth transition between these frames'
+```
+
+#### Video Extension (Veo 3.1 Only)
+
+Extend a previously generated Veo video using its operation ID:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      # Use the operation ID from a previous Veo generation
+      extendVideoId: projects/my-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/abc123
+      durationSeconds: 6
+
+prompts:
+  - 'Continue this video with {{continuation}}'
+
+tests:
+  - vars:
+      continuation: 'the camera panning to reveal a sunset'
+```
+
+:::note
+Video extension requires an operation ID from a previous Veo video generation, not a local file path. The operation ID is returned in the `metadata.operationName` field of the generation response.
+:::
+
+#### Reference Images
+
+Use up to 3 reference images to guide video style (Veo 3.1 only):
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      referenceImages:
+        # Simple format: file paths (uses 'asset' reference type)
+        - file://assets/style-ref-1.jpg
+        - file://assets/style-ref-2.jpg
+      aspectRatio: '16:9'
+      durationSeconds: 6
+```
+
+You can also use the object format to specify the reference type:
+
+```yaml
+referenceImages:
+  - image: file://assets/character.jpg
+    referenceType: asset
+  - image: file://assets/background.jpg
+    referenceType: asset
+```
+
+#### Storage
+
+Generated videos are stored in promptfoo's blob storage system, which uses content-addressable hashing for deduplication. Videos with identical content share the same storage reference. Use `--no-cache` to force regeneration:
+
+```bash
+promptfoo eval --no-cache
+```
+
+See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
+
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:

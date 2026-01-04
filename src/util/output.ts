@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -90,7 +90,7 @@ async function writeJsonOutputSafely(
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
-    fs.writeFileSync(outputPath, jsonString);
+    await fsPromises.writeFile(outputPath, jsonString);
   } catch (error) {
     const msg = (error as Error)?.message ?? '';
     const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
@@ -142,11 +142,9 @@ export async function writeOutput(
     `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
   );
 
-  // Ensure the directory exists
+  // Ensure the directory exists (mkdir with recursive is idempotent)
   const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
+  await fsPromises.mkdir(outputDir, { recursive: true });
 
   const metadata = createOutputMetadata(evalRecord);
 
@@ -157,7 +155,7 @@ export async function writeOutput(
     const headerCsv = stringify([
       [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, headerCsv);
+    await fsPromises.writeFile(outputPath, headerCsv);
 
     // Write body rows in batches
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
@@ -175,13 +173,13 @@ export async function writeOutput(
           return [...row.vars, ...row.outputs.map(outputToSimpleString)];
         }),
       );
-      fs.appendFileSync(outputPath, batchCsv);
+      await fsPromises.appendFile(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
+    await fsPromises.writeFile(
       outputPath,
       yaml.dump({
         evalId: evalRecord.id,
@@ -195,7 +193,10 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(path.join(getDirectory(), 'tableOutput.html'), 'utf-8');
+    const template = await fsPromises.readFile(
+      path.join(getDirectory(), 'tableOutput.html'),
+      'utf-8',
+    );
     const htmlTable = [
       [
         ...table.head.vars,
@@ -208,13 +209,13 @@ export async function writeOutput(
       table: htmlTable,
       results: summary,
     });
-    fs.writeFileSync(outputPath, htmlOutput);
+    await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     // Truncate file first for consistent behavior with other formats
-    fs.writeFileSync(outputPath, '');
+    await fsPromises.writeFile(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
-      fs.appendFileSync(outputPath, text);
+      await fsPromises.appendFile(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
@@ -257,7 +258,7 @@ export async function writeOutput(
         shareableUrl: shareableUrl || '',
       },
     });
-    fs.writeFileSync(outputPath, xmlData);
+    await fsPromises.writeFile(outputPath, xmlData);
   }
 }
 

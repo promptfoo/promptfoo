@@ -532,16 +532,16 @@ ${exampleRequest}`;
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
               Import
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <ChevronDown className="ml-2 size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
-              <Globe className="mr-2 h-4 w-4" />
+              <Globe className="mr-2 size-4" />
               Postman
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -624,13 +624,13 @@ ${exampleRequest}`;
                   className="flex-1"
                 />
                 <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             ))}
 
             <Button variant="outline" onClick={addHeader} className="mt-2">
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus className="mr-1 size-4" />
               Add Header
             </Button>
 
@@ -647,9 +647,9 @@ ${exampleRequest}`;
                 onClick={handleFormatJson}
                 disabled={!requestBody.trim() || !!bodyError}
                 title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                className="absolute right-1 top-1 z-10 h-8 w-8 bg-muted/50 hover:bg-muted"
+                className="absolute right-1 top-1 z-10 size-8 bg-muted/50 hover:bg-muted"
               >
-                <AlignLeft className="h-4 w-4" />
+                <AlignLeft className="size-4" />
               </Button>
               <Editor
                 value={
@@ -674,38 +674,37 @@ ${exampleRequest}`;
 
         {/* Response Transform Section - Common for both modes */}
         <p className="mb-2 mt-6 font-medium">Response Parser</p>
-        <p className="mb-4 text-sm text-muted-foreground">
-          This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
-          with the actual response nested inside - this parser helps find the right part. Leave
-          empty if your API returns plain text. See{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            docs
-          </a>{' '}
-          for examples.
-          <span className="mt-2 block">
-            <details>
-              <summary className="cursor-pointer">Examples</summary>
-              <ol className="ml-4 mt-2 list-decimal space-y-1">
-                <li>
-                  A JavaScript object path: <code>json.choices[0].message.content</code>
-                </li>
-                <li>
-                  A function:{' '}
-                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>
-                </li>
-                <li>
-                  With guardrails:{' '}
-                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
-                </li>
-              </ol>
-            </details>
-          </span>
-        </p>
+        <div className="mb-4 text-sm text-muted-foreground">
+          <p>
+            This tells promptfoo how to extract the AI's response from your API. Most APIs return
+            JSON with the actual response nested inside - this parser helps find the right part.
+            Leave empty if your API returns plain text. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              docs
+            </a>{' '}
+            for examples.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Examples</summary>
+            <ol className="ml-4 mt-2 list-decimal space-y-1">
+              <li>
+                A JavaScript object path: <code>json.choices[0].message.content</code>
+              </li>
+              <li>
+                A function: <code>{`(json, text) => json.choices[0].message.content || text`}</code>
+              </li>
+              <li>
+                With guardrails:{' '}
+                <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+              </li>
+            </ol>
+          </details>
+        </div>
         <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
             value={selectedTarget.config.transformResponse || ''}
@@ -725,7 +724,7 @@ ${exampleRequest}`;
             onClick={() => setResponseTestOpen(true)}
             className="absolute right-2 top-2 z-10"
           >
-            <Play className="mr-1 h-4 w-4" />
+            <Play className="mr-1 size-4" />
             Test
           </Button>
         </div>
@@ -808,9 +807,9 @@ ${exampleRequest}`;
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >
                     {copied ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
+                      <Check className="size-4 text-emerald-600" />
                     ) : (
-                      <Copy className="h-4 w-4" />
+                      <Copy className="size-4" />
                     )}
                   </Button>
                 </div>
