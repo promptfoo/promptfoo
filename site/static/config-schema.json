@@ -1953,6 +1953,9 @@
             },
             "silent": {
               "type": "boolean"
+            },
+            "filterPattern": {
+              "type": "string"
             }
           },
           "additionalProperties": false

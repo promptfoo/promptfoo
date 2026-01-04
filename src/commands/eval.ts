@@ -347,19 +347,6 @@ export async function doEval(
       );
     }
 
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
-      const filterOptions: FilterOptions = {
-        failing: cmdObj.filterFailing,
-        errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
-        metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
-        sample: cmdObj.filterSample,
-      };
-      testSuite.tests = await filterTests(testSuite, filterOptions);
-    }
-
     if (
       config.redteam &&
       config.redteam.plugins &&
@@ -434,6 +421,21 @@ export async function doEval(
       }
     }
 
+    // Apply non-pattern filters to testSuite.tests (non-scenario tests).
+    // Pattern filtering is handled in the evaluator after scenario expansion,
+    // so templated descriptions can be properly matched.
+    if (!resumeEval) {
+      const filterOptions: FilterOptions = {
+        failing: cmdObj.filterFailing,
+        errorsOnly: cmdObj.filterErrorsOnly,
+        firstN: cmdObj.filterFirstN,
+        metadata: cmdObj.filterMetadata,
+        // Pattern filtering is intentionally handled in the evaluator after scenario expansion
+        sample: cmdObj.filterSample,
+      };
+      testSuite.tests = await filterTests(testSuite, filterOptions);
+    }
+
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
       const validationError = fromError(testSuiteSchema.error);
@@ -489,6 +491,7 @@ export async function doEval(
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
       isRedteam: Boolean(config.redteam),
+      filterPattern: resumeEval ? undefined : cmdObj.filterPattern,
     });
 
     // Cleanup signal handler

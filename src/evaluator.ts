@@ -11,6 +11,7 @@ import {
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
+import { filterTests } from './commands/eval/filterTests';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -52,6 +53,7 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
+import { getNunjucksEngine } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -952,15 +954,33 @@ class Evaluator {
               mergedMetadata.conversationId = `__scenario_${scenarioIndex}__`;
             }
 
+            // Merge vars from all sources
+            const mergedVars = {
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
+              ...data.vars,
+              ...test.vars,
+            };
+
+            // Template the test description with merged vars if description exists
+            let templatedDescription = test.description;
+            if (test.description && typeof test.description === 'string') {
+              try {
+                templatedDescription = getNunjucksEngine().renderString(
+                  test.description,
+                  mergedVars,
+                );
+              } catch (error) {
+                logger.debug(`Failed to template test description: ${error}`);
+                // Keep original description if templating fails
+              }
+            }
+
             return {
               ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
               ...test,
-              vars: {
-                ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
-                ...data.vars,
-                ...test.vars,
-              },
+              description: templatedDescription,
+              vars: mergedVars,
               options: {
                 ...(typeof testSuite.defaultTest === 'object'
                   ? testSuite.defaultTest?.options
@@ -980,6 +1000,17 @@ class Evaluator {
           scenarioIndex++;
         }
       }
+    }
+
+    // Apply pattern filter after scenario expansion so templated descriptions can be matched.
+    // We reuse filterTests (with a minimal TestSuite) rather than inline regex construction
+    // to avoid CodeQL security alerts for regex injection. The filterTests function has
+    // proper error handling for invalid patterns.
+    if (options.filterPattern) {
+      tests = await filterTests(
+        { tests, providers: [], prompts: [] },
+        { pattern: options.filterPattern },
+      );
     }
 
     maybeEmitAzureOpenAiWarning(testSuite, tests);

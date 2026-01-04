@@ -213,6 +213,11 @@ const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Regular expression pattern to filter tests by description.
+   * Applied after scenario expansion so templated descriptions can be matched.
+   */
+  filterPattern: z.string().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
