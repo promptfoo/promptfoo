@@ -1,9 +1,6 @@
-import path from 'path';
-
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -12,12 +9,10 @@ import {
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -25,21 +20,19 @@ import {
   getGoogleClient,
   loadCredentials,
   mergeParts,
-  normalizeTools,
   resolveProjectId,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
-  ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type { ClaudeRequest, ClaudeResponse } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -64,69 +57,39 @@ function getVertexApiHost(
   );
 }
 
-class VertexGenericProvider implements ApiProvider {
-  modelName: string;
-
-  config: CompletionOptions;
-  env?: EnvOverrides;
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    const { config, id, env } = options;
-    this.env = env;
-    this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+/**
+ * Vertex AI provider for Gemini, Claude, Llama, and Palm2 models.
+ *
+ * Extends GoogleGenericProvider for shared functionality like MCP integration,
+ * authentication management, and resource cleanup.
+ */
+export class VertexChatProvider extends GoogleGenericProvider {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
+    // Force vertex mode for Vertex AI provider
+    super(modelName, {
+      ...options,
+      config: { ...options.config, vertexai: true },
+    });
   }
 
-  id(): string {
-    return `vertex:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Google Vertex Provider ${this.modelName}]`;
-  }
-
+  /**
+   * Get the Vertex AI API host based on region.
+   * Public for use by integrations like Adaline Gateway.
+   */
   getApiHost(): string {
-    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
-  }
-
-  async getProjectId(): Promise<string> {
-    return await resolveProjectId(this.config, this.env);
-  }
-
-  getApiKey(): string | undefined {
-    // For Vertex provider, prioritize VERTEX_API_KEY over GEMINI_API_KEY
+    const region = this.getRegion();
     return (
-      this.config.apiKey ||
-      this.env?.VERTEX_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('VERTEX_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
+      this.config.apiHost ||
+      this.env?.VERTEX_API_HOST ||
+      getEnvString('VERTEX_API_HOST') ||
+      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
     );
   }
 
-  getRegion(): string {
-    return (
-      this.config.region ||
-      this.env?.VERTEX_REGION ||
-      getEnvString('VERTEX_REGION') ||
-      'us-central1'
-    );
-  }
-
-  getPublisher(): string | undefined {
-    return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
-    );
-  }
-
-  getApiVersion(): string {
+  /**
+   * Get the API version for Vertex AI.
+   */
+  private getApiVersion(): string {
     return (
       this.config.apiVersion ||
       this.env?.VERTEX_API_VERSION ||
@@ -136,38 +99,62 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   /**
-   * Helper method to get Google client with credentials support
+   * Get the publisher for the model.
+   */
+  private getPublisher(): string {
+    return (
+      this.config.publisher ||
+      this.env?.VERTEX_PUBLISHER ||
+      getEnvString('VERTEX_PUBLISHER') ||
+      'google'
+    );
+  }
+
+  /**
+   * Get the API endpoint URL for Vertex AI.
+   * Note: For Gemini, the actual endpoint is constructed dynamically based on mode.
+   */
+  getApiEndpoint(action?: string): string {
+    // This provides a default endpoint - actual endpoints are model-specific
+    const actionSuffix = action ? `:${action}` : '';
+    return `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}${actionSuffix}`;
+  }
+
+  /**
+   * Get authentication headers for Vertex AI.
+   * For OAuth mode, this returns minimal headers; the client handles auth.
+   * For express mode, the API key is passed via x-goog-api-key header for improved security.
+   */
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.config.headers,
+    };
+
+    // In express mode, add the API key to headers
+    if (this.isExpressMode()) {
+      const apiKey = this.getApiKey();
+      if (apiKey) {
+        headers['x-goog-api-key'] = apiKey;
+      }
+    }
+
+    return headers;
+  }
+
+  /**
+   * Helper method to get Google client with credentials support.
+   * Public for use by integrations like Adaline Gateway.
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
-  }
-
-  // @ts-ignore: Prompt is not used in this implementation
-  async callApi(_prompt: string): Promise<ProviderResponse> {
-    throw new Error('Not implemented');
-  }
-}
-
-export class VertexChatProvider extends VertexGenericProvider {
-  private mcpClient: MCPClient | null = null;
-  private initializationPromise: Promise<void> | null = null;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    super(modelName, options);
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -347,23 +334,21 @@ export class VertexChatProvider extends VertexGenericProvider {
    * Check if express mode should be used (API key without OAuth)
    * Express mode uses a simplified endpoint format without project/location.
    *
-   * Express mode is AUTOMATIC when:
-   * 1. API key is available (VERTEX_API_KEY or GEMINI_API_KEY), AND
-   * 2. No explicit projectId in config, AND
-   * 3. No explicit credentials in config, AND
-   * 4. User hasn't explicitly disabled it (expressMode !== false)
+   * SDK Alignment: Express mode must be EXPLICITLY enabled via `expressMode: true`.
+   * This matches Google's SDK behavior where Vertex AI defaults to OAuth/ADC,
+   * not API key authentication. Using API keys for Vertex may hit wrong quotas
+   * or fail with project-scoped features (files, caches).
    *
-   * This mirrors how AWS Bedrock handles authentication - automatic detection
-   * of the simplest auth method available.
+   * Express mode is used when:
+   * 1. User explicitly sets `expressMode: true`, AND
+   * 2. API key is available (VERTEX_API_KEY or GOOGLE_API_KEY)
    */
   private isExpressMode(): boolean {
+    const explicitlyEnabled = this.config.expressMode === true;
     const hasApiKey = Boolean(this.getApiKey());
-    const hasExplicitProjectId = Boolean(this.config.projectId);
-    const hasExplicitCredentials = Boolean(this.config.credentials);
-    const explicitlyDisabled = this.config.expressMode === false;
 
-    // Express mode is automatic when API key is available and no explicit OAuth config
-    return hasApiKey && !hasExplicitProjectId && !hasExplicitCredentials && !explicitlyDisabled;
+    // Express mode must be explicitly enabled (SDK aligned - defaults to OAuth/ADC)
+    return explicitlyEnabled && hasApiKey;
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -384,16 +369,9 @@ export class VertexChatProvider extends VertexGenericProvider {
       config.systemInstruction,
       { useAssistantRole: config.useAssistantRole },
     );
-    // --- MCP tool injection logic ---
-    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : [];
-    const allTools = [
-      ...mcpTools,
-      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
-    ];
-    // --- End MCP tool injection logic ---
+
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = await this.getAllTools(context);
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -481,15 +459,12 @@ export class VertexChatProvider extends VertexGenericProvider {
 
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
-          // Express mode: use simplified endpoint with API key
-          const apiKey = this.getApiKey();
-          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}?key=${apiKey}`;
+          // Express mode: use simplified endpoint with API key in header
+          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
           const res = await fetchWithProxy(url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           });
@@ -1002,110 +977,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-  async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
-    }
-  }
-
-  /**
-   * Loads a function from an external file
-   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
-   * @returns The loaded function
-   */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
-  }
-
-  /**
-   * Executes a function callback with proper error handling
-   */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-    config: any,
-  ): Promise<any> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      return result;
-    } catch (error: any) {
-      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
-      throw error; // Re-throw so caller can handle fallback behavior
-    }
-  }
+  // cleanup() is inherited from GoogleGenericProvider
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
@@ -1124,7 +996,12 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
   }
 

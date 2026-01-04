@@ -1,6 +1,5 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -10,9 +9,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 
-import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 const ajv = getAjv();
@@ -296,105 +293,14 @@ export function maybeCoerceToGeminiFormat(
   };
 }
 
-let cachedAuth: GoogleAuth | undefined;
-
-/**
- * Loads and processes Google credentials from various sources
- */
-export function loadCredentials(credentials?: string): string | undefined {
-  if (!credentials) {
-    return undefined;
-  }
-
-  if (credentials.startsWith('file://')) {
-    try {
-      return maybeLoadFromExternalFile(credentials) as string;
-    } catch (error) {
-      throw new Error(`Failed to load credentials from file: ${error}`);
-    }
-  }
-
-  return credentials;
-}
-
-/**
- * Creates a Google client with optional custom credentials
- */
-export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
-  if (!cachedAuth) {
-    let GoogleAuth;
-    try {
-      const importedModule = await import('google-auth-library');
-      GoogleAuth = importedModule.GoogleAuth;
-      cachedAuth = new GoogleAuth({
-        scopes: 'https://www.googleapis.com/auth/cloud-platform',
-      });
-    } catch {
-      throw new Error(
-        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
-  }
-
-  const processedCredentials = loadCredentials(credentials);
-
-  let client;
-  if (processedCredentials) {
-    try {
-      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
-    } catch (error) {
-      logger.error(`[Vertex] Could not load credentials: ${error}`);
-      throw new Error(`[Vertex] Could not load credentials: ${error}`);
-    }
-  } else {
-    client = await cachedAuth.getClient();
-  }
-
-  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
-  // This allows the fallback logic in resolveProjectId to work properly
-  let projectId;
-  try {
-    projectId = await cachedAuth.getProjectId();
-  } catch {
-    // If Google Auth Library can't detect project ID from environment,
-    // let resolveProjectId handle the fallback logic
-    projectId = undefined;
-  }
-
-  return { client, projectId };
-}
-
-/**
- * Gets project ID from config, environment, or Google client
- */
-export async function resolveProjectId(
-  config: { projectId?: string; credentials?: string },
-  env?: EnvOverrides,
-): Promise<string> {
-  const processedCredentials = loadCredentials(config.credentials);
-  const { projectId: googleProjectId } = await getGoogleClient({
-    credentials: processedCredentials,
-  });
-
-  return (
-    config.projectId ||
-    env?.VERTEX_PROJECT_ID ||
-    env?.GOOGLE_PROJECT_ID ||
-    getEnvString('VERTEX_PROJECT_ID') ||
-    getEnvString('GOOGLE_PROJECT_ID') ||
-    googleProjectId ||
-    ''
-  );
-}
-
-export async function hasGoogleDefaultCredentials() {
-  try {
-    await getGoogleClient();
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Re-export auth functions from auth.ts for backward compatibility
+// These were previously implemented here but are now centralized in auth.ts
+export {
+  getGoogleClient,
+  hasGoogleDefaultCredentials,
+  loadCredentials,
+  resolveProjectId,
+} from './auth';
 
 export function getCandidate(data: GeminiResponseData) {
   if (!data || !data.candidates || data.candidates.length < 1) {
