@@ -446,11 +446,14 @@ export default function RedTeamSetupPage() {
       // Set reconContext for recon-generated configs so the banner displays
       if (isReconConfig) {
         const meaningfulFields = countPopulatedFields(mappedConfig.applicationDefinition);
+        // Parse generatedAt ISO string to Unix timestamp (ms), fallback to now if invalid
+        const generatedAt = yamlConfig.metadata?.generatedAt;
+        const timestamp = generatedAt ? new Date(generatedAt).getTime() : Date.now();
         const reconContext: ReconContext = {
           source: 'recon-cli',
-          timestamp: yamlConfig.metadata?.generatedAt,
+          timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
           codebaseDirectory: yamlConfig.metadata?.scannedDirectory,
-          keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles,
+          keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles?.length,
           fieldsPopulated: meaningfulFields,
           discoveredToolsCount: yamlConfig.metadata?.reconDetails?.discoveredTools?.length,
           securityNotes: yamlConfig.metadata?.reconDetails?.securityNotes,

@@ -320,7 +320,10 @@ export function parseReconOutput(output: unknown): ReconResult {
       safeResult.discoveredTools = raw.discoveredTools
         .filter(
           (t): t is { name: string; description: string } =>
-            t && typeof t === 'object' && typeof t.name === 'string' && typeof t.description === 'string',
+            t &&
+            typeof t === 'object' &&
+            typeof t.name === 'string' &&
+            typeof t.description === 'string',
         )
         .map((t) => ({
           name: t.name,

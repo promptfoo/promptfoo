@@ -122,28 +122,8 @@ export const ReconOutputSchema = {
         'True if the app maintains conversation state across multiple turns (chat history, session memory, multi-turn dialogue). False if each request is independent (single-turn, stateless API).',
     },
   },
-  required: [
-    'purpose',
-    'features',
-    'industry',
-    'systemPrompt',
-    'hasAccessTo',
-    'doesNotHaveAccessTo',
-    'userTypes',
-    'securityRequirements',
-    'sensitiveDataTypes',
-    'exampleIdentifiers',
-    'criticalActions',
-    'forbiddenTopics',
-    'attackConstraints',
-    'competitors',
-    'connectedSystems',
-    'redteamUser',
-    'entities',
-    'discoveredTools',
-    'suggestedPlugins',
-    'securityNotes',
-    'keyFiles',
-    'stateful',
-  ],
+  // All fields are optional to match the Zod validator in validators/recon.ts
+  // The LLM may not have data for all fields, and forcing required fields
+  // would cause structured output validation failures or hallucinated values
+  required: [],
 };

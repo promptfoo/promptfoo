@@ -282,6 +282,17 @@ If the promptfoo server isn't running when recon completes:
 - Browser may open to an error page
 - Start the server with `promptfoo view`, then navigate to `/redteam/setup?source=recon`
 
+### Custom Port
+
+By default, recon opens `http://localhost:15500`. If you're running the server on a different port:
+
+```bash
+# Set the port before running recon
+API_PORT=3000 promptfoo redteam recon --dir ./my-app
+```
+
+Or ensure your server is running on port 15500 with `promptfoo view`.
+
 ---
 
 ## How It Works

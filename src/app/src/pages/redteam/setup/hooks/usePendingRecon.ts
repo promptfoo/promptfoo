@@ -165,11 +165,21 @@ export function usePendingRecon(
         // Apply the configuration
         await applyReconConfig(data);
 
-        // Clear the pending file
-        const deleteResponse = await callApi('/redteam/recon/pending', { method: 'DELETE' });
-        if (!deleteResponse.ok) {
-          // Non-critical error - log but continue since config was already applied
-          console.warn('Failed to clear pending recon file:', deleteResponse.status);
+        // Clear the pending file to prevent re-application on next visit
+        try {
+          const deleteResponse = await callApi('/redteam/recon/pending', { method: 'DELETE' });
+          if (!deleteResponse.ok) {
+            // Log warning but continue - config was already applied successfully
+            // If delete fails, the file may be re-applied on next visit, but that's
+            // preferable to blocking the user flow
+            console.warn(
+              `Failed to clear pending recon file (status ${deleteResponse.status}). ` +
+                'The file may be re-applied if you visit this page again.',
+            );
+          }
+        } catch (deleteErr) {
+          // Network error during delete - log but don't block
+          console.warn('Failed to clear pending recon file:', deleteErr);
         }
 
         setReconApplied(true);

@@ -17,6 +17,7 @@ const ArgsSchema = z.object({
   exclude: z.array(z.string()).optional(),
   open: z.boolean().optional(),
   verbose: z.boolean().optional(),
+  // Note: --env-file is handled by addCommonOptionsRecursively before action runs
 });
 
 /**
