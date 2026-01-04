@@ -458,7 +458,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
           // Express mode: use simplified endpoint with API key in header
-          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
           const res = await fetchWithProxy(url, {
             method: 'POST',

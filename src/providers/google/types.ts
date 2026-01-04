@@ -281,16 +281,16 @@ export interface CompletionOptions {
   streaming?: boolean;
 
   /**
-   * Enable Vertex AI express mode (API key authentication).
+   * Control Vertex AI express mode (API key authentication).
    *
-   * SDK Alignment: Express mode must be EXPLICITLY enabled. Vertex AI defaults
-   * to OAuth/ADC authentication. Using API keys for Vertex may hit different
-   * quotas or fail with project-scoped features (files, caches).
+   * Express mode is automatically enabled when an API key is available
+   * (VERTEX_API_KEY, GOOGLE_API_KEY, or config.apiKey). Set to `false` to
+   * explicitly disable express mode and force OAuth/ADC authentication.
    *
-   * Set to `true` to use API key authentication instead of OAuth/ADC.
-   * Requires an API key (via GOOGLE_API_KEY or config.apiKey).
+   * Note: Using API keys for Vertex may hit different quotas or fail with
+   * project-scoped features (files, caches).
    *
-   * @default false (uses OAuth/ADC)
+   * @default Auto-enabled when API key is present
    * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
    */
   expressMode?: boolean;

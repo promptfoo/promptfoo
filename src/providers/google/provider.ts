@@ -351,7 +351,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       } else if (this.isVertexMode && this.isExpressMode()) {
         // Vertex AI express mode (API key)
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
         const res = await fetchWithProxy(url, {
           method: 'POST',
