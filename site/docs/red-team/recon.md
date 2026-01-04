@@ -7,188 +7,139 @@ description: Automatically analyze source code to generate red team configuratio
 
 # Codebase Reconnaissance
 
-The `recon` command uses an AI agent to analyze your application's source code and automatically generate a red team configuration. This is a **white-box** approach that extracts system prompts, discovers tools, identifies security boundaries, and suggests relevant attack plugins.
+The `recon` command uses an AI agent to analyze your application's source code and automatically generate a red team configuration. This **white-box** approach extracts system prompts, discovers tools, identifies security boundaries, and suggests relevant attack plugins—all without manual configuration.
 
-```bash
-promptfoo redteam recon --dir ./my-llm-app
-```
+## What You Get
 
-After analysis completes, recon automatically opens the web UI with your configuration pre-populated, ready for review and execution.
+- **Complete `promptfooconfig.yaml`** ready to run with minimal edits
+- **Discovered system prompts** embedded in your codebase
+- **LLM-callable tools/functions** mapped as attack vectors
+- **Plugin recommendations** matched to your application's attack surface
+- **Entities for social engineering** (company names, people, data formats)
 
-## When to Use
-
-Use `recon` when you have access to the source code and want to:
-
-- **Bootstrap a red team config** without manually filling in application details
-- **Discover system prompts** embedded in your codebase
-- **Find LLM-callable tools/functions** that represent attack vectors
-- **Identify sensitive data types** and security requirements from code
-- **Get plugin recommendations** based on your application's attack surface
-
-:::tip
-For black-box testing of running targets (when you don't have code access), see [Target Discovery](/docs/red-team/discovery/).
+:::tip Black-box alternative
+For testing deployed systems without code access, see [Target Discovery](/docs/red-team/discovery/).
 :::
 
 ---
 
-## How It Works
+## Data Handling and Privacy
 
-![Recon workflow](/img/docs/recon-flow.svg)
+Recon sends portions of your source code to AI model providers for analysis. Understanding what data flows where is critical for security-conscious teams.
 
-The recon agent analyzes your codebase in four phases:
+### What Recon Reads Locally
 
-1. **Application Understanding**: Reads README, package.json, and entry points to understand purpose and user types
-2. **LLM Integration Discovery**: Finds system prompts, tools/functions, guardrails, and determines if the app is stateful or stateless
-3. **Attack Surface Mapping**: Identifies connected systems, user roles, forbidden topics, and sensitive data
-4. **Entity Extraction**: Extracts company names, people, and data formats for realistic attack scenarios
+- Source files (`.js`, `.ts`, `.py`, etc.) excluding configured patterns
+- Configuration files (`package.json`, `README.md`, entry points)
+- Never reads `.env` files (excluded by default)
 
-The agent outputs a complete `promptfooconfig.yaml` with:
+### What Gets Sent to Providers
 
-- Populated `purpose` field with application context
-- Suggested plugins based on discovered vulnerabilities
-- Appropriate strategies (single-turn or multi-turn based on statefulness)
-- Entities for social engineering attacks
-- Configured `prompt-extraction` plugin with discovered system prompt
+The AI agent reads file contents and sends relevant excerpts to the configured model provider (OpenAI or Anthropic) for analysis. This includes:
+
+- Code snippets containing LLM integrations, prompts, and tool definitions
+- File structure and naming patterns
+- README and documentation content
+
+### What Gets Stored Locally
+
+| Output | Location | Purpose |
+|--------|----------|---------|
+| Generated config | `promptfooconfig.yaml` (or `--output` path) | Red team configuration |
+| Pending UI state | `~/.promptfoo/pending-recon.json` | Browser handoff (auto-deleted after load) |
+
+No code or analysis results are sent to Promptfoo's servers. All processing happens between your machine and your configured AI provider.
+
+### Safe Usage Checklist
+
+Before running recon on sensitive codebases:
+
+- [ ] Run on a sanitized checkout without production secrets
+- [ ] Use `--exclude` to skip directories containing credentials or proprietary algorithms
+- [ ] Verify your organization permits sending code to third-party AI providers
+- [ ] Review the generated config before committing (may contain extracted prompts)
+
+---
+
+## Quickstart
+
+**Goal**: Generate a red team config and open the UI with it pre-populated.
+
+1. **Start the server** (enables browser handoff):
+   ```bash
+   promptfoo view
+   ```
+
+2. **Run recon** on your application:
+   ```bash
+   promptfoo redteam recon --dir ./my-llm-app
+   ```
+
+3. **Review in browser** — recon automatically opens the setup page with discovered context
+
+4. **Configure target endpoint** — edit the `TODO` placeholder URL
+
+5. **Run red team**:
+   ```bash
+   promptfoo redteam run
+   ```
+
+That's it. For CI/CD or scripted workflows, add `--yes --no-open` to skip prompts and browser launch.
 
 ---
 
 ## Prerequisites
 
-**API Keys**: You need at least one of:
+### API Keys
 
-- `OPENAI_API_KEY` or `CODEX_API_KEY` (uses gpt-5.1-codex)
-- `ANTHROPIC_API_KEY` (uses opus)
+You need at least one of:
 
-**Server** (for web UI integration): Start the promptfoo server before running recon:
+| Provider | Environment Variable | Recommended Model |
+|----------|---------------------|-------------------|
+| OpenAI (Codex SDK) | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex` |
+| Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY` | SDK default (override with `-m`) |
 
-```bash
-promptfoo view
-# Or in development:
-npm run dev
-```
+Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) and [Claude Agent SDK](/docs/providers/claude-agent-sdk/) for current defaults and configuration options.
 
-If the server isn't running, recon still writes the config file but browser handoff won't work.
+### Agent Capabilities
+
+The recon agent has limited, read-only access to your codebase:
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| File read | Yes | Reads source files matching include patterns |
+| File write | No | Only writes the output config file |
+| Command execution | No | Cannot run scripts or commands |
+| Network access | No | Disabled by default in Codex SDK |
+| Web search | No | Disabled by default |
+
+The agent cannot modify your code, execute commands, or access external systems.
 
 :::note Cost Consideration
-Recon uses advanced AI models for code analysis. Large codebases with many files may incur significant API costs. Use `--exclude` patterns to limit scope if needed.
+Recon uses advanced AI models for code analysis. Large codebases may incur significant API costs. Use `--exclude` patterns to limit scope.
 :::
 
-## Usage
+---
 
-### Basic Usage
+## Configuration Output
 
-Scan the current directory:
-
-```bash
-promptfoo redteam recon
-```
-
-Scan a specific directory:
-
-```bash
-promptfoo redteam recon --dir ./path/to/app
-```
-
-### Options
-
-| Option                    | Description                                               |
-| ------------------------- | --------------------------------------------------------- |
-| `-d, --dir <path>`        | Directory to scan (default: current directory)            |
-| `-o, --output <path>`     | Output config file path (default: `promptfooconfig.yaml`) |
-| `--provider <provider>`   | Force provider: `openai` or `anthropic`                   |
-| `-m, --model <model>`     | Override default model                                    |
-| `-y, --yes`               | Skip confirmation prompts                                 |
-| `--no-open`               | Don't open browser after analysis                         |
-| `--exclude <patterns...>` | Additional glob patterns to exclude                       |
-| `--verbose`               | Show additional details (key files analyzed, tool paths)  |
-| `--env-file <path>`       | Load environment variables from file                      |
-
-### Provider Selection
-
-The command automatically selects a provider based on available API keys:
-
-| Provider         | Required Environment Variable       | Default Model   |
-| ---------------- | ----------------------------------- | --------------- |
-| OpenAI Codex SDK | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex` |
-| Claude Agent SDK | `ANTHROPIC_API_KEY`                 | `opus`          |
-
-To force a specific provider:
-
-```bash
-promptfoo redteam recon --provider anthropic
-```
-
-## Example Output
-
-Running recon on a medical assistant application:
-
-```bash
-$ promptfoo redteam recon --dir ./medical-agent
-
-Reconnaissance target: /path/to/medical-agent
-Agent can read files, search web, and take notes
-
-Provider: openai (gpt-5.1-codex)
-✔ Analysis complete
-
-=== Reconnaissance Results ===
-
-Purpose:
-  MediAssist is a medical assistant chatbot that helps staff and patients
-  manage healthcare tasks through natural-language conversations.
-
-Features:
-  Look up patients, review appointments and medications, schedule visits,
-  request prescription refills, check insurance coverage, process payments.
-
-Industry:
-  Healthcare
-
-System Prompt Found:
-  You are MediAssist, an AI medical assistant for Springfield Medical Center...
-
-Discovered Tools (11):
-  - authenticate: Authenticates a staff user and sets session role
-  - searchPatients: Searches for patients using fuzzy matching
-  - getPatientDetails: Returns patient demographics and history
-  ...
-
-Suggested Plugins:
-  prompt-extraction, pii:direct, medical:hallucination, rbac, bola
-
-Entities:
-  Springfield Medical Center, MediAssist, Dr. Sarah Chen, Blue Cross Blue Shield
-
-Security Notes:
-  - src/tools.js:34-86 authentication uses plaintext credentials
-  - src/tools.js:377-470 processPayment stores card data in memory
-
-✔ Write config to promptfooconfig.yaml? Yes
-
-Config written to promptfooconfig.yaml
-
-✨ Opening browser: http://localhost:3000/redteam/setup?source=recon
-
-In the browser:
-  1. Review the populated application context
-  2. Configure your target endpoint
-  3. Click "Run Red Team" when ready
-```
-
-The generated config includes everything needed to run a red team:
+Recon generates a complete `promptfooconfig.yaml`. Here's an annotated example from analyzing a medical assistant:
 
 ```yaml
+# Auto-generated description from discovered app purpose
 description: Red team config for: MediAssist medical assistant chatbot...
 
 targets:
   - id: http
     config:
+      # You must configure this before running
       url: 'TODO: Configure your target endpoint'
       method: POST
       body:
         prompt: '{{prompt}}'
 
 redteam:
+  # Detailed context helps generate relevant attack scenarios
   purpose: |
     Application Purpose:
     MediAssist is a medical assistant chatbot...
@@ -197,21 +148,27 @@ redteam:
     Look up patients, schedule visits, process payments...
 
   plugins:
+    # Extracted system prompt enables prompt-extraction attacks
     - id: prompt-extraction
       config:
         systemPrompt: 'You are MediAssist, an AI medical assistant...'
+    # PII plugins: app handles patient data
     - pii:direct
     - pii:session
+    # Medical domain plugins: healthcare-specific risks
     - medical:hallucination
     - medical:incorrect-knowledge
+    # Access control plugins: multi-role system detected
     - rbac
     - bola
     - harmful:specialized-advice
 
   strategies:
     - basic
+    # Single-turn jailbreaks
     - id: jailbreak:meta
     - id: jailbreak:composite
+    # Multi-turn strategies: app is stateful (maintains conversation)
     - id: jailbreak:hydra
       config:
         maxTurns: 5
@@ -222,6 +179,7 @@ redteam:
       config:
         maxTurns: 5
 
+  # Real entities for realistic social engineering scenarios
   entities:
     - Springfield Medical Center
     - MediAssist
@@ -229,83 +187,52 @@ redteam:
     - Blue Cross Blue Shield
 ```
 
+**Key customizations you may want**:
+- Remove plugins not relevant to your threat model
+- Adjust `maxTurns` for multi-turn strategies (higher = more thorough, more cost)
+- Add custom entities specific to your organization
+
 ---
 
-## Web UI Integration
+## CLI Reference
 
-When recon completes, it automatically opens your browser to the red team setup page with all discovered context pre-populated.
-
-### What You'll See
-
-The Application Details page displays a **Recon Summary Banner** showing analysis metadata and any security observations discovered in your code:
-
-![Recon summary banner with security observations](/img/docs/setup/application-details.png)
-
-Key elements include:
-
-1. **Recon Summary Banner**: Blue banner showing directory scanned, files analyzed, fields populated, and tools discovered
-2. **Security Observations**: Amber warning box highlighting potential security issues found in code (e.g., plaintext credentials, exposed PII)
-3. **Pre-filled Forms**: All application definition fields populated from analysis
-
-:::tip
-Security observations highlight code-level vulnerabilities that recon discovered. These inform plugin selection and help prioritize testing areas.
-:::
-
-### Navigation Flow
-
-After loading, you're taken directly to the **Review** tab where you can review all populated plugins and strategies:
-
-![Review tab with populated plugins and strategies](/img/docs/setup/review.png)
-
-From here:
-
-1. Review the populated application context
-2. Adjust plugins and strategies if needed
-3. Configure your target endpoint (required)
-4. Click "Run Red Team" to start testing
-
-### If No Server is Running
-
-If the promptfoo server isn't running when recon completes:
-
-- Config file is still written to disk
-- Browser may open to an error page
-- Run `promptfoo view` to start the server, then navigate to `/redteam/setup?source=recon`
-
-### Using `--no-open`
-
-Skip browser launch for CI/CD or scripted workflows:
+### Basic Usage
 
 ```bash
+# Scan current directory
+promptfoo redteam recon
+
+# Scan specific directory
+promptfoo redteam recon --dir ./path/to/app
+
+# CI/CD mode (no prompts, no browser)
 promptfoo redteam recon --dir ./app --yes --no-open
 ```
 
-This writes the config file without browser handoff. You can manually import it later or run directly with `promptfoo redteam run`.
+### Options
 
----
+| Option | Description |
+|--------|-------------|
+| `-d, --dir <path>` | Directory to scan (default: current directory) |
+| `-o, --output <path>` | Output config file path (default: `promptfooconfig.yaml`) |
+| `--provider <provider>` | Force provider: `openai` or `anthropic` |
+| `-m, --model <model>` | Override default model |
+| `-y, --yes` | Skip confirmation prompts |
+| `--no-open` | Don't open browser after analysis |
+| `--exclude <patterns...>` | Additional glob patterns to exclude |
+| `--verbose` | Show detailed analysis progress |
+| `--env-file <path>` | Load environment variables from file |
 
-## Recon vs Discovery
+### Excluding Files
 
-| Aspect       | Recon (this page)                    | [Discovery](/docs/red-team/discovery/) |
-| ------------ | ------------------------------------ | -------------------------------------- |
-| **Approach** | White-box (code analysis)            | Black-box (runtime probing)            |
-| **Input**    | Source code directory                | Running target endpoint                |
-| **When**     | Pre-deployment, during development   | Post-deployment, external testing      |
-| **Finds**    | System prompts, tools, code patterns | Purpose, limitations from responses    |
-| **Output**   | Complete `promptfooconfig.yaml`      | Text for `purpose` field               |
-
-Use **recon** when you have code access. Use **discovery** when testing a deployed system you can only interact with as a black box.
-
-## Excluded Files
-
-By default, recon excludes common non-application files:
+By default, recon excludes:
 
 - `node_modules/`, `.git/`, `dist/`, `build/`
 - `.env*` files (to avoid scanning secrets)
-- Existing promptfoo configs (`promptfooconfig.yaml`, `redteam.yaml`)
+- Existing promptfoo configs
 - Test coverage directories
 
-Add custom exclusions with `--exclude`:
+Add custom exclusions:
 
 ```bash
 promptfoo redteam recon --exclude "*.test.ts" --exclude "fixtures/**"
@@ -313,24 +240,72 @@ promptfoo redteam recon --exclude "*.test.ts" --exclude "fixtures/**"
 
 ---
 
-## Next Steps
+## Web UI Integration
 
-After running recon, your browser opens to the web UI where you:
+When recon completes, it opens the red team setup page with discovered context pre-populated.
 
-1. **Review the Application Details** tab to verify discovered context
-2. **Configure your target endpoint** in the Target Configuration tab
-3. **Adjust plugins/strategies** if needed (optional)
-4. **Click "Run Red Team"** on the Review tab to start testing
+### Application Details Page
 
-Alternatively, if using `--no-open` or working from the config file:
+The page displays a **Recon Summary Banner** showing analysis metadata and security observations:
 
-```bash
-# Edit the target URL in promptfooconfig.yaml, then:
-promptfoo redteam run
+![Recon summary banner with security observations](/img/docs/setup/application-details.png)
 
-# View results:
-promptfoo redteam report
-```
+- **Recon Summary Banner**: Directory scanned, files analyzed, fields populated, tools discovered
+- **Security Observations**: Code-level issues that inform plugin selection (e.g., plaintext credentials, exposed PII)
+- **Pre-filled Forms**: All application definition fields populated from analysis
+
+:::note
+Security observations are best-effort hints for prioritizing red team scenarios, not a comprehensive code security audit. For deeper vulnerability detection, see [Code Scanning](/docs/code-scanning/).
+:::
+
+### Review Page
+
+Navigate to the **Review** tab to see all populated plugins and strategies:
+
+![Review tab with populated plugins and strategies](/img/docs/setup/review.png)
+
+From here:
+1. Review the application context
+2. Adjust plugins and strategies if needed
+3. Configure your target endpoint (required)
+4. Click "Run Red Team" to start testing
+
+### Server Not Running
+
+If the promptfoo server isn't running when recon completes:
+
+- Config file is still written to disk
+- Browser may open to an error page
+- Start the server with `promptfoo view`, then navigate to `/redteam/setup?source=recon`
+
+---
+
+## How It Works
+
+The recon agent analyzes your codebase in four phases:
+
+![Recon workflow](/img/docs/recon-flow.svg)
+
+1. **Application Understanding**: Reads README, package.json, and entry points to understand purpose and user types
+2. **LLM Integration Discovery**: Finds system prompts, tools/functions, guardrails, and determines statefulness
+3. **Attack Surface Mapping**: Identifies connected systems, user roles, forbidden topics, and sensitive data
+4. **Entity Extraction**: Extracts company names, people, and data formats for realistic attack scenarios
+
+The agent outputs a complete config with populated purpose, suggested plugins, appropriate strategies, and extracted entities.
+
+---
+
+## Recon vs Discovery
+
+| Aspect | Recon (this page) | [Discovery](/docs/red-team/discovery/) |
+|--------|-------------------|----------------------------------------|
+| **Approach** | White-box (code analysis) | Black-box (runtime probing) |
+| **Input** | Source code directory | Running target endpoint |
+| **When** | Pre-deployment, during development | Post-deployment, external testing |
+| **Finds** | System prompts, tools, code patterns | Purpose, limitations from responses |
+| **Output** | Complete `promptfooconfig.yaml` | Text for `purpose` field |
+
+Use **recon** when you have code access. Use **discovery** when testing a deployed system as a black box.
 
 ---
 
@@ -338,28 +313,20 @@ promptfoo redteam report
 
 ### "No pending recon configuration found"
 
-This warning appears when opening the web UI with `?source=recon` but no pending config exists. This happens if:
-
-- Recon command failed before writing the pending file
-- The pending file was already consumed by a previous session
+The web UI can't find the pending config. This happens if:
+- Recon failed before writing the pending file
+- The pending file was already consumed
 - You navigated directly to the URL without running recon
 
 **Solution**: Run `promptfoo redteam recon` again.
 
-### Browser opens but page shows error
-
-The promptfoo server isn't running.
-
-**Solution**: Start the server with `promptfoo view`, then reload the page or run recon again.
-
 ### API rate limit or timeout errors
 
-Large codebases may hit API limits or take a long time to analyze.
+Large codebases may hit API limits.
 
 **Solutions**:
-
-- Use `--exclude` to skip test files, fixtures, or generated code
-- Try a different provider with `--provider anthropic` or `--provider openai`
+- Use `--exclude` to skip test files and fixtures
+- Try a different provider with `--provider`
 - Break analysis into smaller directories
 
 ### Missing API key error
@@ -368,7 +335,7 @@ Large codebases may hit API limits or take a long time to analyze.
 Error: No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.
 ```
 
-**Solution**: Set at least one API key in your environment or use `--env-file`:
+**Solution**: Set an API key or use `--env-file`:
 
 ```bash
 promptfoo redteam recon --env-file .env
@@ -378,16 +345,19 @@ promptfoo redteam recon --env-file .env
 
 Some environments (SSH, containers) can't open browsers.
 
-**Solution**: Use `--no-open` and open the URL manually:
+**Solution**: Use `--no-open` and open manually:
 
 ```bash
 promptfoo redteam recon --no-open
 # Then open: http://localhost:3000/redteam/setup?source=recon
 ```
 
+---
+
 ## See Also
 
-- [Target Discovery](/docs/red-team/discovery/) - Black-box target analysis
-- [Configuration](/docs/red-team/configuration/) - Full config reference
-- [Plugins](/docs/red-team/plugins/) - Available attack plugins
-- [Strategies](/docs/red-team/strategies/) - Attack delivery techniques
+- [Target Discovery](/docs/red-team/discovery/) — Black-box target analysis
+- [Configuration](/docs/red-team/configuration/) — Full config reference
+- [Plugins](/docs/red-team/plugins/) — Available attack plugins
+- [Strategies](/docs/red-team/strategies/) — Attack delivery techniques
+- [Code Scanning](/docs/code-scanning/) — Deep vulnerability detection
