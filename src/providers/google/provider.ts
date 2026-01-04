@@ -205,21 +205,25 @@ export class GoogleProvider extends GoogleGenericProvider {
   }
 
   /**
-   * Check if express mode should be used (API key without OAuth)
+   * Check if express mode should be used (API key without OAuth).
    *
-   * SDK Alignment: Express mode must be EXPLICITLY enabled via `expressMode: true`.
-   * This matches Google's SDK behavior where Vertex AI defaults to OAuth/ADC.
+   * Express mode is automatic when an API key is available - users don't need
+   * to think about it. Just provide an API key and it works.
+   *
+   * Express mode is used when:
+   * 1. API key is available (VERTEX_API_KEY, GOOGLE_API_KEY, or config.apiKey)
+   * 2. User hasn't explicitly disabled it with `expressMode: false`
    */
   private isExpressMode(): boolean {
     if (!this.isVertexMode) {
       return false;
     }
 
-    const explicitlyEnabled = this.config.expressMode === true;
     const hasApiKey = Boolean(this.getApiKey());
+    const explicitlyDisabled = this.config.expressMode === false;
 
-    // Express mode must be explicitly enabled (SDK aligned - defaults to OAuth/ADC)
-    return explicitlyEnabled && hasApiKey;
+    // Auto-enable express mode when API key is available (unless explicitly disabled)
+    return hasApiKey && !explicitlyDisabled;
   }
 
   /**

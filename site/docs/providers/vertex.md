@@ -266,7 +266,7 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 #### Option 5: Express Mode API Key (Quick Start)
 
-Vertex AI Express Mode provides simplified authentication using an API key. Express mode must be explicitly enabled with `expressMode: true` (aligning with the official SDK which defaults to OAuth/ADC).
+Vertex AI Express Mode provides simplified authentication using an API key. Just provide an API key and it works automatically.
 
 1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) or [Vertex AI Studio](https://console.cloud.google.com/vertex-ai)
 2. Set the environment variable:
@@ -279,7 +279,6 @@ export GOOGLE_API_KEY="your-express-mode-api-key"
 providers:
   - id: vertex:gemini-3-flash-preview
     config:
-      expressMode: true # Required to use API key authentication
       temperature: 0.7
 ```
 
@@ -289,8 +288,8 @@ Express mode benefits:
 - Simpler setup for quick testing
 - Works with Gemini models
 
-:::note SDK Alignment
-The official `@google/genai` SDK defaults to OAuth/ADC authentication for Vertex AI. Express mode (API key authentication) must be explicitly enabled. This prevents accidentally using API keys which may have different quotas or lack access to project-scoped features.
+:::tip
+Express mode is automatic when an API key is available. If you need OAuth/ADC features (VPC-SC, private endpoints), set `expressMode: false` to opt out.
 :::
 
 #### Environment Variables
@@ -635,7 +634,7 @@ defaultTest:
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Set to `true` to use API key instead of OAuth/ADC      | `false`                              |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key    | auto (API key → `true`)              |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
 
 :::note

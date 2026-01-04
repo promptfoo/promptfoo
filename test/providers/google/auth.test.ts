@@ -350,10 +350,11 @@ describe('GoogleAuthManager', () => {
       );
     });
 
-    it('should warn when both apiKey and credentials are set', () => {
+    it('should log debug when both apiKey and credentials are set', () => {
+      // When both are set, API key takes precedence (express mode is automatic)
       GoogleAuthManager.validateAndWarn({ apiKey: 'key', credentials: '{}' });
 
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.debug).toHaveBeenCalledWith(
         expect.stringContaining('Both apiKey and credentials are set'),
       );
     });
