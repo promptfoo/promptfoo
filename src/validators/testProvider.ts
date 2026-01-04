@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import { HttpProviderConfig } from 'src/providers/http';
 import { evaluate } from '../evaluator';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { HttpProviderConfig } from '../providers/http';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';

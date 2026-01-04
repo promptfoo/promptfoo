@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { TestCaseWithPlugin } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
@@ -23,6 +22,7 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { TestCaseWithPlugin } from '../../types';
 import { fetchWithProxy } from '../../util/fetch/index';
 import {
   extractGeneratedPrompt,
