@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { countPopulatedFields } from './utils/applicationDefinition';
+
 import type { Config, ReconContext } from './types';
 
 /**
