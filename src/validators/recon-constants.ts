@@ -67,13 +67,11 @@ export const APPLICATION_DEFINITION_FIELDS: (keyof ApplicationDefinition)[] = Ob
  * Default empty ApplicationDefinition for fallback cases.
  * All fields are initialized to empty strings.
  */
-export const DEFAULT_APPLICATION_DEFINITION: ApplicationDefinition = APPLICATION_DEFINITION_FIELDS.reduce(
-  (acc, field) => {
+export const DEFAULT_APPLICATION_DEFINITION: ApplicationDefinition =
+  APPLICATION_DEFINITION_FIELDS.reduce((acc, field) => {
     acc[field] = '';
     return acc;
-  },
-  {} as ApplicationDefinition,
-);
+  }, {} as ApplicationDefinition);
 
 /**
  * Checks if a field value is meaningful (not empty or a placeholder).

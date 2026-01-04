@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
+import opener from 'opener';
 import ora from 'ora';
 import { getLocalAppUrl } from '../../../constants';
 import logger from '../../../logger';
@@ -28,9 +29,7 @@ async function openBrowserWithRecon(): Promise<void> {
   const url = getLocalAppUrl('/redteam/setup', { source: 'recon' });
 
   try {
-    // Dynamic import since 'open' is ESM-only
-    const { default: open } = await import('open');
-    await open(url);
+    await opener(url);
     logger.info(`\n${chalk.green('✨')} Opening browser: ${chalk.cyan(url)}`);
   } catch (error) {
     logger.debug('Failed to open browser automatically', { error });

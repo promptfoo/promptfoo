@@ -13,8 +13,8 @@ import {
 } from '../../constants/plugins';
 
 import type { UnifiedConfig } from '../../../types/index';
+import type { ReconResult } from '../../../validators/recon';
 import type { RedteamPluginObject, RedteamStrategyObject } from '../../types';
-import type { ReconResult } from './types';
 
 /**
  * Maximum number of tools to include in the purpose string output.

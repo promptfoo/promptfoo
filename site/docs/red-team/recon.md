@@ -348,7 +348,7 @@ Large codebases may hit API limits.
 
 ### Missing API key error
 
-```
+```text
 Error: No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.
 ```
 
