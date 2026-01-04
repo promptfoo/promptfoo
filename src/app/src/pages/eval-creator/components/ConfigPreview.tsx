@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/car
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import { UnifiedConfig } from '@promptfoo/types';
 import { Code, Eye } from 'lucide-react';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import YamlEditor from './YamlEditor';
@@ -31,7 +32,7 @@ function ConfigSummaryItem({ label, value, isEmpty }: ConfigSummaryItemProps) {
 }
 
 interface ConfigSummaryProps {
-  config: any;
+  config: Partial<UnifiedConfig>;
 }
 
 function ConfigSummary({ config }: ConfigSummaryProps) {

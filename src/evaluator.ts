@@ -36,6 +36,7 @@ import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -46,7 +47,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { isApiProvider } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
@@ -75,6 +76,7 @@ import type {
   TokenUsage,
   Vars,
 } from './types/index';
+import type { CallApiContextParams } from './types/providers';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -387,7 +389,7 @@ export async function runEval({
         testSuite,
       );
 
-      const callApiContext: any = {
+      const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
@@ -634,17 +636,21 @@ function buildProviderErrorContext({
   promptIdx,
   testIdx,
 }: {
-  error: any;
-  provider: any;
-  test: any;
+  error: unknown;
+  provider: ApiProvider;
+  test: AtomicTestCase;
   promptIdx: number;
   testIdx: number;
 }) {
   const providerId = provider.id();
   const providerLabel = provider.label;
-  const status = error?.response?.status;
-  const statusText = error?.response?.statusText;
-  const responseData = error?.response?.data;
+  // Type guard for errors with HTTP response information
+  const errorWithResponse = error as {
+    response?: { status?: number; statusText?: string; data?: unknown };
+  };
+  const status = errorWithResponse?.response?.status;
+  const statusText = errorWithResponse?.response?.statusText;
+  const responseData = errorWithResponse?.response?.data;
   const responseSnippet = (() => {
     if (responseData == null) {
       return undefined;
@@ -697,7 +703,7 @@ function buildProviderErrorContext({
  * @returns Formatted variables string or fallback message
  */
 export function formatVarsForDisplay(
-  vars: Record<string, any> | undefined,
+  vars: Record<string, unknown> | undefined,
   maxLength: number,
 ): string {
   if (!vars || Object.keys(vars).length === 0) {
@@ -724,13 +730,13 @@ export function formatVarsForDisplay(
 }
 
 export function generateVarCombinations(
-  vars: Record<string, string | string[] | any>,
-): Record<string, string | any[]>[] {
+  vars: Record<string, string | string[] | unknown>,
+): Record<string, string | object>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | any[]>[] = [{}];
+  const combinations: Record<string, string | object>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = [];
+    let values: Array<string | object> = [];
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
@@ -758,7 +764,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, any>[] = [];
+    const newCombinations: Record<string, string | object>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {

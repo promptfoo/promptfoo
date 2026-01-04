@@ -321,6 +321,7 @@ export default function RedTeamSetupPage() {
 
     try {
       const content = await readFileAsText(file);
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME
       const yamlConfig = yaml.load(content) as any;
 
       const strategies = yamlConfig?.redteam?.strategies || [];

@@ -205,10 +205,12 @@ export async function extractAndStoreBinaryData(
   }
 
   // Turns audio (multi-turn)
-  const turns = (response as any).turns as any[] | undefined;
+
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
+  const turns = (response as any).turns;
   if (Array.isArray(turns)) {
     const updatedTurns = await Promise.all(
-      turns.map(async (turn: any, idx: number) => {
+      turns.map(async (turn, idx) => {
         if (turn?.audio?.data && typeof turn.audio.data === 'string') {
           const stored = await maybeStore(
             turn.audio.data,
@@ -232,6 +234,8 @@ export async function extractAndStoreBinaryData(
         return turn;
       }),
     );
+
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
     (next as any).turns = updatedTurns;
   }
 
@@ -264,7 +268,7 @@ export async function extractAndStoreBinaryData(
       response.output.includes('b64_json'))
   ) {
     try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, any>> };
+      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
       if (Array.isArray(parsed.data)) {
         let jsonMutated = false;
         const storedUris: string[] = [];

@@ -27,7 +27,10 @@ export const executablePromptFunction = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: {
+      basePath?: string;
+      timeout?: number;
+    };
   },
 ): Promise<string> => {
   invariant(context.provider?.id, 'provider.id is required');

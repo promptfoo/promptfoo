@@ -44,16 +44,16 @@ export function readGlobalConfig(): GlobalConfig {
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
   const currentConfig = readGlobalConfig();
   // Create a shallow copy of the current config
-  const updatedConfig = { ...currentConfig };
+  const updatedConfig: GlobalConfig = { ...currentConfig };
 
   // Use Object.entries for better type safety
   Object.entries(partialConfig).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      // Type assertion for key - we know it's a valid key from partialConfig
-      (updatedConfig as any)[key] = value;
+      // Type assertion: we know key is valid from partialConfig, and value matches the key's type
+      (updatedConfig as Record<string, unknown>)[key] = value;
     } else {
       // Remove the property if value is falsy
-      delete (updatedConfig as any)[key];
+      delete (updatedConfig as Record<string, unknown>)[key];
     }
   });
 

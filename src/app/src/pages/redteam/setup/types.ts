@@ -28,7 +28,7 @@ export interface Config {
   description: string;
   prompts: string[];
   target: ProviderOptions;
-  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  plugins: (RedteamPlugin | { id: string; config?: PluginConfig })[];
   testGenerationInstructions?: string;
   strategies: RedteamStrategy[];
   purpose?: string;
@@ -46,7 +46,7 @@ export interface ProviderOptions {
   label?: string;
   delay?: number;
   config: {
-    // Custom provider config can have anything
+    // biome-ignore lint/suspicious/noExplicitAny: Custom provider config can have anything
     [key: string]: any;
 
     type?: 'http' | 'websocket' | 'browser';
