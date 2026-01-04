@@ -165,11 +165,12 @@ export class CloudConfig {
         organization,
         app,
       };
-    } catch (error) {
+    } catch (err) {
+      const error = err as Error & { cause?: string };
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Cloud] Failed to validate API token with host ${apiHost}: ${errorMessage}`);
-      if ((error as any).cause) {
-        logger.error(`Cause: ${(error as any).cause}`);
+      if (error.cause) {
+        logger.error(`Cause: ${error.cause}`);
       }
       throw error;
     }

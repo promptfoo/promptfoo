@@ -17,25 +17,15 @@ import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import type { GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
   onClose: () => void;
   category: string;
-  failures: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
-  passes: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
+  failures: TestWithMetadata[];
+  passes: TestWithMetadata[];
   evalId: string;
   numPassed: number;
   numFailed: number;
@@ -44,10 +34,7 @@ interface RiskCategoryDrawerProps {
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
 
 // Sort function for prioritizing specific strategies
-function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-): number {
+function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): number {
   const strategyA = getStrategyIdFromTest(a);
   const strategyB = getStrategyIdFromTest(b);
 
@@ -130,12 +117,7 @@ const RiskCategoryDrawer = ({
   );
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
-  const [selectedTest, setSelectedTest] = React.useState<{
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  } | null>(null);
+  const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -166,15 +148,7 @@ const RiskCategoryDrawer = ({
   }
 
   // Helper to render a test item (used for both failures and passes)
-  const renderTestItem = (
-    test: {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    },
-    index: number,
-  ) => {
+  const renderTestItem = (test: TestWithMetadata, index: number) => {
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,

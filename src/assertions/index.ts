@@ -307,8 +307,9 @@ export async function runAssertion({
   }
 
   // Render assertion values
+  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
+  let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -329,10 +330,11 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -346,10 +348,11 @@ export async function runAssertion({
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {

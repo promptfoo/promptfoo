@@ -102,7 +102,7 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
-const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
+const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
     return result;

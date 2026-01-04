@@ -19,6 +19,7 @@ import {
   ResultFailureReason,
   type UnifiedConfig,
 } from '../types/index';
+import type { Attributes } from '@opentelemetry/api';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
 
@@ -402,7 +403,7 @@ export const modelAuditsTable = sqliteTable(
     failedChecks: integer('failed_checks'),
 
     // Optional metadata
-    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
 
     // Model revision tracking (dual-field approach for deduplication + security)
     modelId: text('model_id'), // Normalized model identifier (e.g., "meta-llama/Llama-2-7b")
@@ -439,7 +440,7 @@ export const tracesTable = sqliteTable(
       .references(() => evalsTable.id),
     testCaseId: text('test_case_id').notNull(),
     createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
   },
   (table) => ({
     evaluationIdx: index('traces_evaluation_idx').on(table.evaluationId),
@@ -459,7 +460,7 @@ export const spansTable = sqliteTable(
     name: text('name').notNull(),
     startTime: integer('start_time').notNull(),
     endTime: integer('end_time'),
-    attributes: text('attributes', { mode: 'json' }).$type<Record<string, any>>(),
+    attributes: text('attributes', { mode: 'json' }).$type<Attributes>(),
     statusCode: integer('status_code'),
     statusMessage: text('status_message'),
   },

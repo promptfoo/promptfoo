@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { TestCaseWithPlugin } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
@@ -36,7 +37,7 @@ export const redteamRouter = Router();
 
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as any), {
+    id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
     }) as unknown as z.ZodType<Plugin>,
     config: PluginConfigSchema.optional().default({}),
@@ -132,7 +133,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as any, // Cast to TestCaseWithPlugin[]
+          testCases as TestCaseWithPlugin[],
           injectVar,
           strategy.config || {},
           strategy.id,

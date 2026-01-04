@@ -75,6 +75,7 @@ import type {
   TokenUsage,
   Vars,
 } from './types/index';
+import type { CallApiContextParams } from './types/providers';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -387,7 +388,7 @@ export async function runEval({
         testSuite,
       );
 
-      const callApiContext: any = {
+      const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
@@ -697,7 +698,7 @@ function buildProviderErrorContext({
  * @returns Formatted variables string or fallback message
  */
 export function formatVarsForDisplay(
-  vars: Record<string, any> | undefined,
+  vars: Record<string, unknown> | undefined,
   maxLength: number,
 ): string {
   if (!vars || Object.keys(vars).length === 0) {
@@ -724,13 +725,13 @@ export function formatVarsForDisplay(
 }
 
 export function generateVarCombinations(
-  vars: Record<string, string | string[] | any>,
-): Record<string, string | any[]>[] {
+  vars: Record<string, string | string[] | unknown>,
+): Record<string, string | object>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | any[]>[] = [{}];
+  const combinations: Record<string, string | object>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = [];
+    let values: Array<string | object> = [];
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
@@ -758,7 +759,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, any>[] = [];
+    const newCombinations: Record<string, string | object>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {

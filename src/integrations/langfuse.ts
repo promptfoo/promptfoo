@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import type Langfuse from 'langfuse';
 
 const langfuseParams = {
   publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
@@ -6,11 +7,11 @@ const langfuseParams = {
   baseUrl: getEnvString('LANGFUSE_HOST'),
 };
 
-let langfuse: any;
+let langfuse: Langfuse;
 
 export async function getPrompt(
   id: string,
-  vars: Record<string, any>,
+  vars: Record<string, string | object>,
   type: 'text' | 'chat' | undefined,
   version?: number,
   label?: string,
@@ -36,7 +37,8 @@ export async function getPrompt(
     } else {
       prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
     }
-  } catch (error: any) {
+  } catch (err) {
+    const error = err as Error;
     // Provide more context in error messages
     if (label) {
       throw new Error(
@@ -51,7 +53,8 @@ export async function getPrompt(
     }
   }
 
-  const compiledPrompt = prompt.compile(vars);
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is almost certainly a bug.  According to langfuse, this is supposed to be Record<string, string>.
+  const compiledPrompt = prompt.compile(vars as any);
   if (typeof compiledPrompt !== 'string') {
     return JSON.stringify(compiledPrompt);
   }

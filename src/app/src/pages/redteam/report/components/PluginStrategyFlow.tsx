@@ -3,20 +3,12 @@
 import React, { useMemo } from 'react';
 
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-
-interface TestRecord {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-}
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 
 interface PluginStrategyFlowProps {
-  failuresByPlugin: TestRecord[];
-  passesByPlugin: TestRecord[];
+  failuresByPlugin: TestWithMetadata[];
+  passesByPlugin: TestWithMetadata[];
 }
 
 // Helper to get CSS variable value and return as hsl() string
@@ -32,8 +24,13 @@ const getCssVarAsHsl = (varName: string, fallbackHsl: string): string => {
   return `hsl(${fallbackHsl})`;
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
+type SankeyNodeOptions = any;
+// biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
+type SankeyLinkOptions = any;
+
 // Add custom node component
-const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any) => {
+const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: SankeyNodeOptions) => {
   const textRef = React.useRef<SVGTextElement>(null);
   const [labelWidth, setLabelWidth] = React.useState(0);
   const isOut = x + width + 6 > containerWidth;
@@ -120,7 +117,7 @@ const interpolateColor = (ratio: number) => {
   }
 };
 
-const CustomLink = (props: any) => {
+const CustomLink = (props: SankeyLinkOptions) => {
   const { sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth, payload } =
     props;
 
@@ -156,9 +153,10 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
     // We'll aggregate counts of tests by (plugin, strategy, outcome)
     const linkCounts: Record<string, Record<string, { pass: number; fail: number }>> = {};
 
-    function processTests(tests: TestRecord[], isPassing: boolean) {
+    function processTests(tests: TestWithMetadata[], isPassing: boolean) {
       for (const t of tests) {
         const pluginId = t.result ? getPluginIdFromResult(t.result) : undefined;
+
         const strategyId = getStrategyIdFromTest(t);
 
         if (!pluginId || strategyId === 'basic') {
@@ -335,7 +333,7 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
               if (!payload?.[0]) {
                 return null;
               }
-              const data = payload[0] as any;
+              const data = payload[0];
               const { source, target, value } = data;
               return (
                 <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">

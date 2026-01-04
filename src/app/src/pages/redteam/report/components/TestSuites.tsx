@@ -41,8 +41,8 @@ interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
-  failuresByPlugin?: Record<string, any[]>;
-  passesByPlugin?: Record<string, any[]>;
+  failuresByPlugin?: Record<string, unknown[]>;
+  passesByPlugin?: Record<string, unknown[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 

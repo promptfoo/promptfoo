@@ -2,13 +2,14 @@ import { useCallback } from 'react';
 
 import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import { SpanData } from '@promptfoo/tracing/store';
 import { Download } from 'lucide-react';
 import TraceTimeline from './TraceTimeline';
 
 export interface Trace {
   traceId: string;
   testCaseId?: string | number;
-  spans?: any[];
+  spans?: Partial<SpanData>[];
 }
 
 interface TraceViewProps {
@@ -73,6 +74,7 @@ export default function TraceView({
     return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
   };
 
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: We are getting confused between Trace and TraceData somewhere in here
   let filteredTraces: any[] = traces;
 
   if (traces.length > 0) {

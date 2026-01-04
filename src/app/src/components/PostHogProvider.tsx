@@ -39,7 +39,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
-          loaded: (_posthogInstance: any) => {
+          loaded: (_posthogInstance) => {
             setIsInitialized(true);
           },
           capture_pageview: false,
