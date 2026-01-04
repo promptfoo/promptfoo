@@ -217,7 +217,7 @@ export async function fetchWithCache<T = unknown>(
   // Include auth headers hash in cache key to prevent different API keys from sharing cache
   const authHash = getAuthHeadersHash(options.headers);
   const authSuffix = authHash ? `:auth:${authHash}` : '';
-  const cacheKey = `fetch:v3:${url}:${JSON.stringify(copy)}${authSuffix}`;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}${authSuffix}`;
   const cache = await getCache();
 
   let cached = true;
