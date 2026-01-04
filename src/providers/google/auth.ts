@@ -203,10 +203,11 @@ export class GoogleAuthManager {
     }
 
     // Check for conflicting auth methods (apiKey + credentials)
+    // When both are set, API key takes precedence (express mode is automatic)
     if (apiKey && credentials) {
-      logger.warn(
-        '[Google] Both apiKey and credentials are set. ' +
-          'Vertex AI defaults to OAuth/ADC. Set expressMode: true to use API key instead.',
+      logger.debug(
+        '[Google] Both apiKey and credentials are set. Using API key (express mode). ' +
+          'Set expressMode: false to use OAuth/ADC instead.',
       );
     }
 

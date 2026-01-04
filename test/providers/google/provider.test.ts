@@ -76,6 +76,14 @@ vi.mock('glob', async (importOriginal) => {
   };
 });
 
+// Mock envars to control API key availability in tests
+vi.mock('../../../src/envars', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getEnvString: vi.fn().mockReturnValue(undefined),
+  };
+});
+
 vi.mock('fs', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -349,29 +357,30 @@ describe('GoogleProvider', () => {
           config: {
             vertexai: true,
             apiKey: 'vertex-api-key',
-            expressMode: true, // SDK aligned: must be explicit
+            // expressMode not needed - automatic when API key is present
           },
         });
       });
 
-      it('should use express mode only when explicitly enabled (SDK aligned)', () => {
+      it('should use express mode automatically when API key is present', () => {
+        // Express mode is invisible to users - just provide an API key and it works
         expect((provider as any).isExpressMode()).toBe(true);
       });
 
-      it('should NOT use express mode by default even with API key (SDK aligned)', () => {
-        // SDK alignment: Vertex AI defaults to OAuth/ADC, not API key
-        const defaultProvider = new GoogleProvider('gemini-pro', {
+      it('should not use express mode when no API key is available', () => {
+        const noApiKeyProvider = new GoogleProvider('gemini-pro', {
           config: {
             vertexai: true,
-            apiKey: 'vertex-api-key',
-            // expressMode not set - should default to OAuth/ADC
+            projectId: 'my-project',
+            // No API key - will use OAuth/ADC
           },
         });
 
-        expect((defaultProvider as any).isExpressMode()).toBe(false);
+        expect((noApiKeyProvider as any).isExpressMode()).toBe(false);
       });
 
-      it('should not use express mode when expressMode: false', () => {
+      it('should not use express mode when expressMode: false (opt-out)', () => {
+        // Users can explicitly opt-out if they need OAuth features
         const noExpressProvider = new GoogleProvider('gemini-pro', {
           config: {
             vertexai: true,
