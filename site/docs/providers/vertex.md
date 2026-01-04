@@ -298,31 +298,26 @@ Promptfoo automatically loads environment variables from your shell or a `.env` 
 
 ```bash
 # .env
-# SDK-aligned environment variables (recommended)
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_API_KEY=your-api-key  # For express mode
-
-# Legacy variables (still supported)
-VERTEX_PROJECT_ID=your-project-id
-VERTEX_REGION=us-central1
 ```
 
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
 
-:::tip SDK Alignment
-For consistency with the official `@google/genai` SDK, prefer using `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy variables (`VERTEX_API_KEY`, `GEMINI_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported for backward compatibility.
+:::tip Recommended Environment Variables
+Prefer `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy variables (`VERTEX_API_KEY`, `GEMINI_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported.
 :::
 
 ### Authentication Configuration Details
 
 :::note Mutual Exclusivity
-API key and OAuth configurations are mutually exclusive. You cannot set both `apiKey` AND `projectId`/`region` in the same provider configuration. This aligns with the [official @google/genai SDK](https://www.npmjs.com/package/@google/genai) behavior.
+API key and OAuth configurations are mutually exclusive. Choose one authentication method:
 
-- Use `apiKey` for express mode (simplified API key authentication)
-- Use `projectId`/`region` with OAuth or service account credentials
+- **API key**: For express mode (simplified authentication)
+- **OAuth/ADC**: With `projectId`/`region` for full Vertex AI features
 
-If you have a configuration that requires both (rare edge case), set `strictMutualExclusivity: false` to allow it with a warning.
+If you need both (rare), set `strictMutualExclusivity: false` to allow it with a warning.
 :::
 
 #### Advanced Auth Options
@@ -365,9 +360,9 @@ The following environment variables can be used to configure the Vertex AI provi
 
 | Variable                         | Description                                     | Default        | Required |
 | -------------------------------- | ----------------------------------------------- | -------------- | -------- |
-| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID (SDK aligned)           | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI (SDK aligned)              | `us-central1`  | No       |
-| `GOOGLE_API_KEY`                 | API key for express mode (SDK aligned)          | None           | No\*     |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID                         | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                            | `us-central1`  | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode                        | None           | No\*     |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials             | None           | No\*     |
 | `VERTEX_PROJECT_ID`              | Project ID (legacy, use `GOOGLE_CLOUD_PROJECT`) | None           | No       |
 | `VERTEX_REGION`                  | Region (legacy, use `GOOGLE_CLOUD_LOCATION`)    | None           | No       |
@@ -1064,9 +1059,9 @@ For more details, see:
 - [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
 
-## SDK Feature Comparison
+## Supported Features
 
-Promptfoo's Vertex AI provider implements core functionality for LLM evaluation. Some SDK features are not supported:
+The Vertex AI provider supports core functionality for LLM evaluation:
 
 | Feature                  | Supported | Notes                                  |
 | ------------------------ | --------- | -------------------------------------- |
