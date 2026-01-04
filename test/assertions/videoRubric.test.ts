@@ -37,7 +37,15 @@ function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams
 }
 
 // Helper to create valid BlobRef
-function createBlobRef(overrides: Partial<{ uri: string; hash: string; mimeType: string; sizeBytes: number; provider: string }> = {}) {
+function createBlobRef(
+  overrides: Partial<{
+    uri: string;
+    hash: string;
+    mimeType: string;
+    sizeBytes: number;
+    provider: string;
+  }> = {},
+) {
   return {
     uri: 'blob://test/video.mp4',
     hash: 'abc123',
