@@ -14,9 +14,10 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import type { GoogleAuthOptions } from 'google-auth-library';
+
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
-import type { GoogleAuth, GoogleAuthOptions } from 'google-auth-library';
 
 /**
  * Configuration for Google authentication
@@ -68,9 +69,14 @@ export interface ApiKeyResult {
   /** The resolved API key, or undefined if not found */
   apiKey: string | undefined;
   /** The source of the API key for debugging */
-  source: 'config' | 'VERTEX_API_KEY' | 'GOOGLE_API_KEY' | 'GEMINI_API_KEY' | 'PALM_API_KEY' | 'none';
+  source:
+    | 'config'
+    | 'VERTEX_API_KEY'
+    | 'GOOGLE_API_KEY'
+    | 'GEMINI_API_KEY'
+    | 'PALM_API_KEY'
+    | 'none';
 }
-
 
 /**
  * Centralized authentication manager for Google AI providers.
@@ -125,7 +131,7 @@ export class GoogleAuthManager {
     const geminiKey = env?.GEMINI_API_KEY || getEnvString('GEMINI_API_KEY');
 
     // 5. PALM_API_KEY (legacy, AI Studio only - deprecated)
-    const palmKey = !isVertexMode ? (env?.PALM_API_KEY || getEnvString('PALM_API_KEY')) : undefined;
+    const palmKey = isVertexMode ? undefined : env?.PALM_API_KEY || getEnvString('PALM_API_KEY');
 
     // SDK alignment: warn whenever both GOOGLE_API_KEY and GEMINI_API_KEY are set
     if (googleKey && geminiKey) {
@@ -167,7 +173,6 @@ export class GoogleAuthManager {
     // Check for Python SDK environment variables
     const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
     const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
-    const cloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -207,7 +212,9 @@ export class GoogleAuthManager {
 
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
-      const hasAdc = Boolean(env?.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+      const hasAdc = Boolean(
+        env?.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      );
       if (!hasAdc) {
         logger.debug(
           '[Google] Vertex AI mode enabled but no projectId, credentials, or ADC detected. ' +
@@ -230,7 +237,10 @@ export class GoogleAuthManager {
    * @param env - Environment overrides
    * @returns Whether to use Vertex AI mode
    */
-  static determineVertexMode(config: CompletionOptions & { vertexai?: boolean }, env?: EnvOverrides): boolean {
+  static determineVertexMode(
+    config: CompletionOptions & { vertexai?: boolean },
+    env?: EnvOverrides,
+  ): boolean {
     // 1. Explicit config flag takes precedence
     if (config.vertexai !== undefined) {
       return config.vertexai;
@@ -308,7 +318,8 @@ export class GoogleAuthManager {
     options: OAuthClientOptions | string = {},
   ): Promise<{ client: any; projectId: string | undefined }> {
     // Handle backward compatibility: string argument means credentials
-    const opts: OAuthClientOptions = typeof options === 'string' ? { credentials: options } : options;
+    const opts: OAuthClientOptions =
+      typeof options === 'string' ? { credentials: options } : options;
     const { credentials, googleAuthOptions, scopes, keyFilename } = opts;
 
     // Determine scopes: explicit > googleAuthOptions > default
@@ -384,7 +395,13 @@ export class GoogleAuthManager {
    * @returns Resolved project ID
    */
   static async resolveProjectId(
-    config: { projectId?: string; credentials?: string; googleAuthOptions?: Partial<GoogleAuthOptions>; keyFilename?: string; scopes?: string | string[] },
+    config: {
+      projectId?: string;
+      credentials?: string;
+      googleAuthOptions?: Partial<GoogleAuthOptions>;
+      keyFilename?: string;
+      scopes?: string | string[];
+    },
     env?: EnvOverrides,
   ): Promise<string> {
     const { projectId: authProjectId } = await this.getOAuthClient({
@@ -411,12 +428,7 @@ export class GoogleAuthManager {
     }
 
     return (
-      config.projectId ||
-      vertexProjectId ||
-      googleProjectId ||
-      cloudProject ||
-      authProjectId ||
-      ''
+      config.projectId || vertexProjectId || googleProjectId || cloudProject || authProjectId || ''
     );
   }
 
@@ -434,7 +446,11 @@ export class GoogleAuthManager {
    * @param hasApiKey - Whether an API key is configured (affects default region)
    * @returns Resolved region
    */
-  static resolveRegion(config: { region?: string }, env?: EnvOverrides, hasApiKey?: boolean): string {
+  static resolveRegion(
+    config: { region?: string },
+    env?: EnvOverrides,
+    hasApiKey?: boolean,
+  ): string {
     // Check for non-SDK env vars
     const vertexRegion = env?.VERTEX_REGION || getEnvString('VERTEX_REGION');
     const cloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
@@ -489,7 +505,8 @@ export class GoogleAuthManager {
 export const loadCredentials = GoogleAuthManager.loadCredentials.bind(GoogleAuthManager);
 export const getGoogleClient = GoogleAuthManager.getOAuthClient.bind(GoogleAuthManager);
 export const resolveProjectId = GoogleAuthManager.resolveProjectId.bind(GoogleAuthManager);
-export const hasGoogleDefaultCredentials = GoogleAuthManager.hasDefaultCredentials.bind(GoogleAuthManager);
+export const hasGoogleDefaultCredentials =
+  GoogleAuthManager.hasDefaultCredentials.bind(GoogleAuthManager);
 
 // Export types
 export type { OAuthClientOptions };

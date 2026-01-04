@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 
 // Mock dependencies
@@ -61,8 +61,12 @@ describe('GoogleAuthManager', () => {
   describe('getApiKey', () => {
     it('should prioritize config.apiKey over all env vars', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') return 'google-key';
-        if (key === 'GEMINI_API_KEY') return 'gemini-key';
+        if (key === 'GOOGLE_API_KEY') {
+          return 'google-key';
+        }
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
         return defaultValue as string;
       });
 
@@ -74,9 +78,15 @@ describe('GoogleAuthManager', () => {
 
     it('should prioritize VERTEX_API_KEY in vertex mode', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'VERTEX_API_KEY') return 'vertex-key';
-        if (key === 'GOOGLE_API_KEY') return 'google-key';
-        if (key === 'GEMINI_API_KEY') return 'gemini-key';
+        if (key === 'VERTEX_API_KEY') {
+          return 'vertex-key';
+        }
+        if (key === 'GOOGLE_API_KEY') {
+          return 'google-key';
+        }
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
         return defaultValue as string;
       });
 
@@ -88,8 +98,12 @@ describe('GoogleAuthManager', () => {
 
     it('should not use VERTEX_API_KEY in non-vertex mode', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'VERTEX_API_KEY') return 'vertex-key';
-        if (key === 'GOOGLE_API_KEY') return 'google-key';
+        if (key === 'VERTEX_API_KEY') {
+          return 'vertex-key';
+        }
+        if (key === 'GOOGLE_API_KEY') {
+          return 'google-key';
+        }
         return defaultValue as string;
       });
 
@@ -101,8 +115,12 @@ describe('GoogleAuthManager', () => {
 
     it('should prioritize GOOGLE_API_KEY over GEMINI_API_KEY (Python SDK alignment)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') return 'google-key';
-        if (key === 'GEMINI_API_KEY') return 'gemini-key';
+        if (key === 'GOOGLE_API_KEY') {
+          return 'google-key';
+        }
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
         return defaultValue as string;
       });
 
@@ -114,7 +132,9 @@ describe('GoogleAuthManager', () => {
 
     it('should fall back to GEMINI_API_KEY when GOOGLE_API_KEY is not set', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GEMINI_API_KEY') return 'gemini-key';
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
         return defaultValue as string;
       });
 
@@ -126,7 +146,9 @@ describe('GoogleAuthManager', () => {
 
     it('should fall back to PALM_API_KEY in non-vertex mode', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'PALM_API_KEY') return 'palm-key';
+        if (key === 'PALM_API_KEY') {
+          return 'palm-key';
+        }
         return defaultValue as string;
       });
 
@@ -138,7 +160,9 @@ describe('GoogleAuthManager', () => {
 
     it('should not use PALM_API_KEY in vertex mode', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'PALM_API_KEY') return 'palm-key';
+        if (key === 'PALM_API_KEY') {
+          return 'palm-key';
+        }
         return defaultValue as string;
       });
 
@@ -150,8 +174,12 @@ describe('GoogleAuthManager', () => {
 
     it('should warn when both GOOGLE_API_KEY and GEMINI_API_KEY are set (SDK aligned)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') return 'google-key';
-        if (key === 'GEMINI_API_KEY') return 'gemini-key';
+        if (key === 'GOOGLE_API_KEY') {
+          return 'google-key';
+        }
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
         return defaultValue as string;
       });
 
@@ -164,8 +192,12 @@ describe('GoogleAuthManager', () => {
 
     it('should warn even when both keys have the same value (SDK aligned)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') return 'same-key';
-        if (key === 'GEMINI_API_KEY') return 'same-key';
+        if (key === 'GOOGLE_API_KEY') {
+          return 'same-key';
+        }
+        if (key === 'GEMINI_API_KEY') {
+          return 'same-key';
+        }
         return defaultValue as string;
       });
 
@@ -180,10 +212,7 @@ describe('GoogleAuthManager', () => {
     it('should use env overrides over process.env', () => {
       vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
-      const result = GoogleAuthManager.getApiKey(
-        {},
-        { GOOGLE_API_KEY: 'override-key' },
-      );
+      const result = GoogleAuthManager.getApiKey({}, { GOOGLE_API_KEY: 'override-key' });
 
       expect(result.apiKey).toBe('override-key');
       expect(result.source).toBe('GOOGLE_API_KEY');
@@ -207,7 +236,9 @@ describe('GoogleAuthManager', () => {
 
     it('should check GOOGLE_GENAI_USE_VERTEXAI env var', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') return 'true';
+        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          return 'true';
+        }
         return defaultValue as string;
       });
 
@@ -219,7 +250,9 @@ describe('GoogleAuthManager', () => {
 
     it('should handle GOOGLE_GENAI_USE_VERTEXAI=1', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') return '1';
+        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          return '1';
+        }
         return defaultValue as string;
       });
 
@@ -228,7 +261,9 @@ describe('GoogleAuthManager', () => {
 
     it('should handle GOOGLE_GENAI_USE_VERTEXAI=false', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') return 'false';
+        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          return 'false';
+        }
         return defaultValue as string;
       });
 
@@ -237,7 +272,9 @@ describe('GoogleAuthManager', () => {
 
     it('should auto-detect vertex mode from projectId', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'VERTEX_PROJECT_ID') return 'my-project';
+        if (key === 'VERTEX_PROJECT_ID') {
+          return 'my-project';
+        }
         return defaultValue as string;
       });
 
@@ -249,7 +286,9 @@ describe('GoogleAuthManager', () => {
 
     it('should auto-detect vertex mode from GOOGLE_CLOUD_PROJECT', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_CLOUD_PROJECT') return 'my-project';
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'my-project';
+        }
         return defaultValue as string;
       });
 
@@ -270,7 +309,9 @@ describe('GoogleAuthManager', () => {
 
     it('should prefer explicit config over env var', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') return 'true';
+        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          return 'true';
+        }
         return defaultValue as string;
       });
 
@@ -281,7 +322,9 @@ describe('GoogleAuthManager', () => {
   describe('validateAndWarn', () => {
     it('should warn when GOOGLE_GENAI_USE_VERTEXAI conflicts with config', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') return 'true';
+        if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          return 'true';
+        }
         return defaultValue as string;
       });
 
@@ -294,7 +337,9 @@ describe('GoogleAuthManager', () => {
 
     it('should warn when GOOGLE_CLOUD_PROJECT conflicts with config.projectId', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_CLOUD_PROJECT') return 'env-project';
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'env-project';
+        }
         return defaultValue as string;
       });
 
@@ -380,7 +425,9 @@ describe('GoogleAuthManager', () => {
   describe('resolveRegion', () => {
     it('should prioritize config.region', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'VERTEX_REGION') return 'env-region';
+        if (key === 'VERTEX_REGION') {
+          return 'env-region';
+        }
         return defaultValue as string;
       });
 
@@ -389,7 +436,9 @@ describe('GoogleAuthManager', () => {
 
     it('should use VERTEX_REGION env var', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'VERTEX_REGION') return 'env-region';
+        if (key === 'VERTEX_REGION') {
+          return 'env-region';
+        }
         return defaultValue as string;
       });
 
@@ -398,7 +447,9 @@ describe('GoogleAuthManager', () => {
 
     it('should use GOOGLE_CLOUD_LOCATION env var (Python SDK)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_CLOUD_LOCATION') return 'cloud-location';
+        if (key === 'GOOGLE_CLOUD_LOCATION') {
+          return 'cloud-location';
+        }
         return defaultValue as string;
       });
 

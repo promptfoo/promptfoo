@@ -4,17 +4,15 @@
  * Exports unified GoogleProvider and legacy provider classes.
  */
 
-// Unified provider (recommended)
-export { GoogleProvider } from './provider';
-
 // Legacy providers (maintained for backwards compatibility)
 export { AIStudioChatProvider } from './ai.studio';
-export { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
-
+export { GoogleAuthManager } from './auth';
 // Base classes and utilities
 export { GoogleGenericProvider } from './base';
-export type { GoogleProviderOptions } from './base';
-export { GoogleAuthManager } from './auth';
+// Unified provider (recommended)
+export { GoogleProvider } from './provider';
+export { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 
+export type { GoogleProviderOptions } from './base';
 // Types
-export type { GoogleProviderConfig, CompletionOptions, Tool } from './types';
+export type { CompletionOptions, GoogleProviderConfig, Tool } from './types';

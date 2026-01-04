@@ -2,9 +2,9 @@ import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
-import * as fetchUtil from '../../../src/util/fetch/index';
 import { GoogleProvider } from '../../../src/providers/google/provider';
 import * as util from '../../../src/providers/google/util';
+import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
 
