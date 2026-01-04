@@ -17,6 +17,7 @@ const ArgsSchema = z.object({
   exclude: z.array(z.string()).optional(),
   open: z.boolean().optional(),
   verbose: z.boolean().optional(),
+  assumeStateful: z.boolean().optional(),
   // Note: --env-file is handled by addCommonOptionsRecursively before action runs
 });
 
@@ -50,6 +51,10 @@ export function reconCommand(program: Command): void {
     .option('-y, --yes', 'Skip confirmation prompts', false)
     .option('--exclude <patterns...>', 'Additional glob patterns to exclude')
     .option('--no-open', 'Do not open browser after analysis')
+    .option(
+      '--assume-stateful',
+      'Assume application supports multi-turn conversations (includes Hydra, Crescendo, GOAT strategies)',
+    )
     // Note: --verbose and --env-file are added automatically by addCommonOptionsRecursively
     .action(async (rawArgs) => {
       const startTime = Date.now();

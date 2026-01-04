@@ -88,10 +88,13 @@ export async function createOpenAIReconProvider(
     );
   }
 
+  // SECURITY: Use scratchpad as working_dir so agent can only write to temp directory.
+  // The target repo is mounted read-only via additional_directories.
+  // This prevents unintended modifications to user's source code during recon.
   const provider = new OpenAICodexSDKProvider({
     config: {
-      working_dir: directory,
-      additional_directories: [scratchpad.dir],
+      working_dir: scratchpad.dir,
+      additional_directories: [directory],
       skip_git_repo_check: true,
       model: model || DEFAULT_OPENAI_MODEL,
       output_schema: ReconOutputSchema,
