@@ -8,6 +8,10 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
 
+:::info Provider Selection
+Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
+:::
+
 ## Available Models
 
 ### Gemini Models
@@ -262,23 +266,21 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 #### Option 5: Express Mode API Key (Quick Start)
 
-Vertex AI Express Mode provides simplified authentication using an API key. **Express mode is automatic** when you have an API key and no explicit `projectId` or `credentials` configured.
+Vertex AI Express Mode provides simplified authentication using an API key. Express mode must be explicitly enabled with `expressMode: true` (aligning with the official SDK which defaults to OAuth/ADC).
 
 1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) or [Vertex AI Studio](https://console.cloud.google.com/vertex-ai)
 2. Set the environment variable:
 
 ```bash
-export VERTEX_API_KEY="your-express-mode-api-key"
-# or
-export GEMINI_API_KEY="your-express-mode-api-key"
+export GOOGLE_API_KEY="your-express-mode-api-key"
 ```
 
 ```yaml
 providers:
   - id: vertex:gemini-3-flash-preview
     config:
+      expressMode: true # Required to use API key authentication
       temperature: 0.7
-      # No expressMode needed - it's automatic with API key!
 ```
 
 Express mode benefits:
@@ -286,9 +288,10 @@ Express mode benefits:
 - No project ID or region required
 - Simpler setup for quick testing
 - Works with Gemini models
-- Automatic detection (no config flag needed)
 
-To force OAuth authentication when you have an API key set, use `expressMode: false`.
+:::note SDK Alignment
+The official `@google/genai` SDK defaults to OAuth/ADC authentication for Vertex AI. Express mode (API key authentication) must be explicitly enabled. This prevents accidentally using API keys which may have different quotas or lack access to project-scoped features.
+:::
 
 #### Environment Variables
 
@@ -296,15 +299,64 @@ Promptfoo automatically loads environment variables from your shell or a `.env` 
 
 ```bash
 # .env
+# SDK-aligned environment variables (recommended)
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_API_KEY=your-api-key  # For express mode
+
+# Legacy variables (still supported)
 VERTEX_PROJECT_ID=your-project-id
 VERTEX_REGION=us-central1
-# Optional: For direct API key authentication
-VERTEX_API_KEY=your-access-token
-# or
-GEMINI_API_KEY=your-access-token
 ```
 
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
+
+:::tip SDK Alignment
+For consistency with the official `@google/genai` SDK, prefer using `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy variables (`VERTEX_API_KEY`, `GEMINI_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported for backward compatibility.
+:::
+
+### Authentication Configuration Details
+
+:::note Mutual Exclusivity
+API key and OAuth configurations are mutually exclusive. You cannot set both `apiKey` AND `projectId`/`region` in the same provider configuration. This aligns with the [official @google/genai SDK](https://www.npmjs.com/package/@google/genai) behavior.
+
+- Use `apiKey` for express mode (simplified API key authentication)
+- Use `projectId`/`region` with OAuth or service account credentials
+
+If you have a configuration that requires both (rare edge case), set `strictMutualExclusivity: false` to allow it with a warning.
+:::
+
+#### Advanced Auth Options
+
+For advanced authentication scenarios, you can pass options directly to the underlying `google-auth-library`:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      projectId: my-project
+      region: us-central1
+
+      # Path to service account key file (alternative to credentials)
+      keyFilename: /path/to/service-account.json
+
+      # Custom OAuth scopes
+      scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/bigquery
+
+      # Advanced google-auth-library options
+      googleAuthOptions:
+        universeDomain: custom.domain.com # For private clouds
+        clientOptions:
+          proxy: http://proxy.example.com
+```
+
+| Option              | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| `keyFilename`       | Path to service account key file                         |
+| `scopes`            | Custom OAuth scopes (default: `cloud-platform`)          |
+| `googleAuthOptions` | Passthrough options for `google-auth-library` GoogleAuth |
 
 ## Configuration
 
@@ -312,18 +364,19 @@ Remember to add `.env` to your `.gitignore` file to prevent accidentally committ
 
 The following environment variables can be used to configure the Vertex AI provider:
 
-| Variable                         | Description                                              | Default        | Required |
-| -------------------------------- | -------------------------------------------------------- | -------------- | -------- |
-| `VERTEX_PROJECT_ID`              | Your Google Cloud project ID                             | None           | Yes      |
-| `VERTEX_REGION`                  | The region for Vertex AI resources                       | `us-central1`  | No       |
-| `VERTEX_API_KEY`                 | Direct API token (from `gcloud auth print-access-token`) | None           | No\*     |
-| `GEMINI_API_KEY`                 | Alternative to VERTEX_API_KEY for API authentication     | None           | No\*     |
-| `VERTEX_PUBLISHER`               | Model publisher                                          | `google`       | No       |
-| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)                      | Auto-generated | No       |
-| `VERTEX_API_VERSION`             | API version                                              | `v1`           | No       |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials                      | None           | No\*     |
+| Variable                         | Description                                     | Default        | Required |
+| -------------------------------- | ----------------------------------------------- | -------------- | -------- |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID (SDK aligned)           | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI (SDK aligned)              | `us-central1`  | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode (SDK aligned)          | None           | No\*     |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials             | None           | No\*     |
+| `VERTEX_PROJECT_ID`              | Project ID (legacy, use `GOOGLE_CLOUD_PROJECT`) | None           | No       |
+| `VERTEX_REGION`                  | Region (legacy, use `GOOGLE_CLOUD_LOCATION`)    | None           | No       |
+| `VERTEX_PUBLISHER`               | Model publisher                                 | `google`       | No       |
+| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)             | Auto-generated | No       |
+| `VERTEX_API_VERSION`             | API version                                     | `v1`           | No       |
 
-\*At least one authentication method is required (ADC, service account, or API key via VERTEX_API_KEY/GEMINI_API_KEY)
+\*At least one authentication method is required (ADC, service account, or API key)
 
 ### Region Selection
 
@@ -582,7 +635,7 @@ defaultTest:
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth when API key is present  | Auto-detected                        |
+| `expressMode`                      | Set to `true` to use API key instead of OAuth/ADC      | `false`                              |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
 
 :::note
@@ -1011,6 +1064,26 @@ For more details, see:
 
 - [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
+
+## SDK Feature Comparison
+
+Promptfoo's Vertex AI provider implements core functionality for LLM evaluation. Some SDK features are not supported:
+
+| Feature                  | Supported | Notes                                  |
+| ------------------------ | --------- | -------------------------------------- |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama |
+| Embeddings               | ✅        | All embedding models                   |
+| Function calling / Tools | ✅        | Including MCP tools                    |
+| Search grounding         | ✅        | Google Search integration              |
+| Safety settings          | ✅        | Full configuration                     |
+| Structured output        | ✅        | JSON schema support                    |
+| Streaming                | ✅        | Optional via `streaming: true`         |
+| Files API                | ❌        | Upload/manage files not supported      |
+| Caching API              | ❌        | Context caching not supported          |
+| Live/Realtime API        | ❌        | WebSocket-based live API not supported |
+| Image generation         | ⚠️        | Use `google:image:` provider instead   |
+
+For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
 
 ## See Also
 
