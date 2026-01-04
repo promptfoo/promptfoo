@@ -143,7 +143,9 @@ describe('GoogleProvider', () => {
 
     it('should detect Vertex mode from credentials presence', () => {
       const provider = new GoogleProvider('gemini-pro', {
-        config: { credentials: JSON.stringify({ client_email: 'test@test.iam.gserviceaccount.com' }) },
+        config: {
+          credentials: JSON.stringify({ client_email: 'test@test.iam.gserviceaccount.com' }),
+        },
       });
 
       expect(provider.id()).toBe('vertex:gemini-pro');
