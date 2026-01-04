@@ -35,7 +35,7 @@ jobs:
             **PR:** ${{ github.event.pull_request.title }}
             **Author:** ${{ github.event.pull_request.user.login }}
 
-            This is promptfoo, an open-source LLM security testing framework. Security review is critical.
+            This is promptfoo, an open-source LLM evaluation framework and AI agent security testing tool. Security review is critical.
 
             ## Instructions
 
