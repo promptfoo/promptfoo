@@ -665,13 +665,13 @@ function buildProviderErrorContext({
     errorWithStack,
     metadata: {
       ...(test.metadata || {}),
-      providerId,
-      providerLabel,
-      status,
-      statusText,
-      responseSnippet,
-      pluginId: test.metadata?.pluginId,
-      strategyId: test.metadata?.strategyId,
+      errorContext: {
+        providerId,
+        providerLabel,
+        status,
+        statusText,
+        responseSnippet,
+      },
     },
     logContext: {
       providerId,
