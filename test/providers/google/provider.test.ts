@@ -665,7 +665,7 @@ describe('GoogleProvider', () => {
         config: {
           vertexai: true,
           apiKey: 'vertex-api-key',
-          expressMode: true, // SDK aligned: must be explicit
+          expressMode: true, // Explicit for test clarity; auto-enabled when apiKey is present
         },
       });
 

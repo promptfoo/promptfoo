@@ -494,11 +494,13 @@ export class GoogleAuthManager {
 
   /**
    * Clear the cached auth client (useful for testing).
-   * @deprecated No longer uses global caching; each call creates a new auth instance.
+   * @deprecated No longer uses instance-level caching; Google's auth library handles token caching internally.
    */
   static clearCache(): void {
-    // No-op: Global caching was removed in favor of per-call auth instances
-    // This matches Google's official SDK behavior
+    // No-op: Instance-level caching was removed. Token caching is handled
+    // internally by google-auth-library (tokens are refreshed as needed).
+    // This matches Google's official SDK behavior where each client instance
+    // manages its own auth state.
   }
 }
 
