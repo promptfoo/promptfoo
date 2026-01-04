@@ -92,9 +92,12 @@ export function readPendingReconConfig(
         // Ignore cleanup errors
       }
     }
-    throw new InvalidPendingReconError('Pending recon file contains malformed JSON', {
-      parse: ['File is not valid JSON. Run `promptfoo redteam recon` again to regenerate.'],
-    });
+    throw new InvalidPendingReconError(
+      'Pending recon file contains malformed JSON. Run `promptfoo redteam recon` again to regenerate.',
+      {
+        parse: ['File is not valid JSON'],
+      },
+    );
   }
 
   // Validate against schema
