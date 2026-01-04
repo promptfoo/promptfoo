@@ -290,7 +290,6 @@
         "src/prompts/**/*",
         "src/database/**/*",
         "src/ruby/**/*",
-        "src/cache.ts",
         "src/cacheMigration.ts",
         "src/csv.ts",
         "src/esm.ts",
