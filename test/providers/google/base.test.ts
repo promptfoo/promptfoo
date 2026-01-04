@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the base class
 vi.mock('../../../src/envars', () => ({
@@ -78,11 +79,11 @@ vi.mock('../../../src/util/templates', () => ({
   })),
 }));
 
-import { GoogleGenericProvider } from '../../../src/providers/google/base';
-import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { importModule } from '../../../src/esm';
-import { MCPClient } from '../../../src/providers/mcp/client';
+import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { GoogleGenericProvider } from '../../../src/providers/google/base';
 import { maybeLoadToolsFromExternalFile } from '../../../src/util/index';
+
 import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 // Create a concrete implementation for testing
@@ -95,7 +96,7 @@ class TestGoogleProvider extends GoogleGenericProvider {
     return { Authorization: 'Bearer test-token' };
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     return { output: `Response to: ${prompt}` };
   }
 }
@@ -145,7 +146,7 @@ describe('GoogleGenericProvider', () => {
 
     it('should initialize MCP client when configured', async () => {
       const mcpConfig = { enabled: true, servers: [] };
-      const provider = new TestGoogleProvider('gemini-2.5-pro', {
+      const _provider = new TestGoogleProvider('gemini-2.5-pro', {
         config: { mcp: mcpConfig },
       });
 

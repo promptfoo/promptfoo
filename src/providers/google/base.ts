@@ -15,24 +15,21 @@
  */
 
 import path from 'path';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools } from './util';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderResponse,
-} from '../../types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
 
 /**
@@ -251,7 +248,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(`Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`);
+      logger.debug(
+        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
 
       const requiredModule = await importModule(resolvedPath, functionName);
 

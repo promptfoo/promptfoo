@@ -15,13 +15,12 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
-import { GoogleAuthManager } from './auth';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -30,15 +29,14 @@ import {
   loadCredentials,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   GuardrailResponse,
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig } from './types';
-import type { GeminiApiResponse, GeminiErrorResponse, GeminiFormat, GeminiResponseData } from './util';
+import type { CompletionOptions } from './types';
+import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from './util';
 
 // Type for Google API errors
 type GaxiosError = any;
@@ -263,7 +261,10 @@ export class GoogleProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API.
    */
-  private async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  private async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
@@ -405,7 +406,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
-    context?: CallApiContextParams,
+    _context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
       // Normalize response: non-streaming returns single object, streaming returns array
