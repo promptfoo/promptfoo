@@ -77,4 +77,4 @@ jobs:
 
             Post your review as a single comment using `gh pr comment ${{ github.event.pull_request.number }}`.
             Use ✅ if no critical issues, ⚠️ if issues found.
-          claude_args: '--max-turns 10 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
