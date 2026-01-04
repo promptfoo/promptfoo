@@ -950,7 +950,7 @@ describe('util', () => {
       });
     });
 
-    it('should reuse cached auth client', async () => {
+    it('should create new auth client per call (SDK aligned, no global cache)', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
@@ -970,7 +970,9 @@ describe('util', () => {
       const googleAuthCalls = vi.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
 
       await getGoogleClient();
-      expect(vi.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      // Per SDK alignment, we no longer cache auth globally - each call creates new instance
+      // This matches @google/genai SDK behavior where auth is per-instance, not global
+      expect(vi.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls + 1);
     });
   });
 

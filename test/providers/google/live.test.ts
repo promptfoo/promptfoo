@@ -401,15 +401,20 @@ describe('GoogleLiveProvider', () => {
       },
     });
 
-    const originalApiKey = process.env.GOOGLE_API_KEY;
+    const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
+    const originalGeminiApiKey = process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_API_KEY;
 
     await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
     );
 
-    if (originalApiKey) {
-      process.env.GOOGLE_API_KEY = originalApiKey;
+    if (originalGoogleApiKey) {
+      process.env.GOOGLE_API_KEY = originalGoogleApiKey;
+    }
+    if (originalGeminiApiKey) {
+      process.env.GEMINI_API_KEY = originalGeminiApiKey;
     }
   });
 

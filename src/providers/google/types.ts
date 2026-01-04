@@ -1,3 +1,5 @@
+import type { GoogleAuthOptions } from 'google-auth-library';
+
 import type { MCPConfig } from '../mcp/types';
 
 /**
@@ -279,16 +281,104 @@ export interface CompletionOptions {
   streaming?: boolean;
 
   /**
-   * Control Vertex AI express mode (API key authentication).
+   * Enable Vertex AI express mode (API key authentication).
    *
-   * Express mode is AUTOMATIC when an API key is available and no explicit
-   * projectId or credentials are configured. Set to `false` to force OAuth
-   * authentication even when an API key is present.
+   * SDK Alignment: Express mode must be EXPLICITLY enabled. Vertex AI defaults
+   * to OAuth/ADC authentication. Using API keys for Vertex may hit different
+   * quotas or fail with project-scoped features (files, caches).
    *
-   * @default undefined (automatic detection)
+   * Set to `true` to use API key authentication instead of OAuth/ADC.
+   * Requires an API key (via GOOGLE_API_KEY or config.apiKey).
+   *
+   * @default false (uses OAuth/ADC)
    * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
    */
   expressMode?: boolean;
+
+  /**
+   * Google Cloud authentication options passed through to google-auth-library.
+   *
+   * Use this for advanced auth configuration like:
+   * - Custom scopes
+   * - keyFilename (path to service account key file)
+   * - universeDomain (for private clouds)
+   * - clientOptions
+   *
+   * @see https://github.com/googleapis/google-auth-library-nodejs
+   */
+  googleAuthOptions?: Partial<GoogleAuthOptions>;
+
+  /**
+   * Path to a service account key file.
+   *
+   * Convenience alias for `googleAuthOptions.keyFilename`.
+   * The official SDK marks this as deprecated in favor of explicit credential loading,
+   * but it remains functional for backward compatibility.
+   *
+   * @example '/path/to/service-account.json'
+   */
+  keyFilename?: string;
+
+  /**
+   * Custom OAuth scopes for authentication.
+   *
+   * Convenience alias for `googleAuthOptions.scopes`.
+   * Defaults to 'https://www.googleapis.com/auth/cloud-platform'.
+   *
+   * @example ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/bigquery']
+   */
+  scopes?: string | string[];
+}
+
+/**
+ * Configuration for the unified GoogleProvider.
+ *
+ * Extends CompletionOptions with explicit mode selection, aligning with
+ * the Python SDK's `vertexai=True` parameter.
+ *
+ * @example
+ * // Google AI Studio mode (default)
+ * { vertexai: false }
+ *
+ * @example
+ * // Vertex AI mode with OAuth
+ * { vertexai: true, projectId: 'my-project', region: 'us-central1' }
+ *
+ * @example
+ * // Vertex AI mode with API key (express mode)
+ * { vertexai: true, apiKey: 'your-key' }
+ */
+export interface GoogleProviderConfig extends CompletionOptions {
+  /**
+   * Explicitly enable Vertex AI mode.
+   *
+   * When true: Uses Vertex AI endpoints with OAuth or API key authentication.
+   * When false: Uses Google AI Studio endpoints with API key authentication.
+   *
+   * This mirrors the Python SDK's `vertexai=True` parameter.
+   *
+   * If not specified, mode is auto-detected:
+   * 1. GOOGLE_GENAI_USE_VERTEXAI env var
+   * 2. Presence of projectId or credentials (suggests Vertex)
+   * 3. Default: false (Google AI Studio)
+   *
+   * @default undefined (auto-detect)
+   */
+  vertexai?: boolean;
+
+  /**
+   * Control mutual exclusivity validation behavior.
+   *
+   * When true (default): Throws an error if both apiKey AND projectId/region
+   * are explicitly set. This aligns with Google's official SDK behavior.
+   *
+   * When false: Only warns about conflicts for backward compatibility.
+   *
+   * Note: This only applies to explicit config values, not environment variables.
+   *
+   * @default true (SDK aligned)
+   */
+  strictMutualExclusivity?: boolean;
 }
 
 // Claude API interfaces
