@@ -15,6 +15,7 @@ const ArgsSchema = z.object({
   yes: z.boolean().optional(),
   exclude: z.array(z.string()).optional(),
   open: z.boolean().optional(),
+  verbose: z.boolean().optional(),
 });
 
 /**

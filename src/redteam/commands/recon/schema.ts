@@ -95,7 +95,9 @@ export const ReconOutputSchema = {
           file: { type: 'string' },
           parameters: { type: 'string' },
         },
-        required: ['name', 'description', 'file', 'parameters'],
+        // Only name and description are required; file and parameters are optional
+        // to match the Zod validator schema in validators/recon.ts
+        required: ['name', 'description'],
       },
       description: 'LLM-callable tools/functions (attack vectors). File refs OK here.',
     },

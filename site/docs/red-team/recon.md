@@ -43,10 +43,10 @@ The AI agent reads file contents and sends relevant excerpts to the configured m
 
 ### What Gets Stored Locally
 
-| Output | Location | Purpose |
-|--------|----------|---------|
-| Generated config | `promptfooconfig.yaml` (or `--output` path) | Red team configuration |
-| Pending UI state | `~/.promptfoo/pending-recon.json` | Browser handoff (auto-deleted after load) |
+| Output           | Location                                    | Purpose                                   |
+| ---------------- | ------------------------------------------- | ----------------------------------------- |
+| Generated config | `promptfooconfig.yaml` (or `--output` path) | Red team configuration                    |
+| Pending UI state | `~/.promptfoo/pending-recon.json`           | Browser handoff (auto-deleted after load) |
 
 No code or analysis results are sent to Promptfoo's servers. All processing happens between your machine and your configured AI provider.
 
@@ -66,11 +66,13 @@ Before running recon on sensitive codebases:
 **Goal**: Generate a red team config and open the UI with it pre-populated.
 
 1. **Start the server** (enables browser handoff):
+
    ```bash
    promptfoo view
    ```
 
 2. **Run recon** on your application:
+
    ```bash
    promptfoo redteam recon --dir ./my-llm-app
    ```
@@ -94,10 +96,10 @@ That's it. For CI/CD or scripted workflows, add `--yes --no-open` to skip prompt
 
 You need at least one of:
 
-| Provider | Environment Variable | Recommended Model |
-|----------|---------------------|-------------------|
-| OpenAI (Codex SDK) | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex` |
-| Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY` | SDK default (override with `-m`) |
+| Provider                     | Environment Variable                | Recommended Model                |
+| ---------------------------- | ----------------------------------- | -------------------------------- |
+| OpenAI (Codex SDK)           | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.1-codex`                  |
+| Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY`                 | SDK default (override with `-m`) |
 
 Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) and [Claude Agent SDK](/docs/providers/claude-agent-sdk/) for current defaults and configuration options.
 
@@ -105,13 +107,13 @@ Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-s
 
 The recon agent has limited, read-only access to your codebase:
 
-| Capability | Status | Notes |
-|------------|--------|-------|
-| File read | Yes | Reads source files matching include patterns |
-| File write | No | Only writes the output config file |
-| Command execution | No | Cannot run scripts or commands |
-| Network access | No | Disabled by default in Codex SDK |
-| Web search | No | Disabled by default |
+| Capability        | Status | Notes                                        |
+| ----------------- | ------ | -------------------------------------------- |
+| File read         | Yes    | Reads source files matching include patterns |
+| File write        | No     | Only writes the output config file           |
+| Command execution | No     | Cannot run scripts or commands               |
+| Network access    | No     | Disabled by default in Codex SDK             |
+| Web search        | No     | Disabled by default                          |
 
 The agent cannot modify your code, execute commands, or access external systems.
 
@@ -188,6 +190,7 @@ redteam:
 ```
 
 **Key customizations you may want**:
+
 - Remove plugins not relevant to your threat model
 - Adjust `maxTurns` for multi-turn strategies (higher = more thorough, more cost)
 - Add custom entities specific to your organization
@@ -211,17 +214,17 @@ promptfoo redteam recon --dir ./app --yes --no-open
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
-| `-d, --dir <path>` | Directory to scan (default: current directory) |
-| `-o, --output <path>` | Output config file path (default: `promptfooconfig.yaml`) |
-| `--provider <provider>` | Force provider: `openai` or `anthropic` |
-| `-m, --model <model>` | Override default model |
-| `-y, --yes` | Skip confirmation prompts |
-| `--no-open` | Don't open browser after analysis |
-| `--exclude <patterns...>` | Additional glob patterns to exclude |
-| `--verbose` | Show detailed analysis progress |
-| `--env-file <path>` | Load environment variables from file |
+| Option                    | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `-d, --dir <path>`        | Directory to scan (default: current directory)            |
+| `-o, --output <path>`     | Output config file path (default: `promptfooconfig.yaml`) |
+| `--provider <provider>`   | Force provider: `openai` or `anthropic`                   |
+| `-m, --model <model>`     | Override default model                                    |
+| `-y, --yes`               | Skip confirmation prompts                                 |
+| `--no-open`               | Don't open browser after analysis                         |
+| `--exclude <patterns...>` | Additional glob patterns to exclude                       |
+| `--verbose`               | Show detailed analysis progress                           |
+| `--env-file <path>`       | Load environment variables from file                      |
 
 ### Excluding Files
 
@@ -265,6 +268,7 @@ Navigate to the **Review** tab to see all populated plugins and strategies:
 ![Review tab with populated plugins and strategies](/img/docs/setup/review.png)
 
 From here:
+
 1. Review the application context
 2. Adjust plugins and strategies if needed
 3. Configure your target endpoint (required)
@@ -297,13 +301,13 @@ The agent outputs a complete config with populated purpose, suggested plugins, a
 
 ## Recon vs Discovery
 
-| Aspect | Recon (this page) | [Discovery](/docs/red-team/discovery/) |
-|--------|-------------------|----------------------------------------|
-| **Approach** | White-box (code analysis) | Black-box (runtime probing) |
-| **Input** | Source code directory | Running target endpoint |
-| **When** | Pre-deployment, during development | Post-deployment, external testing |
-| **Finds** | System prompts, tools, code patterns | Purpose, limitations from responses |
-| **Output** | Complete `promptfooconfig.yaml` | Text for `purpose` field |
+| Aspect       | Recon (this page)                    | [Discovery](/docs/red-team/discovery/) |
+| ------------ | ------------------------------------ | -------------------------------------- |
+| **Approach** | White-box (code analysis)            | Black-box (runtime probing)            |
+| **Input**    | Source code directory                | Running target endpoint                |
+| **When**     | Pre-deployment, during development   | Post-deployment, external testing      |
+| **Finds**    | System prompts, tools, code patterns | Purpose, limitations from responses    |
+| **Output**   | Complete `promptfooconfig.yaml`      | Text for `purpose` field               |
 
 Use **recon** when you have code access. Use **discovery** when testing a deployed system as a black box.
 
@@ -314,6 +318,7 @@ Use **recon** when you have code access. Use **discovery** when testing a deploy
 ### "No pending recon configuration found"
 
 The web UI can't find the pending config. This happens if:
+
 - Recon failed before writing the pending file
 - The pending file was already consumed
 - You navigated directly to the URL without running recon
@@ -325,6 +330,7 @@ The web UI can't find the pending config. This happens if:
 Large codebases may hit API limits.
 
 **Solutions**:
+
 - Use `--exclude` to skip test files and fixtures
 - Try a different provider with `--provider`
 - Break analysis into smaller directories

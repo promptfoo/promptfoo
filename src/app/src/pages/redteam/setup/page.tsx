@@ -51,11 +51,12 @@ import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { usePendingRecon } from './hooks/usePendingRecon';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import { countPopulatedFields } from './utils/applicationDefinition';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config, ReconContext, RedteamUITarget } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -104,7 +105,12 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const {
+    config,
+    setFullConfig,
+    resetConfig,
+    setReconContext: setStoreReconContext,
+  } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -364,7 +370,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };
@@ -438,7 +443,23 @@ export default function RedTeamSetupPage() {
         }
       }
 
-      setFullConfig(mappedConfig);
+      // Set reconContext for recon-generated configs so the banner displays
+      if (isReconConfig) {
+        const meaningfulFields = countPopulatedFields(mappedConfig.applicationDefinition);
+        const reconContext: ReconContext = {
+          source: 'recon-cli',
+          timestamp: yamlConfig.metadata?.generatedAt,
+          codebaseDirectory: yamlConfig.metadata?.scannedDirectory,
+          keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles,
+          fieldsPopulated: meaningfulFields,
+          discoveredToolsCount: yamlConfig.metadata?.reconDetails?.discoveredTools?.length,
+          securityNotes: yamlConfig.metadata?.reconDetails?.securityNotes,
+        };
+        setFullConfig(mappedConfig, reconContext);
+        setStoreReconContext(reconContext);
+      } else {
+        setFullConfig(mappedConfig);
+      }
       toast.showToast(
         isReconConfig
           ? 'Recon configuration imported successfully'

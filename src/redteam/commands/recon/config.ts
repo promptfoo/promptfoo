@@ -215,6 +215,7 @@ export function isValueMeaningful(value: string | undefined): boolean {
   }
   const lower = value.toLowerCase().trim();
   // Skip empty or placeholder values
+  // Note: We use word boundary checks to avoid false positives like "nosql" or "notify"
   if (
     lower === '' ||
     lower === 'none' ||
@@ -222,7 +223,9 @@ export function isValueMeaningful(value: string | undefined): boolean {
     lower === 'na' ||
     lower.startsWith('not ') || // "not specified", "not mentioned", "not provided", "not applicable", "not found"
     lower.startsWith('none ') || // "none mentioned", "none specified"
-    lower.startsWith('no ') // "no formal", "no built-in", "no additional"
+    /^no\s+(formal|built-in|additional|specific|explicit|dedicated|documented|known|particular|special)\b/.test(
+      lower,
+    ) // "no formal", "no built-in", etc. but NOT "nosql database"
   ) {
     return false;
   }
