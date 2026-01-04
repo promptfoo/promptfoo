@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
-import { Code, File, FolderOpen, Settings } from 'lucide-react';
+import { AlertTriangle, Code, File, FolderOpen, Settings, Wrench } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 /**
@@ -71,7 +71,30 @@ export default function ReconSummaryBanner() {
                 {reconContext.fieldsPopulated} fields populated
               </Badge>
             )}
+            {reconContext.discoveredToolsCount !== undefined &&
+              reconContext.discoveredToolsCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+                >
+                  <Wrench className="h-3 w-3 mr-1" />
+                  {reconContext.discoveredToolsCount} tools discovered
+                </Badge>
+              )}
           </div>
+          {reconContext.securityNotes && reconContext.securityNotes.length > 0 && (
+            <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1 mb-1">
+                <AlertTriangle className="h-3 w-3" />
+                Security observations
+              </p>
+              <ul className="text-xs text-amber-600 dark:text-amber-400 list-disc list-inside space-y-0.5">
+                {reconContext.securityNotes.map((note, i) => (
+                  <li key={i}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
             Analyzed on {formatDate(reconContext.timestamp)}. Review and adjust the details below as
             needed.

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420">
+  <style>
+    text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .box-title {
+      font-size: 15px;
+      font-weight: bold;
+    }
+    .box-subtitle {
+      font-size: 12px;
+    }
+    .phase-item {
+      font-size: 12px;
+    }
+    .phase-desc {
+      font-size: 10px;
+    }
+    .label {
+      font-size: 11px;
+    }
+  </style>
+
+  <!-- Arrowhead definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" class="title" fill="#1e293b">Recon Workflow</text>
+
+  <!-- Phase 1: Source Code Input -->
+  <rect x="30" y="60" width="120" height="100" fill="#f1f5f9" stroke="#64748b" stroke-width="2" rx="8"/>
+  <text x="90" y="95" text-anchor="middle" class="box-title" fill="#334155">Source</text>
+  <text x="90" y="115" text-anchor="middle" class="box-title" fill="#334155">Code</text>
+  <text x="90" y="140" text-anchor="middle" class="box-subtitle" fill="#64748b">Your codebase</text>
+
+  <!-- Arrow 1 -->
+  <path d="M 150 110 L 185 110" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Phase 2: AI Agent Analysis - all 4 phases -->
+  <rect x="195" y="50" width="260" height="220" fill="#eff6ff" stroke="#2563eb" stroke-width="2" rx="8"/>
+  <text x="325" y="78" text-anchor="middle" class="box-title" fill="#1d4ed8">AI Agent Analysis</text>
+  <line x1="210" y1="90" x2="440" y2="90" stroke="#2563eb" stroke-opacity="0.3" stroke-width="1"/>
+
+  <!-- Four phases with descriptions -->
+  <text x="215" y="115" class="phase-item" fill="#1e40af">1. Application Understanding</text>
+  <text x="225" y="130" class="phase-desc" fill="#64748b">README, package.json, entry points</text>
+
+  <text x="215" y="155" class="phase-item" fill="#1e40af">2. LLM Integration Discovery</text>
+  <text x="225" y="170" class="phase-desc" fill="#64748b">System prompts, tools, guardrails</text>
+
+  <text x="215" y="195" class="phase-item" fill="#1e40af">3. Attack Surface Mapping</text>
+  <text x="225" y="210" class="phase-desc" fill="#64748b">Roles, forbidden topics, sensitive data</text>
+
+  <text x="215" y="235" class="phase-item" fill="#1e40af">4. Entity Extraction</text>
+  <text x="225" y="250" class="phase-desc" fill="#64748b">Companies, people, data formats</text>
+
+  <!-- Arrow 2 -->
+  <path d="M 455 160 L 490 160" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Phase 3: Config Output -->
+  <rect x="500" y="110" width="130" height="100" fill="#dcfce7" stroke="#16a34a" stroke-width="2" rx="8"/>
+  <text x="565" y="145" text-anchor="middle" class="box-title" fill="#166534">Config</text>
+  <text x="565" y="165" text-anchor="middle" class="box-subtitle" fill="#16a34a">promptfoo</text>
+  <text x="565" y="180" text-anchor="middle" class="box-subtitle" fill="#16a34a">config.yaml</text>
+
+  <!-- Arrow 3 -->
+  <path d="M 630 160 L 665 160" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Phase 4: Web UI Review -->
+  <rect x="675" y="60" width="110" height="200" fill="#fef3c7" stroke="#d97706" stroke-width="2" rx="8"/>
+  <text x="730" y="88" text-anchor="middle" class="box-title" fill="#92400e">Web UI</text>
+  <line x1="690" y1="100" x2="770" y2="100" stroke="#d97706" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="700" y="125" class="phase-desc" fill="#92400e">Review context</text>
+  <text x="700" y="150" class="phase-desc" fill="#92400e">Adjust plugins</text>
+  <text x="700" y="175" class="phase-desc" fill="#92400e">Configure target</text>
+  <text x="700" y="200" class="phase-desc" fill="#92400e">Run red team</text>
+
+  <!-- Bottom labels -->
+  <text x="90" y="180" text-anchor="middle" class="label" fill="#64748b">Input</text>
+  <text x="325" y="290" text-anchor="middle" class="label" fill="#64748b">Analysis</text>
+  <text x="565" y="230" text-anchor="middle" class="label" fill="#64748b">Output</text>
+  <text x="730" y="280" text-anchor="middle" class="label" fill="#64748b">Review</text>
+
+</svg>

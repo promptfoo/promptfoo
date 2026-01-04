@@ -117,6 +117,15 @@ export const ReconContextSchema = z.object({
     .describe('Number of key files analyzed'),
   /** Number of application definition fields that were populated */
   fieldsPopulated: z.number().int().nonnegative().optional().describe('Fields populated count'),
+  /** Number of tools discovered */
+  discoveredToolsCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Number of tools discovered'),
+  /** Security notes and observations */
+  securityNotes: z.array(z.string()).optional().describe('Security notes and observations'),
 });
 
 // =============================================================================

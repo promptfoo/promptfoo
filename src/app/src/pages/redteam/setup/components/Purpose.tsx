@@ -331,6 +331,21 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </a>
                     </p>
 
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      <strong>Have source code access?</strong> Use{' '}
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        promptfoo redteam recon --dir ./your-app
+                      </code>{' '}
+                      to auto-populate fields from your codebase.{' '}
+                      <a
+                        href="https://promptfoo.dev/docs/red-team/recon"
+                        target="_blank"
+                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
+                      >
+                        Learn more
+                      </a>
+                    </p>
+
                     <Button
                       disabled={
                         !hasTargetConfigured ||

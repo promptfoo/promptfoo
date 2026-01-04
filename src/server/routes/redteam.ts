@@ -4,6 +4,7 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import {
   deletePendingReconConfig,
+  InvalidPendingReconError,
   readPendingReconConfig,
 } from '../../redteam/commands/recon/pending';
 import {
@@ -444,6 +445,14 @@ redteamRouter.get('/recon/pending', async (_req: Request, res: Response): Promis
     const response: GetPendingReconResponse = data;
     res.json(response);
   } catch (error) {
+    if (error instanceof InvalidPendingReconError) {
+      res.status(400).json({
+        error: error.message,
+        details: error.details,
+      });
+      return;
+    }
+
     logger.error('Failed to read pending recon file', { error });
     const errorResponse: ReconErrorResponse = {
       error: 'Failed to read pending recon configuration',

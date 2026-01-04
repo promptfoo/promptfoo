@@ -12,7 +12,7 @@ import * as path from 'path';
 
 import logger from '../../../logger';
 import { getConfigDirectoryPath } from '../../../util/config/manage';
-import { PendingReconConfigSchema, type PendingReconConfig } from '../../../validators/recon';
+import { type PendingReconConfig, PendingReconConfigSchema } from '../../../validators/recon';
 
 /** Filename for pending recon config */
 export const PENDING_RECON_FILENAME = 'pending-recon.json';
@@ -41,10 +41,24 @@ export function writePendingReconConfig(config: PendingReconConfig): string {
 }
 
 /**
+ * Custom error for invalid pending recon config format.
+ */
+export class InvalidPendingReconError extends Error {
+  public readonly details: Record<string, string[] | undefined>;
+
+  constructor(message: string, details: Record<string, string[] | undefined>) {
+    super(message);
+    this.name = 'InvalidPendingReconError';
+    this.details = details;
+  }
+}
+
+/**
  * Reads and validates pending recon config from the file system.
  *
  * @returns The parsed and validated config, or null if file doesn't exist
- * @throws Error if file exists but contains invalid data
+ * @throws InvalidPendingReconError if file exists but contains invalid data
+ * @throws Error if file exists but contains malformed JSON
  */
 export function readPendingReconConfig(): PendingReconConfig | null {
   const pendingPath = getPendingReconPath();
@@ -59,11 +73,9 @@ export function readPendingReconConfig(): PendingReconConfig | null {
   // Validate against schema
   const result = PendingReconConfigSchema.safeParse(parsed);
   if (!result.success) {
-    logger.warn('Pending recon config validation failed', {
-      errors: result.error.flatten().fieldErrors,
-    });
-    // Return null for invalid data - server will handle as 404
-    return null;
+    const fieldErrors = result.error.flatten().fieldErrors;
+    logger.warn('Pending recon config validation failed', { errors: fieldErrors });
+    throw new InvalidPendingReconError('Invalid pending recon file format', fieldErrors);
   }
 
   return result.data;

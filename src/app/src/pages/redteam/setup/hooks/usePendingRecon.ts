@@ -32,9 +32,11 @@ interface UsePendingReconResult {
  * 5. Cleans up the URL
  *
  * @param onReconApplied - Callback when recon is successfully applied (e.g., navigate to Review tab)
+ * @param onError - Optional callback when loading fails (e.g., show toast notification)
  */
 export function usePendingRecon(
   onReconApplied?: (tabIndex: number) => void,
+  onError?: (message: string) => void,
 ): UsePendingReconResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +112,8 @@ export function usePendingRecon(
         codebaseDirectory: metadata.codebaseDirectory,
         keyFilesAnalyzed: metadata.keyFilesAnalyzed,
         fieldsPopulated: meaningfulFields,
+        discoveredToolsCount: metadata.reconDetails?.discoveredTools?.length,
+        securityNotes: metadata.reconDetails?.securityNotes,
       };
 
       // Apply to store
@@ -143,8 +147,11 @@ export function usePendingRecon(
         const response = await callApi('/redteam/recon/pending');
 
         if (response.status === 404) {
-          // No pending config, clean up URL and continue
-          setError('No pending recon configuration found');
+          // No pending config, clean up URL and notify user
+          const errorMsg =
+            'No pending recon configuration found. Run `promptfoo redteam recon` first.';
+          setError(errorMsg);
+          onError?.(errorMsg);
           navigate('/redteam/setup', { replace: true });
           return;
         }
@@ -172,7 +179,9 @@ export function usePendingRecon(
         }
       } catch (err) {
         console.error('Failed to load pending recon config:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load recon configuration');
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load recon configuration';
+        setError(errorMsg);
+        onError?.(errorMsg);
         // Clean up URL even on error
         navigate('/redteam/setup', { replace: true });
       } finally {
@@ -181,7 +190,7 @@ export function usePendingRecon(
     };
 
     loadPendingRecon();
-  }, [searchParams, navigate, applyReconConfig, onReconApplied]);
+  }, [searchParams, navigate, applyReconConfig, onReconApplied, onError]);
 
   return {
     isLoading,

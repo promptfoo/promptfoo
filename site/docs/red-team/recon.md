@@ -13,6 +13,8 @@ The `recon` command uses an AI agent to analyze your application's source code a
 promptfoo redteam recon --dir ./my-llm-app
 ```
 
+After analysis completes, recon automatically opens the web UI with your configuration pre-populated, ready for review and execution.
+
 ## When to Use
 
 Use `recon` when you have access to the source code and want to:
@@ -23,9 +25,15 @@ Use `recon` when you have access to the source code and want to:
 - **Identify sensitive data types** and security requirements from code
 - **Get plugin recommendations** based on your application's attack surface
 
+:::tip
 For black-box testing of running targets (when you don't have code access), see [Target Discovery](/docs/red-team/discovery/).
+:::
+
+---
 
 ## How It Works
+
+![Recon workflow](/img/docs/recon-flow.svg)
 
 The recon agent analyzes your codebase in four phases:
 
@@ -41,6 +49,29 @@ The agent outputs a complete `promptfooconfig.yaml` with:
 - Appropriate strategies (single-turn or multi-turn based on statefulness)
 - Entities for social engineering attacks
 - Configured `prompt-extraction` plugin with discovered system prompt
+
+---
+
+## Prerequisites
+
+**API Keys**: You need at least one of:
+
+- `OPENAI_API_KEY` or `CODEX_API_KEY` (uses gpt-5.1-codex)
+- `ANTHROPIC_API_KEY` (uses opus)
+
+**Server** (for web UI integration): Start the promptfoo server before running recon:
+
+```bash
+promptfoo view
+# Or in development:
+npm run dev
+```
+
+If the server isn't running, recon still writes the config file but browser handoff won't work.
+
+:::note Cost Consideration
+Recon uses advanced AI models for code analysis. Large codebases with many files may incur significant API costs. Use `--exclude` patterns to limit scope if needed.
+:::
 
 ## Usage
 
@@ -67,7 +98,10 @@ promptfoo redteam recon --dir ./path/to/app
 | `--provider <provider>`   | Force provider: `openai` or `anthropic`                   |
 | `-m, --model <model>`     | Override default model                                    |
 | `-y, --yes`               | Skip confirmation prompts                                 |
+| `--no-open`               | Don't open browser after analysis                         |
 | `--exclude <patterns...>` | Additional glob patterns to exclude                       |
+| `--verbose`               | Show additional details (key files analyzed, tool paths)  |
+| `--env-file <path>`       | Load environment variables from file                      |
 
 ### Provider Selection
 
@@ -94,7 +128,7 @@ $ promptfoo redteam recon --dir ./medical-agent
 Reconnaissance target: /path/to/medical-agent
 Agent can read files, search web, and take notes
 
-Provider: openai (o3)
+Provider: openai (gpt-5.1-codex)
 ✔ Analysis complete
 
 === Reconnaissance Results ===
@@ -122,11 +156,23 @@ Discovered Tools (11):
 Suggested Plugins:
   prompt-extraction, pii:direct, medical:hallucination, rbac, bola
 
+Entities:
+  Springfield Medical Center, MediAssist, Dr. Sarah Chen, Blue Cross Blue Shield
+
 Security Notes:
   - src/tools.js:34-86 authentication uses plaintext credentials
   - src/tools.js:377-470 processPayment stores card data in memory
 
 ✔ Write config to promptfooconfig.yaml? Yes
+
+Config written to promptfooconfig.yaml
+
+✨ Opening browser: http://localhost:3000/redteam/setup?source=recon
+
+In the browser:
+  1. Review the populated application context
+  2. Configure your target endpoint
+  3. Click "Run Red Team" when ready
 ```
 
 The generated config includes everything needed to run a red team:
@@ -172,7 +218,71 @@ redteam:
     - id: crescendo
       config:
         maxTurns: 10
+    - id: goat
+      config:
+        maxTurns: 5
+
+  entities:
+    - Springfield Medical Center
+    - MediAssist
+    - Dr. Sarah Chen
+    - Blue Cross Blue Shield
 ```
+
+---
+
+## Web UI Integration
+
+When recon completes, it automatically opens your browser to the red team setup page with all discovered context pre-populated.
+
+### What You'll See
+
+The Application Details page displays a **Recon Summary Banner** showing analysis metadata and any security observations discovered in your code:
+
+![Recon summary banner with security observations](/img/docs/setup/application-details.png)
+
+Key elements include:
+
+1. **Recon Summary Banner**: Blue banner showing directory scanned, files analyzed, fields populated, and tools discovered
+2. **Security Observations**: Amber warning box highlighting potential security issues found in code (e.g., plaintext credentials, exposed PII)
+3. **Pre-filled Forms**: All application definition fields populated from analysis
+
+:::tip
+Security observations highlight code-level vulnerabilities that recon discovered. These inform plugin selection and help prioritize testing areas.
+:::
+
+### Navigation Flow
+
+After loading, you're taken directly to the **Review** tab where you can review all populated plugins and strategies:
+
+![Review tab with populated plugins and strategies](/img/docs/setup/review.png)
+
+From here:
+
+1. Review the populated application context
+2. Adjust plugins and strategies if needed
+3. Configure your target endpoint (required)
+4. Click "Run Red Team" to start testing
+
+### If No Server is Running
+
+If the promptfoo server isn't running when recon completes:
+
+- Config file is still written to disk
+- Browser may open to an error page
+- Run `promptfoo view` to start the server, then navigate to `/redteam/setup?source=recon`
+
+### Using `--no-open`
+
+Skip browser launch for CI/CD or scripted workflows:
+
+```bash
+promptfoo redteam recon --dir ./app --yes --no-open
+```
+
+This writes the config file without browser handoff. You can manually import it later or run directly with `promptfoo redteam run`.
+
+---
 
 ## Recon vs Discovery
 
@@ -201,14 +311,79 @@ Add custom exclusions with `--exclude`:
 promptfoo redteam recon --exclude "*.test.ts" --exclude "fixtures/**"
 ```
 
+---
+
 ## Next Steps
 
-After running recon:
+After running recon, your browser opens to the web UI where you:
 
-1. **Configure your target endpoint** in the generated config
-2. **Review the discovered context** and adjust if needed
-3. **Run the red team**: `promptfoo redteam run`
-4. **View results**: `promptfoo redteam report`
+1. **Review the Application Details** tab to verify discovered context
+2. **Configure your target endpoint** in the Target Configuration tab
+3. **Adjust plugins/strategies** if needed (optional)
+4. **Click "Run Red Team"** on the Review tab to start testing
+
+Alternatively, if using `--no-open` or working from the config file:
+
+```bash
+# Edit the target URL in promptfooconfig.yaml, then:
+promptfoo redteam run
+
+# View results:
+promptfoo redteam report
+```
+
+---
+
+## Troubleshooting
+
+### "No pending recon configuration found"
+
+This warning appears when opening the web UI with `?source=recon` but no pending config exists. This happens if:
+
+- Recon command failed before writing the pending file
+- The pending file was already consumed by a previous session
+- You navigated directly to the URL without running recon
+
+**Solution**: Run `promptfoo redteam recon` again.
+
+### Browser opens but page shows error
+
+The promptfoo server isn't running.
+
+**Solution**: Start the server with `promptfoo view`, then reload the page or run recon again.
+
+### API rate limit or timeout errors
+
+Large codebases may hit API limits or take a long time to analyze.
+
+**Solutions**:
+
+- Use `--exclude` to skip test files, fixtures, or generated code
+- Try a different provider with `--provider anthropic` or `--provider openai`
+- Break analysis into smaller directories
+
+### Missing API key error
+
+```
+Error: No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.
+```
+
+**Solution**: Set at least one API key in your environment or use `--env-file`:
+
+```bash
+promptfoo redteam recon --env-file .env
+```
+
+### Browser doesn't open
+
+Some environments (SSH, containers) can't open browsers.
+
+**Solution**: Use `--no-open` and open the URL manually:
+
+```bash
+promptfoo redteam recon --no-open
+# Then open: http://localhost:3000/redteam/setup?source=recon
+```
 
 ## See Also
 

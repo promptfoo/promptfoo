@@ -13,6 +13,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
@@ -123,8 +124,17 @@ export default function RedTeamSetupPage() {
     },
     [markSetupAsSeen, toast],
   );
+
+  // Handle recon errors (e.g., no pending file found)
+  const handleReconError = useCallback(
+    (message: string) => {
+      toast.showToast(message, 'warning', 5000);
+    },
+    [toast],
+  );
+
   // Fetch pending recon configuration from CLI handoff
-  usePendingRecon(handleReconApplied);
+  const { isLoading: isLoadingRecon } = usePendingRecon(handleReconApplied, handleReconError);
 
   // Add new state:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -514,6 +524,13 @@ export default function RedTeamSetupPage() {
 
   return (
     <UserProvider>
+      {/* Loading overlay for recon fetch */}
+      {isLoadingRecon && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <Spinner size="lg" />
+          <p className="mt-4 text-muted-foreground">Loading recon configuration...</p>
+        </div>
+      )}
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}

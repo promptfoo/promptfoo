@@ -180,7 +180,9 @@ describe('usePendingRecon', () => {
       const { result } = renderHook(() => usePendingRecon());
 
       await waitFor(() => {
-        expect(result.current.error).toBe('No pending recon configuration found');
+        expect(result.current.error).toBe(
+          'No pending recon configuration found. Run `promptfoo redteam recon` first.',
+        );
       });
 
       expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup', { replace: true });

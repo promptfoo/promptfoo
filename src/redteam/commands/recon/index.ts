@@ -120,7 +120,11 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     // Open browser if not disabled
     if (options.open !== false) {
       await openBrowserWithRecon();
-      logger.info(chalk.dim('Configure your target in the browser, then click Run.'));
+      logger.info('');
+      logger.info(chalk.dim('In the browser:'));
+      logger.info(chalk.dim('  1. Review the populated application context'));
+      logger.info(chalk.dim('  2. Configure your target endpoint'));
+      logger.info(chalk.dim('  3. Click "Run Red Team" when ready'));
     } else {
       logger.info(`\n${chalk.yellow('Next steps:')}`);
       logger.info('  1. Configure your target endpoint in the config');
