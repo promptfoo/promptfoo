@@ -804,7 +804,7 @@ Yes. Set up a GitHub Action or similar workflow that runs `promptfoo eval` with 
 
 - **[video-rubric reference](/docs/configuration/expected-outputs/model-graded/video-rubric)**: Full assertion configuration options
 - **[OpenAI Sora provider](/docs/providers/openai#video-generation-sora)**: Sora-specific configuration
-- **[Google Veo provider](/docs/providers/vertex#video-generation-veo)**: Veo-specific configuration
-- **[Amazon Nova Reel provider](/docs/providers/aws-bedrock#video-generation-nova-reel)**: Nova Reel configuration
-- **[Luma Ray provider](/docs/providers/luma)**: Ray configuration
+- **[Google Veo provider](/docs/providers/google#video-generation-models-veo)**: Veo-specific configuration
+- **[Amazon Nova Reel provider](/docs/providers/aws-bedrock#amazon-nova-reel-video-generation)**: Nova Reel configuration
+- **[Luma Ray provider](/docs/providers/aws-bedrock#luma-ray-2)**: Ray configuration
 - **[CI/CD guide](/docs/integrations/ci-cd)**: General CI integration patterns
