@@ -11,9 +11,9 @@ on:
     types: [opened, assigned]
 
 permissions:
-  contents: read
-  pull-requests: read
-  issues: read
+  contents: write
+  pull-requests: write
+  issues: write
   actions: read
   id-token: write
 

@@ -30,11 +30,28 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Review this pull request and provide constructive feedback on:
-            - Code quality and adherence to repository conventions (see CLAUDE.md)
-            - Potential bugs or issues
-            - Security concerns
-            - Test coverage
+            Review this pull request for promptfoo, an LLM security testing framework.
 
-            Be concise and actionable. Focus on substantive issues rather than style nitpicks.
+            Read AGENTS.md first for repository conventions, then check:
+
+            **Security (Critical for this codebase):**
+            - Command injection, XSS, SQL injection, OWASP top 10
+            - Sensitive data exposure (API keys, credentials)
+            - Safe handling of adversarial/harmful test content
+
+            **Code Quality:**
+            - TypeScript strict mode compliance
+            - Proper error handling with type checks
+            - No re-exports; import directly from source modules
+
+            **Testing:**
+            - Vitest with explicit imports (describe, it, expect, vi from 'vitest')
+            - Mock cleanup in afterEach to prevent test pollution
+            - Tests for success cases, error cases, and edge cases
+
+            **PR Conventions:**
+            - THE REDTEAM RULE: Any redteam-related change MUST use (redteam) scope
+            - Conventional commit format: type(scope): description
+
+            Be concise and actionable. Skip style nitpicks that Biome would catch.
           claude_args: '--max-turns 10 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
