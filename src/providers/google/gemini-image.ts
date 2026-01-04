@@ -3,6 +3,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
+  createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
@@ -109,17 +110,20 @@ export class GeminiImageProvider implements ApiProvider {
     const body = this.buildRequestBody(contents);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const startTime = Date.now();
       const { data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.config.headers || {}),
-          },
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         false,

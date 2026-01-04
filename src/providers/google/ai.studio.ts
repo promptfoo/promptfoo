@@ -7,7 +7,12 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
-import { formatCandidateContents, geminiFormatAndSystemInstructions, getCandidate } from './util';
+import {
+  createAuthCacheDiscriminator,
+  formatCandidateContents,
+  geminiFormatAndSystemInstructions,
+  getCandidate,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -261,13 +266,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       cached = false;
     try {
       const baseUrl = this.getApiBaseUrl();
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
         `${baseUrl}/v1beta3/models/${this.modelName}:generateMessage`,
         {
           method: 'POST',
-          headers: await this.getAuthHeaders(),
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
@@ -392,13 +400,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     let cached = false;
     try {
       const endpoint = this.getApiEndpoint('generateContent');
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
-          headers: await this.getAuthHeaders(),
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         false,

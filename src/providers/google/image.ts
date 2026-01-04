@@ -3,7 +3,12 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
+import {
+  createAuthCacheDiscriminator,
+  getGoogleClient,
+  loadCredentials,
+  resolveProjectId,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -220,19 +225,22 @@ export class GoogleImageProvider implements ApiProvider {
     logger.debug(`Making request to ${endpoint} with API key`);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const response = await this.withRetry(
         () =>
           fetchWithCache(
             endpoint,
             {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-                ...(this.config.headers || {}),
-              },
+              headers,
               body: JSON.stringify(body),
-            },
+              ...(authDiscriminator && { _authHash: authDiscriminator }),
+            } as RequestInit,
             REQUEST_TIMEOUT_MS,
             'json',
           ),

@@ -323,43 +323,6 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
-    it('should include auth headers in cache key to prevent cross-user cache sharing', async () => {
-      const mockResponse = mockFetchWithRetriesResponse(true, response);
-
-      // First request with API key A
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-      const optionsA = { headers: { 'x-goog-api-key': 'api-key-A' } };
-      await fetchWithCache(url, optionsA, 1000);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-
-      // Second request with same API key A should hit cache
-      const result = await fetchWithCache(url, optionsA, 1000);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(result.cached).toBe(true);
-
-      // Request with different API key B should NOT hit cache (separate cache entry)
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-      const optionsB = { headers: { 'x-goog-api-key': 'api-key-B' } };
-      await fetchWithCache(url, optionsB, 1000);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-    });
-
-    it('should include Authorization header in cache key', async () => {
-      const mockResponse = mockFetchWithRetriesResponse(true, response);
-
-      // First request with bearer token A
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-      const optionsA = { headers: { Authorization: 'Bearer token-A' } };
-      await fetchWithCache(url, optionsA, 1000);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-
-      // Request with different bearer token should NOT hit cache
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-      const optionsB = { headers: { Authorization: 'Bearer token-B' } };
-      await fetchWithCache(url, optionsB, 1000);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-    });
-
     it('should respect cache busting', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);

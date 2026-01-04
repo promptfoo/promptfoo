@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
@@ -939,4 +941,41 @@ export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<str
   }
 
   return result;
+}
+
+/**
+ * Create a cache discriminator from auth headers.
+ *
+ * This is used to ensure different API keys/credentials don't share cached responses.
+ * The discriminator is included as a custom property in fetchWithCache options,
+ * which gets included in the cache key automatically.
+ *
+ * @param headers - Request headers containing auth info
+ * @returns A short hash string for cache key differentiation
+ */
+export function createAuthCacheDiscriminator(headers: Record<string, string>): string {
+  // Extract auth-related header values
+  const authValues: string[] = [];
+
+  const authHeaderNames = [
+    'authorization',
+    'x-goog-api-key',
+    'x-api-key',
+    'api-key',
+    'x-goog-user-project',
+  ];
+
+  for (const name of authHeaderNames) {
+    const value = headers[name] || headers[name.toLowerCase()];
+    if (value) {
+      authValues.push(`${name}:${value}`);
+    }
+  }
+
+  if (authValues.length === 0) {
+    return '';
+  }
+
+  // Create a short hash for cache key
+  return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }

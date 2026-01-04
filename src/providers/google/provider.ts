@@ -22,6 +22,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -371,13 +372,17 @@ export class GoogleProvider extends GoogleGenericProvider {
       } else {
         // AI Studio mode
         const endpoint = this.getApiEndpoint('generateContent');
+        const headers = await this.getAuthHeaders();
+        const authDiscriminator = createAuthCacheDiscriminator(headers);
         const result = await fetchWithCache(
           endpoint,
           {
             method: 'POST',
-            headers: await this.getAuthHeaders(),
+            headers,
             body: JSON.stringify(body),
-          },
+            // Include auth discriminator in cache key to prevent cross-tenant cache sharing
+            ...(authDiscriminator && { _authHash: authDiscriminator }),
+          } as RequestInit,
           REQUEST_TIMEOUT_MS,
           'json',
           false,
