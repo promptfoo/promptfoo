@@ -39,6 +39,16 @@ interface ImagePrediction {
   mimeType?: string;
 }
 
+// Response type for image generation APIs
+interface ImageGenerationResponse {
+  predictions?: ImagePrediction[];
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
+}
+
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
@@ -146,7 +156,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
 
       const startTime = Date.now();
-      const response = await this.withRetry(
+      const response = (await this.withRetry(
         () =>
           client.request({
             url: endpoint,
@@ -159,7 +169,7 @@ export class GoogleImageProvider implements ApiProvider {
             timeout: REQUEST_TIMEOUT_MS,
           }),
         'Vertex AI API call',
-      );
+      )) as { data: ImageGenerationResponse };
       const latencyMs = Date.now() - startTime;
 
       return this.processResponse(response.data, false, latencyMs);

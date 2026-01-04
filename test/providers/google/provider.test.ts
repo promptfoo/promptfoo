@@ -143,7 +143,7 @@ describe('GoogleProvider', () => {
 
     it('should detect Vertex mode from credentials presence', () => {
       const provider = new GoogleProvider('gemini-pro', {
-        config: { credentials: { client_email: 'test@test.iam.gserviceaccount.com' } },
+        config: { credentials: JSON.stringify({ client_email: 'test@test.iam.gserviceaccount.com' }) },
       });
 
       expect(provider.id()).toBe('vertex:gemini-pro');
@@ -236,6 +236,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       await provider.callApi('test prompt');
@@ -277,6 +279,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -301,6 +305,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -447,6 +453,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: true,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -472,6 +480,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -490,6 +500,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -510,6 +522,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 100, totalTokenCount: 110 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -530,6 +544,8 @@ describe('GoogleProvider', () => {
           },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -549,7 +565,7 @@ describe('GoogleProvider', () => {
                 {
                   name: 'test_function',
                   description: 'A test function',
-                  parameters: { type: 'object', properties: {} },
+                  parameters: { type: 'OBJECT', properties: {} },
                 },
               ],
             },
@@ -563,6 +579,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       await provider.callApi('test prompt');
@@ -591,6 +609,8 @@ describe('GoogleProvider', () => {
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       await provider.callApi('test prompt');
@@ -628,6 +648,8 @@ describe('GoogleProvider', () => {
           },
         },
         cached: false,
+        status: 400,
+        statusText: 'Bad Request',
       });
 
       const result = await provider.callApi('test prompt');

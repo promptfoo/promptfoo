@@ -773,7 +773,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
-      const res = await client.request<Palm2ApiResponse>({
+      const res = await client.request({
         url,
         method: 'POST',
         headers: {
@@ -782,7 +782,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         data: body,
         timeout: REQUEST_TIMEOUT_MS,
       });
-      data = res.data;
+      data = res.data as Palm2ApiResponse;
     } catch (err) {
       return {
         error: `API call error: ${JSON.stringify(err)}`,
@@ -910,7 +910,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Llama models use a different endpoint format
       const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
-      const res = await client.request<LlamaResponse>({
+      const res = await client.request({
         url,
         method: 'POST',
         headers: {
@@ -920,7 +920,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         timeout: REQUEST_TIMEOUT_MS,
       });
 
-      data = res.data;
+      data = res.data as LlamaResponse;
       logger.debug(`Llama API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
@@ -1043,7 +1043,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
-      const res = await client.request<any>({
+      const res = await client.request({
         url,
         method: 'POST',
         data: body,
