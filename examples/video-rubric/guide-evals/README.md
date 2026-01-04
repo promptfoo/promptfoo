@@ -4,14 +4,14 @@ Evaluation configs for the [Video Generation Guide](/docs/guides/evaluate-video)
 
 ## What These Evals Test
 
-| Eval | Capability Tested |
-|------|-------------------|
-| `pr-review-hero.yaml` | Identity consistency, action sequences, text rendering |
+| Eval                  | Capability Tested                                            |
+| --------------------- | ------------------------------------------------------------ |
+| `pr-review-hero.yaml` | Identity consistency, action sequences, text rendering       |
 | `text-rendering.yaml` | On-screen text legibility, temporal stability, text accuracy |
-| `camera-motion.yaml` | Camera control execution (orbit, zoom, dolly) |
-| `variance-test.yaml` | Repeatability and score variance across samples |
-| `multi-provider.yaml` | Cross-provider comparison on same prompts |
-| `negative-test.yaml` | Rubric validation (should fail intentionally) |
+| `camera-motion.yaml`  | Camera control execution (orbit, zoom, dolly)                |
+| `variance-test.yaml`  | Repeatability and score variance across samples              |
+| `multi-provider.yaml` | Cross-provider comparison on same prompts                    |
+| `negative-test.yaml`  | Rubric validation (should fail intentionally)                |
 
 ## Prerequisites
 
@@ -61,26 +61,34 @@ npx promptfoo@latest view
 ## Evaluation Dimensions
 
 ### Identity Consistency
+
 Video models struggle to maintain character appearance across frames. The red panda should:
+
 - Keep the same colors (red/orange fur, white face markings)
 - Maintain consistent proportions
 - Not morph into different animals or styles
 
 ### Text Rendering
+
 On-screen text is notoriously difficult. Tests include:
+
 - Short text (LGTM - 4 chars)
 - Medium text (APPROVED - 8 chars)
 - Multi-word (NEEDS TESTS)
 - Stability (no flickering or morphing letters)
 
 ### Action Sequences
+
 Storyboard prompts test temporal coherence:
+
 - Actions happen in requested order
 - No random scene jumps
 - Smooth transitions between beats
 
 ### Camera Motion
+
 Tests provider-specific camera controls:
+
 - Nova Reel: Explicit presets (orbit_left, zoom_in, dolly_forward)
 - Ray: Natural language (orbit left slowly)
 - Baseline: Static camera for comparison

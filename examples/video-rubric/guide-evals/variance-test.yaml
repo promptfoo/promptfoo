@@ -13,7 +13,7 @@ providers:
 
 defaultTest:
   options:
-    repeat: 3  # Generate 3 samples to measure variance
+    repeat: 3 # Generate 3 samples to measure variance
     provider: vertex:gemini-3-flash-preview
 
 tests:

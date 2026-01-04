@@ -156,7 +156,7 @@ The default judge is Gemini 3 Flash Preview. Override it per-assertion or global
 # Per-assertion
 assert:
   - type: video-rubric
-    provider: vertex:gemini-3-pro-preview  # Judge, not the video generator
+    provider: vertex:gemini-3-pro-preview # Judge, not the video generator
     value: ...
 
 # Global default for all assertions
@@ -181,7 +181,7 @@ tests:
   - vars:
       prompt: A cat playing with yarn
     options:
-      repeat: 3  # Generate 3 videos, compare scores
+      repeat: 3 # Generate 3 videos, compare scores
     assert:
       - type: video-rubric
         threshold: 0.7
@@ -318,13 +318,13 @@ providers:
 
 Based on testing, these prompt patterns produce reliable, high-scoring results:
 
-| Pattern | Example | Typical Score |
-| ------- | ------- | ------------- |
-| Simple subject + action | "A cat playing with yarn" | 1.0 |
-| Character + gesture | "Red panda giving thumbs up" | 1.0 |
-| Text overlays | "Sign that says 'LGTM'" | 0.9–1.0 |
-| Approval/rejection actions | "Stamps 'APPROVED' on screen" | 0.98–1.0 |
-| Identity consistency | "Same character throughout" | 0.875+ |
+| Pattern                    | Example                       | Typical Score |
+| -------------------------- | ----------------------------- | ------------- |
+| Simple subject + action    | "A cat playing with yarn"     | 1.0           |
+| Character + gesture        | "Red panda giving thumbs up"  | 1.0           |
+| Text overlays              | "Sign that says 'LGTM'"       | 0.9–1.0       |
+| Approval/rejection actions | "Stamps 'APPROVED' on screen" | 0.98–1.0      |
+| Identity consistency       | "Same character throughout"   | 0.875+        |
 
 **Challenging patterns** (lower scores or failures):
 
@@ -356,7 +356,7 @@ providers:
 
 defaultTest:
   options:
-    repeat: 3  # Generate 3 samples per provider for variance
+    repeat: 3 # Generate 3 samples per provider for variance
     provider: vertex:gemini-3-flash-preview
 
 tests:
@@ -529,7 +529,7 @@ on:
       - 'prompts/**'
       - 'video-eval.yaml'
   schedule:
-    - cron: '0 6 * * 1'  # Weekly Monday 6am
+    - cron: '0 6 * * 1' # Weekly Monday 6am
 
 jobs:
   eval:
@@ -566,14 +566,14 @@ For cost efficiency, use different configurations:
 providers:
   - id: openai:video:sora-2
     config:
-      seconds: 4  # Shorter duration
+      seconds: 4 # Shorter duration
 
 tests:
   - vars:
       prompt: Quick smoke test prompt
     assert:
       - type: video-rubric
-        threshold: 0.6  # Looser threshold for smoke tests
+        threshold: 0.6 # Looser threshold for smoke tests
         value: Basic quality check...
 ```
 
@@ -590,7 +590,7 @@ providers:
 
 defaultTest:
   options:
-    repeat: 3  # Multiple samples for variance
+    repeat: 3 # Multiple samples for variance
 
 tests:
   # Full prompt set with strict thresholds
@@ -691,25 +691,25 @@ Specifications vary by API version, account tier, and region. Information below 
 
 ### Capabilities
 
-| Feature          | Sora    | Veo 3.1 | Nova Reel | Ray 2   |
-| ---------------- | ------- | ------- | --------- | ------- |
-| Text-to-Video    | ✓       | ✓       | ✓         | ✓       |
-| Image-to-Video   | ✓       | ✓       | ✓         | ✓       |
-| Start Keyframe   | ✓       | ✓       | ✓         | ✓       |
-| End Keyframe     | ✓       | ✗       | ✗         | ✓       |
-| Camera Controls  | ✗       | ✗       | ✓         | ✓       |
-| Video Extension  | ✓       | ✗       | ✗         | ✓       |
-| Audio Generation | ✗       | ✓ (preview) | ✗     | ✗       |
-| Looping          | ✓       | ✗       | ✗         | ✓       |
+| Feature          | Sora | Veo 3.1     | Nova Reel | Ray 2 |
+| ---------------- | ---- | ----------- | --------- | ----- |
+| Text-to-Video    | ✓    | ✓           | ✓         | ✓     |
+| Image-to-Video   | ✓    | ✓           | ✓         | ✓     |
+| Start Keyframe   | ✓    | ✓           | ✓         | ✓     |
+| End Keyframe     | ✓    | ✗           | ✗         | ✓     |
+| Camera Controls  | ✗    | ✗           | ✓         | ✓     |
+| Video Extension  | ✓    | ✗           | ✗         | ✓     |
+| Audio Generation | ✗    | ✓ (preview) | ✗         | ✗     |
+| Looping          | ✓    | ✗           | ✗         | ✓     |
 
 ### Specifications (Approximate)
 
-| Provider  | Resolution  | Duration     | Aspect Ratios   |
-| --------- | ----------- | ------------ | --------------- |
-| Sora      | 480p–1080p  | 4, 8, or 12s | 16:9, 9:16, 1:1 |
-| Veo 3.1   | 720p–1080p  | 5–8s         | 16:9, 9:16      |
-| Nova Reel | 720p        | 6s           | 16:9, 9:16      |
-| Ray 2     | 540p–720p   | 5–9s         | 16:9, 9:16, 1:1 |
+| Provider  | Resolution | Duration     | Aspect Ratios   |
+| --------- | ---------- | ------------ | --------------- |
+| Sora      | 480p–1080p | 4, 8, or 12s | 16:9, 9:16, 1:1 |
+| Veo 3.1   | 720p–1080p | 5–8s         | 16:9, 9:16      |
+| Nova Reel | 720p       | 6s           | 16:9, 9:16      |
+| Ray 2     | 540p–720p  | 5–9s         | 16:9, 9:16, 1:1 |
 
 ### Provider Selection Guide
 
@@ -736,7 +736,7 @@ evaluateOptions:
 providers:
   - id: openai:video:sora-2
     config:
-      seconds: 4  # Start short, increase for final eval
+      seconds: 4 # Start short, increase for final eval
 
 # Use Flash for judging (faster and cheaper than Pro)
 defaultTest:
