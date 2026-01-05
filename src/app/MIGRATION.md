@@ -1,4 +1,4 @@
-# MUI to shadcn/Radix UI Migration Plan
+# MUI to /Radix UI Migration Plan
 
 This document outlines an incremental migration strategy from MUI to a design-system-driven approach using Promptfoo's Design system, Radix UI primitives, and Tailwind CSS.
 
@@ -92,7 +92,7 @@ Create `/src/app/src/styles/tokens.css`:
 ```plaintext
 src/app/src/
 ├── components/
-│   ├── ui/                    # New shadcn/Radix components
+│   ├── ui/                    # New /Radix components
 │   │   ├── button.tsx
 │   │   ├── dialog.tsx
 │   │   ├── dropdown-menu.tsx
@@ -112,7 +112,7 @@ src/app/src/
 
 ## Phase 1: Core Primitives
 
-**Goal**: Replace low-level MUI components with Radix/shadcn equivalents.
+**Goal**: Replace low-level MUI components with Radix/ equivalents.
 
 ### Priority Order
 
@@ -126,7 +126,7 @@ src/app/src/
 
 ### Component Mapping
 
-| MUI Component  | Radix/shadcn Equivalent         | Notes                   |
+| MUI Component  | Radix/ Equivalent               | Notes                   |
 | -------------- | ------------------------------- | ----------------------- |
 | `Button`       | `@radix-ui/react-slot` + custom | Use variant system      |
 | `IconButton`   | Button with icon variant        |                         |
@@ -358,7 +358,7 @@ export {
 ### Per-Page Process
 
 1. List all MUI components used
-2. Ensure shadcn equivalents exist
+2. Ensure equivalents exist
 3. Create feature-specific components if needed
 4. Migrate and test
 5. Remove MUI imports
@@ -387,12 +387,12 @@ export {
 
 ## Coexistence Strategy
 
-During migration, MUI and shadcn components will coexist. Rules:
+During migration, MUI and components will coexist. Rules:
 
-1. **New features**: Use shadcn/Radix only
+1. **New features**: Use /Radix only
 2. **Bug fixes**: Fix in place, don't migrate
 3. **Refactors**: Migrate when touching significant code
-4. **No mixing**: A component should be fully MUI or fully shadcn
+4. **No mixing**: A component should be fully MUI or fully
 
 ### Import Conventions
 

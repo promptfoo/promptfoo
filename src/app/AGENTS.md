@@ -48,7 +48,7 @@ Avoid legacy patterns like class components, legacy context, or string refs.
 
 ## Component Guidelines (Migration in Progress)
 
-### For NEW Code: Use shadcn/Radix
+### For NEW Code: Use Radix
 
 ```typescript
 // New components - use Promptfoo's Design system from components/ui/
@@ -111,7 +111,7 @@ className = 'p-4 gap-2 m-6';
 ```plaintext
 src/app/src/
 ├── components/
-│   ├── ui/            # NEW: shadcn/Radix primitives
+│   ├── ui/            # NEW: Radix primitives
 │   │   ├── button.tsx
 │   │   ├── dialog.tsx
 │   │   ├── input.tsx
@@ -250,17 +250,31 @@ const getTooltipMessage = useCallback(() => {
 
 **Migration-specific:**
 
-- Adding new MUI components (use shadcn/Radix instead)
+- Adding new MUI components (use Radix instead)
 - Adding new `styled()` components (use Tailwind instead)
 - Hardcoded colors/spacing (use design tokens)
-- Mixing MUI and shadcn in the same component
+- Mixing MUI and in the same component
 - Creating new monolithic components instead of composing primitives
 - Using MUI icons in new code (use Lucide)
 
 ## Path Alias
 
 - `@app/*` maps to `src/*` (configured in vite.config.ts)
-- `@/components/ui/*` - shadcn/Radix primitives
+- `@/components/ui/*` - Radix primitives
+
+## UI Guidelines
+
+See `UI_GUIDELINES.md` for the 9 rules on writing React components:
+
+1. Typography with semantic HTML
+2. Small, composable components
+3. Purposeful iconography
+4. Data fetching separation
+5. React 19 patterns (`use`, `useActionState`, `useOptimistic`, `useTransition`)
+6. Subtle borders
+7. Dark mode opacity
+8. Semantic severity colors
+9. Consistent page layouts
 
 ## Migration Reference
 
