@@ -107,15 +107,15 @@ Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-s
 
 The recon agent has limited, read-only access to your codebase:
 
-| Capability        | Status | Notes                                        |
-| ----------------- | ------ | -------------------------------------------- |
-| File read         | Yes    | Reads source files matching include patterns |
-| File write        | No     | Only writes the output config file           |
-| Command execution | No     | Cannot run scripts or commands               |
-| Network access    | No     | Disabled by default in Codex SDK             |
-| Web search        | No     | Disabled by default                          |
+| Capability        | Status | Notes                                                     |
+| ----------------- | ------ | --------------------------------------------------------- |
+| File read         | Yes    | Reads source files matching include patterns              |
+| File write        | No     | Only writes to a temp scratchpad; cannot modify your code |
+| Command execution | No     | Cannot run scripts or commands                            |
+| Web search        | Yes    | Can search web for API docs and library documentation     |
+| Web fetch         | Yes    | Can fetch web content for context                         |
 
-The agent cannot modify your code, execute commands, or access external systems.
+The agent cannot modify your code or execute commands. Web access is limited to documentation lookups.
 
 :::note Cost Consideration
 Recon uses advanced AI models for code analysis. Large codebases may incur significant API costs. Use `--exclude` patterns to limit scope.
