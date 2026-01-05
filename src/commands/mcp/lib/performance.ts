@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import { EvalSummary } from 'src/types';
 
 /**
  * Performance utilities for MCP server operations
@@ -8,21 +9,21 @@ import { LRUCache } from 'lru-cache';
  * Simple in-memory cache for evaluation results
  */
 export class EvaluationCache {
-  private cache: LRUCache<string, any>;
+  private cache: LRUCache<string, EvalSummary[]>;
 
   constructor(maxSize: number = 100, ttlMs: number = 5 * 60 * 1000) {
     // 5 minutes default
-    this.cache = new LRUCache({
+    this.cache = new LRUCache<string, EvalSummary[]>({
       max: maxSize,
       ttl: ttlMs,
     });
   }
 
-  get(key: string): any {
+  get(key: string) {
     return this.cache.get(key);
   }
 
-  set(key: string, value: any): void {
+  set(key: string, value: EvalSummary[]): void {
     this.cache.set(key, value);
   }
 
@@ -92,7 +93,8 @@ export function paginate<T>(items: T[], options: PaginationOptions = {}): Pagina
  * Batch processor for handling multiple operations efficiently
  */
 export class BatchProcessor<T, R> {
-  private queue: Array<{ item: T; resolve: (value: R) => void; reject: (error: any) => void }> = [];
+  private queue: Array<{ item: T; resolve: (value: R) => void; reject: (error: Error) => void }> =
+    [];
   private processing = false;
 
   constructor(
@@ -128,7 +130,7 @@ export class BatchProcessor<T, R> {
       const results = await this.processor(items);
       batch.forEach((b, i) => b.resolve(results[i]));
     } catch (error) {
-      batch.forEach((b) => b.reject(error));
+      batch.forEach((b) => b.reject(error as Error));
     }
 
     this.processing = false;
