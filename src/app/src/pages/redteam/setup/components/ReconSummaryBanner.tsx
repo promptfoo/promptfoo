@@ -16,7 +16,7 @@ export default function ReconSummaryBanner() {
   }
 
   const formatDate = (timestamp: number) => {
-    return new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
@@ -48,6 +48,7 @@ export default function ReconSummaryBanner() {
               <Badge
                 variant="outline"
                 className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+                title={reconContext.codebaseDirectory}
               >
                 <FolderOpen className="h-3 w-3 mr-1" />
                 {truncateDirectory(reconContext.codebaseDirectory)}
