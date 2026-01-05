@@ -1,4 +1,11 @@
-import type { EvaluateResult, EvaluateSummaryV2, EvaluateSummaryV3 } from '../../../types/index';
+import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+
+import type {
+  EvaluateResult,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  ResultFailureReason,
+} from '../../../types/index';
 
 /**
  * Union type for evaluation summaries
@@ -87,6 +94,21 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 /**
+ * Convert numeric ResultFailureReason to string representation
+ * Returns undefined for NONE (test passed) or string for ASSERT/ERROR
+ */
+function formatFailureReason(reason: ResultFailureReason): string | undefined {
+  if (reason === ResultFailureReasonEnum.ASSERT) {
+    return 'assertion_failed';
+  }
+  if (reason === ResultFailureReasonEnum.ERROR) {
+    return 'error';
+  }
+  // NONE or unknown - return undefined
+  return undefined;
+}
+
+/**
  * Format a single evaluation result for MCP response
  */
 function formatSingleResult(
@@ -153,7 +175,7 @@ function formatSingleResult(
       score: result.score,
       namedScores: result.namedScores,
       error: result.error ?? undefined,
-      failureReason: typeof result.failureReason === 'string' ? result.failureReason : undefined,
+      failureReason: formatFailureReason(result.failureReason),
     },
     assertions,
   };
