@@ -1,5 +1,6 @@
 import { LRUCache } from 'lru-cache';
-import { EvalSummary } from 'src/types';
+
+import type { EvalSummary } from '../../../types/index';
 
 /**
  * Performance utilities for MCP server operations
