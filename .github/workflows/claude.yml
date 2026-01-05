@@ -35,6 +35,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          # For PR events, check out base repository to avoid executing fork code
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           fetch-depth: 1
 
       - name: Run Claude Code
