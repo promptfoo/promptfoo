@@ -2049,6 +2049,9 @@
             "filterFailing": {
               "type": "string"
             },
+            "filterFailingOnly": {
+              "type": "string"
+            },
             "filterFirstN": {
               "type": "integer",
               "exclusiveMinimum": 0
