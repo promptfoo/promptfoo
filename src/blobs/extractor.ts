@@ -51,12 +51,16 @@ function normalizeAudioMimeType(format: string | undefined): string {
   if (!format) {
     return 'audio/wav';
   }
-  // Already a proper MIME type
-  if (format.includes('/')) {
-    return format;
+
+  const trimmedFormat = format.trim();
+
+  // Already a proper audio MIME type
+  if (/^audio\/[a-z0-9.+-]+$/i.test(trimmedFormat)) {
+    return trimmedFormat;
   }
-  // Normalize common formats
-  const formatLower = format.toLowerCase();
+
+  // Normalize common formats (e.g., "wav", "mp3")
+  const formatLower = trimmedFormat.toLowerCase();
   const mimeMap: Record<string, string> = {
     wav: 'audio/wav',
     mp3: 'audio/mpeg',

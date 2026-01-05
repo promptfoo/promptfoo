@@ -40,6 +40,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
+  // Security: Check that a reference exists for this blob
+  // NOTE: In the OSS version, this is a local-only server with no user authentication.
+  // For multi-tenant deployments (e.g., Promptfoo Cloud), additional authorization is needed:
+  // - Verify the requesting user has access to the evaluation (reference.evalId)
+  // - Check user/team ownership before serving the blob
+  // - Implement proper session/token-based authentication
   const reference = db
     .select({ evalId: blobReferencesTable.evalId })
     .from(blobReferencesTable)
