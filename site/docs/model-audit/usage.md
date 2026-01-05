@@ -203,6 +203,32 @@ promptfoo scan-model models/ \
   --output security-scan.sarif
 ```
 
+### Sharing Results
+
+When connected to promptfoo Cloud, model audit results are automatically shared by default. This provides a web-based interface to view, analyze, and collaborate on scan results.
+
+```bash
+# Results are automatically shared when cloud is enabled
+promptfoo scan-model models/
+
+# Explicitly enable sharing (even if cloud is not configured)
+promptfoo scan-model models/ --share
+
+# Disable sharing for this scan
+promptfoo scan-model models/ --no-share
+
+# Disable sharing globally via environment variable
+export PROMPTFOO_DISABLE_SHARING=true
+promptfoo scan-model models/
+```
+
+:::note
+Auto-sharing follows the same behavior as evaluation sharing:
+- Results display immediately (non-blocking)
+- Share URL appears after scan completes
+- Server handles deduplication automatically
+:::
+
 ## CI/CD Integration
 
 ### GitHub Actions
