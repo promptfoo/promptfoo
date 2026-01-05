@@ -536,8 +536,7 @@ async function processJsonResults(
   );
 
   // Determine if we should share
-  const hasExplicitDisable =
-    options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+  const hasExplicitDisable = options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
 
   let wantsToShare: boolean;
   if (hasExplicitDisable) {
