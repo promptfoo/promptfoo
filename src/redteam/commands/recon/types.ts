@@ -28,8 +28,6 @@ export interface ReconOptions {
   envPath?: string;
   /** Open browser with web UI after analysis (default: true) */
   open?: boolean;
-  /** Assume application is stateful/conversational, include multi-turn strategies */
-  assumeStateful?: boolean;
 }
 
 /**

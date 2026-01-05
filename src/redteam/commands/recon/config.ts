@@ -598,48 +598,27 @@ function buildStrategies(stateful: boolean): RedteamStrategyObject[] {
 }
 
 /**
- * Options for building the redteam config
- */
-export interface BuildConfigOptions {
-  /** Override stateful detection - if true, includes multi-turn strategies regardless of detection */
-  assumeStateful?: boolean;
-}
-
-/**
  * Builds a promptfoo redteam config from recon results
  *
  * @param result - The recon analysis result
  * @param scannedDirectory - Optional directory path; when provided, includes metadata for UI import
- * @param options - Optional config build options
  * @returns Partial config with optional metadata for UI integration
  */
 export function buildRedteamConfig(
   result: ReconResult,
   scannedDirectory?: string,
-  options: BuildConfigOptions = {},
 ): Partial<UnifiedConfig> {
   const purpose = applicationDefinitionToPurpose(result);
   const plugins = suggestPluginsFromFindings(result);
 
-  // Determine stateful status:
-  // 1. If --assume-stateful flag is set, use true
-  // 2. Otherwise use detected value, defaulting to false if inconclusive
-  let stateful: boolean;
-  if (options.assumeStateful) {
-    stateful = true;
-    logger.info(
-      'Using --assume-stateful: including multi-turn strategies (Hydra, Crescendo, GOAT)',
+  // Use detected stateful value, defaulting to false if inconclusive
+  const stateful = result.stateful ?? false;
+  if (result.stateful === undefined) {
+    logger.warn(
+      'Could not determine if application supports multi-turn conversations. ' +
+        'Multi-turn attack strategies (Hydra, Crescendo, GOAT) will be excluded. ' +
+        'To include them, add these strategies to your config: crescendo, goat, jailbreak:hydra',
     );
-  } else {
-    stateful = result.stateful ?? false;
-    // Warn if stateful detection was inconclusive - user may miss multi-turn attack coverage
-    if (result.stateful === undefined) {
-      logger.warn(
-        'Could not determine if application supports multi-turn conversations. ' +
-          'Multi-turn attack strategies (Hydra, Crescendo, GOAT) will be excluded. ' +
-          'Use --assume-stateful to include them, or manually add these strategies to your config.',
-      );
-    }
   }
   const strategies = buildStrategies(stateful);
 
