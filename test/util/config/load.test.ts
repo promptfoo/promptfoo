@@ -2038,9 +2038,38 @@ describe('resolveConfigs with external defaultTest', () => {
 });
 
 describe('readConfig with environment variable substitution', () => {
+  // Store original env vars to restore after tests
+  const originalEnv: Record<string, string | undefined> = {};
+  const testEnvVars = [
+    'TEST_PROMPT_PATH',
+    'TEST_PROVIDER_PATH',
+    'TEST_ASSERTION_PATH',
+    'MY_API_KEY',
+    'UNDEFINED_VAR',
+    'OPTIONAL_PATH',
+    'TEST_BASE_PATH',
+    'TEST_SUB_PATH',
+    'TEST-PATH-WITH-DASHES',
+    'TEST_GRADER_PROVIDER',
+    'EXTERNAL_API_KEY',
+    'EMPTY_VAR',
+    'PROMPT_TEXT',
+    'EVIL_VAR',
+    'SPECIAL_PATH',
+    'TRAVERSAL_PATH',
+    'MY_VAR',
+    'MULTILINE_VAR',
+    'DEEP_VAR',
+  ];
+
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+
+    // Store original env var values
+    for (const varName of testEnvVars) {
+      originalEnv[varName] = process.env[varName];
+    }
 
     // Reset path.parse to use actual implementation
     const actualPath = await vi.importActual<typeof import('path')>('path');
@@ -2053,11 +2082,14 @@ describe('readConfig with environment variable substitution', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    // Clean up environment variables
-    delete process.env.TEST_PROMPT_PATH;
-    delete process.env.TEST_PROVIDER_PATH;
-    delete process.env.TEST_ASSERTION_PATH;
-    delete process.env.MY_API_KEY;
+    // Restore or delete environment variables to prevent test pollution
+    for (const varName of testEnvVars) {
+      if (originalEnv[varName] !== undefined) {
+        process.env[varName] = originalEnv[varName];
+      } else {
+        delete process.env[varName];
+      }
+    }
   });
 
   it('should substitute environment variables in prompts paths', async () => {
@@ -2246,8 +2278,6 @@ describe('readConfig with environment variable substitution', () => {
     const result = await readConfig('config.json');
 
     expect(result.prompts).toEqual(['/base/prompts/prompt.txt']);
-    delete process.env.TEST_BASE_PATH;
-    delete process.env.TEST_SUB_PATH;
   });
 
   it('should substitute environment variables using bracket notation', async () => {
@@ -2263,7 +2293,6 @@ describe('readConfig with environment variable substitution', () => {
     const result = await readConfig('config.json');
 
     expect(result.prompts).toEqual(['/dashed/path/prompt.txt']);
-    delete process.env['TEST-PATH-WITH-DASHES'];
   });
 
   it('should substitute environment variables in defaultTest options', async () => {
@@ -2284,7 +2313,6 @@ describe('readConfig with environment variable substitution', () => {
     const result = await readConfig('config.json');
 
     expect((result.defaultTest as any).options.provider).toEqual('openai:gpt-4-turbo');
-    delete process.env.TEST_GRADER_PROVIDER;
   });
 
   it('should substitute environment variables in env config field', async () => {
@@ -2307,6 +2335,179 @@ describe('readConfig with environment variable substitution', () => {
       API_KEY: 'external-key-123',
       STATIC_VAR: 'static-value',
     });
-    delete process.env.EXTERNAL_API_KEY;
+  });
+
+  describe('security edge cases', () => {
+    it('should handle empty string environment variables', async () => {
+      process.env.EMPTY_VAR = '';
+      const mockConfig = {
+        description: 'Test config with empty env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EMPTY_VAR }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Empty string is still a valid value
+      expect(result.prompts).toEqual(['/prompt.txt']);
+    });
+
+    it('should safely handle env vars containing template-like syntax', async () => {
+      process.env.PROMPT_TEXT = 'Hello {{ vars.name }}';
+      const mockConfig = {
+        description: 'Test config with template-like env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.PROMPT_TEXT }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env var value should be substituted, preserving its content
+      expect(result.prompts).toEqual(['Hello {{ vars.name }}']);
+    });
+
+    it('should safely handle env vars containing Nunjucks statement syntax', async () => {
+      process.env.EVIL_VAR = '{% for i in range(100) %}x{% endfor %}';
+      const mockConfig = {
+        description: 'Test config with statement syntax in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EVIL_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The statement syntax should be treated as a literal string value
+      expect(result.prompts).toEqual(['{% for i in range(100) %}x{% endfor %}']);
+    });
+
+    it('should handle env vars containing special regex characters', async () => {
+      process.env.SPECIAL_PATH = '/path/with/$pecial/chars.*[test]';
+      const mockConfig = {
+        description: 'Test config with special chars in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.SPECIAL_PATH }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['/path/with/$pecial/chars.*[test]/prompt.txt']);
+    });
+
+    it('should handle potential path traversal in env vars', async () => {
+      // Note: This test demonstrates that path traversal is possible if env vars are controlled by attackers
+      // File validation should happen at file load time, not in the template renderer
+      process.env.TRAVERSAL_PATH = '../../etc';
+      const mockConfig = {
+        description: 'Test config with path traversal',
+        providers: ['openai:gpt-4o'],
+        prompts: ['file://{{ env.TRAVERSAL_PATH }}/passwd'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The renderer does not validate paths - that's the responsibility of file loaders
+      expect(result.prompts).toEqual(['file://../../etc/passwd']);
+    });
+
+    it('should skip env var rendering for strings exceeding the 50k character limit', async () => {
+      const longString = 'x'.repeat(50001);
+      const mockConfig = {
+        description: 'Test config with overly long string',
+        providers: ['openai:gpt-4o'],
+        prompts: [longString],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      // Should warn and skip rendering, but not throw
+      const result = await readConfig('config.json');
+      expect(result.prompts).toEqual([longString]); // Unchanged
+    });
+
+    it('should handle malformed template syntax gracefully', async () => {
+      process.env.MY_VAR = 'test-value';
+      const mockConfig = {
+        description: 'Test config with malformed templates',
+        providers: ['openai:gpt-4o'],
+        prompts: [
+          '{{ env.MY_VAR }', // Missing closing braces
+          '{{ env.MY_VAR )', // Wrong closing character
+          '{{env.MY_VAR}}', // No space (still valid)
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Malformed templates should be preserved as-is
+      // Well-formed template should be rendered
+      expect(result.prompts).toEqual([
+        '{{ env.MY_VAR }', // Preserved - malformed
+        '{{ env.MY_VAR )', // Preserved - malformed
+        'test-value', // Rendered - valid
+      ]);
+    });
+
+    it('should handle env vars with newlines and special whitespace', async () => {
+      process.env.MULTILINE_VAR = 'line1\nline2\ttab';
+      const mockConfig = {
+        description: 'Test config with multiline env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.MULTILINE_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['line1\nline2\ttab']);
+    });
+
+    it('should handle deeply nested objects with env vars', async () => {
+      process.env.DEEP_VAR = 'nested-value';
+      const mockConfig = {
+        description: 'Test config with deeply nested env vars',
+        providers: ['openai:gpt-4o'],
+        prompts: ['test'],
+        tests: [
+          {
+            vars: { input: 'test' },
+            assert: [
+              {
+                type: 'javascript',
+                value: {
+                  nested: {
+                    level: {
+                      deep: {
+                        value: '{{ env.DEEP_VAR }}',
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.tests as any)[0].assert[0].value.nested.level.deep.value).toEqual(
+        'nested-value',
+      );
+    });
   });
 });
