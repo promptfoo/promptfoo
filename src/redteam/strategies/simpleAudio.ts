@@ -47,7 +47,12 @@ export async function textToAudio(
       email: getUserEmail(),
     };
 
-    const { data } = await fetchWithCache(
+    interface AudioGenerationResponse {
+      error?: string;
+      audioBase64?: string;
+    }
+
+    const { data } = await fetchWithCache<AudioGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -57,8 +62,10 @@ export async function textToAudio(
       REQUEST_TIMEOUT_MS,
     );
 
-    if (data.error) {
-      throw new Error(`Error in remote audio generation: ${data.error}`);
+    if (data.error || !data.audioBase64) {
+      throw new Error(
+        `Error in remote audio generation: ${data.error || 'No audio data returned'}`,
+      );
     }
 
     logger.debug(`Received audio base64 from remote API (${data.audioBase64.length} chars)`);

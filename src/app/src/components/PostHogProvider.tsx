@@ -23,8 +23,8 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
     fetchUserId();
   }, []);
 
-  // Identify user when PostHog is initialized and we have user info
-  const identifyUser = () => {
+  // Identify user when PostHog is initialized and user data changes
+  useEffect(() => {
     if (!isInitialized || !posthog || !userId) {
       return;
     }
@@ -32,13 +32,6 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
     posthog.identify(userId, {
       email: email || undefined,
     });
-  };
-
-  // Call identify when PostHog is initialized or user data changes
-  useEffect(() => {
-    if (isInitialized) {
-      identifyUser();
-    }
   }, [isInitialized, email, userId]);
 
   useEffect(() => {
@@ -46,7 +39,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
-          loaded: (_posthogInstance: any) => {
+          loaded: (_posthogInstance) => {
             setIsInitialized(true);
           },
           capture_pageview: false,

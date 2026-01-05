@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing latency assertion
+description: 'Smoke test - latency assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test prompt for latency check'
+
+tests:
+  - assert:
+      # Echo provider is fast, should complete under 5000ms
+      - type: latency
+        threshold: 5000

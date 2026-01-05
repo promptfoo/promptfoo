@@ -92,7 +92,7 @@ export const handleConversationRelevance = async ({
       textProvider,
       reasonPrompt,
       'conversation-relevance-reason',
-      { score, irrelevancies },
+      { score: String(score), irrelevancies },
       providerCallContext,
     );
 

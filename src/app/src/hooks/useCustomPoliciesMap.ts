@@ -2,7 +2,7 @@
  * @fileoverview Hooks for working w/ custom policies. Sharable between Promptfoo OSS and Promptfoo Cloud.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   isValidPolicyObject,
@@ -21,30 +21,44 @@ import { type PolicyObject, type RedteamPluginObject } from '@promptfoo/redteam/
 export function useCustomPoliciesMap(
   plugins: RedteamPluginObject[],
 ): Record<PolicyObject['id'], PolicyObject> {
-  return useMemo(() => {
-    return (
-      plugins
-        // Filter on the policy plugin type so that only custom policies are included in the
-        // reduce, ensuring stable indices for default name generation.
-        .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
-        .reduce((map: Record<PolicyObject['id'], PolicyObject>, plugin, index) => {
-          const policy = plugin?.config?.policy;
-          if (policy) {
-            if (isValidPolicyObject(policy)) {
-              map[policy.id] = policy;
-            }
-            // Backwards compatibility w/ text-only inline policies.
-            else {
-              const id = makeInlinePolicyId(policy);
-              map[id] = {
-                id,
-                text: policy,
-                name: makeDefaultPolicyName(index),
-              };
-            }
+  const [policiesMap, setPoliciesMap] = useState<Record<PolicyObject['id'], PolicyObject>>({});
+
+  // Stringify plugins for deep comparison to prevent infinite loops when plugins array reference changes
+  const pluginsKey = useMemo(() => JSON.stringify(plugins), [plugins]);
+
+  useEffect(() => {
+    async function buildPoliciesMap() {
+      const policyPlugins = plugins.filter(
+        (plugin) => typeof plugin !== 'string' && plugin.id === 'policy',
+      );
+
+      const map: Record<PolicyObject['id'], PolicyObject> = {};
+
+      for (let index = 0; index < policyPlugins.length; index++) {
+        const plugin = policyPlugins[index];
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            map[policy.id] = policy;
           }
-          return map;
-        }, {})
-    );
-  }, [plugins]);
+          // Backwards compatibility w/ text-only inline policies.
+          else {
+            const id = await makeInlinePolicyId(policy);
+            map[id] = {
+              id,
+              text: policy,
+              name: makeDefaultPolicyName(index),
+            };
+          }
+        }
+      }
+
+      setPoliciesMap(map);
+    }
+
+    buildPoliciesMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsKey]);
+
+  return policiesMap;
 }

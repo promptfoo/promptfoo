@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Spinner } from '@app/components/ui/spinner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
@@ -42,8 +42,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
-    resetFilters,
-    addFilter,
     setIsStreaming,
   } = useTableStore();
 
@@ -120,7 +118,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
@@ -144,20 +142,26 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
           // clear the search params
-          setSearchParams((prev) => {
-            prev.delete('filter');
-            return prev;
-          });
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             // Add each filter to the search params
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
           }
         }
       },
@@ -168,7 +172,10 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
 
-    resetFilters();
+    // Use getState() to avoid adding functions to dependencies
+    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
+
+    doResetFilters();
 
     // Read search params
     const filtersParam = _searchParams.get('filter');
@@ -178,11 +185,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
       } catch {
-        showToast('URL contains invalid JSON-encoded filters', 'error');
+        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
         return;
       }
       filters.forEach((filter: ResultsFilter) => {
-        addFilter(filter);
+        doAddFilter(filter);
       });
     }
 
@@ -316,8 +323,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    resetFilters,
     setIsStreaming,
+    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({
@@ -350,7 +357,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return (
       <div className="notice">
         <div>
-          <CircularProgress size={22} />
+          <Spinner className="size-5" />
         </div>
         <div>Waiting for eval data</div>
       </div>
@@ -367,9 +374,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   return (
     <ShiftKeyProvider>
       {isRedteam && evalId && (
-        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+        <div className="mb-4 mt-4 mx-4">
           <EnterpriseBanner evalId={evalId} />
-        </Box>
+        </div>
       )}
       <ResultsView
         defaultEvalId={defaultEvalId}

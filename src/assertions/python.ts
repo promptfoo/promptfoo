@@ -71,7 +71,7 @@ ${
       }
       return parsed;
     } else if (typeof result === 'object') {
-      const obj: Record<string, any> = result as any;
+      const obj = result;
 
       // Support snake_case keys from Python dataclass (recursively)
       const mappedObj = mapSnakeCaseToCamelCase(obj);
