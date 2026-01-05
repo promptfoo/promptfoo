@@ -351,6 +351,7 @@ export async function doEval(
     if (!resumeEval) {
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
+        failingOnly: cmdObj.filterFailingOnly,
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
@@ -902,7 +903,11 @@ export function evalCommand(
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option(
       '--filter-failing <path or id>',
-      'Path to json output file or eval ID to filter failing tests from',
+      'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
+    )
+    .option(
+      '--filter-failing-only <path or id>',
+      'Path to json output file or eval ID to filter assertion failures from (excludes errors)',
     )
     .option(
       '--filter-errors-only <path or id>',

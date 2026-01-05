@@ -124,7 +124,75 @@ describe('filterTests - vars mutation bug', () => {
     expect(result.map((t) => t.description)).toEqual(['test1', 'test3']);
   });
 
-  it('should exclude error results when filtering for failures only', async () => {
+  it('should include both failures and errors when using --filter-failing', async () => {
+    const mockTestSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [
+        { description: 'test1', vars: { input: 'a' }, assert: [] },
+        { description: 'test2', vars: { input: 'b' }, assert: [] },
+        { description: 'test3', vars: { input: 'c' }, assert: [] },
+      ],
+    };
+
+    const mockEval = {
+      id: 'eval-errors',
+      createdAt: new Date().getTime(),
+      config: {},
+      results: [],
+      resultsCount: 0,
+      prompts: [],
+      persisted: true,
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        version: 2,
+        timestamp: new Date().toISOString(),
+        results: [
+          {
+            vars: { input: 'a' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT, // Actual failure
+            testCase: { description: 'test1', vars: { input: 'a' }, assert: [] },
+          },
+          {
+            vars: { input: 'b' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR, // Error
+            testCase: { description: 'test2', vars: { input: 'b' }, assert: [] },
+          },
+          {
+            vars: { input: 'c' },
+            success: true, // Success
+            testCase: { description: 'test3', vars: { input: 'c' }, assert: [] },
+          },
+        ],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: {
+          successes: 1,
+          failures: 1,
+          errors: 1,
+          tokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
+        },
+      }),
+    };
+
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+    // --filter-failing should return both failures AND errors (all non-successful results)
+    const result = await filterTests(mockTestSuite, { failing: 'eval-errors' });
+
+    // Should find test1 (ASSERT failure) and test2 (ERROR), but not test3 (success)
+    expect(result).toHaveLength(2);
+    expect(result.map((t) => t.description).sort()).toEqual(['test1', 'test2']);
+  });
+
+  it('should exclude error results when using --filter-failing-only', async () => {
     const mockTestSuite: TestSuite = {
       prompts: [],
       providers: [],
@@ -184,8 +252,8 @@ describe('filterTests - vars mutation bug', () => {
 
     vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
-    // --filter-failing should only return actual failures, not errors
-    const result = await filterTests(mockTestSuite, { failing: 'eval-errors' });
+    // --filter-failing-only should only return actual failures, not errors
+    const result = await filterTests(mockTestSuite, { failingOnly: 'eval-errors' });
 
     // Should only find test1 (the one with ASSERT failure), not test2 (error)
     expect(result).toHaveLength(1);
@@ -570,8 +638,8 @@ describe('filterTests - vars mutation bug', () => {
     expect(result[0].description).toBe('basic-test');
   });
 
-  it('should combine failing and errorsOnly filters (union) when both are provided', async () => {
-    // When both --filter-failing and --filter-errors-only are used, combine results
+  it('should combine failingOnly and errorsOnly filters (union) when both are provided', async () => {
+    // When both --filter-failing-only and --filter-errors-only are used, combine results
     const mockTestSuite: TestSuite = {
       prompts: [],
       providers: [],
@@ -652,9 +720,9 @@ describe('filterTests - vars mutation bug', () => {
 
     vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
-    // Using both filters should return union of failing + errors (but not passing)
+    // Using both filters should return union of failingOnly + errors (but not passing)
     const result = await filterTests(mockTestSuite, {
-      failing: 'eval-combined',
+      failingOnly: 'eval-combined',
       errorsOnly: 'eval-combined',
     });
 

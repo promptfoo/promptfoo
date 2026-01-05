@@ -12,6 +12,8 @@ export interface FilterOptions {
   errorsOnly?: string;
   /** Path or ID to filter tests that did not pass (failed from assert or errors) */
   failing?: string;
+  /** Path or ID to filter tests that failed assertions only (excludes errors) */
+  failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
   /** Key-value pair (format: "key=value") to filter tests by metadata */
@@ -31,7 +33,18 @@ type Tests = NonNullable<TestSuite['tests']>;
  * @returns A filtered array of tests that failed in the specified eval
  */
 async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
-  // Filter for failures only, excluding errors (which have their own filter)
+  // Filter for all non-successful results (both assertion failures and errors)
+  return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
+}
+
+/**
+ * Filters a test suite to only include tests that failed assertions (excludes errors)
+ * @param testSuite - The test suite containing all tests
+ * @param pathOrId - Either a file path to a JSON results file or an eval ID
+ * @returns A filtered array of tests that failed assertions (not errors) in the specified eval
+ */
+async function filterFailingOnlyTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+  // Filter for assertion failures only, excluding errors
   return filterTestsByResults(
     testSuite,
     pathOrId,
@@ -114,10 +127,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
-  // Handle failing and errorsOnly filters
-  // When both are provided, combine results (union) instead of overwriting
-  if (options.failing && options.errorsOnly) {
-    const failingTests = await filterFailingTests(testSuite, options.failing);
+  // Handle failing, failingOnly, and errorsOnly filters
+  // - failing: all non-successful results (failures + errors)
+  // - failingOnly: assertion failures only (excludes errors)
+  // - errorsOnly: errors only
+  // When failingOnly and errorsOnly are both provided, combine results (union)
+  if (options.failingOnly && options.errorsOnly) {
+    const failingOnlyTests = await filterFailingOnlyTests(testSuite, options.failingOnly);
     const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
 
     // Create a union of both sets, deduplicating by test identity
@@ -125,7 +141,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const getTestKey = (test: (typeof tests)[0]) =>
       JSON.stringify({ vars: test.vars, description: test.description });
 
-    tests = [...failingTests, ...errorTests].filter((test) => {
+    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
       const key = getTestKey(test);
       if (seen.has(key)) {
         return false;
@@ -135,10 +151,14 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     });
 
     logger.debug(
-      `Combined failing (${failingTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
+      `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
     );
   } else if (options.failing) {
+    // --filter-failing includes both failures and errors
     tests = await filterFailingTests(testSuite, options.failing);
+  } else if (options.failingOnly) {
+    // --filter-failing-only includes only assertion failures (excludes errors)
+    tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
   } else if (options.errorsOnly) {
     tests = await filterErrorTests(testSuite, options.errorsOnly);
   }
