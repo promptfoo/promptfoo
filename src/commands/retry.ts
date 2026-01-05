@@ -17,7 +17,7 @@ import {
 } from '../util/tokenUsageUtils';
 import type { Command } from 'commander';
 
-import type { EvaluateOptions } from '../types/index';
+import type { EvaluateOptions, TokenUsage } from '../types/index';
 
 interface RetryCommandOptions {
   config?: string;
@@ -79,7 +79,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       assertPassCount: number;
       assertFailCount: number;
       totalLatencyMs: number;
-      tokenUsage: any;
+      tokenUsage: TokenUsage;
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
       cost: number;
