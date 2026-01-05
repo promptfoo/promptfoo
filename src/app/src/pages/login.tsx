@@ -76,7 +76,7 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
-  const handleRedirect = () => {
+  const handleRedirect = React.useCallback(() => {
     // Handle special case where redirect URL contains query parameters
     // e.g., ?redirect=/some-page?param1=value1&param2=value2
     const searchStr = location.search;
@@ -95,7 +95,7 @@ export default function LoginPage() {
     } else {
       navigate('/');
     }
-  };
+  }, [location.search, navigate]);
 
   // Handle successful login
   useEffect(() => {
@@ -103,7 +103,6 @@ export default function LoginPage() {
       setEmail(state.email);
       handleRedirect();
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [state.success, state.email, setEmail, handleRedirect]);
 
   // Redirect if already logged in
@@ -111,7 +110,6 @@ export default function LoginPage() {
     if (!isLoading && email) {
       handleRedirect();
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [isLoading, email, handleRedirect]);
 
   if (isLoading || (!isLoading && email)) {
