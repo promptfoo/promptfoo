@@ -719,9 +719,16 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+  const [actionsHovered, setActionsHovered] = React.useState(false);
+  const showExtraActions = shiftKeyPressed || actionsHovered;
+
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
+    <div
+      className="cell-actions"
+      onMouseEnter={() => setActionsHovered(true)}
+      onMouseLeave={() => setActionsHovered(false)}
+    >
+      {showExtraActions && (
         <>
           <Tooltip>
             <TooltipTrigger asChild>
