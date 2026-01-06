@@ -1,15 +1,7 @@
-import React from 'react';
-
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import VarsForm from './VarsForm';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('VarsForm', () => {
   it('should update the value and call onAdd when a user changes a TextField value', async () => {
@@ -18,7 +10,7 @@ describe('VarsForm', () => {
     const initialValues = { name: 'John Doe', location: 'New York' };
     const user = userEvent.setup();
 
-    renderWithTheme(
+    render(
       <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
     );
 
@@ -43,7 +35,7 @@ describe('VarsForm', () => {
     const initialVarsList = ['var1', 'var2'];
     const initialInitialValues = { var1: 'value1', var2: 'value2' };
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = render(
       <VarsForm
         onAdd={onAddMock}
         varsList={initialVarsList}
@@ -78,7 +70,7 @@ describe('VarsForm', () => {
     const varsList: string[] = [];
     const initialValues = {};
 
-    renderWithTheme(
+    render(
       <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
     );
 
@@ -94,7 +86,7 @@ describe('VarsForm', () => {
     const varsList = ['name', 'location'];
     const initialValues = { name: 'John Doe', location: 'New York', age: '30' };
 
-    renderWithTheme(
+    render(
       <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
     );
 
@@ -112,7 +104,7 @@ describe('VarsForm', () => {
     const varsList = ['name', 'location', 'age'];
     const initialValues = { name: 'John Doe', location: 'New York' };
 
-    renderWithTheme(
+    render(
       <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
     );
 
@@ -127,7 +119,7 @@ describe('VarsForm', () => {
     const initialValues = { name: 'John Doe', location: 'New York' };
     const user = userEvent.setup();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = render(
       <VarsForm onAdd={onAddMock} varsList={initialVarsList} initialValues={initialValues} />,
     );
 

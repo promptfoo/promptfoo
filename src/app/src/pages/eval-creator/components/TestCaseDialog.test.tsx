@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,11 +35,9 @@ describe('TestCaseForm', () => {
       onCancel,
       initialValues: undefined,
     };
-    const theme = createTheme();
     return render(
-      <ThemeProvider theme={theme}>
-        <TestCaseForm {...defaultProps} {...props} />
-      </ThemeProvider>,
+      <TestCaseForm {...defaultProps} {...props} />
+      ,
     );
   };
 
@@ -198,15 +195,14 @@ describe('TestCaseForm', () => {
     };
 
     rerender(
-      <ThemeProvider theme={createTheme()}>
-        <TestCaseForm
+      <TestCaseForm
           open={true}
           onAdd={onAdd}
           varsList={['var1', 'var2']}
           onCancel={onCancel}
           initialValues={initialValues2}
         />
-      </ThemeProvider>,
+      ,
     );
 
     // Get the last call since it was re-rendered with new props
@@ -244,15 +240,14 @@ describe('TestCaseForm', () => {
     });
 
     rerender(
-      <ThemeProvider theme={createTheme()}>
-        <TestCaseForm
+      <TestCaseForm
           open={true}
           onAdd={onAdd}
           varsList={['var1', 'var2']}
           onCancel={onCancel}
           initialValues={initialValues}
         />
-      </ThemeProvider>,
+      ,
     );
 
     const lastVarsFormCall = mockVarsForm.mock.calls[mockVarsForm.mock.calls.length - 1];

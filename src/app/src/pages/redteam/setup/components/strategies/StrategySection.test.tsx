@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
@@ -288,15 +287,8 @@ describe('StrategySection', () => {
 
   describe('Theme customization', () => {
     it('renders without error when theme.palette.primary.main is not defined and highlighted is true', () => {
-      const customTheme = createTheme({
-        palette: {
-          mode: 'light',
-        },
-      });
-
       render(
-        <ThemeProvider theme={customTheme}>
-          <StrategySection
+        <StrategySection
             isStrategyDisabled={() => false}
             isRemoteGenerationDisabled={false}
             title="Test Section"
@@ -306,7 +298,7 @@ describe('StrategySection', () => {
             onConfigClick={mockOnConfigClick}
             highlighted={true}
           />
-        </ThemeProvider>,
+        ,
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
