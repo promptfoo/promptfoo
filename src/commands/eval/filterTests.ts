@@ -201,7 +201,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     // --filter-failing-only includes only assertion failures (excludes errors)
     tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
     if (tests.length === 0) {
-      logNoTestsWarning('filter-failing-only', options.failingOnly, 'no assertion failures (only errors)');
+      logNoTestsWarning(
+        'filter-failing-only',
+        options.failingOnly,
+        'no assertion failures (only errors)',
+      );
     }
   } else if (options.errorsOnly) {
     tests = await filterErrorTests(testSuite, options.errorsOnly);
