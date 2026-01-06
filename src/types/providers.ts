@@ -28,6 +28,7 @@ interface AtomicTestCase {
   options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
+  cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
 }
@@ -196,6 +197,7 @@ export interface ProviderResponse {
 }
 
 export interface ProviderEmbeddingResponse {
+  cached?: boolean;
   cost?: number;
   error?: string;
   embedding?: number[];
