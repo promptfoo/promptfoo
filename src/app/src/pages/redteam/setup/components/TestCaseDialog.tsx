@@ -75,7 +75,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isRunningTest = false,
   onRegenerate,
   onContinue,
-  currentTurn: _currentTurn,
   maxTurns,
   availablePlugins,
   allowPluginChange = false,
