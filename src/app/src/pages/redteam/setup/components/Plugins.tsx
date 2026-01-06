@@ -143,6 +143,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return initialConfig;
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
   }, []);

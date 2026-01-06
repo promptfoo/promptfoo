@@ -76,6 +76,7 @@ export function TagInput({
   }, [inputValue, value, suggestions, normalizeValue]);
 
   // Reset highlighted index when suggestions change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setHighlightedIndex(-1);
   }, [filteredSuggestions]);

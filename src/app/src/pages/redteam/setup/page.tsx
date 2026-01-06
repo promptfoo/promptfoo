@@ -120,6 +120,7 @@ export default function RedTeamSetupPage() {
   const lastSavedConfig = useRef<string>('');
 
   // Track funnel on initial load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('funnel', {
       type: 'redteam',

@@ -65,6 +65,7 @@ const App = () => {
   const vulnerabilitiesDataGridRef = useRef<HTMLDivElement>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const fetchEvalById = async (id: string) => {
       const resp = await callApi(`/results/${id}`, {

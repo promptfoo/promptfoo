@@ -112,6 +112,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   };
 
   // Initial load effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);

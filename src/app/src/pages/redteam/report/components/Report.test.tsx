@@ -110,6 +110,7 @@ describe('Report filtering logic', () => {
 
       // Simulate the useMemo logic
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -157,6 +158,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -196,6 +198,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -246,6 +249,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -292,6 +296,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -349,6 +354,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 0;
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -395,6 +401,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 999; // Out of bounds
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -458,6 +465,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -496,6 +504,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
