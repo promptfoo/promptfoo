@@ -1,8 +1,39 @@
+/**
+ * Test filtering module for the eval command.
+ *
+ * This module provides functions to filter test cases based on previous evaluation results.
+ * The filtering functions are named to match their corresponding CLI flags:
+ *
+ * - `--filter-failing` -> `filterFailingTests`: Returns all non-passing tests (failures + errors)
+ * - `--filter-failing-only` -> `filterFailingOnlyTests`: Returns only assertion failures (excludes errors)
+ * - `--filter-errors-only` -> `filterErrorTests`: Returns only tests that resulted in errors
+ *
+ * Runtime variables (like `_conversation`, `sessionId`) are automatically filtered out when
+ * matching test cases to results, ensuring proper matching even when multi-turn strategies
+ * add runtime state to test vars.
+ *
+ * @module commands/eval/filterTests
+ */
+
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
+import { getTestCaseDeduplicationKey } from '../../util/comparison';
 import { filterTestsByResults } from './filterTestsUtil';
 
 import type { TestSuite } from '../../types/index';
+
+/**
+ * Logs a warning when a filter returns no tests.
+ * @param filterType - The CLI flag name (e.g., 'filter-failing')
+ * @param pathOrId - The path or eval ID that was filtered
+ * @param reason - Description of what the filter was looking for (e.g., 'no failures/errors')
+ */
+function logNoTestsWarning(filterType: string, pathOrId: string, reason: string): void {
+  logger.warn(
+    `--${filterType} returned no tests. The evaluation "${pathOrId}" may have ${reason}, ` +
+      'or the test suite may have changed since the evaluation was run.',
+  );
+}
 
 /**
  * Options for filtering test cases in a test suite.
@@ -133,16 +164,17 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   // - errorsOnly: errors only
   // When failingOnly and errorsOnly are both provided, combine results (union)
   if (options.failingOnly && options.errorsOnly) {
+    logger.debug(
+      'Using both --filter-failing-only and --filter-errors-only together (equivalent to --filter-failing)',
+    );
     const failingOnlyTests = await filterFailingOnlyTests(testSuite, options.failingOnly);
     const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
 
     // Create a union of both sets, deduplicating by test identity
     const seen = new Set<string>();
-    const getTestKey = (test: (typeof tests)[0]) =>
-      JSON.stringify({ vars: test.vars, description: test.description });
 
     tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestKey(test);
+      const key = getTestCaseDeduplicationKey(test);
       if (seen.has(key)) {
         return false;
       }
@@ -153,18 +185,40 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
     );
+    if (tests.length === 0) {
+      logger.warn(
+        'Combined --filter-failing-only and --filter-errors-only returned no tests. ' +
+          'The specified evaluations may have no failures or errors, or the test suite may have changed.',
+      );
+    }
   } else if (options.failing) {
     // --filter-failing includes both failures and errors
     tests = await filterFailingTests(testSuite, options.failing);
+    if (tests.length === 0) {
+      logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
+    }
   } else if (options.failingOnly) {
     // --filter-failing-only includes only assertion failures (excludes errors)
     tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
+    if (tests.length === 0) {
+      logNoTestsWarning('filter-failing-only', options.failingOnly, 'no assertion failures (only errors)');
+    }
   } else if (options.errorsOnly) {
     tests = await filterErrorTests(testSuite, options.errorsOnly);
+    if (tests.length === 0) {
+      logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
+    }
   }
 
   if (options.pattern) {
-    const pattern = new RegExp(options.pattern);
+    let pattern: RegExp;
+    try {
+      pattern = new RegExp(options.pattern);
+    } catch (e) {
+      throw new Error(
+        `Invalid regex pattern "${options.pattern}": ${e instanceof Error ? e.message : 'Unknown error'}`,
+      );
+    }
     tests = tests.filter((test) => test.description && pattern.test(test.description));
   }
 
