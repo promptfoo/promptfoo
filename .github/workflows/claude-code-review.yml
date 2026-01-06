@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    # Skip for bot PRs (dependabot, etc.) due to OIDC token limitations in pull_request_target
+    if: github.event.pull_request.draft == false && github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
