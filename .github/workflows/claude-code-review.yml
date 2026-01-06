@@ -15,8 +15,12 @@ concurrency:
 
 jobs:
   claude-review:
-    # Skip for bot PRs (dependabot, etc.) due to OIDC token limitations in pull_request_target
-    if: github.event.pull_request.draft == false && github.event.pull_request.user.type != 'Bot'
+    # Skip for bot PRs and fork PRs due to OIDC token limitations in pull_request_target
+    # Fork PRs fail because the actor in OIDC context is the fork contributor (read-only)
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

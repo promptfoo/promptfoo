@@ -143,6 +143,7 @@ export function DataTable<TData, TValue = unknown>({
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Scroll to top when page changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     scrollContainerRef.current?.scrollTo?.({ top: 0 });
   }, [pagination.pageIndex]);

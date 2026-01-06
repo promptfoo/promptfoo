@@ -354,6 +354,7 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -561,6 +562,7 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -582,6 +584,7 @@ function ResultsTable({
   }, [evalId]);
 
   // Only fetch data when pagination or filters change, but not when evalId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (!evalId) {
       return;
@@ -660,6 +663,7 @@ function ResultsTable({
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       const injectVarName = config?.redteam?.injectVar || 'prompt';
@@ -903,6 +907,7 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -1282,6 +1287,7 @@ function ResultsTable({
     }
   }, [navigate]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];

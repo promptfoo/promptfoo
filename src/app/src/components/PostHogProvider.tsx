@@ -21,7 +21,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   useEffect(() => {
     fetchEmail();
     fetchUserId();
-  }, []);
+  }, [fetchEmail, fetchUserId]);
 
   // Identify user when PostHog is initialized and user data changes
   useEffect(() => {
