@@ -719,11 +719,18 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+  const [actionsHovered, setActionsHovered] = React.useState(false);
+  const showExtraActions = shiftKeyPressed || actionsHovered;
+
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
+    <div
+      className="cell-actions"
+      onMouseEnter={() => setActionsHovered(true)}
+      onMouseLeave={() => setActionsHovered(false)}
+    >
+      {showExtraActions && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -736,21 +743,24 @@ function EvalOutputCell({
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Toggle test highlight"
               >
-                <Star className="size-4" />
+                <Star
+                  className={`size-4 ${commentText.startsWith('!highlight') ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={commentText.startsWith('!highlight') ? 'currentColor' : 'none'}
+                />
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -768,7 +778,7 @@ function EvalOutputCell({
       )}
       {output.prompt && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -804,7 +814,7 @@ function EvalOutputCell({
           )}
         </>
       )}
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -814,14 +824,14 @@ function EvalOutputCell({
             aria-label="Mark test passed"
           >
             <ThumbsUp
-              className={`size-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
               fill={activeRating === true ? 'currentColor' : 'none'}
             />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -831,14 +841,14 @@ function EvalOutputCell({
             aria-label="Mark test failed"
           >
             <ThumbsDown
-              className={`size-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
               fill={activeRating === false ? 'currentColor' : 'none'}
             />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -851,7 +861,7 @@ function EvalOutputCell({
         </TooltipTrigger>
         <TooltipContent>Set test score</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"

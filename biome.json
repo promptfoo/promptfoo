@@ -274,8 +274,6 @@
       "includes": [
         "src/app/src/pages/eval/components/**/*",
         "src/app/src/pages/redteam/setup/components/**/*",
-        "src/app/src/pages/redteam/setup/hooks/**/*",
-        "src/app/src/pages/redteam/setup/utils/**/*",
         "src/providers/**/*",
         "src/redteam/**/*",
         "src/util/**/*",

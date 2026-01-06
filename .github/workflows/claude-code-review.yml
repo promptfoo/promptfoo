@@ -1,8 +1,8 @@
 name: Claude Code Review
 
 on:
-  pull_request:
-    types: [opened, ready_for_review]
+  pull_request_target:
+    types: [opened, ready_for_review, synchronize]
 
 permissions:
   contents: read
@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    # Skip for bot PRs (dependabot, etc.) due to OIDC token limitations in pull_request_target
+    if: github.event.pull_request.draft == false && github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -23,11 +24,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 1
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are a senior security engineer reviewing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.

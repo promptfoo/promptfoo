@@ -35,6 +35,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          # For PR review events: use base SHA; for issue_comment/issues: use default branch HEAD
+          # Note: github.event.pull_request is only populated for PR review events
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           fetch-depth: 1
 
       - name: Run Claude Code
