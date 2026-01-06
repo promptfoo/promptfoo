@@ -21,8 +21,9 @@ function getProviderIdAndLabel(
     };
   }
 
-  // Check if it's a ProviderOptions object (has 'id' field)
-  if ('id' in provider && typeof (provider as ProviderOptions).id === 'string') {
+  // Check if it's a ProviderOptions object (has 'id' field that is a non-empty string)
+  const providerId = (provider as ProviderOptions).id;
+  if ('id' in provider && providerId != null && typeof providerId === 'string' && providerId !== '') {
     const opts = provider as ProviderOptions;
     return {
       id: opts.id!,
@@ -34,14 +35,23 @@ function getProviderIdAndLabel(
   const keys = Object.keys(provider);
   if (keys.length > 0) {
     const id = keys[0];
-    const opts = (provider as ProviderOptionsMap)[id];
-    return {
-      id: opts.id || id,
-      label: opts.label,
-    };
+    const value = (provider as ProviderOptionsMap)[id];
+    
+    // Check if the value is an object (indicating ProviderOptionsMap format)
+    if (typeof value === 'object' && value !== null) {
+      return {
+        id: value.id || id,
+        label: value.label,
+      };
+    }
   }
 
-  return { id: `unknown-${index}` };
+  // Fallback for malformed provider configs: use label if available
+  const label = (provider as ProviderOptions).label;
+  return {
+    id: label || `unknown-${index}`,
+    label,
+  };
 }
 
 /**

@@ -268,5 +268,16 @@ describe('filterProviderConfigs', () => {
       expect(result).toHaveLength(1);
       expect((result as ProviderOptions[])[0].label).toBe('direct-haiku-4.5');
     });
+
+    it('should handle provider with null or empty id', () => {
+      const providers: any[] = [
+        { id: null, label: 'Provider1', config: {} },
+        { id: '', label: 'Provider2', config: {} },
+        { id: undefined, label: 'Provider3', config: {} },
+      ];
+      const result = filterProviderConfigs(providers, 'Provider2');
+      expect(result).toHaveLength(1);
+      expect((result as any[])[0].label).toBe('Provider2');
+    });
   });
 });
