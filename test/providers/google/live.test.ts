@@ -405,7 +405,7 @@ describe('GoogleLiveProvider', () => {
     delete process.env.GOOGLE_API_KEY;
 
     await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      'Google authentication is not configured',
     );
 
     if (originalApiKey) {
