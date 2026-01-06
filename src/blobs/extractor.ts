@@ -70,7 +70,20 @@ function normalizeAudioMimeType(format: string | undefined): string {
     m4a: 'audio/mp4',
     webm: 'audio/webm',
   };
-  return mimeMap[formatLower] || `audio/${formatLower}`;
+
+  // Check if format is in the known map
+  if (mimeMap[formatLower]) {
+    return mimeMap[formatLower];
+  }
+
+  // Validate format contains only alphanumeric, dash, dot, or underscore (RFC 6838)
+  // This prevents potential header injection or invalid MIME types
+  if (!/^[a-z0-9._-]+$/i.test(formatLower)) {
+    logger.warn('[BlobExtractor] Invalid audio format, using default', { format });
+    return 'audio/wav';
+  }
+
+  return `audio/${formatLower}`;
 }
 
 function parseBinary(

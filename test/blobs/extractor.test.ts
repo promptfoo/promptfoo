@@ -118,6 +118,67 @@ describe('Audio MIME type normalization', () => {
       // Should normalize to 'audio/unknown'
       expect(result).toBeDefined();
     });
+
+    maybeIt('should reject formats with path traversal attempts', async () => {
+      const maliciousFormats = ['../../etc/passwd', '../../../etc/shadow', 'path/to/file'];
+
+      for (const format of maliciousFormats) {
+        const response: ProviderResponse = {
+          output: 'test',
+          audio: {
+            data: 'SGVsbG8gV29ybGQ=',
+            format,
+          },
+        };
+
+        const result = await extractAndStoreBinaryData(response);
+        // Should fall back to default 'audio/wav'
+        expect(result).toBeDefined();
+      }
+    });
+
+    maybeIt('should reject formats with special characters', async () => {
+      const invalidFormats = [
+        'audio\nwav', // newline injection
+        'audio;wav', // semicolon
+        'audio:wav', // colon
+        'audio wav', // space
+        'audio/wav/extra', // extra slash
+        'audio\\wav', // backslash
+      ];
+
+      for (const format of invalidFormats) {
+        const response: ProviderResponse = {
+          output: 'test',
+          audio: {
+            data: 'SGVsbG8gV29ybGQ=',
+            format,
+          },
+        };
+
+        const result = await extractAndStoreBinaryData(response);
+        // Should fall back to default 'audio/wav'
+        expect(result).toBeDefined();
+      }
+    });
+
+    maybeIt('should accept formats with valid special characters', async () => {
+      const validFormats = ['x-custom', 'vnd.company.format', 'codec_v2', 'format-1.0'];
+
+      for (const format of validFormats) {
+        const response: ProviderResponse = {
+          output: 'test',
+          audio: {
+            data: 'SGVsbG8gV29ybGQ=',
+            format,
+          },
+        };
+
+        const result = await extractAndStoreBinaryData(response);
+        // Should normalize to 'audio/<format>'
+        expect(result).toBeDefined();
+      }
+    });
   });
 
   describe('extractAndStoreBinaryData with audio', () => {
