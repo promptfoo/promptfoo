@@ -2892,7 +2892,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 describe('AwsBedrockCompletionProvider', () => {
   const mockInvokeModel = vi.fn();
   let originalModelHandler: IBedrockModel;
-  let mockCache;
+  let mockCache: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
