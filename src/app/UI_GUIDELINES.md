@@ -21,14 +21,14 @@ Never use raw text or inline styles. Use semantic HTML elements with consistent 
 
 **Typography scale:**
 
-| Use Case        | Classes                                      |
-| --------------- | -------------------------------------------- |
-| Page title      | `text-2xl font-bold tracking-tight`          |
-| Section title   | `text-lg font-semibold`                      |
-| Card title      | `text-base font-medium`                      |
-| Body text       | `text-sm`                                    |
-| Muted/secondary | `text-sm text-muted-foreground`              |
-| Labels/caps     | `text-xs font-medium uppercase tracking-wide`|
+| Use Case        | Classes                                       |
+| --------------- | --------------------------------------------- |
+| Page title      | `text-2xl font-bold tracking-tight`           |
+| Section title   | `text-lg font-semibold`                       |
+| Card title      | `text-base font-medium`                       |
+| Body text       | `text-sm`                                     |
+| Muted/secondary | `text-sm text-muted-foreground`               |
+| Labels/caps     | `text-xs font-medium uppercase tracking-wide` |
 
 ---
 
@@ -50,7 +50,9 @@ function ConfirmDeleteDialog({ onConfirm, itemName }) {
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button variant="destructive" onClick={onConfirm}>Delete</Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            Delete
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -176,7 +178,7 @@ Leverage React 19 features for cleaner, more performant code.
 ```tsx
 // ✅ Good - use() for async data in components
 function EvalDetails({ evalPromise }: { evalPromise: Promise<Eval> }) {
-  const eval = use(evalPromise);  // Suspends until resolved
+  const eval = use(evalPromise); // Suspends until resolved
   return <div>{eval.name}</div>;
 }
 
@@ -197,7 +199,7 @@ function CreateEvalForm() {
       const result = await createEval(formData);
       return result.error ? { error: result.error } : { success: true };
     },
-    { error: null }
+    { error: null },
   );
 
   return (
@@ -236,19 +238,16 @@ function CreateEvalForm() {
 ```tsx
 // ✅ Good - optimistic updates
 function TodoList({ todos, onToggle }) {
-  const [optimisticTodos, setOptimisticTodo] = useOptimistic(
-    todos,
-    (state, updatedTodo) => state.map(t =>
-      t.id === updatedTodo.id ? updatedTodo : t
-    )
+  const [optimisticTodos, setOptimisticTodo] = useOptimistic(todos, (state, updatedTodo) =>
+    state.map((t) => (t.id === updatedTodo.id ? updatedTodo : t)),
   );
 
   const handleToggle = async (todo) => {
     setOptimisticTodo({ ...todo, completed: !todo.completed });
-    await onToggle(todo.id);  // Server update
+    await onToggle(todo.id); // Server update
   };
 
-  return optimisticTodos.map(todo => (
+  return optimisticTodos.map((todo) => (
     <TodoItem key={todo.id} todo={todo} onToggle={handleToggle} />
   ));
 }
@@ -264,9 +263,9 @@ function SearchableList({ items }) {
 
   const handleSearch = (e) => {
     const value = e.target.value;
-    setQuery(value);  // Urgent: update input immediately
+    setQuery(value); // Urgent: update input immediately
     startTransition(() => {
-      setFilteredItems(filterItems(items, value));  // Non-urgent: can be interrupted
+      setFilteredItems(filterItems(items, value)); // Non-urgent: can be interrupted
     });
   };
 
@@ -289,7 +288,7 @@ function CustomInput({ ref, ...props }) {
 }
 
 // Usage
-<CustomInput ref={inputRef} />
+<CustomInput ref={inputRef} />;
 
 // ❌ Outdated - forwardRef wrapper
 const CustomInput = forwardRef((props, ref) => {
@@ -326,11 +325,11 @@ In dark mode, use opacity modifiers for backgrounds to maintain subtlety.
 
 ```tsx
 // ✅ Good - opacity for dark mode backgrounds
-className="bg-red-50 dark:bg-red-950/30"
-className="bg-muted/50 dark:bg-muted/20"
+className = 'bg-red-50 dark:bg-red-950/30';
+className = 'bg-muted/50 dark:bg-muted/20';
 
 // ❌ Bad - solid dark backgrounds (too harsh)
-className="bg-red-50 dark:bg-red-900"
+className = 'bg-red-50 dark:bg-red-900';
 ```
 
 ---
@@ -385,9 +384,7 @@ function MyPage() {
       </PageHeader>
 
       <div className="container max-w-7xl mx-auto px-4 py-8">
-        <Card className="bg-white dark:bg-zinc-900">
-          {/* Content */}
-        </Card>
+        <Card className="bg-white dark:bg-zinc-900">{/* Content */}</Card>
       </div>
     </PageContainer>
   );
@@ -403,3 +400,99 @@ function MyPage() {
   );
 }
 ```
+
+## Design Principles
+
+- **Small, composable primitives** - Single responsibility, compose together
+- **Design tokens over hardcoded values** - Use CSS variables via Tailwind
+- **Reuse before creating** - Check `components/ui/` first
+- **Prefer composition** - Build complex UI from simple primitives
+- **Accessibility first** - Radix primitives are accessible by default
+
+### Visual Design Rules
+
+**Borders (IMPORTANT):**
+
+- **Never use harsh black borders** - they look dated and jarring
+- Use `border-border` for standard borders (soft blue-gray)
+- For dark mode, borders should be subtle (use opacity: `dark:border-gray-800/50`)
+- Consider `shadow-sm` or `ring-1 ring-black/5` instead of borders for elevation
+- Reserve `border-2` for focus/selected states only
+
+```tsx
+// Good
+className = 'border border-border'; // Soft, uses CSS variable
+className = 'rounded-lg shadow-sm'; // Borderless with shadow
+className = 'border border-red-200 dark:border-red-900/50'; // Severity with opacity
+
+// Bad
+className = 'border border-black'; // Never pure black
+className = 'border-2 border-gray-900'; // Too harsh
+```
+
+**Colors:**
+
+- Use opacity modifiers in dark mode: `dark:bg-red-950/30` not `dark:bg-red-900`
+- Severity colors: red (critical), amber (warning), blue (info), emerald (success)
+- Text on colored backgrounds: use `*-700` in light mode, `*-300` in dark mode
+
+### Component Composition Example
+
+```tsx
+// Good - compose from primitives
+function ConfirmDialog({ title, onConfirm }) {
+  return (
+    <Dialog>
+      <DialogContent>
+        <DialogHeader>{title}</DialogHeader>
+        <DialogFooter>
+          <Button variant="outline">Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm}>Confirm</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Bad - monolithic component with many props
+function ConfirmDialog({ title, cancelText, confirmText, variant, size, ... }) {
+  // Too many props, hard to maintain
+}
+```
+
+## React Hooks: useMemo vs useCallback
+
+- **`useMemo`**: Use when computing a value (non-callable result)
+- **`useCallback`**: Use when creating a stable function reference
+
+```typescript
+// Good - useMemo for computed values
+const tooltipMessage = useMemo(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
+
+// Good - useCallback for functions with arguments
+const handleClick = useCallback((id: string) => {
+  console.log('Clicked:', id);
+}, []);
+
+// Bad - useCallback for computed values
+const getTooltipMessage = useCallback(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
+```
+
+## Anti-Patterns - DO NOT DO ANY OF THE FOLLOWING
+
+**General:**
+
+- Using `fetch()` instead of `callApi()`
+- Hardcoded route strings (use constants from `@app/constants/routes`)
+- Legacy React patterns (class components, legacy lifecycle methods)
+- Over-memoization of simple values
+- Using `useCallback` for computed values (use `useMemo` instead)
+
+## Path Alias
+
+- `@app/*` maps to `src/*` (configured in vite.config.ts)
+- `@/components/ui/*` - Radix primitives
