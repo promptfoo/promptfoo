@@ -299,6 +299,14 @@ export function maybeCoerceToGeminiFormat(
 let cachedAuth: GoogleAuth | undefined;
 
 /**
+ * Clears the cached GoogleAuth instance (for testing)
+ * @internal
+ */
+export function clearCachedAuth() {
+  cachedAuth = undefined;
+}
+
+/**
  * Loads and processes Google credentials from various sources
  */
 export function loadCredentials(credentials?: string): string | undefined {
