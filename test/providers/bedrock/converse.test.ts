@@ -1083,6 +1083,14 @@ Third line`;
   });
 
   describe('caching', () => {
+    let cacheSpies: any[] = [];
+
+    afterEach(() => {
+      // Clean up any cache-related spies
+      cacheSpies.forEach((spy) => spy.mockRestore());
+      cacheSpies = [];
+    });
+
     it('should track cache tokens in metadata', async () => {
       // Reset mock to ensure clean state
       mockSend.mockReset();
@@ -1132,6 +1140,46 @@ Third line`;
         // Just verify we got a valid response
         expect(result.output).toBeDefined();
       }
+    });
+
+    it('should set cached flag when returning cached response', async () => {
+      // Import cache utilities to mock them
+      const cacheModule = await import('../../../src/cache');
+
+      // Create a mock cache that returns a cached response
+      const mockCachedResponse = createMockConverseResponse('Cached response', {
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      });
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: vi.fn(),
+      };
+
+      // Mock cache to be enabled and return the cached response
+      const isCacheEnabledSpy = vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+      const getCacheSpy = vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache);
+
+      // Store spies for cleanup
+      cacheSpies.push(isCacheEnabledSpy, getCacheSpy);
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      // Verify the cached flag is set
+      expect(result.cached).toBe(true);
+      expect(result.output).toBe('Cached response');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        total: 150,
+      });
+
+      // Verify the mock send was never called (response came from cache)
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
