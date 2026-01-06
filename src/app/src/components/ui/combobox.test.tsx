@@ -91,7 +91,6 @@ describe('Combobox', () => {
     });
 
     it('opens dropdown on input focus', async () => {
-      const user = userEvent.setup();
       render(<Combobox options={mockOptions} onChange={vi.fn()} />);
 
       const input = screen.getByRole('combobox');
@@ -202,9 +201,7 @@ describe('Combobox', () => {
 
     it('shows check mark on selected option', async () => {
       const user = userEvent.setup();
-      const { container } = render(
-        <Combobox options={mockOptions} value="banana" onChange={vi.fn()} />,
-      );
+      render(<Combobox options={mockOptions} value="banana" onChange={vi.fn()} />);
 
       const input = screen.getByRole('combobox');
       await user.click(input);

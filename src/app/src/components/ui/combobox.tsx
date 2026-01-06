@@ -1,5 +1,5 @@
-import * as React from 'react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, FocusEvent, KeyboardEvent, MouseEvent } from 'react';
 
 import { Popover, PopoverAnchor, PopoverContent } from '@app/components/ui/popover';
 import { cn } from '@app/lib/utils';
@@ -30,12 +30,13 @@ function Combobox({
   disabled = false,
   className,
 }: ComboboxProps) {
-  const [open, setOpen] = React.useState(false);
-  const [inputValue, setInputValue] = React.useState('');
-  const [isTyping, setIsTyping] = React.useState(false);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const listRef = React.useRef<HTMLDivElement>(null);
-  const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const listboxId = useId();
 
   const selectedOption = options.find((option) => option.value === value);
 
@@ -47,7 +48,7 @@ function Combobox({
   }, [selectedOption, isTyping]);
 
   // Show all options when dropdown opens, filter only when user is typing something different
-  const filteredOptions = React.useMemo(() => {
+  const filteredOptions = useMemo(() => {
     // If not typing or input matches selected, show all options
     if (!isTyping || inputValue === selectedOption?.label) {
       return options;
@@ -57,113 +58,128 @@ function Combobox({
     return options.filter((option) => option.label.toLowerCase().includes(searchLower));
   }, [options, inputValue, isTyping, selectedOption?.label]);
 
-  const handleSelect = (optionValue: string) => {
-    onChange(optionValue);
-    const selected = options.find((option) => option.value === optionValue);
-    setInputValue(selected?.label || '');
-    setIsTyping(false);
-    setOpen(false);
-    setHighlightedIndex(-1);
-  };
+  const handleSelect = useCallback(
+    (optionValue: string) => {
+      onChange(optionValue);
+      const selected = options.find((option) => option.value === optionValue);
+      setInputValue(selected?.label || '');
+      setIsTyping(false);
+      setOpen(false);
+      setHighlightedIndex(-1);
+    },
+    [onChange, options],
+  );
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onChange('');
-    setInputValue('');
-    setIsTyping(false);
-    inputRef.current?.focus();
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setInputValue(newValue);
-    setIsTyping(true);
-    setOpen(true);
-    setHighlightedIndex(-1);
-
-    // If input is cleared, clear the selection
-    if (!newValue) {
+  const handleClear = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
       onChange('');
-    }
-  };
+      setInputValue('');
+      setIsTyping(false);
+      inputRef.current?.focus();
+    },
+    [onChange],
+  );
 
-  const handleInputFocus = () => {
+  const handleInputChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setInputValue(newValue);
+      setIsTyping(true);
+      setOpen(true);
+      setHighlightedIndex(-1);
+
+      // If input is cleared, clear the selection
+      if (!newValue) {
+        onChange('');
+      }
+    },
+    [onChange],
+  );
+
+  const handleInputFocus = useCallback(() => {
     setOpen(true);
-  };
+  }, []);
 
-  const handleInputClick = () => {
+  const handleInputClick = useCallback(() => {
     // Open dropdown on click even if already focused
     setOpen(true);
-  };
+  }, []);
 
-  const handleInputBlur = (e: React.FocusEvent) => {
-    // Don't close if clicking on the popover content or clear button
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (
-      relatedTarget?.closest('[data-combobox-content]') ||
-      relatedTarget?.closest('[data-combobox-clear]')
-    ) {
-      return;
-    }
-
-    // On blur, reset to selected value if input doesn't match
-    const matchingOption = options.find(
-      (option) => option.label.toLowerCase() === inputValue.toLowerCase(),
-    );
-
-    if (matchingOption) {
-      onChange(matchingOption.value);
-      setInputValue(matchingOption.label);
-    } else if (selectedOption) {
-      setInputValue(selectedOption.label);
-    } else {
-      setInputValue('');
-    }
-
-    setIsTyping(false);
-    setOpen(false);
-    setHighlightedIndex(-1);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!open) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        setOpen(true);
-        e.preventDefault();
+  const handleInputBlur = useCallback(
+    (e: FocusEvent) => {
+      // Don't close if clicking on the popover content or clear button
+      const relatedTarget = e.relatedTarget as HTMLElement;
+      if (
+        relatedTarget?.closest('[data-combobox-content]') ||
+        relatedTarget?.closest('[data-combobox-clear]')
+      ) {
+        return;
       }
-      return;
-    }
 
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : prev));
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
-          handleSelect(filteredOptions[highlightedIndex].value);
+      // On blur, reset to selected value if input doesn't match
+      const matchingOption = options.find(
+        (option) => option.label.toLowerCase() === inputValue.toLowerCase(),
+      );
+
+      if (matchingOption) {
+        onChange(matchingOption.value);
+        setInputValue(matchingOption.label);
+      } else if (selectedOption) {
+        setInputValue(selectedOption.label);
+      } else {
+        setInputValue('');
+      }
+
+      setIsTyping(false);
+      setOpen(false);
+      setHighlightedIndex(-1);
+    },
+    [options, inputValue, onChange, selectedOption],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!open) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          setOpen(true);
+          e.preventDefault();
         }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setOpen(false);
-        setIsTyping(false);
-        setHighlightedIndex(-1);
-        if (selectedOption) {
-          setInputValue(selectedOption.label);
-        }
-        break;
-    }
-  };
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : prev));
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+            handleSelect(filteredOptions[highlightedIndex].value);
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setOpen(false);
+          setIsTyping(false);
+          setHighlightedIndex(-1);
+          if (selectedOption) {
+            setInputValue(selectedOption.label);
+          }
+          break;
+      }
+    },
+    [open, filteredOptions, highlightedIndex, handleSelect, selectedOption],
+  );
 
   // Scroll highlighted option into view
-  React.useEffect(() => {
+  useEffect(() => {
     if (highlightedIndex >= 0 && listRef.current) {
       const highlighted = listRef.current.children[highlightedIndex] as HTMLElement;
       highlighted?.scrollIntoView({ block: 'nearest' });
@@ -184,6 +200,10 @@ function Combobox({
             aria-expanded={showDropdown}
             aria-haspopup="listbox"
             aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-activedescendant={
+              highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
+            }
             disabled={disabled}
             value={inputValue}
             onChange={handleInputChange}
@@ -234,13 +254,14 @@ function Combobox({
           }
         }}
       >
-        <div ref={listRef} className="max-h-60 overflow-y-auto" role="listbox">
+        <div ref={listRef} id={listboxId} className="max-h-60 overflow-y-auto" role="listbox">
           {filteredOptions.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
           ) : (
             filteredOptions.map((option, index) => (
               <button
                 key={option.value}
+                id={`${listboxId}-option-${index}`}
                 type="button"
                 role="option"
                 aria-selected={option.value === value}
