@@ -5,7 +5,7 @@ import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers'
  * Checks if a value is a valid provider ID (non-empty string).
  */
 function isValidProviderId(id: unknown): id is string {
-  return id != null && typeof id === 'string' && id !== '';
+  return id !== null && id !== undefined && typeof id === 'string' && id !== '';
 }
 
 /**
@@ -53,11 +53,18 @@ function getProviderIdAndLabel(
     }
   }
 
-  // Fallback for malformed provider configs: use label if available
-  // Use optional chaining to safely access potentially missing properties
+  // Fallback for malformed provider configs
+  // Use label as id if it's a valid string, otherwise generate a descriptive unknown id
   const label = (provider as Partial<ProviderOptions>).label;
+  if (isValidProviderId(label)) {
+    return {
+      id: label,
+      label,
+    };
+  }
+  
   return {
-    id: label || `unknown-${index}`,
+    id: `unknown-${index}`,
     label,
   };
 }
