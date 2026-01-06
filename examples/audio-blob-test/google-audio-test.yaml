@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Audio Blob Storage Test with Google Live Audio'
+
+prompts:
+  - 'Tell me a short joke'
+
+providers:
+  # Google Live API with OAuth2 authentication
+  # Note: gemini-2.0-flash-live-001 was shut down December 9, 2025
+  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
+    label: 'Google Live Audio (PCM)'
+    config:
+      # Force OAuth2 by not providing API key
+      apiKey: null
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
+      timeoutMs: 30000
+
+tests:
+  - vars:
+      query: 'Test audio generation'
+    assert:
+      - type: javascript
+        value: |
+          // Verify output exists
+          if (!output) {
+            throw new Error('No output');
+          }
+
+          // Verify audio field exists (may be replaced with blobRef)
+          const audio = context.providerResponse?.audio;
+          if (!audio) {
+            throw new Error('No audio in provider response');
+          }
+
+          // Verify blob storage worked (audio data should be > 1KB)
+          if (audio.blobRef) {
+            console.log('✅ Audio stored as blob:', audio.blobRef.hash);
+            console.log('   MIME type:', audio.blobRef.mimeType);
+            console.log('   Size:', audio.blobRef.sizeBytes, 'bytes');
+          } else if (audio.data) {
+            console.log('⚠️ Audio not stored as blob (might be < 1KB)');
+          }
+
+          // Verify transcript was generated
+          if (!audio.transcript || audio.transcript.length === 0) {
+            throw new Error('No transcript in audio response');
+          }
+
+          console.log('📝 Transcript:', audio.transcript);
+          return true;

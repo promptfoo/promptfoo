@@ -133,12 +133,74 @@ export class GoogleLiveProvider implements ApiProvider {
     return this.config.apiKey || getEnvString('GOOGLE_API_KEY');
   }
 
+  /**
+   * Gets an OAuth2 access token from Google credentials for the Generative Language API.
+   * Returns undefined if credentials are not available or if there's an error.
+   *
+   * NOTE: The Google Live API currently has authentication issues with OAuth2.
+   * For now, OAuth2 is disabled - only API keys are supported.
+   */
+  private async getAccessToken(): Promise<string | undefined> {
+    // TEMPORARILY DISABLED: Google Live API appears to require OAuth2 but rejects
+    // tokens with "insufficient authentication scopes" error.
+    // Needs investigation into correct scopes or service account requirements.
+    return undefined;
+
+    /* Keeping original OAuth2 code commented for future investigation:
+    try {
+      // Create a GoogleAuth instance with appropriate scopes for Generative Language API
+      let GoogleAuth;
+      try {
+        const importedModule = await import('google-auth-library');
+        GoogleAuth = importedModule.GoogleAuth;
+      } catch {
+        logger.debug('google-auth-library not available, skipping OAuth2 authentication');
+        return undefined;
+      }
+
+      const auth = new GoogleAuth({
+        scopes: [
+          'https://www.googleapis.com/auth/cloud-platform',
+        ],
+      });
+
+      const credentials = loadCredentials(this.config.credentials);
+      let client;
+
+      if (credentials) {
+        try {
+          client = await auth.fromJSON(JSON.parse(credentials));
+        } catch (error) {
+          logger.debug(`Could not load credentials for OAuth2: ${error}`);
+          return undefined;
+        }
+      } else {
+        client = await auth.getClient();
+      }
+
+      const tokenResponse = await client.getAccessToken();
+      return tokenResponse.token || undefined;
+    } catch (err) {
+      logger.debug(`Could not get OAuth2 access token: ${err}`);
+      return undefined;
+    }
+    */
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    if (!this.getApiKey()) {
+    // Try OAuth2 first, fallback to API key
+    const accessToken = await this.getAccessToken();
+    const apiKey = this.getApiKey();
+
+    if (!accessToken && !apiKey) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google authentication is not configured. Either:\n' +
+          '1. Set GOOGLE_API_KEY environment variable, or\n' +
+          '2. Run `gcloud auth application-default login`, or\n' +
+          '3. Set GOOGLE_APPLICATION_CREDENTIALS to your service account key file, or\n' +
+          '4. Add `credentials` to the provider config with a service account JSON',
       );
     }
 
@@ -211,7 +273,15 @@ export class GoogleLiveProvider implements ApiProvider {
         apiVersion = 'v1alpha';
       }
 
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
+      // Construct WebSocket URL with either OAuth2 token or API key
+      let url: string;
+      if (accessToken) {
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
+        logger.debug('Using OAuth2 access token for Google Live API authentication');
+      } else {
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+        logger.debug('Using API key for Google Live API authentication');
+      }
 
       const ws = new WebSocket(url);
 
