@@ -80,7 +80,6 @@ function renderWithProviders({
   isLoading?: boolean;
   error?: string | null;
   initialEntries?: string[];
-  theme?: ReturnType<typeof createTheme>;
   showDatasetColumn?: boolean;
 }): RenderResult {
   return render(
@@ -240,7 +239,6 @@ describe('Prompts', () => {
   it('should render correctly in dark mode', () => {
     const { container } = renderWithProviders({
       data: mockPrompts,
-      theme: darkTheme,
     });
 
     const promptsContainer = container.firstChild;
