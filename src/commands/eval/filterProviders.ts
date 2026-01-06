@@ -2,6 +2,13 @@ import type { ApiProvider, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
 
 /**
+ * Checks if a value is a valid provider ID (non-empty string).
+ */
+function isValidProviderId(id: unknown): id is string {
+  return id != null && typeof id === 'string' && id !== '';
+}
+
+/**
  * Extracts the id and label from a raw provider config without instantiating it.
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
@@ -23,7 +30,7 @@ function getProviderIdAndLabel(
 
   // Check if it's a ProviderOptions object (has 'id' field that is a non-empty string)
   const providerId = (provider as ProviderOptions).id;
-  if ('id' in provider && providerId != null && typeof providerId === 'string' && providerId !== '') {
+  if ('id' in provider && isValidProviderId(providerId)) {
     const opts = provider as ProviderOptions;
     return {
       id: opts.id!,
@@ -47,7 +54,8 @@ function getProviderIdAndLabel(
   }
 
   // Fallback for malformed provider configs: use label if available
-  const label = (provider as ProviderOptions).label;
+  // Use optional chaining to safely access potentially missing properties
+  const label = (provider as Partial<ProviderOptions>).label;
   return {
     id: label || `unknown-${index}`,
     label,
