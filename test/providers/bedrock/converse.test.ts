@@ -1154,7 +1154,7 @@ Third line`;
       const mockCache = {
         get: vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
         set: vi.fn(),
-      };
+      } as any;
 
       // Mock cache to be enabled and return the cached response
       const isCacheEnabledSpy = vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
