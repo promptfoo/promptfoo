@@ -35,10 +35,7 @@ describe('TestCaseForm', () => {
       onCancel,
       initialValues: undefined,
     };
-    return render(
-      <TestCaseForm {...defaultProps} {...props} />
-      ,
-    );
+    return render(<TestCaseForm {...defaultProps} {...props} />);
   };
 
   it('should render with the title "Add Test Case" and show both "Add Test Case" and "Add Another" buttons when initialValues is undefined and open is true', () => {
@@ -196,13 +193,12 @@ describe('TestCaseForm', () => {
 
     rerender(
       <TestCaseForm
-          open={true}
-          onAdd={onAdd}
-          varsList={['var1', 'var2']}
-          onCancel={onCancel}
-          initialValues={initialValues2}
-        />
-      ,
+        open={true}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues2}
+      />,
     );
 
     // Get the last call since it was re-rendered with new props
@@ -241,13 +237,12 @@ describe('TestCaseForm', () => {
 
     rerender(
       <TestCaseForm
-          open={true}
-          onAdd={onAdd}
-          varsList={['var1', 'var2']}
-          onCancel={onCancel}
-          initialValues={initialValues}
-        />
-      ,
+        open={true}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues}
+      />,
     );
 
     const lastVarsFormCall = mockVarsForm.mock.calls[mockVarsForm.mock.calls.length - 1];

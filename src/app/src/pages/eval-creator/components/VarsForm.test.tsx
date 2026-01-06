@@ -10,9 +10,7 @@ describe('VarsForm', () => {
     const initialValues = { name: 'John Doe', location: 'New York' };
     const user = userEvent.setup();
 
-    render(
-      <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
-    );
+    render(<VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />);
 
     const locationInput = screen.getByLabelText('location');
     expect(locationInput).toHaveValue('New York');
@@ -70,9 +68,7 @@ describe('VarsForm', () => {
     const varsList: string[] = [];
     const initialValues = {};
 
-    render(
-      <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
-    );
+    render(<VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />);
 
     const messageElement = screen.getByText(
       'Add variables to your prompt using the {{varname}} syntax.',
@@ -86,9 +82,7 @@ describe('VarsForm', () => {
     const varsList = ['name', 'location'];
     const initialValues = { name: 'John Doe', location: 'New York', age: '30' };
 
-    render(
-      <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
-    );
+    render(<VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />);
 
     const nameInput = screen.getByLabelText('name');
     const locationInput = screen.getByLabelText('location');
@@ -104,9 +98,7 @@ describe('VarsForm', () => {
     const varsList = ['name', 'location', 'age'];
     const initialValues = { name: 'John Doe', location: 'New York' };
 
-    render(
-      <VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />,
-    );
+    render(<VarsForm onAdd={onAddMock} varsList={varsList} initialValues={initialValues} />);
 
     const ageInput = screen.getByLabelText('age');
     expect(ageInput).toBeInTheDocument();

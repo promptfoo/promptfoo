@@ -74,7 +74,7 @@ function renderWithProviders({
   isLoading = false,
   error = null,
   initialEntries = ['/'],
-    showDatasetColumn = true,
+  showDatasetColumn = true,
 }: {
   data?: ServerPromptWithMetadata[];
   isLoading?: boolean;
@@ -86,12 +86,12 @@ function renderWithProviders({
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <Prompts
-          data={data}
-          isLoading={isLoading}
-          error={error}
-          showDatasetColumn={showDatasetColumn}
-        />
-      </MemoryRouter>,
+        data={data}
+        isLoading={isLoading}
+        error={error}
+        showDatasetColumn={showDatasetColumn}
+      />
+    </MemoryRouter>,
   );
 }
 

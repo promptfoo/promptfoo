@@ -289,16 +289,15 @@ describe('StrategySection', () => {
     it('renders without error when theme.palette.primary.main is not defined and highlighted is true', () => {
       render(
         <StrategySection
-            isStrategyDisabled={() => false}
-            isRemoteGenerationDisabled={false}
-            title="Test Section"
-            strategies={testStrategies}
-            selectedIds={[]}
-            onToggle={mockOnToggle}
-            onConfigClick={mockOnConfigClick}
-            highlighted={true}
-          />
-        ,
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
+          title="Test Section"
+          strategies={testStrategies}
+          selectedIds={[]}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          highlighted={true}
+        />,
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();

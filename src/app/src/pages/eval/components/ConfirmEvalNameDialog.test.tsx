@@ -534,16 +534,10 @@ describe('ConfirmEvalNameDialog', () => {
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
       await user.click(confirmButton);
 
-      rerender(
-        <ConfirmEvalNameDialog {...props} open={false} />
-        ,
-      );
+      rerender(<ConfirmEvalNameDialog {...props} open={false} />);
 
       const newProps = { ...props, currentName: 'New Name' };
-      rerender(
-        <ConfirmEvalNameDialog {...newProps} />
-        ,
-      );
+      rerender(<ConfirmEvalNameDialog {...newProps} />);
 
       const button = screen.getByRole('button', { name: 'Confirm' });
       expect(button).toHaveTextContent('Confirm');
