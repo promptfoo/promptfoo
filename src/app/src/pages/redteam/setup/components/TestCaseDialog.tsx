@@ -75,7 +75,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isRunningTest = false,
   onRegenerate,
   onContinue,
-  currentTurn,
   maxTurns,
   availablePlugins,
   allowPluginChange = false,
@@ -141,15 +140,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     }
 
     return messages;
-  }, [
-    generatedTestCases,
-    targetResponses,
-    currentTurn,
-    maxTurns,
-    isGenerating,
-    isRunningTest,
-    strategyName,
-  ]);
+  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName]);
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);

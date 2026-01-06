@@ -50,6 +50,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: San
   const borderColor = getCssVarAsHsl('--border', '214.3 31.8% 91.4%');
   const textColor = getCssVarAsHsl('--foreground', '222.2 84% 4.9%');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (textRef.current) {
       setLabelWidth(textRef.current.getComputedTextLength() + 16);

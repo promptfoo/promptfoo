@@ -18,6 +18,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -61,6 +62,7 @@ interface IterativeMetaMetadata {
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -95,6 +97,7 @@ export async function runMetaAgentRedteam({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -108,6 +111,7 @@ export async function runMetaAgentRedteam({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  inputs?: Record<string, string>;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
@@ -243,6 +247,12 @@ export async function runMetaAgentRedteam({
       continue;
     }
 
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      attackPrompt = extractedPrompt;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Apply per-turn layer transforms if configured (e.g., audio, base64)
     // This enables: layer: { steps: [jailbreak:meta, audio] }
@@ -289,12 +299,19 @@ export async function runMetaAgentRedteam({
       .replace(/\{%/g, '{ %')
       .replace(/%\}/g, '% }');
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, string | object> = {
+      ...iterationVars,
+      [injectVar]: escapedAttackPrompt,
+      ...(currentInputVars || {}),
+    };
+
     const targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: escapedAttackPrompt,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -460,6 +477,8 @@ export async function runMetaAgentRedteam({
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
     });
 
     // Check if vulnerability was achieved
@@ -505,6 +524,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  readonly inputs?: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -512,6 +532,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
@@ -537,6 +558,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       task: 'meta-agent-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
+      inputs: this.inputs,
     });
   }
 
@@ -580,6 +603,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

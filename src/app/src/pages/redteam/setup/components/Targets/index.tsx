@@ -33,6 +33,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
 
   const { recordEvent } = useTelemetry();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_targets' });
   }, []);

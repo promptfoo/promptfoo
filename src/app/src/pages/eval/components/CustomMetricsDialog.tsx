@@ -102,6 +102,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }, [table.head.prompts]);
 
   // Create columns for DataTable
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
     const cols: ColumnDef<MetricRow>[] = [
       {
