@@ -197,7 +197,7 @@ describe('FoundationModelConfiguration', () => {
       );
     });
 
-    expect(modelIdInput).toHaveValue('openai:gpt-4o');
+    expect(modelIdInput).toHaveValue('openai:gpt-4o-turbo');
   });
 
   it('should update the placeholder and documentation link when the providerType prop changes', () => {
