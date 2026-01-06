@@ -233,7 +233,10 @@ function Combobox({
                 <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
               </button>
             )}
-            <ChevronDown className="h-4 w-4 opacity-50 pointer-events-none" />
+            <ChevronDown
+              data-testid="combobox-chevron"
+              className="h-4 w-4 opacity-50 pointer-events-none"
+            />
           </div>
         </div>
       </PopoverAnchor>
@@ -265,6 +268,7 @@ function Combobox({
                 type="button"
                 role="option"
                 aria-selected={option.value === value}
+                data-highlighted={index === highlightedIndex || undefined}
                 onMouseDown={(e) => e.preventDefault()} // Prevent blur
                 onClick={() => handleSelect(option.value)}
                 onMouseEnter={() => setHighlightedIndex(index)}

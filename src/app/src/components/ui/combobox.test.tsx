@@ -1,7 +1,11 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Combobox, type ComboboxOption } from './combobox';
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 const mockOptions: ComboboxOption[] = [
   { value: 'apple', label: 'Apple' },
@@ -42,9 +46,8 @@ describe('Combobox', () => {
     });
 
     it('renders chevron down icon', () => {
-      const { container } = render(<Combobox options={mockOptions} onChange={vi.fn()} />);
-      const icon = container.querySelector('svg');
-      expect(icon).toBeInTheDocument();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+      expect(screen.getByTestId('combobox-chevron')).toBeInTheDocument();
     });
 
     it('displays selected value in input', () => {
@@ -364,7 +367,7 @@ describe('Combobox', () => {
 
       // Second option should be highlighted (index 1)
       const options = screen.getAllByRole('option');
-      expect(options[1]).toHaveClass('bg-accent');
+      expect(options[1]).toHaveAttribute('data-highlighted');
     });
 
     it('navigates through options with ArrowUp', async () => {
@@ -384,7 +387,7 @@ describe('Combobox', () => {
       await user.keyboard('{ArrowUp}');
 
       const options = screen.getAllByRole('option');
-      expect(options[0]).toHaveClass('bg-accent');
+      expect(options[0]).toHaveAttribute('data-highlighted');
     });
 
     it('selects highlighted option on Enter', async () => {
@@ -455,7 +458,7 @@ describe('Combobox', () => {
       await user.keyboard('{ArrowUp}'); // Should not go below 0
 
       const options = screen.getAllByRole('option');
-      expect(options[0]).toHaveClass('bg-accent');
+      expect(options[0]).toHaveAttribute('data-highlighted');
     });
 
     it('does not navigate past last option with ArrowDown', async () => {
@@ -475,7 +478,7 @@ describe('Combobox', () => {
       }
 
       const options = screen.getAllByRole('option');
-      expect(options[3]).toHaveClass('bg-accent'); // Last option (index 3)
+      expect(options[3]).toHaveAttribute('data-highlighted'); // Last option (index 3)
     });
   });
 
@@ -578,7 +581,7 @@ describe('Combobox', () => {
       const option = screen.getByRole('option', { name: /cherry/i });
       await user.hover(option);
 
-      expect(option).toHaveClass('bg-accent');
+      expect(option).toHaveAttribute('data-highlighted');
     });
   });
 
