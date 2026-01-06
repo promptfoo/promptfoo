@@ -131,9 +131,10 @@ describe('filterTests', () => {
 
   describe('failing filter', () => {
     it('should filter failing tests when failing option is provided', async () => {
+      // --filter-failing returns all non-successful results (failures + errors)
       const result = await filterTests(mockTestSuite, { failing: 'eval-123' });
-      expect(result).toHaveLength(2);
-      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+      expect(result).toHaveLength(3);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
     });
 
     it('should match failing tests when provider paths differ', async () => {
