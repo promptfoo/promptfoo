@@ -20,7 +20,7 @@ npx promptfoo@latest init --example redteam-medical-agent
 
 ## Prerequisites
 
-- Node.js 20 or higher
+- Node.js 20+
 - npm or yarn
 - OpenAI API key for the agent
 

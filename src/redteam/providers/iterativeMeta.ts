@@ -224,7 +224,7 @@ export async function runMetaAgentRedteam({
     }
 
     if (agentResp.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
+      logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
       continue;

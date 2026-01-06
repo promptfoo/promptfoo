@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -102,7 +102,7 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useExhaustiveDependencies": "off",
+        "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
         "useJsxKeyInIterable": "error"
       },
@@ -143,7 +143,7 @@
         }
       },
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "error",
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
@@ -244,6 +244,9 @@
           },
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
@@ -268,6 +271,25 @@
       }
     },
     {
+      "includes": [
+        "src/app/src/pages/eval/components/**/*",
+        "src/app/src/pages/redteam/setup/components/**/*",
+        "src/providers/**/*",
+        "src/redteam/**/*",
+        "src/util/**/*",
+        "src/commands/**/*",
+        "src/types/**/*",
+        "src/tracing/**/*"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
@@ -280,6 +302,9 @@
           "style": {
             "noRestrictedGlobals": "off",
             "useBlockStatements": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }

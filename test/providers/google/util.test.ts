@@ -19,6 +19,7 @@ import {
   maybeCoerceToGeminiFormat,
   normalizeTools,
   parseStringObject,
+  sanitizeSchemaForGemini,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
@@ -1036,11 +1037,10 @@ describe('util', () => {
         ']';
       const context_vars = {};
 
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      // existsSync no longer called due to TOCTOU fix
       vi.spyOn(fs, 'readFileSync').mockReturnValue(tools);
       const result = loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
     });
   });
@@ -1988,6 +1988,109 @@ describe('util', () => {
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
     });
+
+    it('should sanitize function declaration schemas by removing additionalProperties', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'test_tool',
+              description: 'A test tool',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+                additionalProperties: false, // Should be removed
+              },
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized[0].functionDeclarations![0].parameters).not.toHaveProperty(
+        'additionalProperties',
+      );
+      expect(normalized[0].functionDeclarations![0].parameters).toEqual({
+        type: 'OBJECT',
+        properties: {
+          query: { type: 'STRING' },
+        },
+      });
+    });
+
+    it('should sanitize nested schemas in function declarations', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'nested_tool',
+              parameters: {
+                type: 'object',
+                properties: {
+                  options: {
+                    type: 'object',
+                    properties: {
+                      value: { type: 'number', default: 10 },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+                additionalProperties: false,
+                $schema: 'http://json-schema.org/draft-07/schema#',
+              },
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      const params = normalized[0].functionDeclarations![0].parameters as any;
+      expect(params).not.toHaveProperty('additionalProperties');
+      expect(params).not.toHaveProperty('$schema');
+      expect(params.properties.options).not.toHaveProperty('additionalProperties');
+      expect(params.properties.options.properties.value).not.toHaveProperty('default');
+    });
+
+    it('should handle tools without functionDeclarations', () => {
+      const tools = [
+        {
+          googleSearch: {},
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          googleSearch: {},
+        },
+      ]);
+    });
+
+    it('should handle functionDeclarations without parameters', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'no_params_tool',
+              description: 'Tool without parameters',
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized[0].functionDeclarations![0]).toEqual({
+        name: 'no_params_tool',
+        description: 'Tool without parameters',
+        parameters: undefined,
+      });
+    });
   });
 
   describe('resolveProjectId', () => {
@@ -2133,6 +2236,333 @@ describe('util', () => {
           process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
         }
       }
+    });
+  });
+
+  describe('sanitizeSchemaForGemini', () => {
+    it('should remove additionalProperties from schema', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        additionalProperties: false,
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+        },
+      });
+      expect(result).not.toHaveProperty('additionalProperties');
+    });
+
+    it('should remove $schema from schema', () => {
+      const schema = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('$schema');
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+        },
+      });
+    });
+
+    it('should remove default values from schema', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          count: {
+            type: 'number',
+            default: 10,
+          },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.properties.count).not.toHaveProperty('default');
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          count: { type: 'NUMBER' },
+        },
+      });
+    });
+
+    it('should convert lowercase types to uppercase', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          str: { type: 'string' },
+          num: { type: 'number' },
+          int: { type: 'integer' },
+          bool: { type: 'boolean' },
+          arr: { type: 'array', items: { type: 'string' } },
+          obj: { type: 'object', properties: {} },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.str.type).toBe('STRING');
+      expect(result.properties.num.type).toBe('NUMBER');
+      expect(result.properties.int.type).toBe('INTEGER');
+      expect(result.properties.bool.type).toBe('BOOLEAN');
+      expect(result.properties.arr.type).toBe('ARRAY');
+      expect(result.properties.obj.type).toBe('OBJECT');
+    });
+
+    it('should preserve already uppercase types', () => {
+      const schema = {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.name.type).toBe('STRING');
+    });
+
+    it('should recursively sanitize nested properties', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          user: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string', default: 'unknown' },
+              address: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  street: { type: 'string' },
+                  city: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        additionalProperties: false,
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('additionalProperties');
+      expect(result.properties.user).not.toHaveProperty('additionalProperties');
+      expect(result.properties.user.properties.name).not.toHaveProperty('default');
+      expect(result.properties.user.properties.address).not.toHaveProperty('additionalProperties');
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.user.type).toBe('OBJECT');
+      expect(result.properties.user.properties.address.type).toBe('OBJECT');
+      expect(result.properties.user.properties.address.properties.street.type).toBe('STRING');
+    });
+
+    it('should recursively sanitize array items', () => {
+      const schema = {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string' },
+            tags: {
+              type: 'array',
+              items: { type: 'string', default: '' },
+            },
+          },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.items).not.toHaveProperty('additionalProperties');
+      expect(result.items.properties.tags.items).not.toHaveProperty('default');
+
+      expect(result.type).toBe('ARRAY');
+      expect(result.items.type).toBe('OBJECT');
+      expect(result.items.properties.id.type).toBe('STRING');
+      expect(result.items.properties.tags.type).toBe('ARRAY');
+      expect(result.items.properties.tags.items.type).toBe('STRING');
+    });
+
+    it('should preserve supported Gemini schema properties', () => {
+      const schema = {
+        type: 'object',
+        format: 'date-time',
+        description: 'A user object',
+        nullable: true,
+        enum: ['a', 'b', 'c'],
+        required: ['name'],
+        properties: {
+          name: { type: 'string', description: 'User name' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({
+        type: 'OBJECT',
+        format: 'date-time',
+        description: 'A user object',
+        nullable: true,
+        enum: ['a', 'b', 'c'],
+        required: ['name'],
+        properties: {
+          name: { type: 'STRING', description: 'User name' },
+        },
+      });
+    });
+
+    it('should preserve minItems and maxItems for arrays', () => {
+      const schema = {
+        type: 'array',
+        minItems: 1,
+        maxItems: 10,
+        items: { type: 'string' },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({
+        type: 'ARRAY',
+        minItems: 1,
+        maxItems: 10,
+        items: { type: 'STRING' },
+      });
+    });
+
+    it('should handle real MCP SDK Zod-generated schema', () => {
+      // This represents what MCP SDK generates from Zod schemas
+      const mcpZodSchema = {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'The prompt to analyze',
+          },
+          maxTokens: {
+            type: 'number',
+            description: 'Maximum tokens to generate',
+            default: 1000,
+          },
+          options: {
+            type: 'object',
+            properties: {
+              temperature: {
+                type: 'number',
+                default: 0.7,
+              },
+              topK: {
+                type: 'integer',
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ['prompt'],
+        additionalProperties: false,
+        $schema: 'http://json-schema.org/draft-07/schema#',
+      };
+
+      const result = sanitizeSchemaForGemini(mcpZodSchema);
+
+      // Should not have any unsupported properties
+      expect(result).not.toHaveProperty('$schema');
+      expect(result).not.toHaveProperty('additionalProperties');
+      expect(result.properties.maxTokens).not.toHaveProperty('default');
+      expect(result.properties.options).not.toHaveProperty('additionalProperties');
+      expect(result.properties.options.properties.temperature).not.toHaveProperty('default');
+
+      // Should have all supported properties with correct types
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          prompt: {
+            type: 'STRING',
+            description: 'The prompt to analyze',
+          },
+          maxTokens: {
+            type: 'NUMBER',
+            description: 'Maximum tokens to generate',
+          },
+          options: {
+            type: 'OBJECT',
+            properties: {
+              temperature: {
+                type: 'NUMBER',
+              },
+              topK: {
+                type: 'INTEGER',
+              },
+            },
+          },
+        },
+        required: ['prompt'],
+      });
+    });
+
+    it('should handle null or undefined schema gracefully', () => {
+      expect(sanitizeSchemaForGemini(null as any)).toBe(null);
+      expect(sanitizeSchemaForGemini(undefined as any)).toBe(undefined);
+    });
+
+    it('should handle empty schema object', () => {
+      const schema = {};
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({});
+    });
+
+    it('should handle null type mapping', () => {
+      // Gemini doesn't support null type directly, map to STRING
+      const schema = {
+        type: 'null',
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('STRING');
+    });
+
+    it('should remove anyOf, oneOf, allOf (not supported by Gemini)', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            anyOf: [{ type: 'string' }, { type: 'number' }],
+          },
+        },
+        oneOf: [{ type: 'object' }],
+        allOf: [{ required: ['name'] }],
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('anyOf');
+      expect(result).not.toHaveProperty('oneOf');
+      expect(result).not.toHaveProperty('allOf');
+      // The nested anyOf in value property should also be removed
+      expect(result.properties.value).not.toHaveProperty('anyOf');
     });
   });
 });

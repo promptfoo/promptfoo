@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Veo video generation
+
+prompts:
+  - 'Generate a video: {{prompt}}'
+
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9'
+      resolution: '720p'
+      durationSeconds: 6 # Valid: 4, 6, 8 for Veo 3.x
+
+tests:
+  - vars:
+      prompt: A serene mountain landscape with clouds drifting slowly across the peaks at sunset
+    assert:
+      - type: is-valid-video
+  - vars:
+      prompt: A cat playing with a ball of yarn on a cozy living room floor
+    assert:
+      - type: is-valid-video
+  - vars:
+      prompt: Ocean waves gently rolling onto a sandy beach with palm trees swaying in the breeze
+    assert:
+      - type: is-valid-video

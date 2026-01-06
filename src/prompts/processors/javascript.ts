@@ -6,7 +6,7 @@ import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/ind
 export const transformContext = (context: {
   vars: Record<string, string | object>;
   provider?: ApiProvider;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
 }): PromptFunctionContext => {
   invariant(context.provider, 'Provider is required');
   return {

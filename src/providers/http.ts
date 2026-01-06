@@ -18,6 +18,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
 import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
@@ -836,7 +837,7 @@ export const HttpProviderConfigSchema = z.object({
   tls: TlsCertificateSchema.optional(),
 });
 
-type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -1530,12 +1531,11 @@ export class HttpProvider implements ApiProvider {
         : baseConfig;
     const now = Date.now();
 
-    // Check if token exists and is still valid (with 60 second buffer)
-    const TOKEN_BUFFER_MS = 60000;
+    // Check if token exists and is still valid (with buffer before expiry)
     if (
       this.lastToken &&
       this.lastTokenExpiresAt &&
-      now + TOKEN_BUFFER_MS < this.lastTokenExpiresAt
+      now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt
     ) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
       return;
@@ -1551,7 +1551,7 @@ export class HttpProvider implements ApiProvider {
         const stillValid =
           this.lastToken &&
           this.lastTokenExpiresAt &&
-          Date.now() + TOKEN_BUFFER_MS < this.lastTokenExpiresAt;
+          Date.now() + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
         if (stillValid) {
           return;
         }

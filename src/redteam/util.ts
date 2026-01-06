@@ -340,8 +340,12 @@ export async function extractGoalFromPrompt(
     ...(policy && { policy }),
   };
 
+  interface ExtractIntentResponse {
+    intent?: string;
+  }
+
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',

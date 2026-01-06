@@ -1,7 +1,7 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
 
-import type { EvaluateTableRow, Prompt } from '../../types/index';
+import type { CompletedPrompt, EvaluateTableRow, Prompt } from '../../types/index';
 
 /**
  *
@@ -39,7 +39,7 @@ export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
   options: { isRedteam?: boolean } = { isRedteam: false },
 ): string {
-  const csvRows: any[][] = [];
+  const csvRows: unknown[][] = [];
   const { isRedteam } = options;
 
   // Check if any rows have descriptions
@@ -51,7 +51,7 @@ export function evalTableToCsv(
     ...table.head.vars,
     ...table.head.prompts.flatMap((prompt) => {
       // Handle both Prompt and CompletedPrompt types
-      const provider = (prompt as any).provider || '';
+      const provider = (prompt as CompletedPrompt).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
       return [label, 'Grader Reason', 'Comment'];
     }),
@@ -67,7 +67,7 @@ export function evalTableToCsv(
 
   // Process body rows with pass/fail prefixes and conversation data
   table.body.forEach((row) => {
-    const rowValues: any[] = [
+    const rowValues = [
       ...(hasDescriptions ? [row.test.description || ''] : []),
       ...row.vars,
       ...row.outputs.flatMap((output) => {
@@ -129,6 +129,7 @@ export function evalTableToCsv(
 export function evalTableToJson(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME
 }): any {
   return table;
 }

@@ -355,7 +355,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (agentResp.error) {
-        logger.error('[Hydra] Agent provider error', {
+        logger.debug('[Hydra] Agent provider error', {
           turn,
           testRunId,
           error: agentResp.error,

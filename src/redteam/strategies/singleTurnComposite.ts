@@ -47,7 +47,12 @@ async function generateCompositePrompts(
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
 
-      const { data } = await fetchWithCache(
+      interface CompositeGenerationResponse {
+        error?: string;
+        modifiedPrompts?: string[];
+      }
+
+      const { data } = await fetchWithCache<CompositeGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -64,7 +69,7 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
-      if (data.error) {
+      if (data.error || !data.modifiedPrompts) {
         logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
         logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
         return;

@@ -222,13 +222,14 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
           return result.success || result.error.errors[0].message;
         },
       });
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
         // exit cleanly on interrupt
         process.exit(1);
       }
       // Unknown error: rethrow
-      logger.error('failed to prompt for email:', err);
+      logger.error(`failed to prompt for email: ${err}`);
       throw err;
     }
     setUserEmail(email);
