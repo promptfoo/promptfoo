@@ -45,7 +45,7 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
     <button
       onClick={handleCopy}
       className={cn(
-        'p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors',
+        'p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer',
         className,
       )}
       aria-label={copied ? 'Copied' : 'Copy'}
