@@ -14,7 +14,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
-import { createShareableModelAuditUrl } from '../share';
+import { createShareableModelAuditUrl, isModelAuditSharingEnabled } from '../share';
 import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
 import {
   getHuggingFaceMetadata,
@@ -535,8 +535,9 @@ async function processJsonResults(
     revisionInfo,
   );
 
-  // Determine if we should share
-  const hasExplicitDisable = options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+  // Determine if we should share (matches eval command behavior)
+  const hasExplicitDisable =
+    options.share === false || options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
 
   let wantsToShare: boolean;
   if (hasExplicitDisable) {
@@ -548,11 +549,14 @@ async function processJsonResults(
     wantsToShare = cloudConfig.isEnabled();
   }
 
-  logger.debug(`Model audit sharing decision: wantsToShare=${wantsToShare}`);
+  // Check if sharing is actually possible (cloud enabled or custom share URL configured)
+  const canShare = isModelAuditSharingEnabled();
+
+  logger.debug(`Model audit sharing decision: wantsToShare=${wantsToShare}, canShare=${canShare}`);
 
   // Start sharing in background (don't await yet - non-blocking like evals!)
   let sharePromise: Promise<string | null> | null = null;
-  if (wantsToShare && cloudConfig.isEnabled()) {
+  if (wantsToShare && canShare) {
     sharePromise = createShareableModelAuditUrl(audit);
   }
 

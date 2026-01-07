@@ -211,7 +211,7 @@ When connected to promptfoo Cloud, model audit results are automatically shared 
 # Results are automatically shared when cloud is enabled
 promptfoo scan-model models/
 
-# Explicitly enable sharing (even if cloud is not configured)
+# Explicitly enable sharing
 promptfoo scan-model models/ --share
 
 # Disable sharing for this scan
