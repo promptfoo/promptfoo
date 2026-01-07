@@ -168,6 +168,7 @@ export function printProfilerReport(): void {
 
 // Expose utilities globally for console access
 if (typeof window !== 'undefined') {
+  // biome-ignore lint/suspicious/noExplicitAny: window can kind of have anything I guess
   (window as any).__REACT_PROFILER__ = {
     getSummary: getProfilerSummary,
     getAllSummaries: getAllProfilerSummaries,

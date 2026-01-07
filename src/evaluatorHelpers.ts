@@ -258,7 +258,7 @@ export async function renderPrompt(
           varName,
           basePrompt,
           vars,
-        ])) as { output?: any; error?: string };
+        ])) as { output?: unknown; error?: string };
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }

@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, RenderResult, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -75,26 +74,22 @@ function renderWithProviders({
   isLoading = false,
   error = null,
   initialEntries = ['/'],
-  theme = createTheme(),
   showDatasetColumn = true,
 }: {
   data?: ServerPromptWithMetadata[];
   isLoading?: boolean;
   error?: string | null;
   initialEntries?: string[];
-  theme?: ReturnType<typeof createTheme>;
   showDatasetColumn?: boolean;
 }): RenderResult {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <ThemeProvider theme={theme}>
-        <Prompts
-          data={data}
-          isLoading={isLoading}
-          error={error}
-          showDatasetColumn={showDatasetColumn}
-        />
-      </ThemeProvider>
+      <Prompts
+        data={data}
+        isLoading={isLoading}
+        error={error}
+        showDatasetColumn={showDatasetColumn}
+      />
     </MemoryRouter>,
   );
 }
@@ -242,11 +237,8 @@ describe('Prompts', () => {
   });
 
   it('should render correctly in dark mode', () => {
-    const darkTheme = createTheme({ palette: { mode: 'dark' } });
-
     const { container } = renderWithProviders({
       data: mockPrompts,
-      theme: darkTheme,
     });
 
     const promptsContainer = container.firstChild;

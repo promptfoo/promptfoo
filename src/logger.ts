@@ -42,9 +42,9 @@ type LogLevel = keyof typeof LOG_LEVELS;
 export interface SanitizedLogContext {
   url?: string;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   queryParams?: Record<string, string>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Lazy source map support - only loaded when debug is enabled
@@ -123,7 +123,7 @@ type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
 /**
  * Extracts the actual message string from potentially nested info objects
  */
-function extractMessage(info: any): string {
+function extractMessage(info: winston.Logform.TransformableInfo): string {
   if (typeof info.message === 'object' && info.message !== null && 'message' in info.message) {
     return typeof info.message.message === 'string'
       ? info.message.message
@@ -341,9 +341,9 @@ export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'w
 /**
  * Sanitizes context object for logging using generic sanitization
  */
-function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
+function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> {
   // Special handling for URLs to preserve the URL-specific sanitization logic
-  const contextWithSanitizedUrls: Record<string, any> = {};
+  const contextWithSanitizedUrls: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(context)) {
     if (key === 'url' && typeof value === 'string') {

@@ -1,7 +1,14 @@
 // Barrel file re-exporting from specialized modules for backwards compatibility
 
 // Test case comparison
-export { filterRuntimeVars, resultIsForTestCase, varsMatch } from './comparison';
+export {
+  deduplicateTestCases,
+  filterRuntimeVars,
+  getTestCaseDeduplicationKey,
+  isRuntimeVar,
+  resultIsForTestCase,
+  varsMatch,
+} from './comparison';
 // Environment setup
 export { setupEnv } from './env';
 // File operations

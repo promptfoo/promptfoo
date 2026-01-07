@@ -23,6 +23,8 @@ PR titles follow Conventional Commits format. They become squash-merge commit me
 | `revert`   | Revert previous change                                |
 | `perf`     | Performance improvement                               |
 
+**Changelog visibility:** Only `feat`, `fix`, and breaking changes (`!`) appear in release notes. Use `ci`, `chore`, `test`, `docs`, or `refactor` for changes that shouldn't be user-facing.
+
 **Breaking changes:** Add `!` after scope: `feat(api)!:`, `chore(deps)!:`
 
 ### Test vs Fix

@@ -3,7 +3,7 @@ import type winston from 'winston';
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { Inputs, NunjucksFilterMap, TokenUsage } from './shared';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
@@ -28,6 +28,7 @@ interface AtomicTestCase {
   options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
+  cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
 }
@@ -46,6 +47,7 @@ export interface ProviderOptions {
   transform?: string;
   delay?: number;
   env?: EnvOverrides;
+  inputs?: Inputs;
 }
 
 export interface CallApiContextParams {
@@ -97,6 +99,7 @@ export interface ApiProvider {
   config?: any;
   delay?: number;
   getSessionId?: () => string;
+  inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
@@ -196,6 +199,7 @@ export interface ProviderResponse {
 }
 
 export interface ProviderEmbeddingResponse {
+  cached?: boolean;
   cost?: number;
   error?: string;
   embedding?: number[];

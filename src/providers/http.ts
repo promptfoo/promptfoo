@@ -837,7 +837,7 @@ export const HttpProviderConfigSchema = z.object({
   tls: TlsCertificateSchema.optional(),
 });
 
-type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {

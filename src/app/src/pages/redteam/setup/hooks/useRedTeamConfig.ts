@@ -34,8 +34,8 @@ interface RedTeamConfigState {
   config: Config;
   providerType: string | undefined; // UI state, not persisted in config
   reconContext: ReconContext | null; // Tracks if config came from recon analysis
-  updateConfig: (section: keyof Config, value: any) => void;
-  updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
+  updateConfig: <K extends keyof Config>(section: K, value: Config[K]) => void;
+  updatePlugins: (plugins: Config['plugins']) => void;
   setFullConfig: (config: Config, reconContext?: ReconContext) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;

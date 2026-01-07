@@ -148,6 +148,7 @@ export default function ResultsView({
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleFailureFilterToggle = React.useCallback(
     (columnId: string, checked: boolean) => {
       setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));

@@ -37,6 +37,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     validateRef.current = validator;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);

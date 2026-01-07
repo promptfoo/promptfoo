@@ -46,6 +46,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (hasShownPopup.current) {
       return;

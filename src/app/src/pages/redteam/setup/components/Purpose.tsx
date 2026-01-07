@@ -91,6 +91,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
   }, []);
@@ -157,6 +158,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
   const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {

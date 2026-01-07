@@ -10,13 +10,13 @@ import { runPython } from './pythonUtils';
  * @param {string} code - The Python code to execute.
  * @param {string} method - The method name to call in the Python script.
  * @param {(string | object | undefined)[]} args - The list of arguments to pass to the Python method.
- * @returns {Promise<any>} - The result from executing the Python code.
+ * @returns {Promise<T>} - The result from executing the Python code.
  */
-export async function runPythonCode(
+export async function runPythonCode<T = unknown>(
   code: string,
   method: string,
   args: (string | object | undefined)[],
-): Promise<any> {
+): Promise<T> {
   const tempFilePath = path.join(
     os.tmpdir(),
     `temp-python-code-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
@@ -24,7 +24,7 @@ export async function runPythonCode(
   try {
     fs.writeFileSync(tempFilePath, code);
     // Necessary to await so temp file doesn't get deleted.
-    const result = await runPython(tempFilePath, method, args);
+    const result = await runPython<T>(tempFilePath, method, args);
     return result;
   } catch (error) {
     logger.error(`Error executing Python code: ${error}`);

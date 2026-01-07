@@ -83,12 +83,31 @@ export async function filterTestsByResults(
   }
 
   // Match tests against filtered results.
-  // We merge defaultTest.vars into each test's vars before comparison because
-  // stored results have merged vars (from prepareTests in evaluator), but fresh
-  // tests loaded from config don't have defaultTest.vars merged yet.
+  // We try two matching strategies:
+  // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
+  // 2. Fallback: try without merging defaults (for old results that don't have defaults merged)
+  // This ensures backward compatibility with results stored before the merge was consistent.
   const matchedTests = [...testSuite.tests].filter((test) => {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
-    return filteredResults.some((result) => resultIsForTestCase(result, testWithDefaults));
+
+    // Try matching with merged defaults first (new results)
+    if (filteredResults.some((result) => resultIsForTestCase(result, testWithDefaults))) {
+      return true;
+    }
+
+    // Fallback: try matching without defaults (old results that don't have defaults merged)
+    // Only try fallback if defaultTest.vars actually adds something
+    const hasDefaultVars =
+      testSuite.defaultTest &&
+      typeof testSuite.defaultTest !== 'string' &&
+      testSuite.defaultTest.vars &&
+      Object.keys(testSuite.defaultTest.vars).length > 0;
+
+    if (hasDefaultVars) {
+      return filteredResults.some((result) => resultIsForTestCase(result, test));
+    }
+
+    return false;
   });
 
   logger.debug(

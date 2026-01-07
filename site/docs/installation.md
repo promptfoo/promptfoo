@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js >= 20.0.0
 - Supported operating systems: macOS, Linux, Windows
 
 ## For Command-Line Usage
