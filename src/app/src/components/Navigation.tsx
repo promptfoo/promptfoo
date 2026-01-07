@@ -157,7 +157,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
 
   return (
     <>
-      <header className="sticky top-0 z-[var(--z-appbar)] w-full border-b border-border bg-card shadow-sm">
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
         <div className="flex h-14 items-center justify-between px-4">
           {/* Left section: Logo and Navigation */}
           <div className="flex items-center gap-6">
@@ -197,9 +197,9 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                 <button
                   type="button"
                   onClick={handleModalToggle}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
-                  <Info className="h-5 w-5" />
+                  <Info className="size-5" />
                   <span className="sr-only">Information</span>
                 </button>
               </TooltipTrigger>
@@ -212,9 +212,9 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                   <button
                     type="button"
                     onClick={handleApiSettingsModalToggle}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    <Settings className="h-5 w-5" />
+                    <Settings className="size-5" />
                     <span className="sr-only">API and Sharing Settings</span>
                   </button>
                 </TooltipTrigger>

@@ -7,7 +7,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
   {
     id: 'ecommerce',
     name: 'E-commerce',
-    icon: <ShoppingCart className="h-5 w-5" />,
+    icon: <ShoppingCart className="size-5" />,
     description:
       'PCI DSS compliance, payment data security, and customer privacy for online retail.',
     longDescription:
@@ -39,7 +39,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
   {
     id: 'financial',
     name: 'Financial Services',
-    icon: <Building2 className="h-5 w-5" />,
+    icon: <Building2 className="size-5" />,
     description:
       'Trading systems, risk assessment, credit scoring, and customer advisory platforms',
     longDescription:
@@ -89,7 +89,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
   {
     id: 'medical',
     name: 'Healthcare',
-    icon: <HeartPulse className="h-5 w-5" />,
+    icon: <HeartPulse className="size-5" />,
     description: 'Clinical decision support, diagnosis assistance, and patient triage systems',
     longDescription:
       'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, and patient triage. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, and sycophantic behavior that prioritizes user satisfaction over medical accuracy.',
@@ -126,7 +126,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
   {
     id: 'insurance',
     name: 'Insurance Safety',
-    icon: <Shield className="h-5 w-5" />,
+    icon: <Shield className="size-5" />,
     description: 'Coverage decisions, benefits administration, and claims processing',
     longDescription:
       'Specialized tests for health insurance AI systems including coverage decisions, benefits administration, provider networks, and claims processing. Tests cover discriminatory coverage decisions based on protected characteristics (ADA, Section 1557, GINA violations), inaccurate provider network information that could cause surprise billing, and unauthorized PHI disclosure in violation of HIPAA privacy regulations.',
@@ -156,7 +156,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
   {
     id: 'pharmacy',
     name: 'Pharmacy',
-    icon: <Pill className="h-5 w-5" />,
+    icon: <Pill className="size-5" />,
     description: 'Medication dispensing, drug interactions, and dosage calculations',
     longDescription:
       'Critical safety testing for pharmacy AI systems including medication dispensing, drug interaction checking, dosage calculations, and controlled substance monitoring. Tests cover dangerous drug-drug/drug-food/drug-supplement interactions, dosage calculation errors (weight-based, renal adjustments, pediatric dosing), and DEA controlled substance compliance (schedule restrictions, early refill detection, PDMP requirements).',

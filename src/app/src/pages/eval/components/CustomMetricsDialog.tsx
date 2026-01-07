@@ -102,6 +102,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }, [table.head.prompts]);
 
   // Create columns for DataTable
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
     const cols: ColumnDef<MetricRow>[] = [
       {
@@ -143,7 +144,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             <div className="flex justify-end items-center h-full">
               <span
                 className={cn(
-                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                   classes,
                 )}
               >
@@ -198,7 +199,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           <div className="flex justify-end items-center h-full">
             <span
               className={cn(
-                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                 classes,
               )}
             >
@@ -221,9 +222,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               variant="ghost"
               size="sm"
               onClick={() => handleMetricFilterClick(row.original.metric)}
-              className="filter-icon h-8 w-8 p-0"
+              className="filter-icon size-8 p-0"
             >
-              <FilterIcon className="h-4 w-4" />
+              <FilterIcon className="size-4" />
             </Button>
           </div>
         );

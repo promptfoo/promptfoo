@@ -49,7 +49,7 @@ export function SetupSection({
           {headerAction}
         </div>
         <ChevronDown
-          className={cn('h-5 w-5 flex-shrink-0 transition-transform', isExpanded && 'rotate-180')}
+          className={cn('size-5 shrink-0 transition-transform', isExpanded && 'rotate-180')}
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 pb-4 pt-2">{children}</CollapsibleContent>

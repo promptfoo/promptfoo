@@ -247,7 +247,7 @@ export default function SuggestionsDialog({
                           <span>View suggested prompt</span>
                           <ChevronDown
                             className={cn(
-                              'h-4 w-4 transition-transform',
+                              'size-4 transition-transform',
                               expandedItems[index] && 'rotate-180',
                             )}
                           />

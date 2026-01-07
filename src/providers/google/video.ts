@@ -578,6 +578,7 @@ export class GoogleVideoProvider implements ApiProvider {
       video: {
         id: operationName,
         blobRef,
+        url: blobRef.uri, // Expose URI directly for consistent API surface with Sora
         format: 'mp4',
         size: resolution,
         duration: durationSeconds,

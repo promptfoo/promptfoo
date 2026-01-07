@@ -63,7 +63,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
                     onClick={handleCopyClick}
                     className="p-2 rounded hover:bg-muted transition-colors"
                   >
-                    {copied ? <Check className="h-5 w-5" /> : <ClipboardCopy className="h-5 w-5" />}
+                    {copied ? <Check className="size-5" /> : <ClipboardCopy className="size-5" />}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>Copy to clipboard</TooltipContent>
@@ -75,7 +75,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
                     onClick={handleDownloadClick}
                     className="p-2 rounded hover:bg-muted transition-colors"
                   >
-                    <Download className="h-5 w-5" />
+                    <Download className="size-5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>Download .yaml</TooltipContent>
@@ -89,7 +89,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
             readOnly
             value={yamlConfig}
             className={cn(
-              'w-full h-full min-h-[500px] font-mono text-sm p-3 rounded border border-border',
+              'size-full min-h-[500px] font-mono text-sm p-3 rounded border border-border',
               'bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring resize-none',
             )}
           />

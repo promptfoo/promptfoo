@@ -75,7 +75,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isRunningTest = false,
   onRegenerate,
   onContinue,
-  currentTurn,
   maxTurns,
   availablePlugins,
   allowPluginChange = false,
@@ -141,15 +140,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     }
 
     return messages;
-  }, [
-    generatedTestCases,
-    targetResponses,
-    currentTurn,
-    maxTurns,
-    isGenerating,
-    isRunningTest,
-    strategyName,
-  ]);
+  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName]);
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
@@ -215,7 +206,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           </div>
           {generatedTestCases.length > 0 && (
             <Alert variant="info">
-              <Info className="h-4 w-4" />
+              <Info className="size-4" />
               <AlertDescription>
                 Dissatisfied with the test case? Fine tune it by adjusting your{' '}
                 {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
@@ -233,7 +224,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
               className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
             >
               Learn more about {pluginDisplayName}
-              <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="size-3" />
             </a>
           )}
 

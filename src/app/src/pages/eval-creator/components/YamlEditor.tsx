@@ -112,6 +112,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   };
 
   // Initial load effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);
@@ -142,17 +143,17 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
-              <SaveIcon className="h-4 w-4 mr-2" />
+              <SaveIcon className="size-4 mr-2" />
               Save
             </Button>
             <Button variant="outline" size="sm" onClick={handleCancel}>
-              <CancelIcon className="h-4 w-4 mr-2" />
+              <CancelIcon className="size-4 mr-2" />
               Reset to UI State
             </Button>
             <label>
               <Button variant="ghost" size="sm" asChild>
                 <span className="cursor-pointer">
-                  <UploadIcon className="h-4 w-4 mr-2" />
+                  <UploadIcon className="size-4 mr-2" />
                   Upload File
                 </span>
               </Button>

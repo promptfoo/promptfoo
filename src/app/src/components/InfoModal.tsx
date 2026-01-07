@@ -20,32 +20,32 @@ import {
 
 const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
-    icon: <BookOpen className="h-4 w-4" />,
+    icon: <BookOpen className="size-4" />,
     text: 'Documentation',
     href: 'https://www.promptfoo.dev/docs/intro',
   },
   {
-    icon: <Github className="h-4 w-4" />,
+    icon: <Github className="size-4" />,
     text: 'GitHub Repository',
     href: 'https://github.com/promptfoo/promptfoo',
   },
   {
-    icon: <Bug className="h-4 w-4" />,
+    icon: <Bug className="size-4" />,
     text: 'File an Issue',
     href: 'https://github.com/promptfoo/promptfoo/issues',
   },
   {
-    icon: <MessageCircle className="h-4 w-4" />,
+    icon: <MessageCircle className="size-4" />,
     text: 'Join Our Discord Community',
     href: 'https://discord.gg/promptfoo',
   },
   {
-    icon: <Calendar className="h-4 w-4" />,
+    icon: <Calendar className="size-4" />,
     text: 'Book a Meeting',
     href: 'https://cal.com/team/promptfoo/intro2',
   },
   {
-    icon: <Briefcase className="h-4 w-4" />,
+    icon: <Briefcase className="size-4" />,
     text: 'Careers',
     href: 'https://www.promptfoo.dev/careers/',
   },
@@ -88,7 +88,7 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
             >
               {item.icon}
               <span>{item.text}</span>
-              <ExternalLink className="h-3 w-3 opacity-50 ml-auto" />
+              <ExternalLink className="size-3 opacity-50 ml-auto" />
             </a>
           ))}
         </div>

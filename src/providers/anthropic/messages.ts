@@ -271,6 +271,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            cached: true,
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.

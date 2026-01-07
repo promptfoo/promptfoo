@@ -94,7 +94,7 @@ export const AuthorChip = ({
           className="p-1.5 hover:bg-muted/50 transition-colors text-emerald-600 dark:text-emerald-400"
           aria-label="Save"
         >
-          {isLoading ? <Spinner className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          {isLoading ? <Spinner className="size-3.5" /> : <Check className="size-3.5" />}
         </button>
         <button
           type="button"
@@ -103,7 +103,7 @@ export const AuthorChip = ({
           className="p-1.5 pr-2 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-destructive"
           aria-label="Cancel"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="size-3.5" />
         </button>
       </div>
     );
@@ -118,7 +118,7 @@ export const AuthorChip = ({
           disabled={!editable}
           interactive={editable}
           trailingIcon={
-            editable ? <Pencil className="h-3.5 w-3.5 text-muted-foreground" /> : undefined
+            editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined
           }
         >
           {author || 'Unknown'}

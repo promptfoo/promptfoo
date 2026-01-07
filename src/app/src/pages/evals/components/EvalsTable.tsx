@@ -71,6 +71,7 @@ export default function EvalsTable({
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchEvals(abortController.signal);
@@ -298,7 +299,7 @@ export default function EvalsTable({
         onClick={handleDeleteSelected}
         data-testid="delete-selected-button"
       >
-        <DeleteIcon className="h-4 w-4 mr-1.5" />
+        <DeleteIcon className="size-4 mr-1.5" />
         Delete ({selectedEvalIds.length})
       </Button>
     ) : null;
@@ -346,7 +347,7 @@ export default function EvalsTable({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <DeleteIcon className="h-4 w-4 mr-1.5" />
+              <DeleteIcon className="size-4 mr-1.5" />
               Delete
             </Button>
           </DialogFooter>

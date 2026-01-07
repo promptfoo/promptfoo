@@ -75,6 +75,7 @@ export function LogViewer({ logs }: LogViewerProps) {
   );
 
   // Auto-scroll effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {
@@ -188,15 +189,15 @@ export function LogViewer({ logs }: LogViewerProps) {
         <p className="text-sm font-medium">Logs</p>
         <div className="ml-auto flex gap-2">
           <Button variant="ghost" size="sm" onClick={handleCopyLogs}>
-            <Copy className="mr-1 h-4 w-4" />
+            <Copy className="mr-1 size-4" />
             Copy
           </Button>
           <Button variant="ghost" size="sm" onClick={handleSaveLogs}>
-            <Download className="mr-1 h-4 w-4" />
+            <Download className="mr-1 size-4" />
             Save
           </Button>
           <Button variant="ghost" size="sm" onClick={handleOpenFullscreen}>
-            <Maximize2 className="mr-1 h-4 w-4" />
+            <Maximize2 className="mr-1 size-4" />
             Fullscreen
           </Button>
         </div>
@@ -211,10 +212,10 @@ export function LogViewer({ logs }: LogViewerProps) {
         {showScrollButton && !isFullscreen && (
           <Button
             size="icon"
-            className="absolute bottom-4 right-4 h-8 w-8 rounded-full shadow-md"
+            className="absolute bottom-4 right-4 size-8 rounded-full shadow-md"
             onClick={() => scrollToBottom(logsContainerRef)}
           >
-            <ChevronsDown className="h-4 w-4" />
+            <ChevronsDown className="size-4" />
           </Button>
         )}
       </div>
@@ -225,11 +226,11 @@ export function LogViewer({ logs }: LogViewerProps) {
             <DialogTitle>Logs</DialogTitle>
             <div className="mr-8 flex gap-2">
               <Button variant="ghost" size="sm" onClick={handleCopyLogs}>
-                <Copy className="mr-1 h-4 w-4" />
+                <Copy className="mr-1 size-4" />
                 Copy
               </Button>
               <Button variant="ghost" size="sm" onClick={handleSaveLogs}>
-                <Download className="mr-1 h-4 w-4" />
+                <Download className="mr-1 size-4" />
                 Save
               </Button>
               <Button variant="ghost" size="sm" onClick={handleCloseFullscreen}>
@@ -246,10 +247,10 @@ export function LogViewer({ logs }: LogViewerProps) {
             {showScrollButton && isFullscreen && (
               <Button
                 size="icon"
-                className="fixed bottom-4 right-4 h-8 w-8 rounded-full shadow-md"
+                className="fixed bottom-4 right-4 size-8 rounded-full shadow-md"
                 onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
               >
-                <ChevronsDown className="h-4 w-4" />
+                <ChevronsDown className="size-4" />
               </Button>
             )}
           </div>

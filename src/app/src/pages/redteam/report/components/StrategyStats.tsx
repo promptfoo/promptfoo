@@ -13,19 +13,7 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 import { compareByASRDescending } from '../utils/utils';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 
 /**
  * Gets the progress bar color based on ASR percentage.
@@ -469,7 +457,7 @@ const StrategyStats = ({
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
                   </p>
-                  <p className="mb-4 min-h-[40px] text-sm text-muted-foreground">
+                  <p className="mb-4 min-h-10 text-sm text-muted-foreground">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
                   </p>

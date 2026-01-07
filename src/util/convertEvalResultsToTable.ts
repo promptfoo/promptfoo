@@ -106,10 +106,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         ? {
             id: result.response.video.id,
             blobRef: result.response.video.blobRef,
+            storageRef: result.response.video.storageRef,
             url: result.response.video.url,
             format: result.response.video.format,
             size: result.response.video.size,
             duration: result.response.video.duration,
+            thumbnail: result.response.video.thumbnail,
+            spritesheet: result.response.video.spritesheet,
             model: result.response.video.model,
             aspectRatio: result.response.video.aspectRatio,
             resolution: result.response.video.resolution,

@@ -180,7 +180,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
               onOpenChange={() => toggleSpan(span.spanId)}
               className="mb-2"
             >
-              <div className="flex items-center min-h-[40px] relative">
+              <div className="flex items-center min-h-10 relative">
                 {/* Expand/collapse button */}
                 <button
                   type="button"
@@ -191,9 +191,9 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                   )}
                 >
                   {isExpanded ? (
-                    <ChevronUp className="h-4 w-4" />
+                    <ChevronUp className="size-4" />
                   ) : (
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="size-4" />
                   )}
                 </button>
 

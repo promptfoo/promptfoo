@@ -30,7 +30,7 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
       <DialogContent className="max-w-[680px] p-0 overflow-hidden">
         <DialogHeader className="p-5 pb-3 border-b border-border/10">
           <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
-            <Settings className="h-5 w-5 text-primary" />
+            <Settings className="size-5 text-primary" />
             Table Settings
           </DialogTitle>
         </DialogHeader>
@@ -49,7 +49,7 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
             aria-label="Reset settings to defaults"
             title="Reset all settings to their default values"
           >
-            <RotateCcw className="h-4 w-4 mr-2" />
+            <RotateCcw className="size-4 mr-2" />
             Reset to Defaults
           </Button>
           <Button onClick={handleClose}>Done</Button>
