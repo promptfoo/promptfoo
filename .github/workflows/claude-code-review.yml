@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0  # Need full history for incremental diffs
+          fetch-depth: 0 # Need full history for incremental diffs
 
       - name: Determine review scope
         id: review_scope
@@ -63,9 +63,11 @@ jobs:
             ## Instructions
 
             1. Run `git diff ${{ steps.review_scope.outputs.base_sha }}..${{ steps.review_scope.outputs.head_sha }}` to see the changes
-            2. **IMPORTANT:** Only review the changes shown in this diff - do not re-review previously reviewed code
-            3. Read AGENTS.md for repository conventions
-            4. Review for the issues below, focusing on **critical problems only**
+            2. For incremental reviews, run `gh pr view ${{ github.event.pull_request.number }} --comments` to see previous review feedback
+            3. **IMPORTANT:** Only review the changes shown in this diff - do not re-review previously reviewed code
+            4. **IMPORTANT:** Do not re-report issues already mentioned in previous reviews unless they appear in new code
+            5. Read AGENTS.md for repository conventions
+            6. Review for the issues below, focusing on **critical problems only**
 
             ## Review Focus (Priority Order)
 
