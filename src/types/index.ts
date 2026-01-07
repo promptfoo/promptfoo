@@ -980,6 +980,22 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string()).optional(),
         })
         .optional(),
+      provider: z
+        .object({
+          type: z.enum(['tempo', 'jaeger', 'local']),
+          endpoint: z.string().optional(),
+          auth: z
+            .object({
+              token: z.string().optional(),
+              username: z.string().optional(),
+              password: z.string().optional(),
+            })
+            .optional(),
+          headers: z.record(z.string()).optional(),
+          timeout: z.number().optional(),
+        })
+        .optional(),
+      queryDelay: z.number().optional(),
     })
     .optional(),
 });
@@ -1124,6 +1140,26 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string()).optional(),
         })
         .optional(),
+
+      // External trace provider for fetching traces (Tempo, Jaeger, etc.)
+      provider: z
+        .object({
+          type: z.enum(['tempo', 'jaeger', 'local']).default('local'),
+          endpoint: z.string().optional(),
+          auth: z
+            .object({
+              token: z.string().optional(),
+              username: z.string().optional(),
+              password: z.string().optional(),
+            })
+            .optional(),
+          headers: z.record(z.string()).optional(),
+          timeout: z.number().default(10000),
+        })
+        .optional(),
+
+      // Delay before querying external provider (allows spans to arrive)
+      queryDelay: z.number().optional(),
     })
     .optional(),
 });

@@ -498,6 +498,8 @@ export default class GoatProvider implements ApiProvider {
               retryDelayMs: tracingOptions.retryDelayMs,
               spanFilter: tracingOptions.spanFilter,
               sanitizeAttributes: tracingOptions.sanitizeAttributes,
+              providerConfig: tracingOptions.provider,
+              queryDelay: tracingOptions.queryDelay,
             });
 
             if (traceContext) {

@@ -33,6 +33,8 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isExternalTraceProvider } from './tracing/providers';
+import { fetchTraceContext } from './tracing/traceContext';
 import {
   type Assertion,
   type AssertionType,
@@ -549,6 +551,27 @@ export async function runEval({
         const parts = traceContext.traceparent.split('-');
         if (parts.length >= 3) {
           traceId = parts[1];
+        }
+      }
+
+      // Fetch traces from external provider (Tempo, Jaeger, etc.) if configured
+      // This enables the basic strategy to pull traces from external backends
+      if (traceId && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+        try {
+          logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
+          // Default 7s delay to allow target app's OTLP exporter to flush spans to backend
+          // Many OTLP exporters batch spans with 5-30s intervals by default
+          await fetchTraceContext(traceId, {
+            providerConfig: testSuite?.tracing?.provider,
+            queryDelay: testSuite?.tracing?.queryDelay ?? 7000,
+            maxRetries: 5,
+            retryDelayMs: 1000,
+            includeInternalSpans: true,
+            sanitizeAttributes: true,
+          });
+          logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
+        } catch (error) {
+          logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
         }
       }
 

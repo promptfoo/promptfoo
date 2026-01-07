@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 
+import type { TraceProviderConfig } from '../../tracing/providers/types';
 import type { AtomicTestCase } from '../../types/index';
 
 export interface RedteamTracingOptions {
@@ -13,6 +14,10 @@ export interface RedteamTracingOptions {
   retryDelayMs?: number;
   spanFilter?: string[];
   sanitizeAttributes: boolean;
+  /** External trace provider configuration (Tempo, Jaeger, etc.) */
+  provider?: TraceProviderConfig;
+  /** Delay in ms before querying external provider (allows spans to arrive). Default: 3000 */
+  queryDelay?: number;
 }
 
 export type RawTracingConfig = Partial<
@@ -28,6 +33,8 @@ export type RawTracingConfig = Partial<
     | 'retryDelayMs'
     | 'spanFilter'
     | 'sanitizeAttributes'
+    | 'provider'
+    | 'queryDelay'
   >
 > & {
   strategies?: Record<string, RawTracingConfig>;
@@ -44,6 +51,8 @@ const DEFAULT_TRACING_OPTIONS: RedteamTracingOptions = {
   retryDelayMs: 500,
   spanFilter: undefined,
   sanitizeAttributes: true,
+  provider: undefined,
+  queryDelay: 3000,
 };
 
 function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): RawTracingConfig {
@@ -68,6 +77,8 @@ function normalizeTracingOptions(config: RawTracingConfig): RedteamTracingOption
     retryDelayMs: merged.retryDelayMs ?? DEFAULT_TRACING_OPTIONS.retryDelayMs,
     spanFilter: merged.spanFilter,
     sanitizeAttributes: merged.sanitizeAttributes ?? DEFAULT_TRACING_OPTIONS.sanitizeAttributes,
+    provider: merged.provider,
+    queryDelay: merged.queryDelay ?? DEFAULT_TRACING_OPTIONS.queryDelay,
   };
 }
 
@@ -80,8 +91,8 @@ export function resolveTracingOptions({
   test?: AtomicTestCase;
   config?: Record<string, unknown>;
 }): RedteamTracingOptions {
-  const globalConfig =
-    (cliState.config?.redteam?.tracing as RawTracingConfig | undefined) ?? undefined;
+  // Read from root-level tracing config
+  const globalConfig = (cliState.config?.tracing as RawTracingConfig | undefined) ?? undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
