@@ -36,14 +36,18 @@ jobs:
         run: |
           # For synchronize events, only review new commits since last push
           if [ "${{ github.event.action }}" = "synchronize" ]; then
-            echo "scope=incremental" >> $GITHUB_OUTPUT
-            echo "base_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
-            echo "head_sha=${{ github.event.after }}" >> $GITHUB_OUTPUT
+            {
+              echo "scope=incremental"
+              echo "base_sha=${{ github.event.before }}"
+              echo "head_sha=${{ github.event.after }}"
+            } >> "$GITHUB_OUTPUT"
           else
             # For opened/ready_for_review, review entire PR
-            echo "scope=full" >> $GITHUB_OUTPUT
-            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
-            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+            {
+              echo "scope=full"
+              echo "base_sha=${{ github.event.pull_request.base.sha }}"
+              echo "head_sha=${{ github.event.pull_request.head.sha }}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run Claude Code Review
