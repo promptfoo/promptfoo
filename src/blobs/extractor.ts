@@ -55,8 +55,10 @@ export function normalizeAudioMimeType(format: string | undefined): string {
 
   const trimmedFormat = format.trim();
 
-  // Already a proper audio MIME type
-  if (/^audio\/[a-z0-9.+-]+$/i.test(trimmedFormat)) {
+  // Already a proper audio MIME type - validate strictly to prevent MIME injection
+  // Only allow: audio/subtype where subtype is alphanumeric with optional dash/underscore/plus
+  // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
+  if (/^audio\/[a-z0-9_+-]+$/i.test(trimmedFormat)) {
     return trimmedFormat;
   }
 
@@ -77,9 +79,10 @@ export function normalizeAudioMimeType(format: string | undefined): string {
     return mimeMap[formatLower];
   }
 
-  // Validate format contains only alphanumeric, dash, dot, or underscore (RFC 6838)
-  // This prevents potential header injection or invalid MIME types
-  if (!/^[a-z0-9._-]+$/i.test(formatLower)) {
+  // Validate format contains only alphanumeric, dash, or underscore
+  // Periods are NOT allowed to prevent MIME injection attacks (e.g., "wav.html" -> "audio/wav.html")
+  // which browsers could interpret as HTML and execute embedded scripts
+  if (!/^[a-z0-9_-]+$/i.test(formatLower)) {
     logger.warn('[BlobExtractor] Invalid audio format, using default', { format });
     return 'audio/wav';
   }

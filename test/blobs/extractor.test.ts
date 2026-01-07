@@ -33,9 +33,15 @@ describe('normalizeAudioMimeType', () => {
       expect(normalizeAudioMimeType('audio/webm')).toBe('audio/webm');
     });
 
-    it('should pass through vendor MIME types', () => {
+    it('should pass through vendor MIME types without periods', () => {
       expect(normalizeAudioMimeType('audio/x-custom')).toBe('audio/x-custom');
-      expect(normalizeAudioMimeType('audio/vnd.company.format')).toBe('audio/vnd.company.format');
+      expect(normalizeAudioMimeType('audio/x-wav')).toBe('audio/x-wav');
+    });
+
+    it('should reject MIME types with periods to prevent injection attacks', () => {
+      // Periods could enable attacks like "audio/wav.html" being interpreted as HTML
+      expect(normalizeAudioMimeType('audio/vnd.company.format')).toBe('audio/wav');
+      expect(normalizeAudioMimeType('audio/wav.html')).toBe('audio/wav');
     });
   });
 
@@ -70,11 +76,17 @@ describe('normalizeAudioMimeType', () => {
       expect(normalizeAudioMimeType('raw')).toBe('audio/raw');
     });
 
-    it('should allow valid RFC 6838 characters in unknown formats', () => {
+    it('should allow dash and underscore in unknown formats', () => {
       expect(normalizeAudioMimeType('x-custom')).toBe('audio/x-custom');
-      expect(normalizeAudioMimeType('vnd.company.format')).toBe('audio/vnd.company.format');
       expect(normalizeAudioMimeType('codec_v2')).toBe('audio/codec_v2');
-      expect(normalizeAudioMimeType('format-1.0')).toBe('audio/format-1.0');
+      expect(normalizeAudioMimeType('x-wav-hd')).toBe('audio/x-wav-hd');
+    });
+
+    it('should reject unknown formats with periods to prevent MIME injection', () => {
+      // Periods could enable attacks like "wav.html" -> "audio/wav.html"
+      expect(normalizeAudioMimeType('vnd.company.format')).toBe('audio/wav');
+      expect(normalizeAudioMimeType('format-1.0')).toBe('audio/wav');
+      expect(normalizeAudioMimeType('wav.html')).toBe('audio/wav');
     });
   });
 
