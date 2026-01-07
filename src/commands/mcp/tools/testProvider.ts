@@ -1,9 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
-import { createToolResponse } from '../lib/utils';
-import { withTimeout } from '../lib/utils';
+import { createToolResponse, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { TokenUsage } from '../../../types/index';
 
 interface TestResult {
   providerId: string;
@@ -11,7 +12,7 @@ interface TestResult {
   responseTime: number;
   response?: string;
   error?: string;
-  tokenUsage?: any;
+  tokenUsage?: TokenUsage;
   cost?: number;
   timedOut: boolean;
   metadata: {

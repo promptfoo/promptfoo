@@ -1,21 +1,21 @@
-import { callApi } from '@app/utils/api';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
   isValidPolicyObject,
-  makeInlinePolicyId,
   makeDefaultPolicyName,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
-import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
+import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
@@ -60,20 +60,23 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 /**
  * Extracts unique policy IDs from plugins.
  */
-function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
+async function buildPolicyOptions(plugins?: RedteamPluginObject[]): Promise<string[]> {
   const policyIds = new Set<string>();
-  plugins?.forEach((plugin) => {
-    if (typeof plugin !== 'string' && plugin.id === 'policy') {
-      const policy = plugin?.config?.policy;
-      if (policy) {
-        if (isValidPolicyObject(policy)) {
-          policyIds.add(policy.id);
-        } else {
-          policyIds.add(makeInlinePolicyId(policy));
+
+  if (plugins) {
+    for (const plugin of plugins) {
+      if (typeof plugin !== 'string' && plugin.id === 'policy') {
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            policyIds.add(policy.id);
+          } else {
+            policyIds.add(await makeInlinePolicyId(policy));
+          }
         }
       }
     }
-  });
+  }
 
   return Array.from(policyIds).sort();
 }
@@ -84,28 +87,36 @@ type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
  * Creates a mapping of policy IDs to their names for display purposes.
  * Used by the filter form to show policy names in the dropdown.
  */
-function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
-  return plugins
-    .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
-    .reduce((map: PolicyIdToNameMap, plugin, index) => {
-      const policy = plugin?.config?.policy as Policy;
-      if (isValidPolicyObject(policy)) {
-        map[policy.id] = policy.name;
-      }
-      // Backwards compatibility w/ text-only inline policies.
-      else {
-        const id = makeInlinePolicyId(policy);
-        map[id] = makeDefaultPolicyName(index);
-      }
-      return map;
-    }, {});
+async function extractPolicyIdToNameMap(
+  plugins: RedteamPluginObject[],
+): Promise<PolicyIdToNameMap> {
+  const map: PolicyIdToNameMap = {};
+  const policyPlugins = plugins.filter(
+    (plugin) => typeof plugin !== 'string' && plugin.id === 'policy',
+  );
+
+  for (let index = 0; index < policyPlugins.length; index++) {
+    const plugin = policyPlugins[index];
+    const policy = plugin?.config?.policy as Policy;
+    if (isValidPolicyObject(policy)) {
+      map[policy.id] = policy.name;
+    }
+    // Backwards compatibility w/ text-only inline policies.
+    else if (policy) {
+      const id = await makeInlinePolicyId(policy);
+      map[id] = makeDefaultPolicyName(index);
+    }
+  }
+
+  return map;
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
 
-  return Array.from(new Set([...strategyIds, 'basic']));
+  // Filter out 'retry' - it's in the config but not user-facing in the UI
+  return Array.from(new Set([...strategyIds, 'basic'])).filter((id) => id !== 'retry');
 }
 
 /**
@@ -116,10 +127,10 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
  * @param config - The eval config
  * @param table - The eval table (needed to extract policy options from metrics)
  */
-function buildRedteamFilterOptions(
+async function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
   _table?: EvaluateTable | null,
-): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
+): Promise<{ plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {}> {
   const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
@@ -141,7 +152,7 @@ function buildRedteamFilterOptions(
     ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
-    policy: buildPolicyOptions(config?.redteam?.plugins),
+    policy: await buildPolicyOptions(config?.redteam?.plugins),
   };
 }
 
@@ -241,7 +252,7 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => void;
+  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -264,6 +275,12 @@ interface TableState {
    */
   filteredMetrics: PromptMetrics[] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
+
+  /**
+   * Evaluation-level statistics including durationMs (wall-clock time).
+   * Set automatically by fetchEvalData from API response.
+   */
+  stats: EvaluateStats | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -486,9 +503,15 @@ export const useTableStore = create<TableState>()(
       }));
     },
 
-    setTableFromResultsFile: (resultsFile: ResultsFile) => {
+    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
       if (resultsFile.version && resultsFile.version >= 4) {
         const table = convertResultsToTable(resultsFile);
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
 
         set((prevState) => ({
           table,
@@ -499,13 +522,20 @@ export const useTableStore = create<TableState>()(
             options: {
               metric: computeAvailableMetrics(table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       } else {
         const results = resultsFile.results as EvaluateSummaryV2;
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, results.table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
+
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
@@ -515,9 +545,9 @@ export const useTableStore = create<TableState>()(
             options: {
               metric: computeAvailableMetrics(results.table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, results.table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       }
@@ -533,6 +563,8 @@ export const useTableStore = create<TableState>()(
     filteredMetrics: null,
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
+
+    stats: null,
 
     highlightedResultsCount: 0,
 
@@ -619,6 +651,12 @@ export const useTableStore = create<TableState>()(
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
 
+          // Build async options
+          const [redteamOptions, policyIdToNameMap] = await Promise.all([
+            buildRedteamFilterOptions(data.config, data.table),
+            extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+          ]);
+
           set((prevState) => ({
             table: data.table,
             filteredResultsCount: data.filteredCount,
@@ -632,14 +670,16 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Store evaluation-level stats including durationMs
+            stats: data.stats || null,
             filters: {
               ...prevState.filters,
               options: {
                 metric: computeAvailableMetrics(data.table),
                 metadata: [],
-                ...buildRedteamFilterOptions(data.config, data.table),
+                ...redteamOptions,
               },
-              policyIdToNameMap: extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+              policyIdToNameMap,
             },
           }));
 
@@ -674,7 +714,7 @@ export const useTableStore = create<TableState>()(
     },
 
     addFilter: (filter) => {
-      const filterId = uuidv4();
+      const filterId = crypto.randomUUID();
 
       set((prevState) => {
         const isApplied = isFilterApplied(filter);

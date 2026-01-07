@@ -3,6 +3,7 @@ import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
+import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
@@ -12,20 +13,30 @@ import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
-import { Plugins } from './redteam/plugins/index';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
+import { Plugins } from './redteam/plugins/index';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
+import { createShareableUrl, isSharingEnabled } from './share';
+import { isApiProvider } from './types/providers';
 import { maybeLoadFromExternalFile } from './util/file';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
 import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
 import type { ApiProvider } from './types/providers';
-import { isApiProvider } from './types/providers';
 
 export { generateTable } from './table';
 export * from './types/index';
+
+// Extension hook context types for users writing custom extensions
+export type {
+  AfterAllExtensionHookContext,
+  AfterEachExtensionHookContext,
+  BeforeAllExtensionHookContext,
+  BeforeEachExtensionHookContext,
+  ExtensionHookContextMap,
+} from './evaluatorHelpers';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -135,6 +146,25 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       ...options,
     },
   );
+
+  // Handle sharing if enabled
+  if (testSuite.writeLatestResults && testSuite.sharing) {
+    if (isSharingEnabled(ret)) {
+      try {
+        const shareableUrl = await createShareableUrl(ret, { silent: true });
+        if (shareableUrl) {
+          ret.shareableUrl = shareableUrl;
+          ret.shared = true;
+          logger.debug(`Eval shared successfully: ${shareableUrl}`);
+        }
+      } catch (error) {
+        // Don't fail the evaluation if sharing fails
+        logger.warn(`Failed to create shareable URL: ${error}`);
+      }
+    } else {
+      logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
+    }
+  }
 
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {

@@ -1,0 +1,87 @@
+name: Claude Code Review
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    # Skip for bot PRs and fork PRs due to OIDC token limitations in pull_request_target
+    # Fork PRs fail because the actor in OIDC context is the fork contributor (read-only)
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are a senior security engineer reviewing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            **PR:** ${{ github.event.pull_request.title }}
+            **Author:** ${{ github.event.pull_request.user.login }}
+
+            This is promptfoo, an open-source LLM evaluation framework and AI agent security testing tool. Security review is critical.
+
+            ## Instructions
+
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
+            2. Read AGENTS.md for repository conventions
+            3. Review for the issues below, focusing on **critical problems only**
+
+            ## Review Focus (Priority Order)
+
+            **🔴 Security (Critical)**
+            - Injection vulnerabilities (command, SQL, XSS, prompt injection)
+            - Unsafe handling of user input or adversarial test content
+            - Credential/secret exposure, insecure data handling
+            - SSRF, path traversal, unsafe deserialization
+
+            **🟠 Correctness**
+            - Logic errors, incorrect behavior, unhandled edge cases
+            - Missing null/undefined checks, race conditions
+            - Breaking changes to public APIs
+
+            **🟡 Testing**
+            - Missing tests for new functionality or bug fixes
+            - Tests that don't actually verify the behavior
+            - Missing mock cleanup (causes test pollution)
+
+            ## Output Format
+
+            For each issue found:
+            - **File:line** - Brief description
+            - **Why it matters:** One sentence on impact
+            - **Suggested fix:** Code snippet or approach
+
+            ## Skip These (Biome/CI catches them)
+            - Formatting, import order, naming conventions
+            - Minor style preferences
+
+            ## PR Convention Check
+            If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per THE REDTEAM RULE.
+
+            Post your review as a single comment using `gh pr comment ${{ github.event.pull_request.number }}`.
+            Use ✅ if no critical issues, ⚠️ if issues found.
+          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'

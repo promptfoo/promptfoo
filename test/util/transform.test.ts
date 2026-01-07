@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import logger from '../../src/logger';
 import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import { TransformInputType, transform } from '../../src/util/transform';
 

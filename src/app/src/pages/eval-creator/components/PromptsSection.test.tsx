@@ -1,7 +1,8 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
-import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import PromptsSection from './PromptsSection';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import PromptsSection from './PromptsSection';
 
 vi.mock('@app/stores/evalConfig');
 
@@ -32,7 +33,11 @@ describe('PromptsSection', () => {
       config: { prompts },
       updateConfig: mockUpdateConfig,
     });
-    rerender(<PromptsSection />);
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
   };
 
   const openPromptDialog = () => {
@@ -87,7 +92,11 @@ describe('PromptsSection', () => {
   it('should display a message indicating no prompts are present when the prompts list is empty', () => {
     setupStore([]);
 
-    render(<PromptsSection />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
   });
@@ -95,7 +104,11 @@ describe('PromptsSection', () => {
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
     setupStore([]);
 
-    const { rerender } = render(<PromptsSection />);
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
 
@@ -124,7 +137,11 @@ describe('PromptsSection', () => {
     const initialPrompt = 'Write a short story about a cat.';
     setupStore([initialPrompt]);
 
-    const { rerender } = render(<PromptsSection />);
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText(/Write a short story about a cat./)).toBeInTheDocument();
 
@@ -156,19 +173,16 @@ describe('PromptsSection', () => {
     const initialPrompt = 'Translate the following sentence to French: {{sentence}}';
     setupStore([initialPrompt]);
 
-    const { rerender } = render(<PromptsSection />);
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText(/Translate the following sentence to French/)).toBeInTheDocument();
 
-    const duplicateButtons = screen
-      .getAllByTestId('ContentCopyIcon')
-      .map((icon) => icon.closest('button'));
-    if (duplicateButtons.length > 0) {
-      const button = duplicateButtons[0];
-      if (button) {
-        fireEvent.click(button);
-      }
-    }
+    const duplicateButton = screen.getByRole('button', { name: /duplicate prompt 1/i });
+    fireEvent.click(duplicateButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -184,17 +198,18 @@ describe('PromptsSection', () => {
     const initialPrompts = ['Prompt 1', 'Prompt 2', 'Prompt 3'];
     setupStore(initialPrompts);
 
-    const { rerender } = render(<PromptsSection />);
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText(/Prompt 1/)).toBeInTheDocument();
     expect(screen.getByText(/Prompt 2/)).toBeInTheDocument();
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
 
-    const deleteButtons = screen.getAllByTestId('DeleteIcon');
-    const deleteButton = deleteButtons[1].closest('button');
-    if (deleteButton) {
-      fireEvent.click(deleteButton);
-    }
+    const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
+    fireEvent.click(deleteButton);
 
     expect(screen.getByRole('dialog', { name: /delete prompt/i })).toBeInTheDocument();
 
@@ -216,7 +231,11 @@ describe('PromptsSection', () => {
   it("should add an example prompt to the list when the 'Add Example' button is clicked and the prompts list is empty", () => {
     setupStore([]);
 
-    render(<PromptsSection />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     const addExampleButton = screen.getByRole('button', { name: /add example/i });
     fireEvent.click(addExampleButton);
@@ -236,10 +255,15 @@ describe('PromptsSection', () => {
 
     setupStore([]);
 
-    render(<PromptsSection />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     const file = new File([longLineText], 'long_line.txt', { type: 'text/plain' });
-    const fileInput = screen.getByLabelText('Upload prompt from file').querySelector('input');
+    // Find the hidden file input
+    const fileInput = document.querySelector('input[type="file"]');
 
     if (!fileInput) {
       throw new Error('File input element not found');
@@ -261,7 +285,11 @@ describe('PromptsSection', () => {
     const malformedPrompt = 'This is a prompt with an unclosed variable: {{variable';
     setupStore([malformedPrompt]);
 
-    render(<PromptsSection />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
 
     expect(screen.getByText(/This is a prompt with an unclosed variable/)).toBeInTheDocument();
   });

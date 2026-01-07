@@ -23,6 +23,72 @@ import os
 import sys
 import traceback
 
+# ============================================================================
+# OpenTelemetry Tracing Support (Optional)
+# ============================================================================
+# When PROMPTFOO_ENABLE_OTEL=true, automatically instruments Python provider
+# calls with OpenTelemetry spans that link to the parent trace from Promptfoo.
+#
+# Requirements (optional):
+#   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+# ============================================================================
+
+_tracer = None
+_tracing_enabled = False
+
+
+def _init_tracing():
+    """Initialize OpenTelemetry tracing if enabled and packages are available."""
+    global _tracer, _tracing_enabled
+
+    if os.getenv("PROMPTFOO_ENABLE_OTEL", "").lower() not in ("true", "1", "yes"):
+        return
+
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+        # Get endpoint from environment or use default Promptfoo OTLP receiver
+        base_endpoint = os.getenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+        )
+        endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
+
+        provider = TracerProvider()
+        exporter = OTLPSpanExporter(endpoint=endpoint)
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+
+        _tracer = trace.get_tracer("promptfoo.python.provider")
+        _tracing_enabled = True
+
+        print(
+            f"[PythonProvider] OpenTelemetry tracing enabled, endpoint: {endpoint}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except ImportError:
+        print(
+            "[PythonProvider] OpenTelemetry packages not installed, tracing disabled. "
+            "Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as e:
+        print(
+            f"[PythonProvider] Failed to initialize tracing: {e}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+# Initialize tracing at module load
+_init_tracing()
+
 
 def load_user_module(script_path):
     """Load and return the user's Python module."""
@@ -112,6 +178,150 @@ def call_method(method_callable, args):
         return method_callable(*args)
 
 
+def _truncate_body(text, max_length=4096):
+    """Truncate text to max_length, adding indicator if truncated."""
+    if not isinstance(text, str):
+        text = str(text)
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 13] + "... [truncated]"
+
+
+def _traced_call(method_callable, args, function_name):
+    """
+    Call method with OpenTelemetry tracing if enabled.
+
+    Extracts traceparent from context (3rd arg) and creates a child span
+    that links to the parent trace from Promptfoo.
+    """
+    global _tracer, _tracing_enabled
+
+    # Fast path: if tracing not enabled, just call the method
+    if not _tracing_enabled or _tracer is None:
+        return call_method(method_callable, args)
+
+    # Extract traceparent from context (3rd argument for call_api)
+    traceparent = None
+    context_arg = None
+    if len(args) >= 3:
+        context_arg = args[2]
+        if isinstance(context_arg, dict):
+            traceparent = context_arg.get("traceparent")
+
+    # If no traceparent, fall back to untraced call
+    if not traceparent:
+        return call_method(method_callable, args)
+
+    try:
+        from opentelemetry.propagate import extract
+        from opentelemetry.trace import SpanKind, Status, StatusCode
+
+        # Extract parent context from W3C traceparent header
+        parent_ctx = extract({"traceparent": traceparent})
+
+        # Determine span name following GenAI conventions
+        span_name = f"python {function_name}"
+
+        with _tracer.start_as_current_span(
+            span_name, context=parent_ctx, kind=SpanKind.CLIENT
+        ) as span:
+            # Set GenAI semantic convention attributes
+            span.set_attribute("gen_ai.system", "python")
+            span.set_attribute("gen_ai.operation.name", function_name)
+
+            # Set request attributes from prompt (1st arg)
+            if len(args) >= 1:
+                prompt = args[0]
+                if isinstance(prompt, str):
+                    span.set_attribute("promptfoo.request.body", _truncate_body(prompt))
+
+            # Set model from config if available (2nd arg)
+            if len(args) >= 2:
+                options = args[1]
+                if isinstance(options, dict):
+                    config = options.get("config", {})
+                    if config.get("model"):
+                        span.set_attribute("gen_ai.request.model", config["model"])
+                    # Also check for provider id
+                    if options.get("id"):
+                        span.set_attribute("promptfoo.provider.id", options["id"])
+
+            # Set evaluation metadata from context
+            if context_arg:
+                if context_arg.get("evaluationId"):
+                    span.set_attribute("promptfoo.eval.id", context_arg["evaluationId"])
+                if context_arg.get("testCaseId"):
+                    span.set_attribute("promptfoo.test.id", context_arg["testCaseId"])
+
+            try:
+                # Execute the user's function
+                result = call_method(method_callable, args)
+
+                # Set response attributes
+                if isinstance(result, dict):
+                    # Response body
+                    if "output" in result:
+                        output = result["output"]
+                        if isinstance(output, str):
+                            span.set_attribute(
+                                "promptfoo.response.body", _truncate_body(output)
+                            )
+                        elif output is not None:
+                            span.set_attribute(
+                                "promptfoo.response.body",
+                                _truncate_body(json.dumps(output)),
+                            )
+
+                    # Token usage following GenAI conventions
+                    if "tokenUsage" in result and isinstance(
+                        result["tokenUsage"], dict
+                    ):
+                        usage = result["tokenUsage"]
+                        if "total" in usage:
+                            span.set_attribute(
+                                "gen_ai.usage.total_tokens", usage["total"]
+                            )
+                        if "prompt" in usage:
+                            span.set_attribute(
+                                "gen_ai.usage.input_tokens", usage["prompt"]
+                            )
+                        if "completion" in usage:
+                            span.set_attribute(
+                                "gen_ai.usage.output_tokens", usage["completion"]
+                            )
+
+                    # Cache hit
+                    if "cached" in result:
+                        span.set_attribute(
+                            "promptfoo.cache_hit", bool(result["cached"])
+                        )
+
+                    # Handle error in result
+                    if result.get("error"):
+                        span.set_status(Status(StatusCode.ERROR, str(result["error"])))
+                    else:
+                        span.set_status(Status(StatusCode.OK))
+                else:
+                    span.set_status(Status(StatusCode.OK))
+
+                return result
+
+            except Exception as e:
+                # Record exception and set error status
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+
+    except Exception as tracing_error:
+        # If tracing itself fails, log and fall back to untraced call
+        print(
+            f"[PythonProvider] Tracing error (continuing without trace): {tracing_error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return call_method(method_callable, args)
+
+
 def main():
     if len(sys.argv) < 3:
         print(
@@ -194,9 +404,9 @@ def handle_call(command_line, user_module, default_function_name):
         with open(request_file, "r", encoding="utf-8") as f:
             args = json.load(f)
 
-        # Execute user function
+        # Execute user function (with automatic tracing if enabled)
         try:
-            result = call_method(method_callable, args)
+            result = _traced_call(method_callable, args, function_name)
             response = {"type": "result", "data": result}
         except Exception as e:
             response = {

@@ -220,7 +220,7 @@ export class OpenAiModerationProvider
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache<OpenAIModerationResponse>(
         `${this.getApiUrl()}/moderations`,
         {
           method: 'POST',

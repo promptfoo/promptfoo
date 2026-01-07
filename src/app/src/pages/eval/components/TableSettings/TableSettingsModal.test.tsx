@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import TableSettingsModal from './TableSettingsModal';
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
+import TableSettingsModal from './TableSettingsModal';
 
 vi.mock('./hooks/useSettingsState', () => ({
   useSettingsState: vi.fn(),
@@ -10,10 +11,6 @@ vi.mock('./hooks/useSettingsState', () => ({
 
 vi.mock('./components/SettingsPanel', () => ({
   default: () => <div data-testid="mock-settings-panel"></div>,
-}));
-
-vi.mock('@mui/material/useMediaQuery', () => ({
-  default: vi.fn(() => true),
 }));
 
 describe('TableSettingsModal', () => {
@@ -54,7 +51,7 @@ describe('TableSettingsModal', () => {
 
   it('should call the onClose callback when the close button is clicked', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-    const closeButton = screen.getByRole('button', { name: 'close' });
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -85,12 +82,13 @@ describe('TableSettingsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should render the dialog in full screen mode when isMobile is true', () => {
+  it('should render the dialog with proper sizing', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const dialog = screen.getByRole('dialog');
 
-    expect(dialog).toHaveClass('MuiDialog-paperFullScreen');
+    // The dialog uses Radix UI with Tailwind classes for sizing
+    expect(dialog).toHaveClass('max-w-[680px]');
   });
 
   it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', () => {
@@ -98,7 +96,7 @@ describe('TableSettingsModal', () => {
 
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
-    const closeButton = screen.getByRole('button', { name: 'close' });
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);

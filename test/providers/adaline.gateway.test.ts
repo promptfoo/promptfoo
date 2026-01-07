@@ -1,13 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mocked } from 'vitest';
-
 import { Gateway } from '@adaline/gateway';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache } from '../../src/cache';
 import {
   AdalineGatewayCachePlugin,
   AdalineGatewayChatProvider,
   AdalineGatewayEmbeddingProvider,
 } from '../../src/providers/adaline.gateway';
+import type { Mocked } from 'vitest';
 
 vi.mock('@adaline/gateway', async (importOriginal) => {
   const GatewayMock = vi.fn(function () {

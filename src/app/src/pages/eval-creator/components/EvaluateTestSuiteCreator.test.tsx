@@ -1,8 +1,6 @@
-import React from 'react';
-
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import { callApi } from '@app/utils/api';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
@@ -14,7 +12,6 @@ import type {
   Scenario,
   TestCase,
 } from '@promptfoo/types';
-import { callApi } from '@app/utils/api';
 
 // Mock useToast hook
 const showToastMock = vi.fn();
@@ -31,15 +28,17 @@ vi.mock('./ConfigureEnvButton', () => ({
 vi.mock('./PromptsSection', () => ({
   default: vi.fn(() => <div data-testid="mock-prompts-section" />),
 }));
-vi.mock('./ProviderSelector', () => ({
-  // ProviderSelector expects providers and onChange props.
-  default: vi.fn(({ providers, onChange }) => (
+vi.mock('./ProvidersListSection', () => ({
+  ProvidersListSection: vi.fn(({ providers, onChange }) => (
     <div data-testid="mock-provider-selector">
       <button onClick={() => onChange([])}>Mock Clear Providers</button>
       {/* Render something based on providers if needed for other tests, or keep simple */}
       <span>{providers?.length || 0} providers</span>
     </div>
   )),
+}));
+vi.mock('./RunOptionsSection', () => ({
+  RunOptionsSection: vi.fn(() => <div data-testid="mock-run-options-section" />),
 }));
 vi.mock('./RunTestSuiteButton', () => ({
   default: vi.fn(() => <div data-testid="mock-run-test-suite-button" />),
@@ -54,11 +53,17 @@ vi.mock('./TestCasesSection', () => ({
 }));
 vi.mock('./YamlEditor', () => ({
   // YamlEditor expects initialConfig prop.
-  default: vi.fn(({ initialConfig }) => (
+  default: vi.fn(() => (
     <div data-testid="mock-yaml-editor">
-      <pre>{JSON.stringify(initialConfig)}</pre>
+      <pre>YAML Editor</pre>
     </div>
   )),
+}));
+vi.mock('./StepSection', () => ({
+  StepSection: vi.fn(({ children }) => <div data-testid="mock-step-section">{children}</div>),
+}));
+vi.mock('./InfoBox', () => ({
+  InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
 }));
 
 vi.mock('@app/utils/api', () => ({
@@ -70,11 +75,6 @@ vi.mock('@app/utils/api', () => ({
   ),
 }));
 
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
-
 describe('EvaluateTestSuiteCreator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,7 +83,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
@@ -91,7 +91,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
@@ -101,11 +101,13 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(cancelButton);
 
     // Wait for the dialog to be removed from the DOM
-    await waitForElementToBeRemoved(() => screen.queryByRole('dialog', { name: 'Confirm Reset' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Confirm Reset' })).toBeNull();
+    });
   });
 
   it('should close the reset confirmation dialog after the Reset button in the dialog is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -127,7 +129,15 @@ describe('EvaluateTestSuiteCreator', () => {
     const initialPrompts = ['Test Prompt {{var}}'];
     useStore.getState().updateConfig({ prompts: initialPrompts });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
+
+    // Navigate to step 3 (Test Cases) to see the TestCasesSection
+    const step3Button = screen.getByRole('button', { name: /add test cases/i });
+    await userEvent.click(step3Button);
+
+    // Verify initial state has the variable
+    const testCasesSectionBefore = screen.getByTestId('mock-test-cases-section');
+    expect(testCasesSectionBefore).toHaveTextContent('Vars: var');
 
     // Act
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -138,8 +148,8 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(dialogResetButton);
 
     // Assert
-    const testCasesSection = screen.getByTestId('mock-test-cases-section');
-    expect(testCasesSection).toHaveTextContent('Vars:'); // varsList is empty
+    const testCasesSectionAfter = screen.getByTestId('mock-test-cases-section');
+    expect(testCasesSectionAfter).toHaveTextContent('Vars:'); // varsList is empty
   });
 
   it('should reset all fields to their default state when the Reset button is clicked', async () => {
@@ -158,7 +168,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -191,7 +201,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -209,10 +219,11 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should update state when interacting with components', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
+    // Step 1 (Choose Providers) should be active by default, so provider selector should be visible
     // Find the provider selector
-    const providerSelector = screen.getByTestId('mock-provider-selector');
+    const providerSelector = await screen.findByTestId('mock-provider-selector');
     expect(providerSelector).toHaveTextContent('0 providers');
 
     // Click the clear providers button to trigger onChange
@@ -237,7 +248,7 @@ describe('EvaluateTestSuiteCreator', () => {
     expect((config as any).someNewFieldInFuture).toBe('This will work automatically!');
   });
 
-  it('should handle edge cases in variable extraction from prompts', () => {
+  it('should handle edge cases in variable extraction from prompts', async () => {
     useStore.getState().updateConfig({
       prompts: [
         '{{{nestedVar}}}',
@@ -248,7 +259,11 @@ describe('EvaluateTestSuiteCreator', () => {
       ],
     });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
+
+    // Navigate to step 3 (Test Cases) to see the TestCasesSection
+    const step3Button = screen.getByRole('button', { name: /add test cases/i });
+    await userEvent.click(step3Button);
 
     const testCasesSection = screen.getByTestId('mock-test-cases-section');
     expect(testCasesSection).toHaveTextContent('Vars: nestedVar, complete, validVar');
@@ -260,7 +275,7 @@ describe('EvaluateTestSuiteCreator', () => {
       json: async () => ({}),
     } as Response);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith('/providers/config-status');
@@ -273,7 +288,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should show the ConfigureEnvButton when the server responds with { hasCustomConfig: false }', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const configureEnvButton = await screen.findByTestId('mock-configure-env-button');
 

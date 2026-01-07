@@ -2,39 +2,40 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import PylonChat from '@app/components/PylonChat';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import AppIcon from '@mui/icons-material/Apps';
-import DownloadIcon from '@mui/icons-material/Download';
-import PluginIcon from '@mui/icons-material/Extension';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import TargetIcon from '@mui/icons-material/GpsFixed';
-import StrategyIcon from '@mui/icons-material/Psychology';
-import ReviewIcon from '@mui/icons-material/RateReview';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import SaveIcon from '@mui/icons-material/Save';
-import SettingsIcon from '@mui/icons-material/Settings';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import List from '@mui/material/List';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
-import { styled } from '@mui/material/styles';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
+import {
+  Brain,
+  ClipboardCheck,
+  Crosshair,
+  Download,
+  FolderOpen,
+  LayoutGrid,
+  Puzzle,
+  RotateCcw,
+  Save,
+  Settings,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { customTargetOption, predefinedTargets } from './components/constants';
 import Plugins from './components/Plugins';
@@ -45,171 +46,17 @@ import Strategies from './components/Strategies';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
+import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import './page.css';
-
 import type { Config, RedteamUITarget } from './types';
-import { SIDEBAR_WIDTH, NAVBAR_HEIGHT } from './constants';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
-
-const StyledTabs = styled(Tabs)(({ theme }) => ({
-  '& .MuiTabs-indicator': {
-    left: 0,
-    right: 'auto',
-  },
-  width: '100%',
-  backgroundColor: theme.palette.background.paper,
-  '& .MuiTab-root': {
-    minHeight: '48px',
-  },
-  '& .MuiTabs-scrollButtons': {
-    display: 'none',
-  },
-}));
-
-const StyledTab = styled(Tab)(({ theme }) => ({
-  alignItems: 'center',
-  textAlign: 'left',
-  justifyContent: 'flex-start',
-  '&.Mui-selected': {
-    backgroundColor: theme.palette.action.selected,
-  },
-  maxWidth: 'none',
-  width: '100%',
-  minHeight: '48px',
-  padding: theme.spacing(1, 2),
-  borderBottom: `1px solid ${theme.palette.divider}`,
-  '& .MuiSvgIcon-root': {
-    marginRight: theme.spacing(1),
-    fontSize: '18px',
-  },
-  textTransform: 'none',
-  fontSize: '0.875rem',
-}));
-
-const SidebarButtons = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  gap: theme.spacing(0.5),
-  padding: theme.spacing(1.5),
-  borderTop: `1px solid ${theme.palette.divider}`,
-  backgroundColor: theme.palette.background.paper,
-}));
-
-const SidebarButton = styled(Button)(({ theme }) => ({
-  justifyContent: 'flex-start',
-  padding: theme.spacing(1),
-  textTransform: 'none',
-  color: theme.palette.text.secondary,
-  fontSize: '0.875rem',
-  fontWeight: 400,
-  '& .MuiSvgIcon-root': {
-    marginRight: theme.spacing(1),
-    fontSize: '18px',
-  },
-  '&:hover': {
-    backgroundColor: theme.palette.action.hover,
-    color: theme.palette.text.primary,
-  },
-}));
-
-const TabPanel = styled(Box)(({ theme }) => ({
-  flexGrow: 1,
-  padding: theme.spacing(3),
-}));
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function CustomTabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <TabPanel
-      role="tabpanel"
-      hidden={value !== index}
-      id={`vertical-tabpanel-${index}`}
-      aria-labelledby={`vertical-tab-${index}`}
-      sx={{ padding: 0 }}
-      {...other}
-    >
-      {value === index && children}
-    </TabPanel>
-  );
-}
-
-function a11yProps(index: number) {
-  return {
-    id: `vertical-tab-${index}`,
-    'aria-controls': `vertical-tabpanel-${index}`,
-  };
-}
-
-const Root = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
-  position: 'fixed',
-  width: '100%',
-}));
-
-const OuterSidebarContainer = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  width: SIDEBAR_WIDTH,
-  minWidth: SIDEBAR_WIDTH,
-  borderRight: `1px solid ${theme.palette.divider}`,
-}));
-
-const InnerSidebarContainer = styled(Box)({
-  position: 'sticky',
-  top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
-  height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
-  display: 'flex',
-  flexDirection: 'column',
-});
-
-const TabsContainer = styled(Box)({
-  flexGrow: 1,
-  overflowY: 'auto',
-});
-
-const Content = styled(Box)(({ theme }) => ({
-  flexGrow: 1,
-  display: 'flex',
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-}));
-
-const TabContent = styled(Box)(({ theme }) => ({
-  flexGrow: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  position: 'relative',
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-}));
-
-/*
-const StyledFab = styled(Fab)(({ theme }) => ({
-  position: 'fixed',
-  bottom: theme.spacing(2),
-  right: theme.spacing(2),
-}));
-*/
 
 interface SavedConfig {
   id: string;
@@ -226,42 +73,20 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
-// Update the StatusSection styling
-const StatusSection = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
-  borderBottom: `1px solid ${theme.palette.divider}`,
-  borderRight: `1px solid ${theme.palette.divider}`,
-  backgroundColor: theme.palette.background.paper,
-  width: SIDEBAR_WIDTH,
-  minWidth: SIDEBAR_WIDTH,
-  '& .configName': {
-    fontSize: '1rem',
-    fontWeight: 500,
-    color: theme.palette.text.primary,
-    marginBottom: theme.spacing(0.5),
+const TAB_CONFIG = [
+  { value: '0', label: 'Target Type', icon: Crosshair },
+  { value: '1', label: 'Target Config', icon: Settings },
+  { value: '2', label: 'Application Details', icon: LayoutGrid },
+  { value: '3', label: 'Plugins', icon: Puzzle, showCount: true, countKey: 'plugins' as const },
+  {
+    value: '4',
+    label: 'Strategies',
+    icon: Brain,
+    showCount: true,
+    countKey: 'strategies' as const,
   },
-  '& .statusRow': {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing(1),
-  },
-  '& .unsavedChanges': {
-    fontSize: '0.875rem',
-    color: theme.palette.warning.main,
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.5),
-  },
-  '& .saveButton': {
-    minWidth: 'auto',
-    padding: theme.spacing(0.5, 1),
-  },
-  '& .dateText': {
-    fontSize: '0.875rem',
-    color: theme.palette.text.secondary,
-  },
-}));
+  { value: '5', label: 'Review', icon: ClipboardCheck },
+];
 
 export default function RedTeamSetupPage() {
   usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
@@ -295,6 +120,7 @@ export default function RedTeamSetupPage() {
   const lastSavedConfig = useRef<string>('');
 
   // Track funnel on initial load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('funnel', {
       type: 'redteam',
@@ -357,17 +183,18 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
-    updateHash(newValue);
-    setValue(newValue);
+  const handleTabChange = (newValue: string) => {
+    const numValue = Number.parseInt(newValue, 10);
+    updateHash(numValue);
+    setValue(numValue);
     window.scrollTo({ top: 0 });
 
     // Track funnel progress
     const steps = ['target_type', 'target_config', 'purpose', 'plugins', 'strategies', 'review'];
-    if (newValue < steps.length) {
+    if (numValue < steps.length) {
       recordEvent('funnel', {
         type: 'redteam',
-        step: `webui_setup_${steps[newValue]}_viewed`,
+        step: `webui_setup_${steps[numValue]}_viewed`,
         source: 'webui',
       });
     }
@@ -495,6 +322,7 @@ export default function RedTeamSetupPage() {
 
     try {
       const content = await readFileAsText(file);
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME
       const yamlConfig = yaml.load(content) as any;
 
       const strategies = yamlConfig?.redteam?.strategies || [];
@@ -522,6 +350,12 @@ export default function RedTeamSetupPage() {
         }
       }
 
+      // Parse applicationDefinition from purpose string or use explicit definition if available
+      // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
+      const applicationDefinition = yamlConfig.redteam?.applicationDefinition
+        ? yamlConfig.redteam.applicationDefinition
+        : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
+
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
@@ -533,16 +367,10 @@ export default function RedTeamSetupPage() {
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
-        applicationDefinition: {
-          purpose: yamlConfig.redteam?.purpose || '',
-          // We could potentially parse these from redteam.purpose if it follows a specific format.
-          redteamUser: '',
-          accessToData: '',
-          forbiddenData: '',
-          accessToActions: '',
-          forbiddenActions: '',
-          connectedSystems: '',
-        },
+        applicationDefinition,
+        testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',
+        language: yamlConfig.redteam?.language,
+        extensions: yamlConfig.extensions,
       };
 
       setFullConfig(mappedConfig);
@@ -611,26 +439,55 @@ export default function RedTeamSetupPage() {
     }).length;
   }, [config.strategies]);
 
+  const getTabLabel = (tab: (typeof TAB_CONFIG)[number]) => {
+    if (!tab.showCount) {
+      return tab.label;
+    }
+    if (tab.countKey === 'plugins' && config.plugins?.length) {
+      return `${tab.label} (${config.plugins.length})`;
+    }
+    if (tab.countKey === 'strategies' && activeStrategyCount) {
+      return `${tab.label} (${activeStrategyCount})`;
+    }
+    return tab.label;
+  };
+
   return (
     <UserProvider>
-      <Root>
-        <Content>
-          <OuterSidebarContainer>
-            <InnerSidebarContainer>
-              <StatusSection>
-                <Typography className="configName">
+      {/* Root container */}
+      <div className="fixed flex w-full bg-white dark:bg-zinc-900">
+        {/* Content wrapper */}
+        <div className="flex grow transition-[margin] duration-200">
+          {/* Outer sidebar container */}
+          <div
+            className="flex h-full flex-col border-r border-border"
+            style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
+          >
+            {/* Inner sidebar (sticky) */}
+            <div
+              className="sticky flex flex-col"
+              style={{
+                top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
+                height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
+              }}
+            >
+              {/* Status section */}
+              <div
+                className="border-b border-r border-border bg-card p-4"
+                style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
+              >
+                <p className="mb-1 text-base font-medium text-foreground">
                   {configName ? `Config: ${configName}` : 'New Configuration'}
-                </Typography>
+                </p>
                 {hasUnsavedChanges ? (
-                  <div className="statusRow">
-                    <Typography className="unsavedChanges">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
                       <span>●</span> Unsaved changes
-                    </Typography>
+                    </span>
                     <Button
-                      className="saveButton"
-                      size="small"
-                      variant="outlined"
-                      color="warning"
+                      size="sm"
+                      variant="outline"
+                      className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
                       onClick={handleSaveConfig}
                       disabled={!configName}
                     >
@@ -639,117 +496,106 @@ export default function RedTeamSetupPage() {
                   </div>
                 ) : (
                   configDate && (
-                    <Typography className="dateText" color="text.secondary" variant="body2">
+                    <p className="text-sm text-muted-foreground">
                       {formatDataGridDate(configDate)}
-                    </Typography>
+                    </p>
                   )
                 )}
-              </StatusSection>
-              <TabsContainer>
-                <StyledTabs
+              </div>
+
+              {/* Tabs container */}
+              <div className="grow overflow-y-auto">
+                <Tabs
+                  value={String(value)}
+                  onValueChange={handleTabChange}
                   orientation="vertical"
-                  variant="scrollable"
-                  value={value}
-                  onChange={handleChange}
+                  className="w-full"
                 >
-                  <StyledTab
-                    icon={<TargetIcon />}
-                    iconPosition="start"
-                    label="Target Type"
-                    {...a11yProps(0)}
-                  />
-                  <StyledTab
-                    icon={<SettingsIcon />}
-                    iconPosition="start"
-                    label="Target Config"
-                    {...a11yProps(1)}
-                  />
-                  <StyledTab
-                    icon={<AppIcon />}
-                    iconPosition="start"
-                    label="Application Details"
-                    {...a11yProps(1)}
-                  />
-                  <StyledTab
-                    icon={<PluginIcon />}
-                    iconPosition="start"
-                    label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
-                    {...a11yProps(3)}
-                  />
-                  <StyledTab
-                    icon={<StrategyIcon />}
-                    iconPosition="start"
-                    label={`Strategies${activeStrategyCount ? ` (${activeStrategyCount})` : ''}`}
-                    {...a11yProps(4)}
-                  />
-                  <StyledTab
-                    icon={<ReviewIcon />}
-                    iconPosition="start"
-                    label="Review"
-                    {...a11yProps(5)}
-                  />
-                </StyledTabs>
-              </TabsContainer>
-              <SidebarButtons>
-                <SidebarButton
-                  variant="text"
-                  fullWidth
-                  startIcon={<SaveIcon />}
+                  <TabsList className="flex h-auto w-full flex-col rounded-none bg-card p-0">
+                    {TAB_CONFIG.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <TabsTrigger
+                          key={tab.value}
+                          value={tab.value}
+                          className={cn(
+                            'w-full justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-sm font-normal',
+                            'data-[state=active]:bg-accent data-[state=active]:shadow-none',
+                            'hover:bg-muted/50',
+                          )}
+                        >
+                          <Icon className="size-[18px]" />
+                          {getTabLabel(tab)}
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </Tabs>
+              </div>
+
+              {/* Sidebar buttons */}
+              <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
+                <Button
+                  variant="ghost"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setSaveDialogOpen(true)}
                 >
+                  <Save className="mr-2 size-[18px]" />
                   Save Config
-                </SidebarButton>
-                <SidebarButton
-                  variant="text"
-                  fullWidth
-                  startIcon={<FolderOpenIcon />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     loadConfigs();
                     setLoadDialogOpen(true);
                   }}
                 >
+                  <FolderOpen className="mr-2 size-[18px]" />
                   Load Config
-                </SidebarButton>
-                <SidebarButton
-                  variant="text"
-                  fullWidth
-                  startIcon={<RestartAltIcon />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setResetDialogOpen(true)}
                 >
+                  <RotateCcw className="mr-2 size-[18px]" />
                   Reset Config
-                </SidebarButton>
-              </SidebarButtons>
-            </InnerSidebarContainer>
-          </OuterSidebarContainer>
-          <TabContent>
-            <CustomTabPanel value={value} index={0}>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tab content */}
+          <div className="relative flex grow flex-col transition-[margin] duration-200">
+            {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
               </ErrorBoundary>
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={1}>
+            )}
+            {value === 1 && (
               <ErrorBoundary name="Target Configuration Page">
                 <TargetConfiguration onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={2}>
+            )}
+            {value === 2 && (
               <ErrorBoundary name="Application Purpose Page">
                 <Purpose onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={3}>
+            )}
+            {value === 3 && (
               <ErrorBoundary name="Plugins Page">
                 <TestCaseGenerationProvider redTeamConfig={config}>
                   <Plugins onNext={handleNext} onBack={handleBack} />
                 </TestCaseGenerationProvider>
               </ErrorBoundary>
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={4}>
+            )}
+            {value === 4 && (
               <ErrorBoundary name="Strategies Page">
                 <Strategies onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={5}>
+            )}
+            {value === 5 && (
               <ErrorBoundary name="Review Page">
                 <Review
                   navigateToPlugins={navigateToPlugins}
@@ -757,147 +603,124 @@ export default function RedTeamSetupPage() {
                   navigateToPurpose={navigateToPurpose}
                 />
               </ErrorBoundary>
-            </CustomTabPanel>
-          </TabContent>
-        </Content>
+            )}
+          </div>
+        </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
         <PylonChat />
-        {saveDialogOpen ? (
-          <Dialog
-            open={saveDialogOpen}
-            onClose={() => setSaveDialogOpen(false)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Save Configuration</DialogTitle>
-            <DialogContent>
-              <TextField
-                autoFocus
-                margin="dense"
-                label="Configuration Name"
-                fullWidth
-                value={configName}
-                onChange={(e) => setConfigName(e.target.value)}
-                sx={{ mb: 2 }}
-              />
-              <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<DownloadIcon />}
-                  onClick={handleDownloadYaml}
-                  fullWidth
-                >
+
+        {/* Save Dialog */}
+        <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Save Configuration</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="config-name">Configuration Name</Label>
+                <Input
+                  id="config-name"
+                  value={configName}
+                  onChange={(e) => setConfigName(e.target.value)}
+                  placeholder="Enter configuration name"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleDownloadYaml} className="flex-1">
+                  <Download className="mr-2 size-4" />
                   Export YAML
                 </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSaveConfig}
-                  disabled={!configName}
-                  fullWidth
-                >
+                <Button onClick={handleSaveConfig} disabled={!configName} className="flex-1">
+                  <Save className="mr-2 size-4" />
                   Save
                 </Button>
-              </Box>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-            </DialogActions>
-          </Dialog>
-        ) : null}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
-        {loadDialogOpen ? (
-          <Dialog
-            open={loadDialogOpen}
-            onClose={() => setLoadDialogOpen(false)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Load Configuration</DialogTitle>
-            <DialogContent>
-              <Box sx={{ mb: 2 }}>
+        {/* Load Dialog */}
+        <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Load or Import Configuration</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Import YAML Section */}
+              <div>
+                <p className="text-sm font-medium">Import YAML File</p>
+                <p className="mb-2 text-sm text-muted-foreground">
+                  Import an existing promptfoo redteam YAML configuration. Your application details
+                  will be automatically parsed and pre-filled in the form.
+                </p>
                 <input
                   accept=".yml,.yaml"
-                  style={{ display: 'none' }}
+                  className="hidden"
                   id="yaml-file-upload"
                   type="file"
                   onChange={handleFileUpload}
                 />
                 <label htmlFor="yaml-file-upload">
-                  <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
-                    Upload YAML File
+                  <Button variant="outline" className="w-full" asChild>
+                    <span>Import YAML File</span>
                   </Button>
                 </label>
-              </Box>
-              <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                Or choose a saved configuration:
-              </Typography>
-              {savedConfigs.length === 0 ? (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <Typography color="text.secondary">No saved configurations found</Typography>
-                </Box>
-              ) : (
-                <List>
-                  {savedConfigs.map((config) => (
-                    <ListItemButton
-                      key={config.id}
-                      onClick={() => handleLoadConfig(config.id)}
-                      sx={{
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        mb: 0.5,
-                        backgroundColor: 'background.paper',
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                          cursor: 'pointer',
-                        },
-                      }}
-                    >
-                      <ListItemText
-                        primary={config.name}
-                        secondary={formatDataGridDate(config.updatedAt)}
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
-              )}
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
-            </DialogActions>
-          </Dialog>
-        ) : null}
+              </div>
 
-        {resetDialogOpen ? (
-          <Dialog
-            open={resetDialogOpen}
-            onClose={() => setResetDialogOpen(false)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Reset Configuration</DialogTitle>
-            <DialogContent>
-              <Typography>
+              <p className="text-sm font-medium">Or choose a saved configuration:</p>
+
+              {savedConfigs.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-muted-foreground">No saved configurations found</p>
+                </div>
+              ) : (
+                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                  {savedConfigs.map((savedConfig) => (
+                    <button
+                      key={savedConfig.id}
+                      onClick={() => handleLoadConfig(savedConfig.id)}
+                      className="w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent"
+                    >
+                      <p className="font-medium">{savedConfig.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDataGridDate(savedConfig.updatedAt)}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLoadDialogOpen(false)}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reset Dialog */}
+        <Dialog open={resetDialogOpen} onOpenChange={(open) => !open && setResetDialogOpen(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reset Configuration</DialogTitle>
+              <DialogDescription>
                 Are you sure you want to reset the configuration to default values? This action
                 cannot be undone.
-              </Typography>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
-              <Button
-                onClick={() => {
-                  handleResetConfig();
-                }}
-                color="error"
-              >
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleResetConfig}>
                 Reset
               </Button>
-            </DialogActions>
-          </Dialog>
-        ) : null}
-      </Root>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </UserProvider>
   );
 }

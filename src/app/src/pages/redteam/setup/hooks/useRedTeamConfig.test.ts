@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useRedTeamConfig } from './useRedTeamConfig';
+
 import type { Config } from '../types';
 
 describe('useRedTeamConfig', () => {
@@ -77,7 +78,7 @@ describe('useRedTeamConfig', () => {
     it('should merge configs when updating existing object plugin', () => {
       // Set initial state with a plugin that has some config
       const initialPlugins = [
-        { id: 'bola', config: { targetSystems: ['sys1'], severity: 'high' } },
+        { id: 'bola', config: { targetSystems: ['sys1'], severity: 'high' as const } },
       ];
       useRedTeamConfig.setState({
         config: { ...useRedTeamConfig.getState().config, plugins: initialPlugins },
@@ -91,7 +92,7 @@ describe('useRedTeamConfig', () => {
       // Both old (severity) and new (targetSystems) config should be present
       // New targetSystems overwrites old one
       expect(newState.config.plugins).toEqual([
-        { id: 'bola', config: { targetSystems: ['sys2'], severity: 'high' } },
+        { id: 'bola', config: { targetSystems: ['sys2'], severity: 'high' as const } },
       ]);
     });
 

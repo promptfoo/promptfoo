@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesAnswerRelevance } from '../../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {

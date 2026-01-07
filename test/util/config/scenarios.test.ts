@@ -1,20 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
 import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import type { ApiProvider } from '../../../src/types/providers';
-import { readFilters } from '../../../src/util/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { readFilters } from '../../../src/util/index';
 import { readTests } from '../../../src/util/testCaseReader';
 
+import type { ApiProvider } from '../../../src/types/providers';
+
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('glob', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
@@ -81,15 +84,17 @@ describe('Scenario loading with glob patterns', () => {
 
     // Mock file system
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fsPromises.readFile).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
-        return yaml.dump({
-          prompts: ['Test prompt'],
-          providers: ['openai:gpt-3.5-turbo'],
-          scenarios: ['file://scenarios/*.yaml'],
-        });
+        return Promise.resolve(
+          yaml.dump({
+            prompts: ['Test prompt'],
+            providers: ['openai:gpt-3.5-turbo'],
+            scenarios: ['file://scenarios/*.yaml'],
+          }),
+        );
       }
-      return '';
+      return Promise.resolve('');
     });
 
     // Mock glob to return config file
@@ -138,15 +143,17 @@ describe('Scenario loading with glob patterns', () => {
     ];
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fsPromises.readFile).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
-        return yaml.dump({
-          prompts: ['Test prompt'],
-          providers: ['openai:gpt-3.5-turbo'],
-          scenarios: ['file://group1/*.yaml', 'file://group2/*.yaml'],
-        });
+        return Promise.resolve(
+          yaml.dump({
+            prompts: ['Test prompt'],
+            providers: ['openai:gpt-3.5-turbo'],
+            scenarios: ['file://group1/*.yaml', 'file://group2/*.yaml'],
+          }),
+        );
       }
-      return '';
+      return Promise.resolve('');
     });
 
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
@@ -193,15 +200,17 @@ describe('Scenario loading with glob patterns', () => {
     ];
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fsPromises.readFile).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
-        return yaml.dump({
-          prompts: ['Test prompt'],
-          providers: ['openai:gpt-3.5-turbo'],
-          scenarios: [directScenario, 'file://scenarios/*.yaml'],
-        });
+        return Promise.resolve(
+          yaml.dump({
+            prompts: ['Test prompt'],
+            providers: ['openai:gpt-3.5-turbo'],
+            scenarios: [directScenario, 'file://scenarios/*.yaml'],
+          }),
+        );
       }
-      return '';
+      return Promise.resolve('');
     });
 
     vi.mocked(globSync).mockReturnValue(['config.yaml']);

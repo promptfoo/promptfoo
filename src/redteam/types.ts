@@ -1,8 +1,12 @@
 import { z } from 'zod';
-
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
+
+import type { ApiProvider, ProviderOptions } from '../types/providers';
+
+// Re-export Inputs from shared to maintain backwards compatibility
+export { InputsSchema, type Inputs };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -87,6 +91,10 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // Multi-variable inputs - allows generating test cases with multiple variables
+  // Keys are variable names, values are descriptions of what each variable should contain
+  inputs: InputsSchema.optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });
@@ -152,6 +160,13 @@ export interface PluginActionParams {
   config?: PluginConfig;
 }
 
+// Context for testing multiple security contexts/states
+export interface RedteamContext {
+  id: string;
+  purpose: string;
+  vars?: Record<string, string>;
+}
+
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
@@ -160,6 +175,7 @@ type CommonOptions = {
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
+  contexts?: RedteamContext[];
   strategies?: RedteamStrategy[];
   frameworks?: FrameworkComplianceId[];
   delay?: number;
@@ -201,13 +217,15 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
+  // Multi-variable inputs for test case generation (from target)
+  inputs?: Inputs;
   language?: string | string[];
   maxConcurrency?: number;
   numTests: number;
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
-  targetLabels: string[];
+  targetIds: string[];
   showProgressBar?: boolean;
 }
 
@@ -228,6 +246,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  description?: string;
 
   // Used by webui
   liveRedteamConfig?: any;
@@ -287,7 +306,15 @@ export interface SavedRedteamConfig {
  * Media data (audio or image) for redteam history entries
  */
 export interface RedteamMediaData {
-  data: string;
+  /**
+   * Media payload for rendering/transport.
+   *
+   * - Base64 string (legacy/inline)
+   * - `storageRef:<key>` string (external media storage)
+   *
+   * Optional because some code paths only know the format and store the payload elsewhere.
+   */
+  data?: string;
   format: string;
 }
 
@@ -303,6 +330,10 @@ export interface RedteamHistoryEntry {
   promptImage?: RedteamMediaData;
   /** Audio data from the target response */
   outputAudio?: RedteamMediaData;
+  /** Image data from the target response */
+  outputImage?: RedteamMediaData;
+  /** Extracted input variables for multi-input mode */
+  inputVars?: Record<string, string>;
 }
 
 /**

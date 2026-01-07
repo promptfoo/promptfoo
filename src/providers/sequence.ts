@@ -1,6 +1,7 @@
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 import type {
   ApiProvider,
@@ -9,7 +10,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 interface SequenceProviderConfig {
   inputs: string[];
@@ -17,7 +17,7 @@ interface SequenceProviderConfig {
 }
 
 export class SequenceProvider implements ApiProvider {
-  private readonly inputs: string[];
+  private readonly sequenceInputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
 
@@ -28,7 +28,7 @@ export class SequenceProvider implements ApiProvider {
     );
 
     const typedConfig = config as SequenceProviderConfig;
-    this.inputs = typedConfig.inputs;
+    this.sequenceInputs = typedConfig.inputs;
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
   }
@@ -49,7 +49,7 @@ export class SequenceProvider implements ApiProvider {
     const accumulatedTokenUsage = createEmptyTokenUsage();
 
     // Send each input to the original provider
-    for (const input of this.inputs) {
+    for (const input of this.sequenceInputs) {
       const renderedInput = nunjucks.renderString(input, {
         ...context?.vars,
         prompt,
