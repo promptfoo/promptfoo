@@ -1,7 +1,13 @@
 import { TempoProvider } from './tempo';
+
 import type { TraceProvider, TraceProviderConfig } from './types';
 
-export type { TraceProvider, TraceProviderConfig, FetchTraceOptions, FetchTraceResult } from './types';
+export type {
+  FetchTraceOptions,
+  FetchTraceResult,
+  TraceProvider,
+  TraceProviderConfig,
+} from './types';
 
 /**
  * Create a trace provider instance based on configuration.

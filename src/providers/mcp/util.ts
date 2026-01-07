@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { withOAuthSpan } from '../../tracing/oauthTracer';
 import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
@@ -66,50 +67,59 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
     return cached;
   }
 
-  const url = new URL(serverUrl);
-  const baseUrl = `${url.protocol}//${url.host}`;
+  return withOAuthSpan(
+    {
+      operation: 'discovery',
+      url: serverUrl,
+      providerType: 'mcp',
+    },
+    async () => {
+      const url = new URL(serverUrl);
+      const baseUrl = `${url.protocol}//${url.host}`;
 
-  // Try different well-known paths in order of preference
-  // 1. Path-appended: /path/.well-known/oauth-authorization-server (common for Keycloak, etc.)
-  // 2. RFC 8414 path-aware: /.well-known/oauth-authorization-server/path
-  // 3. Root level: /.well-known/oauth-authorization-server
-  const discoveryUrls = [];
+      // Try different well-known paths in order of preference
+      // 1. Path-appended: /path/.well-known/oauth-authorization-server (common for Keycloak, etc.)
+      // 2. RFC 8414 path-aware: /.well-known/oauth-authorization-server/path
+      // 3. Root level: /.well-known/oauth-authorization-server
+      const discoveryUrls = [];
 
-  if (url.pathname && url.pathname !== '/') {
-    // Path-appended style (e.g., Keycloak: /realms/test/.well-known/oauth-authorization-server)
-    discoveryUrls.push(`${baseUrl}${url.pathname}/.well-known/oauth-authorization-server`);
-    // RFC 8414 path-aware style
-    discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${url.pathname}`);
-  }
-  // Root level discovery
-  discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server`);
+      if (url.pathname && url.pathname !== '/') {
+        // Path-appended style (e.g., Keycloak: /realms/test/.well-known/oauth-authorization-server)
+        discoveryUrls.push(`${baseUrl}${url.pathname}/.well-known/oauth-authorization-server`);
+        // RFC 8414 path-aware style
+        discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${url.pathname}`);
+      }
+      // Root level discovery
+      discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server`);
 
-  for (const discoveryUrl of discoveryUrls) {
-    try {
-      logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl);
+      for (const discoveryUrl of discoveryUrls) {
+        try {
+          logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
+          const response = await fetchWithProxy(discoveryUrl);
 
-      if (!response.ok) {
-        logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
-        continue;
+          if (!response.ok) {
+            logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
+            continue;
+          }
+
+          const metadata = (await response.json()) as { token_endpoint?: string };
+          if (metadata.token_endpoint) {
+            logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
+            tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
+            return metadata.token_endpoint;
+          }
+
+          logger.debug(`[MCP Auth] No token_endpoint in metadata from ${discoveryUrl}`);
+        } catch (error) {
+          logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
+        }
       }
 
-      const metadata = (await response.json()) as { token_endpoint?: string };
-      if (metadata.token_endpoint) {
-        logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
-        tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
-        return metadata.token_endpoint;
-      }
-
-      logger.debug(`[MCP Auth] No token_endpoint in metadata from ${discoveryUrl}`);
-    } catch (error) {
-      logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
-    }
-  }
-
-  throw new Error(
-    `Failed to discover OAuth token endpoint for ${serverUrl}. ` +
-      `Please configure tokenUrl explicitly in the auth config.`,
+      throw new Error(
+        `Failed to discover OAuth token endpoint for ${serverUrl}. ` +
+          `Please configure tokenUrl explicitly in the auth config.`,
+      );
+    },
   );
 }
 
@@ -149,6 +159,7 @@ export async function getOAuthTokenWithExpiry(
     username: 'username' in auth ? auth.username : undefined,
     password: 'password' in auth ? auth.password : undefined,
     scopes: auth.scopes,
+    providerType: 'mcp',
   });
 
   // Cache the token

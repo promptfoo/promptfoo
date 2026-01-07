@@ -13,6 +13,7 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { withOAuthSpan } from '../tracing/oauthTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -1590,77 +1591,95 @@ export class HttpProvider implements ApiProvider {
     },
     now: number,
   ): Promise<void> {
-    try {
-      // Prepare the token request body
-      const tokenRequestBody = new URLSearchParams();
-      tokenRequestBody.append('grant_type', oauthConfig.grantType);
-      if (oauthConfig.clientId) {
-        tokenRequestBody.append('client_id', oauthConfig.clientId);
-      }
-      if (oauthConfig.clientSecret) {
-        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
-      }
+    await withOAuthSpan(
+      {
+        operation: 'token_refresh',
+        url: oauthConfig.tokenUrl,
+        grantType: oauthConfig.grantType,
+        clientId: oauthConfig.clientId,
+        scopes: oauthConfig.scopes,
+        providerType: 'http',
+      },
+      async () => {
+        try {
+          // Prepare the token request body
+          const tokenRequestBody = new URLSearchParams();
+          tokenRequestBody.append('grant_type', oauthConfig.grantType);
+          if (oauthConfig.clientId) {
+            tokenRequestBody.append('client_id', oauthConfig.clientId);
+          }
+          if (oauthConfig.clientSecret) {
+            tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+          }
 
-      // Add username and password for password grant type
-      if (oauthConfig.grantType === 'password') {
-        if (!oauthConfig.username || !oauthConfig.password) {
-          throw new Error('Username and password are required for password grant type');
+          // Add username and password for password grant type
+          if (oauthConfig.grantType === 'password') {
+            if (!oauthConfig.username || !oauthConfig.password) {
+              throw new Error('Username and password are required for password grant type');
+            }
+            tokenRequestBody.append('username', oauthConfig.username);
+            tokenRequestBody.append('password', oauthConfig.password);
+          }
+
+          if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+            tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+          }
+
+          // Make the token request
+          const httpsAgent = await this.getHttpsAgent();
+          const fetchOptions: any = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: tokenRequestBody.toString(),
+          };
+
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+          }
+
+          const response = await fetchWithCache(
+            oauthConfig.tokenUrl,
+            fetchOptions,
+            REQUEST_TIMEOUT_MS,
+            'text',
+            true, // Always bust cache for token requests
+            0, // No retries for token requests
+          );
+
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(
+              `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+            );
+          }
+
+          const tokenData = JSON.parse(response.data as string);
+
+          if (!tokenData.access_token) {
+            throw new Error('OAuth token response missing access_token');
+          }
+
+          this.lastToken = tokenData.access_token;
+
+          // Calculate expiration time
+          // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
+          const expiresInSeconds = tokenData.expires_in || 3600;
+          this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+
+          logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+
+          return {
+            httpStatusCode: response.status,
+            expiresIn: expiresInSeconds,
+          };
+        } catch (err) {
+          logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+          throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
         }
-        tokenRequestBody.append('username', oauthConfig.username);
-        tokenRequestBody.append('password', oauthConfig.password);
-      }
-
-      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
-        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
-      }
-
-      // Make the token request
-      const httpsAgent = await this.getHttpsAgent();
-      const fetchOptions: any = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: tokenRequestBody.toString(),
-      };
-
-      if (httpsAgent) {
-        fetchOptions.dispatcher = httpsAgent;
-      }
-
-      const response = await fetchWithCache(
-        oauthConfig.tokenUrl,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        true, // Always bust cache for token requests
-        0, // No retries for token requests
-      );
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(
-          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
-        );
-      }
-
-      const tokenData = JSON.parse(response.data as string);
-
-      if (!tokenData.access_token) {
-        throw new Error('OAuth token response missing access_token');
-      }
-
-      this.lastToken = tokenData.access_token;
-
-      // Calculate expiration time
-      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
-      const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
-
-      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
-    } catch (err) {
-      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
-      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
-    }
+      },
+      (result) => result,
+    );
 
     invariant(this.lastToken, 'OAuth token should be defined at this point');
   }

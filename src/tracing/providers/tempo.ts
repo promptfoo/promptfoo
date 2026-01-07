@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+
 import type { SpanData } from '../store';
 import type {
   FetchTraceOptions,
