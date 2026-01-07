@@ -37,6 +37,41 @@ See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 **Config priority:** Explicit options > Environment variables > Provider defaults
 
+## Caching Best Practices
+
+When implementing caching in your provider, **ALWAYS set the `cached: true` flag** when returning a cached response:
+
+```typescript
+// ✅ CORRECT - Always set cached flag
+if (cachedResponse) {
+  const parsed = JSON.parse(cachedResponse as string);
+  return { ...parsed, cached: true };
+}
+
+// ❌ WRONG - Missing cached flag
+if (cachedResponse) {
+  return JSON.parse(cachedResponse as string);
+}
+```
+
+**Why this matters:**
+
+- The `cached` flag allows downstream code to skip rate limiting delays
+- Performance metrics can distinguish between fresh API calls and cache hits
+- Evaluations can accurately track which responses were served from cache
+
+**Response type compatibility:**
+
+- `ProviderResponse` has `cached?: boolean`
+- `ProviderEmbeddingResponse` has `cached?: boolean`
+- `ProviderModerationResponse` has `cached?: boolean`
+
+**Reference implementations:**
+
+- `bedrock/converse.ts:985` - Sets cached flag correctly
+- `pythonCompletion.ts:194` - Example with spread operator
+- `google/vertex.ts:268` - Multiple cache points handled correctly
+
 ## Testing Requirements
 
 **CRITICAL: Tests must NEVER make real API calls.** Mock all HTTP requests.
