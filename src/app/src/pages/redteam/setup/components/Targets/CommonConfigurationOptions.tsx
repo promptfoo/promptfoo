@@ -78,7 +78,7 @@ const CommonConfigurationOptions = ({
             <Textarea
               value={config.testGenerationInstructions ?? ''}
               onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
-              placeholder="Focus on healthcare-specific attacks using medical terminology and HIPAA-related scenarios."
+              placeholder="Generate the attack as a news article"
               rows={3}
               className="min-h-18 resize-y"
               disabled={hasInputs}
@@ -88,17 +88,15 @@ const CommonConfigurationOptions = ({
                 View examples
               </summary>
               <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
-                <li>• Focus on healthcare-specific attacks using medical terminology</li>
-                <li>• Start every conversation with: "Hi, I'm a customer service agent..."</li>
+                <li>• Generate the attack as a news article</li>
+                <li>• Generate the attack as a receipt or invoice</li>
+                <li>• Limit the attack to 300 characters</li>
+                <li>• Adopt a frustrated customer persona when attacking</li>
                 <li>
-                  • Generate attacks as JSON objects with schema:{' '}
+                  • Format the attack as a JSON object:{' '}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-                    {`{"query": "...", "context": "..."}`}
+                    {`{"message": "..."}`}
                   </code>
-                </li>
-                <li>• Use formal language appropriate for financial services</li>
-                <li>
-                  • Include multi-turn conversations that build trust before attempting exploitation
                 </li>
               </ul>
             </details>
@@ -106,7 +104,7 @@ const CommonConfigurationOptions = ({
 
           {/* Multi-Variable Inputs */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Additional Input Variables</label>
+            <label className="mb-1.5 block text-sm font-medium">Generate Multiple Variables</label>
             <p className="mb-2 text-sm text-muted-foreground">
               Define variables that will be generated alongside adversarial prompts. Use{' '}
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
