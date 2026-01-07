@@ -109,17 +109,43 @@ jobs:
 
             ## Output Format
 
-            **For incremental reviews:**
-            - Keep it concise - only comment on new issues in the new changes
-            - Start with "🔄 Incremental Review" and the commit range
-            - If no new issues: Just post "✅ No issues in new changes"
-            - If issues found: List them briefly with file:line and fix suggestion
+            Use this exact structure for your comment:
 
-            **For full reviews:**
-            - For each issue found:
-              - **File:line** - Brief description
-              - **Why it matters:** One sentence on impact
-              - **Suggested fix:** Code snippet or approach
+            ```markdown
+            ## Security Review [STATUS]
+
+            [One-line summary: "No critical issues found" or "X issues require attention"]
+
+            ### 🔴 Critical Issues
+            [List each critical/security issue - ALWAYS show this section if issues exist]
+            - **file:line** - Description. **Fix:** suggestion
+
+            ### 🟠 Correctness Issues
+            [List each correctness issue - show if any exist]
+            - **file:line** - Description. **Fix:** suggestion
+
+            <details>
+            <summary>🟡 Minor Observations (N items)</summary>
+
+            [Low-severity items, suggestions, and non-blocking feedback go here]
+            - **file:line** - Observation
+            - **file:line** - Observation
+
+            </details>
+            ```
+
+            **Format rules:**
+            - STATUS: Use ✅ if no critical/correctness issues, ⚠️ if issues found
+            - Critical and correctness issues are NEVER collapsed - they must be visible
+            - Minor observations (testing suggestions, style notes, non-blocking items) go in collapsible section
+            - One line per issue: `**file:line** - Description. **Fix:** suggestion`
+            - Omit empty sections entirely (don't show "### 🔴 Critical Issues" with "None")
+            - If truly no issues at all: Just post "## Security Review ✅\n\nNo issues found."
+
+            **For incremental reviews:**
+            - Add "🔄 Incremental Review" before "Security Review" in the header
+            - Only report issues in the new changes, not previously reviewed code
+            - If no new issues: "## 🔄 Security Review ✅\n\nNo issues in new changes."
 
             ## Skip These (Biome/CI catches them)
             - Formatting, import order, naming conventions
@@ -129,5 +155,4 @@ jobs:
             If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per THE REDTEAM RULE.
 
             Post your review as a single comment using `gh pr comment ${{ github.event.pull_request.number }}`.
-            Use ✅ if no critical issues, ⚠️ if issues found.
           claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*)"'
