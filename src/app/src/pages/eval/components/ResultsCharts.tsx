@@ -171,6 +171,7 @@ function PassRateChart({ table }: ChartProps) {
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;

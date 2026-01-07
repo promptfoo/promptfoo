@@ -41,8 +41,8 @@ interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
-  failuresByPlugin?: Record<string, any[]>;
-  passesByPlugin?: Record<string, any[]>;
+  failuresByPlugin?: Record<string, unknown[]>;
+  passesByPlugin?: Record<string, unknown[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -107,6 +107,7 @@ const TestSuites = ({
 
   const customPoliciesById = useCustomPoliciesMap(plugins);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const allRows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)

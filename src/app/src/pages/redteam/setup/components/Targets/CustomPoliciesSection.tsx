@@ -512,6 +512,7 @@ export const CustomPoliciesSection = () => {
     [recordEvent, config.applicationDefinition],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -666,6 +667,7 @@ export const CustomPoliciesSection = () => {
     [
       generatingTestCase,
       generatingPolicyId,
+      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       handleEditPolicy,
       handleGenerateTestCase,
       apiHealthStatus,

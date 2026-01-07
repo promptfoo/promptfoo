@@ -97,8 +97,8 @@ export function loadServerConfig(): ServerConfig {
         configPath,
         error: err,
         yamlError: err.message,
-        line: (err as any).mark?.line,
-        column: (err as any).mark?.column,
+        line: err.mark?.line,
+        column: err.mark?.column,
       });
     } else if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       // File not found - already logged in getServerConfigPath, this is unexpected

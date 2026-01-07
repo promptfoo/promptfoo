@@ -386,6 +386,16 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "inputs": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "propertyNames": {
+                            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                          }
                         }
                       },
                       "additionalProperties": false
@@ -524,7 +534,10 @@
                               "delay": {
                                 "type": "number"
                               },
-                              "config": {}
+                              "config": {},
+                              "inputs": {
+                                "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties/properties/inputs"
+                              }
                             },
                             "additionalProperties": false
                           }
@@ -2047,6 +2060,9 @@
               "type": "string"
             },
             "filterFailing": {
+              "type": "string"
+            },
+            "filterFailingOnly": {
               "type": "string"
             },
             "filterFirstN": {

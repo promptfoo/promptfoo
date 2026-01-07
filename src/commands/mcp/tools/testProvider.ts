@@ -4,13 +4,15 @@ import { loadApiProvider, loadApiProviders } from '../../../providers/index';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+import type { TokenUsage } from '../../../types/index';
+
 interface TestResult {
   providerId: string;
   success: boolean;
   responseTime: number;
   response?: string;
   error?: string;
-  tokenUsage?: any;
+  tokenUsage?: TokenUsage;
   cost?: number;
   timedOut: boolean;
   metadata: {

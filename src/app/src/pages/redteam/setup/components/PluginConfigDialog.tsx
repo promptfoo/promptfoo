@@ -38,6 +38,7 @@ export default function PluginConfigDialog({
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
   // Update localConfig when config prop changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
       setLocalConfig(config || {});

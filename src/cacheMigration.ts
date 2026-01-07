@@ -151,9 +151,9 @@ function isProcessRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (err: any) {
+  } catch (err) {
     // ESRCH = No such process (Unix), EPERM = Permission denied but process exists
-    return err.code === 'EPERM';
+    return (err as { code: string }).code === 'EPERM';
   }
 }
 
@@ -185,8 +185,8 @@ function acquireMigrationLock(cachePath: string, attempt: number = 1): number | 
 
     logger.debug(`[Cache Migration] Lock acquired (PID: ${process.pid})`);
     return fd;
-  } catch (err: any) {
-    if (err.code === 'EEXIST') {
+  } catch (err) {
+    if ((err as { code: string }).code === 'EEXIST') {
       // Lock file exists, check if it's stale
       try {
         const content = fs.readFileSync(lockFile, 'utf-8');
@@ -248,7 +248,7 @@ function releaseMigrationLock(fd: number | null, cachePath: string): void {
 /**
  * Parse expireTime field, handling the "[object Object]" suffix bug
  */
-function parseExpireTime(expireTimeValue: string | number | any): number | undefined {
+function parseExpireTime(expireTimeValue: string | number | unknown): number | undefined {
   try {
     // Handle number type
     if (typeof expireTimeValue === 'number') {
