@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
+  type CacheCheckResult,
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
-  type CacheCheckResult,
 } from '../../src/providers/agentic-utils';
 
 vi.mock('../../src/cache');
