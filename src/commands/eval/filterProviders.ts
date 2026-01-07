@@ -33,7 +33,7 @@ function getProviderIdAndLabel(
   if ('id' in provider && isValidProviderId(providerId)) {
     const opts = provider as ProviderOptions;
     return {
-      id: opts.id,
+      id: providerId,
       label: opts.label,
     };
   }
