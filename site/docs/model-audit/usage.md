@@ -222,14 +222,6 @@ export PROMPTFOO_DISABLE_SHARING=true
 promptfoo scan-model models/
 ```
 
-:::note
-Auto-sharing follows the same behavior as evaluation sharing:
-
-- Results display immediately (non-blocking)
-- Share URL appears after scan completes
-- Server handles deduplication automatically
-  :::
-
 ## CI/CD Integration
 
 ### GitHub Actions
