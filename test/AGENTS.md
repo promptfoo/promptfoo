@@ -93,85 +93,102 @@ Every provider needs tests covering:
 
 See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
-## Integration Tests (CLI Commands)
+## Smoke Tests
 
-For integration tests that execute CLI commands with `npm run local`:
+Smoke tests verify the **built CLI package** works correctly end-to-end. They test `dist/src/main.js` directly using `spawnSync`.
+
+```bash
+# Run smoke tests
+npm run test:smoke
+
+# Run specific smoke test file
+npx vitest run test/smoke/cli.test.ts --config vitest.smoke.config.ts
+```
+
+**Location:** `test/smoke/` with fixtures in `test/smoke/fixtures/configs/`
+
+**Reference pattern** (from `test/smoke/filters-and-flags.test.ts`):
 
 ```typescript
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-describe('my integration test', () => {
-  const testDir = path.join(process.cwd(), '.test-tmp', 'my-test-name');
-  const configPath = path.join(testDir, 'promptfooconfig.yaml');
-  const outputPath = path.join(testDir, 'output.json');
+const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
+const FIXTURES_DIR = path.resolve(__dirname, 'fixtures/configs');
+const OUTPUT_DIR = path.resolve(__dirname, '.temp-output');
 
+function runCli(args: string[], options: { cwd?: string } = {}) {
+  const result = spawnSync('node', [CLI_PATH, ...args], {
+    cwd: options.cwd || path.resolve(__dirname, '../..'),
+    encoding: 'utf-8',
+    env: { ...process.env, NO_COLOR: '1' },
+    timeout: 60000,
+  });
+  return {
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    exitCode: result.status ?? 1,
+  };
+}
+
+describe('My Smoke Tests', () => {
   beforeAll(() => {
-    fs.mkdirSync(testDir, { recursive: true });
-    fs.writeFileSync(
-      configPath,
-      `
-description: 'Test description'
-prompts:
-  - 'Echo: {{message}}'
-providers:
-  - id: echo
-    label: 'provider-a'
-    config:
-      output: 'Response from A: {{prompt}}'
-tests:
-  - vars:
-      message: 'test'
-`,
-    );
+    if (!fs.existsSync(CLI_PATH)) {
+      throw new Error(`Built CLI not found. Run 'npm run build' first.`);
+    }
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   });
 
   afterAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
   });
 
-  it('should run eval command', () => {
-    const cmd = `npm run local -- eval -c ${configPath} --no-cache -o ${outputPath}`;
-    const output = execSync(cmd, {
-      encoding: 'utf-8',
-      stdio: 'pipe',
-      env: { ...process.env, PROMPTFOO_DISABLE_TELEMETRY: '1' },
-    });
+  it('runs eval with echo provider', () => {
+    const configPath = path.join(FIXTURES_DIR, 'basic.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'output.json');
 
-    expect(output).toContain('[provider-a]');
-    expect(fs.existsSync(outputPath)).toBe(true);
+    const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(parsed.results.results[0].response.output).toContain('Hello');
   });
 });
 ```
 
 **Key patterns:**
 
-- Use `.test-tmp` directory for test fixtures (auto-cleaned, not in git)
-- Create config files in `beforeAll`, clean up in `afterAll`
-- Execute with `npm run local -- eval` and capture output
-- Set `PROMPTFOO_DISABLE_TELEMETRY: '1'` to avoid telemetry during tests
+- Test the **built package** (`dist/src/main.js`), not source code
+- Use `spawnSync` with `node` to run the CLI directly
+- Fixtures go in `test/smoke/fixtures/configs/` (committed to git)
+- Temp output directories cleaned up in `afterAll`
 - Use `echo` provider for deterministic, zero-cost testing
-- Assert on both command output and generated files
+- Check exit codes AND output file contents
 
-**Echo provider config for deterministic tests:**
+**Fixture example** (`test/smoke/fixtures/configs/basic.yaml`):
 
 ```yaml
 providers:
-  - id: echo
-    label: 'test-provider'
-    config:
-      output: 'Fixed response: {{prompt}}'
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World
 ```
 
-See `test/commands/eval/filterProviders.integration.test.ts` for reference.
+See `docs/plans/smoke-tests.md` for the full test checklist.
 
 ## Test Configuration
 
-- Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
+- Config: `vitest.config.ts` (unit tests), `vitest.integration.config.ts` (integration tests), `vitest.smoke.config.ts` (smoke tests)
 - Setup: `vitest.setup.ts`
 - Globals disabled: All test utilities must be explicitly imported from `vitest`
 - Import `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` from `vitest`
