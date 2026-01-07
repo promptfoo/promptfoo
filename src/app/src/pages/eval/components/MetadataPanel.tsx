@@ -91,7 +91,7 @@ export function MetadataPanel({
                             data-testid="pf-cloud-policy-detail-link"
                           >
                             <span>View policy in Promptfoo Cloud</span>
-                            <ExternalLink className="h-3.5 w-3.5" />
+                            <ExternalLink className="size-3.5" />
                           </a>
                         )}
                     </div>
@@ -143,9 +143,9 @@ export function MetadataPanel({
                           aria-label={`Copy metadata value for ${key}`}
                         >
                           {copiedFields[key] ? (
-                            <Check className="h-4 w-4" />
+                            <Check className="size-4" />
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <Copy className="size-4" />
                           )}
                         </button>
                       </TooltipTrigger>
@@ -159,7 +159,7 @@ export function MetadataPanel({
                           className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                           aria-label={`Filter by ${key}`}
                         >
-                          <SlidersHorizontal className="h-4 w-4" />
+                          <SlidersHorizontal className="size-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Filter by value (replaces existing filters)</TooltipContent>

@@ -70,6 +70,8 @@ export function isImageProvider(provider: string | undefined): boolean {
 /**
  * Detects if the provider is a video generation provider.
  * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
  * - 'google:video:veo-2-generate' (Google Veo 2)
  * Used to skip truncation for video content.
@@ -78,7 +80,7 @@ export function isVideoProvider(provider: string | undefined): boolean {
   if (!provider) {
     return false;
   }
-  // Check for :video: namespace (Google Veo)
+  // Check for :video: namespace (OpenAI Sora, Google Veo)
   return provider.includes(':video:');
 }
 
@@ -255,7 +257,8 @@ function EvalOutputCell({
   }
 
   // Include provider-level error if present (e.g., from Python provider returning error)
-  if (output.error) {
+  // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
+  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     failReasons.unshift(output.error);
   }
 
@@ -365,15 +368,18 @@ function EvalOutputCell({
         </div>
       );
     }
-  } else if (output.video) {
-    // Video can use blob storage (blobRef) or legacy URL paths
-    const videoSource = resolveVideoSource(output.video);
+  } else if (output.video || output.response?.video) {
+    // Support both top-level video (new format) and response.video (fallback)
+    // Video can use blob storage (blobRef), storage refs (storageRef), or legacy URL paths
+    const videoData = output.video || output.response?.video;
+    const videoSource = resolveVideoSource(videoData);
     if (videoSource) {
       node = (
         <div className="video-output">
           <video
             controls
             style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+            poster={videoSource.poster}
             data-testid="video-player"
           >
             <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
@@ -383,13 +389,11 @@ function EvalOutputCell({
             className="video-metadata"
             style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
           >
-            {output.video.model && (
-              <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+            {videoData?.model && (
+              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
             )}
-            {output.video.size && (
-              <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
-            )}
-            {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
           </div>
         </div>
       );
@@ -715,11 +719,18 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+  const [actionsHovered, setActionsHovered] = React.useState(false);
+  const showExtraActions = shiftKeyPressed || actionsHovered;
+
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
+    <div
+      className="cell-actions"
+      onMouseEnter={() => setActionsHovered(true)}
+      onMouseLeave={() => setActionsHovered(false)}
+    >
+      {showExtraActions && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -727,26 +738,29 @@ function EvalOutputCell({
                 onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
               >
-                {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Toggle test highlight"
               >
-                <Star className="h-4 w-4" />
+                <Star
+                  className={`size-4 ${commentText.startsWith('!highlight') ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={commentText.startsWith('!highlight') ? 'currentColor' : 'none'}
+                />
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -755,7 +769,7 @@ function EvalOutputCell({
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Share output"
               >
-                {linked ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Share output</TooltipContent>
@@ -764,7 +778,7 @@ function EvalOutputCell({
       )}
       {output.prompt && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -772,7 +786,7 @@ function EvalOutputCell({
                 onClick={handlePromptOpen}
                 aria-label="View output and test details"
               >
-                <Search className="h-4 w-4" />
+                <Search className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>View output and test details</TooltipContent>
@@ -800,7 +814,7 @@ function EvalOutputCell({
           )}
         </>
       )}
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -810,14 +824,14 @@ function EvalOutputCell({
             aria-label="Mark test passed"
           >
             <ThumbsUp
-              className={`h-4 w-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
               fill={activeRating === true ? 'currentColor' : 'none'}
             />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -827,14 +841,14 @@ function EvalOutputCell({
             aria-label="Mark test failed"
           >
             <ThumbsDown
-              className={`h-4 w-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
+              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
               fill={activeRating === false ? 'currentColor' : 'none'}
             />
           </button>
         </TooltipTrigger>
         <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -842,12 +856,12 @@ function EvalOutputCell({
             onClick={handleSetScore}
             aria-label="Set test score"
           >
-            <Hash className="h-4 w-4" />
+            <Hash className="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent>Set test score</TooltipContent>
       </Tooltip>
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -855,7 +869,7 @@ function EvalOutputCell({
             onClick={handleCommentOpen}
             aria-label="Edit comment"
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil className="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>

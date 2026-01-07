@@ -532,16 +532,16 @@ ${exampleRequest}`;
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
               Import
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <ChevronDown className="ml-2 size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
-              <Globe className="mr-2 h-4 w-4" />
+              <Globe className="mr-2 size-4" />
               Postman
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -624,13 +624,13 @@ ${exampleRequest}`;
                   className="flex-1"
                 />
                 <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             ))}
 
             <Button variant="outline" onClick={addHeader} className="mt-2">
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus className="mr-1 size-4" />
               Add Header
             </Button>
 
@@ -647,9 +647,9 @@ ${exampleRequest}`;
                 onClick={handleFormatJson}
                 disabled={!requestBody.trim() || !!bodyError}
                 title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                className="absolute right-1 top-1 z-10 h-8 w-8 bg-muted/50 hover:bg-muted"
+                className="absolute right-1 top-1 z-10 size-8 bg-muted/50 hover:bg-muted"
               >
-                <AlignLeft className="h-4 w-4" />
+                <AlignLeft className="size-4" />
               </Button>
               <Editor
                 value={
@@ -724,7 +724,7 @@ ${exampleRequest}`;
             onClick={() => setResponseTestOpen(true)}
             className="absolute right-2 top-2 z-10"
           >
-            <Play className="mr-1 h-4 w-4" />
+            <Play className="mr-1 size-4" />
             Test
           </Button>
         </div>
@@ -807,9 +807,9 @@ ${exampleRequest}`;
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >
                     {copied ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
+                      <Check className="size-4 text-emerald-600" />
                     ) : (
-                      <Copy className="h-4 w-4" />
+                      <Copy className="size-4" />
                     )}
                   </Button>
                 </div>

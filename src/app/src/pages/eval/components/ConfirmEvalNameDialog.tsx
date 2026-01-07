@@ -114,7 +114,7 @@ export const ConfirmEvalNameDialog = ({
         <div className="space-y-4 py-2">
           {isLargeOperation && (
             <Alert variant={isVeryLargeOperation ? 'warning' : 'info'}>
-              {isVeryLargeOperation && <AlertTriangle className="h-4 w-4" />}
+              {isVeryLargeOperation && <AlertTriangle className="size-4" />}
               <AlertDescription>
                 <strong>
                   This evaluation has {itemCount?.toLocaleString()} {itemLabel}.

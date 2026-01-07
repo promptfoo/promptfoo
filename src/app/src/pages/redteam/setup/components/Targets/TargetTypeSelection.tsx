@@ -40,6 +40,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
   const { recordEvent } = useTelemetry();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_type_selection' });
     // Initialize providerType if not already set

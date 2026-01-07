@@ -51,6 +51,7 @@ const EnhancedRangeSlider = ({
   }, [debouncedValue, onChange, safeValue]);
 
   // Safely update input value when external value changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalValue(safeValue);
     setInputValue(isUnlimited ? 'Unlimited' : String(safeValue));
@@ -74,11 +75,11 @@ const EnhancedRangeSlider = ({
     [onChangeCommitted],
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
-  };
+  }, []);
 
-  const handleInputBlur = () => {
+  const handleInputBlur = useCallback(() => {
     setIsEditing(false);
     if (inputValue === 'Unlimited' && unlimited) {
       setLocalValue(max);
@@ -96,16 +97,25 @@ const EnhancedRangeSlider = ({
       setInputValue(String(clampedValue));
       onChange(clampedValue);
     }
-  };
+  }, [inputValue, unlimited, max, onChange, isUnlimited, localValue, min]);
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleInputBlur();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-      setInputValue(isUnlimited ? 'Unlimited' : String(localValue));
+  const handleEditClick = useCallback(() => {
+    if (!disabled) {
+      setIsEditing(true);
     }
-  };
+  }, [disabled]);
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleInputBlur();
+      } else if (e.key === 'Escape') {
+        setIsEditing(false);
+        setInputValue(isUnlimited ? 'Unlimited' : String(localValue));
+      }
+    },
+    [handleInputBlur, isUnlimited, localValue],
+  );
 
   return (
     <div
@@ -131,7 +141,7 @@ const EnhancedRangeSlider = ({
               ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
               : 'border-border/30 hover:border-primary hover:bg-primary/[0.02]',
           )}
-          onClick={() => !disabled && setIsEditing(true)}
+          onClick={handleEditClick}
           role="textbox"
           aria-label={`Enter ${label.toLowerCase()} value`}
         >
@@ -163,7 +173,7 @@ const EnhancedRangeSlider = ({
                 className="p-1 text-primary/70 hover:text-primary hover:bg-primary/10 rounded"
                 aria-label={`Information about ${label.toLowerCase()}`}
               >
-                <Info className="h-4 w-4" />
+                <Info className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">{tooltipText}</TooltipContent>

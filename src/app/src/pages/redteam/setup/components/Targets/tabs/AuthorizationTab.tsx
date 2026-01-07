@@ -70,7 +70,7 @@ const PasswordField: React.FC<{
             onClick={onToggleVisibility}
             aria-label={showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
           >
-            {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -508,7 +508,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   >
                     <Icon
                       className={cn(
-                        'mb-2 h-6 w-6',
+                        'mb-2 size-6',
                         selectedTarget.config.signatureAuth?.keyInputType === value
                           ? 'text-primary'
                           : 'text-muted-foreground',
@@ -583,7 +583,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                         })
                       }
                     >
-                      <X className="mr-2 h-4 w-4" />
+                      <X className="mr-2 size-4" />
                       Remove Key
                     </Button>
                   </>
@@ -593,7 +593,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     <label htmlFor="private-key-upload">
                       <Button variant="outline" asChild>
                         <span className="cursor-pointer">
-                          <Key className="mr-2 h-4 w-4" />
+                          <Key className="mr-2 size-4" />
                           Choose File
                         </span>
                       </Button>
@@ -686,7 +686,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                       }
                     }}
                   >
-                    <Check className="mr-2 h-4 w-4" />
+                    <Check className="mr-2 size-4" />
                     Format & Validate
                   </Button>
                 </div>
@@ -791,7 +791,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                                 }),
                           });
                         }}
-                        className="h-4 w-4"
+                        className="size-4"
                       />
                       <span>{mode === 'pfx' ? 'PFX/P12 File' : 'Separate CRT/KEY Files'}</span>
                     </label>

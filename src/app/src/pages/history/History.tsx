@@ -248,7 +248,7 @@ export default function History({
   return (
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
-        <div className="container max-w-7xl mx-auto px-6 py-6">
+        <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Evaluation History</h1>
           <p className="text-sm text-muted-foreground mt-1">View and compare all evaluation runs</p>
         </div>

@@ -143,7 +143,7 @@ export function EmailVerificationDialog({
           <Button onClick={handleSubmit} disabled={isSubmitting || !email.trim()}>
             {isSubmitting ? (
               <>
-                <Spinner className="mr-2 h-4 w-4" />
+                <Spinner className="mr-2 size-4" />
                 Verifying...
               </>
             ) : (

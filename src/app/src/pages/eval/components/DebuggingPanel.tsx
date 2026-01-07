@@ -28,7 +28,7 @@ export function DebuggingPanel({
           <ErrorBoundary
             fallback={
               <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="size-4" />
                 <AlertDescription>Error loading traces</AlertDescription>
               </Alert>
             }

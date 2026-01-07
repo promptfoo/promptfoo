@@ -981,7 +981,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        return await this.parseResponse(parsed);
+        const result = await this.parseResponse(parsed);
+        return { ...result, cached: true };
       }
     }
 

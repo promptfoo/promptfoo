@@ -37,6 +37,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     validateRef.current = validator;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);
@@ -103,7 +104,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
         {/* Validation Error Display */}
         {validationErrors && (
           <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="size-4" />
             <AlertDescription>
               <p className="text-sm">Please fix the following issues before continuing:</p>
               <p className="mt-2 text-sm font-medium">{validationErrors}</p>
@@ -114,7 +115,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
         {/* Documentation Alert for specific providers */}
         {hasSpecificDocumentation(providerType) && (
           <Alert variant="info">
-            <Info className="h-4 w-4" />
+            <Info className="size-4" />
             <AlertDescription>
               Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
               <a

@@ -27,6 +27,35 @@ function withApiBase(apiPath: string): string {
   return base ? `${base}${apiPath}` : apiPath;
 }
 
+/**
+ * Resolves a URL that could be a storage ref, blob URI, legacy API path, or external URL.
+ * Returns the resolved URL or undefined if unrecognized.
+ */
+function resolveMediaUrl(url?: string | null): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+
+  // Legacy API path - prepend base URL (check before resolveBlobUri since
+  // that function returns paths starting with '/' directly without apiBaseUrl)
+  if (url.startsWith('/api/')) {
+    return withApiBase(url);
+  }
+
+  // Try resolving as blob/storage ref
+  const blobUrl = resolveBlobUri(url);
+  if (blobUrl) {
+    return blobUrl;
+  }
+
+  // External URLs and data URIs pass through
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+
+  return undefined;
+}
+
 export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
@@ -122,37 +151,41 @@ export function resolveImageSource(
 }
 
 /**
- * Resolves video source from a video object with optional blob reference.
- * Returns a source URL and MIME type suitable for HTML video elements.
+ * Resolve video source from a video object with url, blobRef, or storageRef.
+ * Handles both legacy API paths and new blob/storage patterns.
+ * Supports both Google Veo (blobRef) and OpenAI Sora (storageRef, thumbnail) patterns.
  */
 export function resolveVideoSource(
-  video?: { format?: string; blobRef?: BlobLike; url?: string } | null,
-): { src: string; type?: string } | null {
+  video?: {
+    url?: string;
+    blobRef?: BlobLike;
+    storageRef?: { key?: string };
+    format?: string;
+    thumbnail?: string;
+  } | null,
+): { src: string; type?: string; poster?: string } | null {
   if (!video) {
     return null;
   }
 
-  // Try blob reference first
-  const blobUrl = resolveBlobRef(video.blobRef);
-  if (blobUrl) {
-    return {
-      src: blobUrl,
-      type: `video/${video.format || 'mp4'}`,
-    };
+  // Try blob reference first, then storage reference, then URL
+  const src =
+    resolveBlobRef(video.blobRef) ||
+    (video.storageRef?.key
+      ? withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`)
+      : undefined) ||
+    resolveMediaUrl(video.url);
+
+  if (!src) {
+    return null;
   }
 
-  // Fall back to direct URL (legacy format)
-  if (video.url) {
-    const resolvedUrl = resolveBlobUri(video.url);
-    if (resolvedUrl) {
-      return {
-        src: resolvedUrl,
-        type: `video/${video.format || 'mp4'}`,
-      };
-    }
-  }
-
-  return null;
+  const format = video.format || 'mp4';
+  return {
+    src,
+    type: `video/${format}`,
+    poster: resolveMediaUrl(video.thumbnail),
+  };
 }
 
 export function normalizeMediaText(text: string): string {

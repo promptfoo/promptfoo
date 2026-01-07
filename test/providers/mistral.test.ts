@@ -172,7 +172,6 @@ describe('Mistral', () => {
         get: vi.fn().mockResolvedValue({
           output: 'Cached output',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-          cached: true,
           cost: 0.000005,
         }),
         set: vi.fn(),
@@ -195,6 +194,7 @@ describe('Mistral', () => {
       } as any);
       const result = await provider.callApi('Test prompt');
 
+      expect(result.cached).toBe(true);
       expect(result).toEqual({
         output: 'Cached output',
         tokenUsage: {

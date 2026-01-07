@@ -66,8 +66,8 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-5 w-5">
-            <Info className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="size-5">
+            <Info className="size-4" />
           </Button>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
@@ -143,6 +143,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return initialConfig;
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
   }, []);
@@ -391,7 +392,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {/* Warning banner when remote generation is disabled */}
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertTitle>Remote Generation Disabled</AlertTitle>
           <AlertDescription>
             Some plugins require remote generation and are currently unavailable. These plugins
@@ -405,7 +406,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {/* Warning banner when all/most plugins are selected */}
       {hasSelectedMostPlugins && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
           <AlertDescription>
             Selecting many plugins is usually not efficient and will significantly increase
