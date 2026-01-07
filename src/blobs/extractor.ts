@@ -46,8 +46,9 @@ function getKindFromMimeType(mimeType: string): BlobKind {
 /**
  * Normalize audio format to proper MIME type.
  * Some providers return just 'wav' instead of 'audio/wav'.
+ * @internal Exported for testing
  */
-function normalizeAudioMimeType(format: string | undefined): string {
+export function normalizeAudioMimeType(format: string | undefined): string {
   if (!format) {
     return 'audio/wav';
   }

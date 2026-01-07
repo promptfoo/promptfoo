@@ -61,6 +61,14 @@ vi.mock('../../../src/util/fetch', async (importOriginal) => {
     fetchWithProxy: vi.fn(),
   };
 });
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    // Mock getGoogleAccessToken to return undefined (no OAuth2 credentials)
+    // This prevents the test from actually trying to authenticate with Google
+    getGoogleAccessToken: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const mockImportModule = vi.mocked(importModule);
 
