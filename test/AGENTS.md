@@ -93,9 +93,102 @@ Every provider needs tests covering:
 
 See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
+## Smoke Tests
+
+Smoke tests verify the **built CLI package** works correctly end-to-end. They test `dist/src/main.js` directly using `spawnSync`.
+
+```bash
+# Run smoke tests
+npm run test:smoke
+
+# Run specific smoke test file
+npx vitest run test/smoke/cli.test.ts --config vitest.smoke.config.ts
+```
+
+**Location:** `test/smoke/` with fixtures in `test/smoke/fixtures/configs/`
+
+**Reference pattern** (from `test/smoke/filters-and-flags.test.ts`):
+
+```typescript
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
+const FIXTURES_DIR = path.resolve(__dirname, 'fixtures/configs');
+const OUTPUT_DIR = path.resolve(__dirname, '.temp-output');
+
+function runCli(args: string[], options: { cwd?: string } = {}) {
+  const result = spawnSync('node', [CLI_PATH, ...args], {
+    cwd: options.cwd || path.resolve(__dirname, '../..'),
+    encoding: 'utf-8',
+    env: { ...process.env, NO_COLOR: '1' },
+    timeout: 60000,
+  });
+  return {
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    exitCode: result.status ?? 1,
+  };
+}
+
+describe('My Smoke Tests', () => {
+  beforeAll(() => {
+    if (!fs.existsSync(CLI_PATH)) {
+      throw new Error(`Built CLI not found. Run 'npm run build' first.`);
+    }
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  });
+
+  afterAll(() => {
+    fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+  });
+
+  it('runs eval with echo provider', () => {
+    const configPath = path.join(FIXTURES_DIR, 'basic.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'output.json');
+
+    const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(parsed.results.results[0].response.output).toContain('Hello');
+  });
+});
+```
+
+**Key patterns:**
+
+- Test the **built package** (`dist/src/main.js`), not source code
+- Use `spawnSync` with `node` to run the CLI directly
+- Fixtures go in `test/smoke/fixtures/configs/` (committed to git)
+- Temp output directories cleaned up in `afterAll`
+- Use `echo` provider for deterministic, zero-cost testing
+- Check exit codes AND output file contents
+
+**Fixture example** (`test/smoke/fixtures/configs/basic.yaml`):
+
+```yaml
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World
+```
+
+See `docs/plans/smoke-tests.md` for the full test checklist.
+
 ## Test Configuration
 
-- Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
+- Config: `vitest.config.ts` (unit tests), `vitest.integration.config.ts` (integration tests), `vitest.smoke.config.ts` (smoke tests)
 - Setup: `vitest.setup.ts`
 - Globals disabled: All test utilities must be explicitly imported from `vitest`
 - Import `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` from `vitest`
