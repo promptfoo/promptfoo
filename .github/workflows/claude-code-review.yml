@@ -45,20 +45,31 @@ jobs:
             git rev-parse --verify "$1^{commit}" >/dev/null 2>&1
           }
 
+          # Check if a commit is a merge commit (has 2+ parents)
+          # Used to detect "merge main into branch" which should trigger full review
+          is_merge_commit() {
+            git rev-parse --verify "$1^2" >/dev/null 2>&1
+          }
+
           BEFORE_SHA="${{ github.event.before }}"
           AFTER_SHA="${{ github.event.after }}"
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
 
-          # For synchronize events with valid SHAs, do incremental review
-          if [ "${{ github.event.action }}" = "synchronize" ] && is_valid_sha "$BEFORE_SHA" && is_valid_sha "$AFTER_SHA"; then
+          # For synchronize events with valid SHAs and no merge commits, do incremental review
+          # Merge commits (e.g., merging main into branch) trigger full review to avoid
+          # reviewing main branch changes that aren't part of this PR
+          if [ "${{ github.event.action }}" = "synchronize" ] && \
+             is_valid_sha "$BEFORE_SHA" && \
+             is_valid_sha "$AFTER_SHA" && \
+             ! is_merge_commit "$AFTER_SHA"; then
             {
               echo "scope=incremental"
               echo "base_sha=$BEFORE_SHA"
               echo "head_sha=$AFTER_SHA"
             } >> "$GITHUB_OUTPUT"
           else
-            # For opened/ready_for_review or invalid SHAs (force push), review entire PR
+            # Full review for: opened, ready_for_review, force push, or merge commits
             {
               echo "scope=full"
               echo "base_sha=$BASE_SHA"
@@ -83,11 +94,16 @@ jobs:
             ## Instructions
 
             1. Run `git diff ${{ steps.review_scope.outputs.base_sha }}..${{ steps.review_scope.outputs.head_sha }}` to see the changes
+               - If the diff command fails, fall back to `gh pr diff ${{ github.event.pull_request.number }}` instead
             2. For incremental reviews, run `gh pr view ${{ github.event.pull_request.number }} --comments` to see previous review feedback
             3. **IMPORTANT:** Only review the changes shown in this diff - do not re-review previously reviewed code
             4. **IMPORTANT:** Do not re-report issues already mentioned in previous reviews unless they appear in new code
             5. Read AGENTS.md for repository conventions
             6. Review for the issues below, focusing on **critical problems only**
+
+            **Note on review scope:**
+            - `scope=incremental`: Only new commits since last push (fast, focused)
+            - `scope=full`: Entire PR diff - triggered by: PR opened, ready for review, force push, or merge commits
 
             ## Review Focus (Priority Order)
 
