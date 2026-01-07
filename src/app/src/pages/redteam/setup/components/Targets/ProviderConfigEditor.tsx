@@ -386,6 +386,8 @@ function ProviderConfigEditor({
 
       <div className="mt-6">
         <CommonConfigurationOptions
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
