@@ -28,15 +28,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0 # Need full history for incremental diffs
+          persist-credentials: false
+
+      - name: Fetch PR head for diff comparison
+        run: git fetch origin "${{ github.event.pull_request.head.sha }}"
 
       - name: Determine review scope
         id: review_scope
         run: |
-          # Validate SHA format (40 hex chars, not null SHA)
+          # Validate SHA format (40 hex chars, not null SHA) and verify it exists
           is_valid_sha() {
-            [[ "$1" =~ ^[0-9a-f]{40}$ ]] && [[ "$1" != "0000000000000000000000000000000000000000" ]]
+            [[ "$1" =~ ^[0-9a-f]{40}$ ]] && \
+            [[ "$1" != "0000000000000000000000000000000000000000" ]] && \
+            git rev-parse --verify "$1^{commit}" >/dev/null 2>&1
           }
 
           BEFORE_SHA="${{ github.event.before }}"
