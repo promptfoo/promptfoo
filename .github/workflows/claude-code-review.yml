@@ -132,6 +132,11 @@ jobs:
             - **file:line** - Observation
 
             </details>
+
+            ---
+            *Last updated: [TIMESTAMP] | Reviewing: [COMMIT_SHA_SHORT]*
+
+            <!-- claude-code-review -->
             ```
 
             **Format rules:**
@@ -154,5 +159,31 @@ jobs:
             ## PR Convention Check
             If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per THE REDTEAM RULE.
 
-            Post your review as a single comment using `gh pr comment ${{ github.event.pull_request.number }}`.
-          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*)"'
+            ## Posting Your Review
+
+            **IMPORTANT:** Update the existing review comment instead of creating new ones.
+
+            1. First, find the existing review comment:
+               ```bash
+               gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+                 --jq '.[] | select(.body | contains("<!-- claude-code-review -->")) | .id'
+               ```
+
+            2. If a comment ID is returned, UPDATE it:
+               ```bash
+               gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/{COMMENT_ID}" \
+                 -f body="YOUR_REVIEW_CONTENT"
+               ```
+
+            3. If no comment exists, CREATE one:
+               ```bash
+               gh pr comment ${{ github.event.pull_request.number }} -b "YOUR_REVIEW_CONTENT"
+               ```
+
+            **Always include this hidden marker at the END of your comment:**
+            ```
+            <!-- claude-code-review -->
+            ```
+
+            This marker allows future runs to find and update this comment.
+          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'
