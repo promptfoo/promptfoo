@@ -19,23 +19,27 @@ This is promptfoo, an open-source LLM evaluation framework and AI agent security
 6. Review for the issues below, focusing on **critical problems only**
 
 **Note on review scope:**
+
 - `scope=incremental`: Only new commits since last push (fast, focused)
 - `scope=full`: Entire PR diff - triggered by: PR opened, ready for review, force push, or merge commits
 
 ## Review Focus (Priority Order)
 
 **🔴 Security (Critical)**
+
 - Injection vulnerabilities (command, SQL, XSS, prompt injection)
 - Unsafe handling of user input or adversarial test content
 - Credential/secret exposure, insecure data handling
 - SSRF, path traversal, unsafe deserialization
 
 **🟠 Correctness**
+
 - Logic errors, incorrect behavior, unhandled edge cases
 - Missing null/undefined checks, race conditions
 - Breaking changes to public APIs
 
 **🟡 Testing**
+
 - Missing tests for new functionality or bug fixes
 - Tests that don't actually verify the behavior
 - Missing mock cleanup (causes test pollution)
@@ -50,29 +54,36 @@ Use this exact structure for your comment:
 [One-line summary: "No critical issues found" or "X issues require attention"]
 
 ### 🔴 Critical Issues
+
 [List each critical/security issue - ALWAYS show this section if issues exist]
+
 - **file:line** - Description. **Fix:** suggestion
 
 ### 🟠 Correctness Issues
+
 [List each correctness issue - show if any exist]
+
 - **file:line** - Description. **Fix:** suggestion
 
 <details>
 <summary>🟡 Minor Observations (N items)</summary>
 
 [Low-severity items, suggestions, and non-blocking feedback go here]
+
 - **file:line** - Observation
 - **file:line** - Observation
 
 </details>
 
 ---
-*Last updated: [TIMESTAMP] | Reviewing: [COMMIT_SHA_SHORT]*
+
+_Last updated: [TIMESTAMP] | Reviewing: [COMMIT_SHA_SHORT]_
 
 <!-- claude-code-review -->
 ```
 
 **Format rules:**
+
 - STATUS: Use ✅ if no critical/correctness issues, ⚠️ if issues found
 - Critical and correctness issues are NEVER collapsed - they must be visible
 - Minor observations (testing suggestions, style notes, non-blocking items) go in collapsible section
@@ -81,15 +92,18 @@ Use this exact structure for your comment:
 - If truly no issues at all: Just post "## Security Review ✅\n\nNo issues found."
 
 **For incremental reviews:**
+
 - Add "🔄 Incremental Review" before "Security Review" in the header
 - Only report issues in the new changes, not previously reviewed code
 - If no new issues: "## 🔄 Security Review ✅\n\nNo issues in new changes."
 
 ## Skip These (Biome/CI catches them)
+
 - Formatting, import order, naming conventions
 - Minor style preferences
 
 ## PR Convention Check
+
 If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per THE REDTEAM RULE.
 
 ## Posting Your Review
@@ -97,12 +111,14 @@ If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per T
 **IMPORTANT:** Update the existing review comment instead of creating new ones.
 
 1. First, find the existing review comment:
+
    ```bash
    gh api "/repos/{{REPOSITORY}}/issues/{{PR_NUMBER}}/comments" \
      --jq '.[] | select(.body | contains("<!-- claude-code-review -->")) | .id'
    ```
 
 2. If a comment ID is returned, UPDATE it:
+
    ```bash
    gh api -X PATCH "/repos/{{REPOSITORY}}/issues/comments/{COMMENT_ID}" \
      -f body="YOUR_REVIEW_CONTENT"
@@ -114,6 +130,7 @@ If this PR touches `src/redteam/`, verify the title uses `(redteam)` scope per T
    ```
 
 **Always include this hidden marker at the END of your comment:**
+
 ```
 <!-- claude-code-review -->
 ```
