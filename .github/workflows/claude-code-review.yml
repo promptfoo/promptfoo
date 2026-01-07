@@ -28,8 +28,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0  # Need full history for incremental diffs
+
+      - name: Determine review scope
+        id: review_scope
+        run: |
+          # For synchronize events, only review new commits since last push
+          if [ "${{ github.event.action }}" = "synchronize" ]; then
+            echo "scope=incremental" >> $GITHUB_OUTPUT
+            echo "base_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
+            echo "head_sha=${{ github.event.after }}" >> $GITHUB_OUTPUT
+          else
+            # For opened/ready_for_review, review entire PR
+            echo "scope=full" >> $GITHUB_OUTPUT
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
@@ -41,14 +56,16 @@ jobs:
 
             **PR:** ${{ github.event.pull_request.title }}
             **Author:** ${{ github.event.pull_request.user.login }}
+            **Review Scope:** ${{ steps.review_scope.outputs.scope }}
 
             This is promptfoo, an open-source LLM evaluation framework and AI agent security testing tool. Security review is critical.
 
             ## Instructions
 
-            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
-            2. Read AGENTS.md for repository conventions
-            3. Review for the issues below, focusing on **critical problems only**
+            1. Run `git diff ${{ steps.review_scope.outputs.base_sha }}..${{ steps.review_scope.outputs.head_sha }}` to see the changes
+            2. **IMPORTANT:** Only review the changes shown in this diff - do not re-review previously reviewed code
+            3. Read AGENTS.md for repository conventions
+            4. Review for the issues below, focusing on **critical problems only**
 
             ## Review Focus (Priority Order)
 
@@ -70,10 +87,17 @@ jobs:
 
             ## Output Format
 
-            For each issue found:
-            - **File:line** - Brief description
-            - **Why it matters:** One sentence on impact
-            - **Suggested fix:** Code snippet or approach
+            **For incremental reviews:**
+            - Keep it concise - only comment on new issues in the new changes
+            - Start with "🔄 Incremental Review" and the commit range
+            - If no new issues: Just post "✅ No issues in new changes"
+            - If issues found: List them briefly with file:line and fix suggestion
+
+            **For full reviews:**
+            - For each issue found:
+              - **File:line** - Brief description
+              - **Why it matters:** One sentence on impact
+              - **Suggested fix:** Code snippet or approach
 
             ## Skip These (Biome/CI catches them)
             - Formatting, import order, naming conventions
@@ -84,4 +108,4 @@ jobs:
 
             Post your review as a single comment using `gh pr comment ${{ github.event.pull_request.number }}`.
             Use ✅ if no critical issues, ⚠️ if issues found.
-          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*)"'
