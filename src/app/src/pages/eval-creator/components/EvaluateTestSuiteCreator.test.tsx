@@ -1,8 +1,5 @@
-import React from 'react';
-
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -78,11 +75,6 @@ vi.mock('@app/utils/api', () => ({
   ),
 }));
 
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
-
 describe('EvaluateTestSuiteCreator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -91,7 +83,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
@@ -99,7 +91,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
@@ -115,7 +107,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog after the Reset button in the dialog is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -137,7 +129,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const initialPrompts = ['Test Prompt {{var}}'];
     useStore.getState().updateConfig({ prompts: initialPrompts });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Navigate to step 3 (Test Cases) to see the TestCasesSection
     const step3Button = screen.getByRole('button', { name: /add test cases/i });
@@ -176,7 +168,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -209,7 +201,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -227,7 +219,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should update state when interacting with components', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Step 1 (Choose Providers) should be active by default, so provider selector should be visible
     // Find the provider selector
@@ -267,7 +259,7 @@ describe('EvaluateTestSuiteCreator', () => {
       ],
     });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Navigate to step 3 (Test Cases) to see the TestCasesSection
     const step3Button = screen.getByRole('button', { name: /add test cases/i });
@@ -283,7 +275,7 @@ describe('EvaluateTestSuiteCreator', () => {
       json: async () => ({}),
     } as Response);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith('/providers/config-status');
@@ -296,7 +288,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should show the ConfigureEnvButton when the server responds with { hasCustomConfig: false }', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const configureEnvButton = await screen.findByTestId('mock-configure-env-button');
 
