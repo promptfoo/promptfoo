@@ -43,7 +43,7 @@ function getProviderIdAndLabel(
   if (keys.length > 0) {
     const id = keys[0];
     const value = (provider as ProviderOptionsMap)[id];
-    
+
     // Check if the value is an object (indicating ProviderOptionsMap format)
     if (typeof value === 'object' && value !== null) {
       return {
@@ -62,7 +62,7 @@ function getProviderIdAndLabel(
       label,
     };
   }
-  
+
   return {
     id: `unknown-${index}`,
     label,

@@ -110,7 +110,9 @@ describe('my integration test', () => {
 
   beforeAll(() => {
     fs.mkdirSync(testDir, { recursive: true });
-    fs.writeFileSync(configPath, `
+    fs.writeFileSync(
+      configPath,
+      `
 description: 'Test description'
 prompts:
   - 'Echo: {{message}}'
@@ -122,7 +124,8 @@ providers:
 tests:
   - vars:
       message: 'test'
-`);
+`,
+    );
   });
 
   afterAll(() => {
