@@ -120,17 +120,23 @@ function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
 
+/**
+ * Reset shared mock state before each test to ensure test isolation.
+ *
+ * - dynamicModuleMocks: Clears the Map used by mockDynamicModule() to prevent
+ *   module mocks from leaking between tests (e.g., renderPrompt external JS tests)
+ * - mockPathResolve: Resets to default implementation since some tests override it
+ *   with custom behavior (e.g., collectFileMetadata returns only the last path segment)
+ * - vi.clearAllMocks(): Clears call history for all mocks to ensure clean assertions
+ */
 beforeEach(() => {
+  vi.clearAllMocks();
   dynamicModuleMocks.clear();
   mockPathResolve.mockReset();
   mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
 });
 
 describe('extractTextFromPDF', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('should extract text from PDF successfully', async () => {
     const mockPDFText = 'Extracted PDF text';
     vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
@@ -599,7 +605,6 @@ describe('resolveVariables', () => {
 
 describe('runExtensionHook', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     // Reset the transform mock to return undefined by default
     vi.mocked(transform).mockResolvedValue(undefined);
   });
@@ -728,11 +733,6 @@ describe('runExtensionHook', () => {
     });
 
     describe('extensions provided', () => {
-      beforeEach(() => {
-        // Reset the mock to return undefined for these tests
-        vi.mocked(transform).mockResolvedValue(undefined);
-      });
-
       it('should call transform for each extension', async () => {
         const extensions = ['ext1', 'ext2', 'ext3'];
         await runExtensionHook(extensions, hookName, context);
@@ -778,7 +778,7 @@ describe('runExtensionHook', () => {
 
 describe('collectFileMetadata', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Override mockPathResolve to return only the last path segment for these tests
     mockPathResolve.mockImplementation((...paths: string[]) => {
       return paths[paths.length - 1];
     });
@@ -899,7 +899,7 @@ describe('collectFileMetadata', () => {
 });
 describe('Image Data URL Generation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Override mockPathResolve to return only the last path segment for these tests
     mockPathResolve.mockImplementation((...paths: string[]) => {
       return paths[paths.length - 1];
     });
