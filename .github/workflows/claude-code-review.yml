@@ -34,19 +34,29 @@ jobs:
       - name: Determine review scope
         id: review_scope
         run: |
-          # For synchronize events, only review new commits since last push
-          if [ "${{ github.event.action }}" = "synchronize" ]; then
+          # Validate SHA format (40 hex chars, not null SHA)
+          is_valid_sha() {
+            [[ "$1" =~ ^[0-9a-f]{40}$ ]] && [[ "$1" != "0000000000000000000000000000000000000000" ]]
+          }
+
+          BEFORE_SHA="${{ github.event.before }}"
+          AFTER_SHA="${{ github.event.after }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # For synchronize events with valid SHAs, do incremental review
+          if [ "${{ github.event.action }}" = "synchronize" ] && is_valid_sha "$BEFORE_SHA" && is_valid_sha "$AFTER_SHA"; then
             {
               echo "scope=incremental"
-              echo "base_sha=${{ github.event.before }}"
-              echo "head_sha=${{ github.event.after }}"
+              echo "base_sha=$BEFORE_SHA"
+              echo "head_sha=$AFTER_SHA"
             } >> "$GITHUB_OUTPUT"
           else
-            # For opened/ready_for_review, review entire PR
+            # For opened/ready_for_review or invalid SHAs (force push), review entire PR
             {
               echo "scope=full"
-              echo "base_sha=${{ github.event.pull_request.base.sha }}"
-              echo "head_sha=${{ github.event.pull_request.head.sha }}"
+              echo "base_sha=$BASE_SHA"
+              echo "head_sha=$HEAD_SHA"
             } >> "$GITHUB_OUTPUT"
           fi
 
