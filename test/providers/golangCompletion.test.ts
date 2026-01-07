@@ -288,7 +288,8 @@ describe('GolangProvider', () => {
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
       expect(mockExecFile).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result' });
+      expect(result.cached).toBe(true);
+      expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should handle cache errors', async () => {
