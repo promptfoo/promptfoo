@@ -121,7 +121,6 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluatorHelpers', () => {
-
   /**
    * Reset shared mock state before each test to ensure test isolation.
    *
@@ -342,7 +341,10 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.json'), 'utf8');
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('testData.json'),
+        'utf8',
+      );
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromJson"}');
     });
 
@@ -355,7 +357,10 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('testData.yaml'),
+        'utf8',
+      );
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
@@ -540,7 +545,11 @@ describe('evaluatorHelpers', () => {
 
   describe('resolveVariables', () => {
     it('should replace placeholders with corresponding variable values', () => {
-      const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
+      const variables = {
+        final: '{{ my_greeting }}, {{name}}!',
+        my_greeting: 'Hello',
+        name: 'John',
+      };
       const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
       expect(resolveVariables(variables)).toEqual(expected);
     });
