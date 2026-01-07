@@ -93,6 +93,79 @@ Every provider needs tests covering:
 
 See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
+## Integration Tests (CLI Commands)
+
+For integration tests that execute CLI commands with `npm run local`:
+
+```typescript
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+describe('my integration test', () => {
+  const testDir = path.join(process.cwd(), '.test-tmp', 'my-test-name');
+  const configPath = path.join(testDir, 'promptfooconfig.yaml');
+  const outputPath = path.join(testDir, 'output.json');
+
+  beforeAll(() => {
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(configPath, `
+description: 'Test description'
+prompts:
+  - 'Echo: {{message}}'
+providers:
+  - id: echo
+    label: 'provider-a'
+    config:
+      output: 'Response from A: {{prompt}}'
+tests:
+  - vars:
+      message: 'test'
+`);
+  });
+
+  afterAll(() => {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should run eval command', () => {
+    const cmd = `npm run local -- eval -c ${configPath} --no-cache -o ${outputPath}`;
+    const output = execSync(cmd, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      env: { ...process.env, PROMPTFOO_DISABLE_TELEMETRY: '1' },
+    });
+
+    expect(output).toContain('[provider-a]');
+    expect(fs.existsSync(outputPath)).toBe(true);
+  });
+});
+```
+
+**Key patterns:**
+
+- Use `.test-tmp` directory for test fixtures (auto-cleaned, not in git)
+- Create config files in `beforeAll`, clean up in `afterAll`
+- Execute with `npm run local -- eval` and capture output
+- Set `PROMPTFOO_DISABLE_TELEMETRY: '1'` to avoid telemetry during tests
+- Use `echo` provider for deterministic, zero-cost testing
+- Assert on both command output and generated files
+
+**Echo provider config for deterministic tests:**
+
+```yaml
+providers:
+  - id: echo
+    label: 'test-provider'
+    config:
+      output: 'Fixed response: {{prompt}}'
+```
+
+See `test/commands/eval/filterProviders.integration.test.ts` for reference.
+
 ## Test Configuration
 
 - Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
