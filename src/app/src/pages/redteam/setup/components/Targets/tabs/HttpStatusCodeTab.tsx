@@ -3,6 +3,7 @@ import React from 'react';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
+
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface HttpStatusCodeTabProps {
