@@ -120,6 +120,12 @@ function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
 
+beforeEach(() => {
+  dynamicModuleMocks.clear();
+  mockPathResolve.mockReset();
+  mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
+});
+
 describe('extractTextFromPDF', () => {
   beforeEach(() => {
     vi.clearAllMocks();
