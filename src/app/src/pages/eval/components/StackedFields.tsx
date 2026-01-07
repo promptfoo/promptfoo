@@ -1,6 +1,4 @@
-import Box from '@mui/material/Box';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { cn } from '@app/lib/utils';
 
 interface StackedFieldsProps {
   fields: Record<string, string | number | boolean | null | object>;
@@ -12,10 +10,6 @@ interface StackedFieldsProps {
  * Useful for displaying multiple input variables or structured data.
  */
 export function StackedFields({ fields, title }: StackedFieldsProps) {
-  const theme = useTheme();
-  const textColor = theme.palette.text.primary;
-  const labelColor = alpha(textColor, 0.6);
-
   const entries = Object.entries(fields);
 
   if (entries.length === 0) {
@@ -23,13 +17,9 @@ export function StackedFields({ fields, title }: StackedFieldsProps) {
   }
 
   return (
-    <Box>
-      {title && (
-        <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 500 }}>
-          {title}
-        </Typography>
-      )}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <div>
+      {title && <h4 className="mb-1.5 text-sm font-medium">{title}</h4>}
+      <div className="flex flex-col gap-1.5">
         {entries.map(([key, value]) => {
           const displayValue =
             value === null
@@ -44,41 +34,33 @@ export function StackedFields({ fields, title }: StackedFieldsProps) {
           const isComplexValue = typeof value === 'object' && value !== null;
 
           return (
-            <Box key={key}>
-              <Typography
-                component="div"
-                sx={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  color: labelColor,
-                  mb: 0.25,
-                }}
-              >
+            <div key={key}>
+              <div className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {key}
-              </Typography>
-              <Typography
-                component={isComplexValue ? 'pre' : 'div'}
-                sx={{
-                  fontSize: '14px',
-                  lineHeight: 1.5,
-                  color: textColor,
-                  wordBreak: 'break-word',
-                  overflowWrap: 'anywhere',
-                  whiteSpace: isComplexValue ? 'pre-wrap' : 'normal',
-                  fontFamily: isComplexValue ? 'monospace' : 'inherit',
-                  fontStyle: isEmptyOrNull ? 'italic' : 'normal',
-                  opacity: isEmptyOrNull ? 0.5 : 1,
-                  m: 0,
-                }}
-              >
-                {displayValue}
-              </Typography>
-            </Box>
+              </div>
+              {isComplexValue ? (
+                <pre
+                  className={cn(
+                    'm-0 whitespace-pre-wrap break-words font-mono text-sm leading-relaxed',
+                    isEmptyOrNull && 'italic opacity-50',
+                  )}
+                >
+                  {displayValue}
+                </pre>
+              ) : (
+                <div
+                  className={cn(
+                    'break-words text-sm leading-relaxed [overflow-wrap:anywhere]',
+                    isEmptyOrNull && 'italic opacity-50',
+                  )}
+                >
+                  {displayValue}
+                </div>
+              )}
+            </div>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

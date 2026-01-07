@@ -63,6 +63,7 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
 export async function testProviderConnectivity(
   provider: ApiProvider,
   prompt: string = 'Hello World!',
+  _inputs?: Record<string, string>,
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
@@ -413,6 +414,7 @@ export async function testProviderSession(
   provider: ApiProvider,
   sessionConfig?: { sessionSource?: string; sessionParser?: string },
   options?: { skipConfigValidation?: boolean },
+  _inputs?: Record<string, string>,
 ): Promise<SessionTestResult> {
   try {
     // Validate sessions config
