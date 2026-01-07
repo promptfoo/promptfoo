@@ -61,40 +61,7 @@ jobs:
 
       - name: Determine review scope
         id: review_scope
-        run: |
-          # Validate SHA format (40 hex chars, not null SHA) and verify it exists
-          is_valid_sha() {
-            [[ "$1" =~ ^[0-9a-f]{40}$ ]] && \
-            [[ "$1" != "0000000000000000000000000000000000000000" ]] && \
-            git rev-parse --verify "$1^{commit}" >/dev/null 2>&1
-          }
-
-          # Check if a commit is a merge commit (has 2+ parents)
-          # Used to detect "merge main into branch" which should trigger full review
-          is_merge_commit() {
-            git rev-parse --verify "$1^2" >/dev/null 2>&1
-          }
-
-          # For synchronize events with valid SHAs and no merge commits, do incremental review
-          # Merge commits (e.g., merging main into branch) trigger full review to avoid
-          # reviewing main branch changes that aren't part of this PR
-          if [ "$EVENT_ACTION" = "synchronize" ] && \
-             is_valid_sha "$EVENT_BEFORE" && \
-             is_valid_sha "$EVENT_AFTER" && \
-             ! is_merge_commit "$EVENT_AFTER"; then
-            {
-              echo "scope=incremental"
-              echo "base_sha=$EVENT_BEFORE"
-              echo "head_sha=$EVENT_AFTER"
-            } >> "$GITHUB_OUTPUT"
-          else
-            # Full review for: opened, ready_for_review, force push, or merge commits
-            {
-              echo "scope=full"
-              echo "base_sha=$PR_BASE_SHA"
-              echo "head_sha=$PR_HEAD_SHA"
-            } >> "$GITHUB_OUTPUT"
-          fi
+        run: .github/scripts/determine-review-scope.sh
 
       - name: Prepare review prompt
         id: prompt
