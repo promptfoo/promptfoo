@@ -466,10 +466,12 @@ export class GoogleLiveProvider implements ApiProvider {
               hasAudioStreamEnded = true;
             }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
+              try {
+                await finalizeResponse();
+              } catch (err) {
                 logger.error(`Error in finalizeResponse: ${err}`);
                 safeResolve({ error: `Error finalizing response: ${err}` });
-              });
+              }
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
@@ -491,10 +493,12 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
+              try {
+                await finalizeResponse();
+              } catch (err) {
                 logger.error(`Error in finalizeResponse: ${err}`);
                 safeResolve({ error: `Error finalizing response: ${err}` });
-              });
+              }
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
@@ -597,10 +601,12 @@ export class GoogleLiveProvider implements ApiProvider {
               );
               hasAudioStreamEnded = true;
               if (hasTextStreamEnded && hasAudioStreamEnded) {
-                finalizeResponse().catch((err) => {
+                try {
+                  await finalizeResponse();
+                } catch (err) {
                   logger.error(`Error in finalizeResponse: ${err}`);
                   safeResolve({ error: `Error finalizing response: ${err}` });
-                });
+                }
               }
             }
           }
