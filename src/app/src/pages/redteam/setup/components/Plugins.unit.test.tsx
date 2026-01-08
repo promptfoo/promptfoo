@@ -11,6 +11,7 @@ import Plugins from './Plugins';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
 import type { Config } from '../types';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
