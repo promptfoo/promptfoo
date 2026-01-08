@@ -21,6 +21,7 @@ import {
   HARM_PLUGINS,
   ISO_42001_MAPPING,
   MCP_PLUGINS,
+  MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_AGENTIC_TOP_10_MAPPING,
@@ -29,6 +30,7 @@ import {
   OWASP_LLM_TOP_10_MAPPING,
   PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
+  RAG_PLUGINS,
   riskCategories,
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
@@ -127,11 +129,11 @@ export default function PluginsTab({
       },
       {
         name: 'Minimal Test',
-        plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+        plugins: MINIMAL_TEST_PLUGINS,
       },
       {
         name: 'RAG',
-        plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+        plugins: RAG_PLUGINS,
       },
       {
         name: 'Foundation',

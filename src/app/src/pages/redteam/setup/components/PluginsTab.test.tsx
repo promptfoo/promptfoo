@@ -10,6 +10,24 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
+import {
+  DEFAULT_PLUGINS,
+  EU_AI_ACT_MAPPING,
+  FOUNDATION_PLUGINS,
+  GDPR_MAPPING,
+  GUARDRAILS_EVALUATION_PLUGINS,
+  HARM_PLUGINS,
+  ISO_42001_MAPPING,
+  MCP_PLUGINS,
+  MINIMAL_TEST_PLUGINS,
+  MITRE_ATLAS_MAPPING,
+  NIST_AI_RMF_MAPPING,
+  OWASP_AGENTIC_TOP_10_MAPPING,
+  OWASP_API_TOP_10_MAPPING,
+  OWASP_LLM_RED_TEAM_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
+  RAG_PLUGINS,
+} from '@promptfoo/redteam/constants';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -152,7 +170,422 @@ describe('PluginsTab', () => {
       });
     });
 
+    describe('Presets', () => {
+      describe('Selection updates the Zustand store with the correct plugins when the store is empty', () => {
+        test('Selecting the "Recommended" present', async () => {
+          const user = userEvent.setup();
+
+          // Verify initial store state has no plugins
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          // Find and click the "Recommended" preset card
+          const presetCard = screen.getByTestId('preset-card-recommended');
+          await user.click(presetCard);
+
+          // Verify the Zustand store was updated with all recommended plugins
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(DEFAULT_PLUGINS.size);
+          });
+
+          // Verify all plugins from DEFAULT_PLUGINS are present in the store
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of DEFAULT_PLUGINS) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "Minimal Test" preset', async () => {
+          const user = userEvent.setup();
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-minimal-test');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "RAG" preset', async () => {
+          const user = userEvent.setup();
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-rag');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(RAG_PLUGINS.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of RAG_PLUGINS) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "Foundation" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(FOUNDATION_PLUGINS);
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-foundation');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "Guardrails Evaluation" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(GUARDRAILS_EVALUATION_PLUGINS);
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-guardrails-evaluation');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "MCP" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(MCP_PLUGINS);
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-mcp');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "Harmful" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(Object.keys(HARM_PLUGINS));
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-harmful');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "NIST" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-nist');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "OWASP LLM Top 10" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-owasp-llm-top-10');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "OWASP Gen AI Red Team" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-owasp-gen-ai-red-team');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "OWASP API Top 10" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-owasp-api-top-10');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "OWASP Top 10 for Agentic Applications" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId(
+            'preset-card-owasp-top-10-for-agentic-applications',
+          );
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "MITRE" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-mitre');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "EU AI Act" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-eu-ai-act');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "ISO 42001" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-iso-42001');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "GDPR" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins));
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-gdpr');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+      });
+    });
+
     describe('Plugin List Items', () => {
+      // describe('Search', () => {});
+
+      // describe('Category Filtering', () => {});
+
+      // describe('Select All Button', () => {});
+
+      // describe('Select None Button', () => {});
+
       test('Selecting a list item updates the underlying Zustand store plugins array', async () => {
         const user = userEvent.setup();
 
@@ -218,5 +651,7 @@ describe('PluginsTab', () => {
         });
       });
     });
+
+    // describe('Selected Plugins List', () => {});
   });
 });
