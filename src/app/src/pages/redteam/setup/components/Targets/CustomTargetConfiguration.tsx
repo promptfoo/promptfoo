@@ -1,9 +1,7 @@
-import 'prismjs/components/prism-json';
-
 import React, { useEffect, useMemo, useState } from 'react';
 
+import { JsonCodeEditor } from '@app/components/JsonCodeEditor';
 import { Alert, AlertDescription } from '@app/components/ui/alert';
-import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
   CollapsibleContent,
@@ -11,20 +9,8 @@ import {
 } from '@app/components/ui/collapsible';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import {
-  AlertCircle,
-  AlignLeft,
-  ChevronDown,
-  Cloud,
-  Code2,
-  FileCode2,
-  Server,
-  Terminal,
-} from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
+import { AlertCircle, ChevronDown, Cloud, Code2, FileCode2, Server, Terminal } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
 
@@ -51,18 +37,6 @@ interface ProviderConfig {
   configExample: Record<string, unknown>;
   configDescription: string;
 }
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = (Prism as any)?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
 
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   switch (providerType) {
@@ -438,22 +412,8 @@ const CustomTargetConfiguration = ({
     try {
       const parsedConfig = JSON.parse(content);
       updateCustomTarget('config', parsedConfig);
-    } catch (error) {
+    } catch {
       // Allow invalid JSON while typing - error is shown via bodyError prop
-      console.error('Invalid JSON configuration:', error);
-    }
-  };
-
-  const handleFormatJson = () => {
-    if (rawConfigJson.trim()) {
-      try {
-        const parsed = JSON.parse(rawConfigJson);
-        const formatted = JSON.stringify(parsed, null, 2);
-        setRawConfigJson(formatted);
-        updateCustomTarget('config', parsed);
-      } catch {
-        // Error state is already shown via bodyError prop
-      }
     }
   };
 
@@ -497,24 +457,7 @@ const CustomTargetConfiguration = ({
 
         {/* Custom Configuration Section */}
         <div className="mt-6 space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="config-json">Configuration (JSON)</Label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleFormatJson}
-                  disabled={!rawConfigJson.trim() || !!bodyError}
-                  className="h-7 px-2"
-                >
-                  <AlignLeft className="size-4" />
-                  <span className="ml-1 text-xs">Format</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{bodyError ? 'Fix JSON errors first' : 'Format JSON'}</TooltipContent>
-            </Tooltip>
-          </div>
+          <Label htmlFor="config-json">Configuration (JSON)</Label>
 
           {/* Documentation Collapsible */}
           <Collapsible
@@ -562,30 +505,12 @@ const CustomTargetConfiguration = ({
           </Collapsible>
 
           {/* JSON Editor */}
-          <div
-            className={cn(
-              'overflow-hidden rounded-lg border',
-              bodyError ? 'border-destructive' : 'border-border',
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-1.5">
-              <span className="text-xs text-muted-foreground">JSON</span>
-            </div>
-            <div className="bg-white dark:bg-zinc-950">
-              <Editor
-                value={rawConfigJson}
-                onValueChange={handleConfigChange}
-                highlight={highlightJSON}
-                padding={12}
-                placeholder={JSON.stringify(config.configExample, null, 2)}
-                style={{
-                  fontFamily: 'ui-monospace, "Fira Code", monospace',
-                  fontSize: 13,
-                  minHeight: '120px',
-                }}
-              />
-            </div>
-          </div>
+          <JsonCodeEditor
+            value={rawConfigJson}
+            onChange={handleConfigChange}
+            hasError={!!bodyError}
+            placeholder={JSON.stringify(config.configExample, null, 2)}
+          />
 
           {bodyError ? (
             <Alert variant="destructive" className="py-2">

@@ -4,6 +4,7 @@ import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
+import { JsonCodeEditor } from '@app/components/JsonCodeEditor';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -31,17 +32,7 @@ import { Switch } from '@app/components/ui/switch';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
-import {
-  AlignLeft,
-  Check,
-  ChevronDown,
-  Copy,
-  Globe,
-  Play,
-  Plus,
-  Sparkles,
-  Trash2,
-} from 'lucide-react';
+import { Check, ChevronDown, Copy, Globe, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -376,20 +367,6 @@ Content-Type: application/json
     updateCustomTarget('body', content);
   };
 
-  const handleFormatJson = () => {
-    if (requestBody.trim()) {
-      try {
-        const parsed = JSON.parse(requestBody);
-        const formatted = JSON.stringify(parsed, null, 2);
-        setRequestBody(formatted);
-        updateCustomTarget('body', formatted);
-        setBodyError(null);
-      } catch {
-        setBodyError('Cannot format: Invalid JSON');
-      }
-    }
-  };
-
   const handleRawRequestChange = (value: string) => {
     updateCustomTarget('request', value);
   };
@@ -635,39 +612,19 @@ ${exampleRequest}`;
             </Button>
 
             <p className="mb-2 mt-6 font-medium">Request Body</p>
-            <div
-              className={cn(
-                'relative mt-2 rounded-md border bg-white dark:bg-zinc-900',
-                bodyError ? 'border-destructive' : 'border-border',
-              )}
-            >
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleFormatJson}
-                disabled={!requestBody.trim() || !!bodyError}
-                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                className="absolute right-1 top-1 z-10 size-8 bg-muted/50 hover:bg-muted"
-              >
-                <AlignLeft className="size-4" />
-              </Button>
-              <Editor
-                value={
-                  typeof requestBody === 'object'
-                    ? JSON.stringify(requestBody, null, 2)
-                    : requestBody || ''
-                }
-                onValueChange={handleRequestBodyChange}
-                highlight={(code) => code}
-                padding={10}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                  paddingRight: '40px', // Add space for the format button
-                }}
-              />
-            </div>
+            <JsonCodeEditor
+              value={
+                typeof requestBody === 'object'
+                  ? JSON.stringify(requestBody, null, 2)
+                  : requestBody || ''
+              }
+              onChange={handleRequestBodyChange}
+              hasError={!!bodyError}
+              showHeader={false}
+              formatButtonPosition="overlay"
+              minHeight="100px"
+              className="mt-2 rounded-md"
+            />
             {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
           </>
         )}
