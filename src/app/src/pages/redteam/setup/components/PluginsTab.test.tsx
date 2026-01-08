@@ -575,6 +575,147 @@ describe('PluginsTab', () => {
           }
         });
       });
+
+      describe('Selection updates the Zustand store with the correct plugins when the store is not empty', () => {
+        test('Appends, does not overwrite, existing plugins', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with a plugin object that's in MINIMAL_TEST_PLUGINS
+          // This plugin has custom config that should be preserved after selecting the preset
+          const customConfig = { numTests: 10 };
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: [{ id: 'harmful:hate', config: customConfig }],
+              },
+            });
+          });
+
+          // Verify initial store state
+          const initialPlugins = useRedTeamConfig.getState().config.plugins;
+          expect(initialPlugins).toHaveLength(1);
+
+          renderComponent();
+
+          // Click the "Minimal Test" preset which contains 'harmful:hate' and 'harmful:self-harm'
+          const presetCard = screen.getByTestId('preset-card-minimal-test');
+          await user.click(presetCard);
+
+          // Wait for store update
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
+          });
+
+          // Verify all preset plugins are present
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
+          const pluginIdSet = new Set(pluginIds);
+          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
+            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
+          }
+
+          // Verify the existing plugin's config was preserved (not overwritten)
+          const harmfulHatePlugin = storePlugins.find(
+            (p) => typeof p === 'object' && p.id === 'harmful:hate',
+          );
+          expect(harmfulHatePlugin).toBeDefined();
+          expect(typeof harmfulHatePlugin).toBe('object');
+          expect(
+            (harmfulHatePlugin as { id: string; config?: { numTests?: number } }).config,
+          ).toEqual(customConfig);
+        });
+
+        test('Does not add duplicate plugins when existing plugin is a string', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with a plugin that's already in MINIMAL_TEST_PLUGINS
+          // This simulates selecting 'harmful:hate' before clicking the preset
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: { ...initialStoreState.config, plugins: ['harmful:hate'] },
+            });
+          });
+
+          // Verify initial store state has one plugin
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(1);
+
+          renderComponent();
+
+          // Click the "Minimal Test" preset which contains 'harmful:hate' and 'harmful:self-harm'
+          const presetCard = screen.getByTestId('preset-card-minimal-test');
+          await user.click(presetCard);
+
+          // Wait for store update and verify no duplicates were added
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            // Should be exactly MINIMAL_TEST_PLUGINS.size (2), not 3
+            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
+          });
+
+          // Verify 'harmful:hate' appears exactly once
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
+          const harmfulHateCount = pluginIds.filter((id) => id === 'harmful:hate').length;
+          expect(harmfulHateCount).toBe(1);
+
+          // Verify all expected plugins are present
+          const pluginIdSet = new Set(pluginIds);
+          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
+            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Does not add duplicate plugins when existing plugin is an object', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with a plugin object (not a string) that's already in MINIMAL_TEST_PLUGINS
+          // Plugin objects have the shape: { id: string; config?: PluginConfig }
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: [{ id: 'harmful:hate', config: { numTests: 10 } }],
+              },
+            });
+          });
+
+          // Verify initial store state has one plugin object
+          const initialPlugins = useRedTeamConfig.getState().config.plugins;
+          expect(initialPlugins).toHaveLength(1);
+          expect(typeof initialPlugins[0]).toBe('object');
+          expect((initialPlugins[0] as { id: string }).id).toBe('harmful:hate');
+
+          renderComponent();
+
+          // Click the "Minimal Test" preset which contains 'harmful:hate' and 'harmful:self-harm'
+          const presetCard = screen.getByTestId('preset-card-minimal-test');
+          await user.click(presetCard);
+
+          // Wait for store update and verify no duplicates were added
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            // Should be exactly MINIMAL_TEST_PLUGINS.size (2), not 3
+            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
+          });
+
+          // Verify 'harmful:hate' appears exactly once
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
+          const harmfulHateCount = pluginIds.filter((id) => id === 'harmful:hate').length;
+          expect(harmfulHateCount).toBe(1);
+
+          // Verify all expected plugins are present
+          const pluginIdSet = new Set(pluginIds);
+          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
+            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
+          }
+        });
+      });
     });
 
     describe('Plugin List Items', () => {
