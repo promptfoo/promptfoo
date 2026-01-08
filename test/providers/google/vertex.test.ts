@@ -382,8 +382,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     ];
 
-    // Mock file system operations
-    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    // Mock file system operations (existsSync no longer called due to TOCTOU fix)
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
 
     provider = new VertexChatProvider('gemini-pro', {
@@ -441,7 +440,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       metadata: {},
     });
 
-    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    // Note: existsSync no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
     expect(mockRequest).toHaveBeenCalledWith(
       expect.objectContaining({

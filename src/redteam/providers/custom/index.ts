@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -22,6 +21,7 @@ import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts'
 import { getMultiTurnStrategyContext } from '../prompts';
 import {
   buildGraderResultAssertion,
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   type Message,
@@ -152,7 +152,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -188,8 +188,8 @@ export class CustomProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -874,7 +874,12 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(

@@ -1,4 +1,4 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ConfigurationTab from './ConfigurationTab';
@@ -10,8 +10,6 @@ vi.mock('./PathSelector', () => ({
 vi.mock('./InstallationGuide', () => ({
   default: () => <div data-testid="installation-guide" />,
 }));
-
-const theme = createTheme();
 
 describe('ConfigurationTab', () => {
   const defaultProps = {
@@ -33,18 +31,18 @@ describe('ConfigurationTab', () => {
   it('should clear the error message when the error prop changes from non-null to null', async () => {
     const initialError = 'An error occurred';
     const { rerender } = render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <ConfigurationTab {...defaultProps} error={initialError} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     expect(screen.getByText(initialError)).toBeInTheDocument();
 
     await act(() => {
       rerender(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider delayDuration={0}>
           <ConfigurationTab {...defaultProps} error={null} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
     });
 
@@ -53,28 +51,28 @@ describe('ConfigurationTab', () => {
 
   it('should show error state but remain clickable when installationStatus.installed is false', () => {
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <ConfigurationTab
           {...defaultProps}
           installationStatus={{ checking: false, installed: false }}
           paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
         />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     // Button should show "ModelAudit Not Installed" text
     const scanButton = screen.getByRole('button', { name: 'ModelAudit Not Installed' });
     // Button should NOT be disabled - users can click it to see installation instructions
     expect(scanButton).not.toBeDisabled();
-    // Button should have error color styling
-    expect(scanButton).toHaveClass('MuiButton-containedError');
+    // Button should have error color styling (destructive variant)
+    expect(scanButton).toHaveClass('bg-destructive');
   });
 
   it('should render PathSelector', () => {
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <ConfigurationTab {...defaultProps} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     expect(screen.getByTestId('path-selector')).toBeInTheDocument();

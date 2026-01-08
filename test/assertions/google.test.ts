@@ -193,7 +193,7 @@ describe('Google assertions', () => {
         validateFunctionCall(functionOutput, fileProvider.config.tools, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.json');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.json',
         'utf8',

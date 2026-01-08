@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { asc, eq, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
@@ -136,7 +134,7 @@ export class TraceStore {
       await db
         .insert(tracesTable)
         .values({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
@@ -184,7 +182,7 @@ export class TraceStore {
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           traceId,
           spanId: span.spanId,
           parentSpanId: span.parentSpanId,

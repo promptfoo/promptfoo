@@ -1,10 +1,10 @@
-import { randomUUID } from 'crypto';
-
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
+import { ProviderConfig } from '../providers/shared';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -44,7 +44,11 @@ export function sanitizeProvider(
       };
     }
     if (typeof provider === 'object' && provider) {
-      const providerObj = provider as { id: string | (() => string); label?: string; config?: any };
+      const providerObj = provider as {
+        id: string | (() => string);
+        label?: string;
+        config?: ProviderConfig;
+      };
       return {
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
@@ -79,15 +83,24 @@ export default class EvalResult {
       testCase,
     } = result;
 
-    const args = {
-      id: randomUUID(),
+    // Normalize provider for storage and extract blobs from responses
+    const preSanitizeTestCase = {
+      ...testCase,
+      ...(testCase.provider && {
+        provider: sanitizeProvider(testCase.provider),
+      }),
+    };
+
+    const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
-      testCase: {
-        ...testCase,
-        ...(testCase.provider && {
-          provider: sanitizeProvider(testCase.provider),
-        }),
-      },
+      testIdx: result.testIdx,
+      promptIdx: result.promptIdx,
+    });
+
+    const args = {
+      id: crypto.randomUUID(),
+      evalId,
+      testCase: preSanitizeTestCase,
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,
@@ -95,7 +108,7 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: result.response || null,
+      response: processedResponse || null,
       gradingResult: gradingResult || null,
       namedScores,
       provider: sanitizeProvider(provider),
@@ -116,11 +129,23 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
+    const processedResults: EvaluateResult[] = [];
+    for (const result of results) {
+      const processedResponse = isBlobStorageEnabled()
+        ? await extractAndStoreBinaryData(result.response, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          })
+        : result.response;
+      processedResults.push({ ...result, response: processedResponse ?? undefined });
+    }
+
     db.transaction(() => {
-      for (const result of results) {
+      for (const result of processedResults) {
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
+          .values({ ...result, evalId, id: crypto.randomUUID() })
           .returning()
           .get();
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
@@ -238,6 +263,7 @@ export default class EvalResult {
   provider: ProviderOptions;
   latencyMs: number;
   cost: number;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata: Record<string, any>;
   failureReason: ResultFailureReason;
   persisted: boolean;
@@ -260,6 +286,7 @@ export default class EvalResult {
     provider: ProviderOptions;
     latencyMs?: number | null;
     cost?: number | null;
+    // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason | number;
     persisted?: boolean;

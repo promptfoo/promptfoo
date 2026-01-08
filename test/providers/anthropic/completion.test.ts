@@ -67,6 +67,7 @@ describe('AnthropicCompletionProvider', () => {
       const cachedResult = await provider.callApi('Test prompt');
 
       expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
+      expect(cachedResult.cached).toBe(true);
       expect(cachedResult).toMatchObject({
         output: 'Test output',
         tokenUsage: {},

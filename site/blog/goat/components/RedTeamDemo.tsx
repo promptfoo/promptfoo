@@ -134,6 +134,7 @@ const RedTeamDemo: React.FC = () => {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state.messages is a trigger dependency - scrollToBottom is stable
   useEffect(() => {
     scrollToBottom();
   }, [state.messages]);

@@ -1,14 +1,14 @@
-import { randomUUID } from 'crypto';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
@@ -22,8 +22,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { strategyDisplayNames } from './redteam/constants';
-import { getSessionId, isSimbaTestCase } from './redteam/util';
+import { getSessionId } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -37,6 +36,7 @@ import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -47,7 +47,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { isApiProvider } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
@@ -66,6 +66,7 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -75,6 +76,7 @@ import type {
   TokenUsage,
   Vars,
 } from './types/index';
+import type { CallApiContextParams } from './types/providers';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -251,10 +253,21 @@ function updateAssertionMetrics(
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
+  const promptLabel = prompt.label;
   return (
     !Array.isArray(allowedPrompts) ||
-    allowedPrompts.includes(prompt.label) ||
-    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
+    allowedPrompts.some((allowedPrompt) => {
+      if (allowedPrompt === promptLabel) {
+        return true;
+      }
+
+      if (allowedPrompt.endsWith('*')) {
+        const prefix = allowedPrompt.slice(0, -1);
+        return promptLabel.startsWith(prefix);
+      }
+
+      return promptLabel.startsWith(`${allowedPrompt}:`);
+    })
   );
 }
 
@@ -291,6 +304,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  evalId,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -303,7 +317,7 @@ export async function runEval({
 
   // Set up vars with a shallow copy to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
-  // Crescendo, SIMBA) may add runtime variables like sessionId to vars during execution.
+  // Crescendo) may add runtime variables like sessionId to vars during execution.
   // Without this copy, those mutations would persist to the stored testCase, causing
   // test matching to fail when using --filter-errors-only or --filter-failing.
   const vars = { ...(test.vars || {}) };
@@ -343,7 +357,10 @@ export async function runEval({
 
   try {
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+    // For redteam tests, skip rendering the inject variable to prevent double-rendering of
+    // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
+    const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider, skipRenderVars);
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
@@ -373,7 +390,7 @@ export async function runEval({
         testSuite,
       );
 
-      const callApiContext: any = {
+      const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
@@ -400,35 +417,11 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      // Handle Simba providers specially - they use runSimba instead of callApi
-      if (activeProvider.id() === 'promptfoo:redteam:simba') {
-        const simbaProvider = activeProvider as any;
-        if (simbaProvider.runSimba) {
-          // Simba returns EvaluateResult[] directly, so we need to return early
-          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
-            prompt: renderedPrompt,
-            context: callApiContext,
-            options: abortSignal ? { abortSignal } : undefined,
-            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-          });
-
-          // Update results with proper indices for Simba
-          for (const result of simbaResults) {
-            result.promptIdx = promptIdx;
-            result.testIdx = testIdx++;
-          }
-
-          return simbaResults;
-        } else {
-          throw new Error('Simba provider does not have runSimba method');
-        }
-      } else {
-        response = await activeProvider.callApi(
-          renderedPrompt,
-          callApiContext,
-          abortSignal ? { abortSignal } : undefined,
-        );
-      }
+      response = await activeProvider.callApi(
+        renderedPrompt,
+        callApiContext,
+        abortSignal ? { abortSignal } : undefined,
+      );
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -471,7 +464,7 @@ export async function runEval({
       failureReason: ResultFailureReason.NONE,
       score: 0,
       namedScores: {},
-      latencyMs,
+      latencyMs: response.latencyMs ?? latencyMs,
       cost: response.cost,
       metadata: {
         ...test.metadata,
@@ -516,7 +509,7 @@ export async function runEval({
       }
     } else {
       // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
+      let processedResponse = { ...response };
 
       // Apply provider transform first (if exists)
       if (provider.transform) {
@@ -540,6 +533,16 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
+      const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        evalId,
+        testIdx,
+        promptIdx,
+      });
+      if (blobbedResponse) {
+        processedResponse = blobbedResponse;
+      }
 
       // Extract traceId from traceparent if available
       let traceId: string | undefined;
@@ -599,10 +602,20 @@ export async function runEval({
 
     return [ret];
   } catch (err) {
+    const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
+      error: err,
+      provider,
+      test,
+      promptIdx,
+      testIdx,
+    });
+
+    logger.error('Provider call failed during eval', logContext);
+
     return [
       {
         ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
+        error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
         score: 0,
@@ -612,9 +625,75 @@ export async function runEval({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
+        metadata,
       },
     ];
   }
+}
+
+function buildProviderErrorContext({
+  error,
+  provider,
+  test,
+  promptIdx,
+  testIdx,
+}: {
+  error: unknown;
+  provider: ApiProvider;
+  test: AtomicTestCase;
+  promptIdx: number;
+  testIdx: number;
+}) {
+  const providerId = provider.id();
+  const providerLabel = provider.label;
+  // Type guard for errors with HTTP response information
+  const errorWithResponse = error as {
+    response?: { status?: number; statusText?: string; data?: unknown };
+  };
+  const status = errorWithResponse?.response?.status;
+  const statusText = errorWithResponse?.response?.statusText;
+  const responseData = errorWithResponse?.response?.data;
+  const responseSnippet = (() => {
+    if (responseData == null) {
+      return undefined;
+    }
+    const asString =
+      typeof responseData === 'string' ? responseData : safeJsonStringify(responseData);
+    if (!asString) {
+      return undefined;
+    }
+    return asString.length > 500 ? `${asString.slice(0, 500)}...` : asString;
+  })();
+  const errorMessage = String(error);
+  const stack = (error as Error)?.stack;
+  const errorWithStack =
+    stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+
+  return {
+    errorWithStack,
+    metadata: {
+      ...(test.metadata || {}),
+      errorContext: {
+        providerId,
+        providerLabel,
+        status,
+        statusText,
+        responseSnippet,
+      },
+    },
+    logContext: {
+      providerId,
+      providerLabel,
+      status,
+      statusText,
+      responseSnippet,
+      promptIdx,
+      testIdx,
+      pluginId: test.metadata?.pluginId,
+      strategyId: test.metadata?.strategyId,
+      error,
+    },
+  };
 }
 
 /**
@@ -626,7 +705,7 @@ export async function runEval({
  * @returns Formatted variables string or fallback message
  */
 export function formatVarsForDisplay(
-  vars: Record<string, any> | undefined,
+  vars: Record<string, unknown> | undefined,
   maxLength: number,
 ): string {
   if (!vars || Object.keys(vars).length === 0) {
@@ -653,13 +732,13 @@ export function formatVarsForDisplay(
 }
 
 export function generateVarCombinations(
-  vars: Record<string, string | string[] | any>,
-): Record<string, string | any[]>[] {
+  vars: Record<string, string | string[] | unknown>,
+): Record<string, string | object>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | any[]>[] = [{}];
+  const combinations: Record<string, string | object>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = [];
+    let values: Array<string | object> = [];
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
@@ -687,7 +766,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, any>[] = [];
+    const newCombinations: Record<string, string | object>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -733,6 +812,40 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
+  /**
+   * Updates metrics and stats after a comparison assertion (select-best or max-score).
+   */
+  private updateComparisonStats(
+    result: EvalResult,
+    passed: boolean,
+    reason: string,
+    tokensUsed: TokenUsage | undefined,
+    wasSuccess: boolean,
+    wasScore: number,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ): void {
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (tokensUsed) {
+        updateAssertionMetrics(metrics, tokensUsed);
+      }
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = reason;
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      this.stats.successes -= 1;
+      this.stats.failures += 1;
+    }
+  }
+
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
@@ -766,7 +879,9 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    if (!options.silent) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -969,7 +1084,7 @@ class Evaluator {
         if (inputTransform) {
           const transformContext: TransformContext = {
             prompt: {},
-            uuid: randomUUID(),
+            uuid: crypto.randomUUID(),
           };
           const transformedVars: Vars = await transform(
             inputTransform,
@@ -1134,6 +1249,7 @@ class Evaluator {
                 isRedteam: testSuite.redteam != null,
                 concurrency,
                 abortSignal: options.abortSignal,
+                evalId: this.evalRecord.id,
               });
               promptIdx++;
             }
@@ -1267,11 +1383,6 @@ class Evaluator {
           await writer.write(row);
         }
 
-        if (row.metadata?.simbaSessionId) {
-          this.evalRecord.config.metadata ??= {};
-          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
-        }
-
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
@@ -1281,9 +1392,12 @@ class Evaluator {
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
 
           // Count assertions contributing to this named score
+          // Note: We need to render template variables in assertion metrics before comparing
+          const testVars = row.testCase?.vars || {};
           let contributingAssertions = 0;
           row.gradingResult?.componentResults?.forEach((result) => {
-            if (result.assertion?.metric === key) {
+            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
+            if (renderedMetric === key) {
               contributingAssertions++;
             }
           });
@@ -1357,19 +1471,25 @@ class Evaluator {
 
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
-      const { signal } = abortController;
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
+        : abortController.signal;
 
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
+
+      let timeoutId: NodeJS.Timeout | undefined;
+      let didTimeout = false;
 
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
+              didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
 
@@ -1383,13 +1503,13 @@ class Evaluator {
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-
-              // Clear the timeout to prevent memory leaks
-              clearTimeout(timeoutId);
             }, timeoutMs);
           }),
         ]);
       } catch (error) {
+        if (!didTimeout) {
+          throw error;
+        }
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1428,6 +1548,8 @@ class Evaluator {
           metrics.totalLatencyMs += timeoutMs;
         }
 
+        numComplete++;
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1455,6 +1577,10 @@ class Evaluator {
               cost: 0,
             },
           );
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
       }
     };
@@ -1498,15 +1624,12 @@ class Evaluator {
       }
     };
 
-    // Separate serial, concurrent, and Simba eval options
+    // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
-    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (isSimbaTestCase(evalOption)) {
-        simbaRunEvalOptions.push(evalOption);
-      } else if (evalOption.test.options?.runSerially) {
+      if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1514,13 +1637,15 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
-      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-    }
-    if (concurrentRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
+    if (!this.options.silent) {
+      if (serialRunEvalOptions.length > 0) {
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+      }
+      if (concurrentRunEvalOptions.length > 0) {
+        logger.info(
+          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+        );
+      }
     }
 
     // Now start the progress bar after info messages
@@ -1555,28 +1680,6 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
-
-      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
-      if (simbaRunEvalOptions.length > 0) {
-        if (progressBarManager) {
-          progressBarManager.complete();
-          progressBarManager.stop();
-        }
-
-        for (const evalStep of simbaRunEvalOptions) {
-          if (isWebUI) {
-            const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
-            logger.info(
-              `[${numComplete}/${runEvalOptions.length}] Running ${strategyDisplayNames.simba} ${provider} with vars: ${vars}`,
-            );
-          }
-          checkAbort();
-          const idx = runEvalOptions.indexOf(evalStep);
-          await processEvalStepWithTimeout(evalStep, idx);
-          processedIndices.add(idx);
-        }
-      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout
@@ -1651,6 +1754,9 @@ class Evaluator {
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const metrics = prompts[result.promptIdx]?.metrics;
           if (result.gradingResult) {
             result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
@@ -1700,8 +1806,25 @@ class Evaluator {
             }
             result.gradingResult.componentResults.push(gradingResult);
           } else {
-            result.gradingResult = gradingResult;
+            const newPass = result.success && gradingResult.pass;
+            result.gradingResult = {
+              ...gradingResult,
+              pass: newPass,
+            };
+            result.success = newPass;
+            if (!gradingResult.pass) {
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
           }
+          this.updateComparisonStats(
+            result,
+            gradingResult.pass,
+            gradingResult.reason || '',
+            gradingResult.tokensUsed,
+            wasSuccess,
+            wasScore,
+            metrics,
+          );
           if (this.evalRecord.persisted) {
             await result.save();
           }
@@ -1767,11 +1890,26 @@ class Evaluator {
             // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
+            const wasSuccess = result.success;
+            const wasScore = result.score;
+            const metrics = prompts[result.promptIdx]?.metrics;
+            const comparisonPassed = maxScoreGradingResult.pass;
+            const previousPass = existingGradingResult?.pass ?? result.success;
+            const nextPass = previousPass && comparisonPassed;
+
+            // When max-score fails, update score like select-best does
+            const newScore = comparisonPassed
+              ? (existingGradingResult?.score ?? result.score)
+              : maxScoreGradingResult.score;
 
             result.gradingResult = {
-              pass: maxScoreGradingResult.pass,
-              score: maxScoreGradingResult.score,
-              reason: maxScoreGradingResult.reason,
+              ...(existingGradingResult || {}),
+              pass: nextPass,
+              score: newScore,
+              reason:
+                !comparisonPassed && previousPass
+                  ? maxScoreGradingResult.reason
+                  : (existingGradingResult?.reason ?? ''),
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
@@ -1781,9 +1919,20 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Don't overwrite overall success/score - max-score is just another assertion
-            // The overall result should be determined by all assertions, not just max-score
-
+            // Max-score is an additional assertion, so overall pass depends on existing asserts too.
+            result.success = nextPass;
+            if (!comparisonPassed) {
+              result.score = newScore;
+            }
+            this.updateComparisonStats(
+              result,
+              comparisonPassed,
+              maxScoreGradingResult.reason || '',
+              maxScoreGradingResult.tokensUsed,
+              wasSuccess,
+              wasScore,
+              metrics,
+            );
             if (this.evalRecord.persisted) {
               await result.save();
             }
@@ -1851,11 +2000,25 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
-      suite: testSuite,
-    });
+    // Only load results from database if there are extensions to run
+    if (testSuite.extensions?.length) {
+      // Load results from database for extensions (results may not be in memory for persisted evals)
+      const allResults = await this.evalRecord.getResults();
+
+      // Convert EvalResult model instances to plain EvaluateResult objects for extensions
+      const resultsForExtension: EvaluateResult[] = allResults.map(
+        (result): EvaluateResult =>
+          'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+      );
+
+      await runExtensionHook(testSuite.extensions, 'afterAll', {
+        prompts: this.evalRecord.prompts,
+        results: resultsForExtension,
+        suite: testSuite,
+        evalId: this.evalRecord.id,
+        config: this.evalRecord.config,
+      });
+    }
 
     // Calculate additional metrics for telemetry
     const endTime = Date.now();

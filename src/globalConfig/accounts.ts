@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { z } from 'zod';
@@ -24,7 +22,7 @@ import type { GlobalConfig } from '../configTypes';
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
-    const newId = randomUUID();
+    const newId = crypto.randomUUID();
     globalConfig = { ...globalConfig, id: newId };
     writeGlobalConfig(globalConfig);
     return newId;
@@ -224,13 +222,14 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
           return result.success || result.error.errors[0].message;
         },
       });
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
         // exit cleanly on interrupt
         process.exit(1);
       }
       // Unknown error: rethrow
-      logger.error('failed to prompt for email:', err);
+      logger.error(`failed to prompt for email: ${err}`);
       throw err;
     }
     setUserEmail(email);

@@ -1,68 +1,18 @@
-import { useState } from 'react';
-
-import CompareIcon from '@mui/icons-material/Compare';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
-import EvalSelectorDialog from './EvalSelectorDialog';
-import { useTableStore } from './store';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import { DropdownMenuItem, DropdownMenuItemIcon } from '@app/components/ui/dropdown-menu';
+import { GitCompareArrows } from 'lucide-react';
 
 interface CompareEvalMenuItemProps {
-  initialEvals: ResultLightweightWithLabel[];
-  onComparisonEvalSelected: (evalId: string) => void;
+  onClick: () => void;
 }
 
-function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemProps) {
-  const { evalId: currentEvalId } = useTableStore();
-  const [dialogOpen, setDialogOpen] = useState(false);
-
-  const handleOpenDialog = () => {
-    setDialogOpen(true);
-  };
-
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-  };
-
-  const handleEvalSelected = (evalId: string) => {
-    // Prevent self-comparison
-    if (evalId === currentEvalId) {
-      handleCloseDialog();
-      return;
-    }
-
-    try {
-      onComparisonEvalSelected(evalId);
-    } finally {
-      // Always close the dialog, even if the callback throws an error
-      handleCloseDialog();
-    }
-  };
-
+function CompareEvalMenuItem({ onClick }: CompareEvalMenuItemProps) {
   return (
-    <>
-      <Tooltip title="Combine this eval with another eval run" placement="left">
-        <MenuItem onClick={handleOpenDialog}>
-          <ListItemIcon>
-            <CompareIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Compare with another eval</ListItemText>
-        </MenuItem>
-      </Tooltip>
-      <EvalSelectorDialog
-        open={dialogOpen}
-        onClose={handleCloseDialog}
-        onEvalSelected={(evalId) => {
-          handleEvalSelected(evalId);
-        }}
-        title="Select an eval to compare"
-        description="Only evals with the same dataset can be compared."
-        focusedEvalId={currentEvalId ?? undefined}
-        filterByDatasetId
-      />
-    </>
+    <DropdownMenuItem onSelect={onClick}>
+      <DropdownMenuItemIcon>
+        <GitCompareArrows className="size-4" />
+      </DropdownMenuItemIcon>
+      Compare with another eval
+    </DropdownMenuItem>
   );
 }
 

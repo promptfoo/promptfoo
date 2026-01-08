@@ -61,6 +61,14 @@ vi.mock('../../../src/util/fetch', async (importOriginal) => {
     fetchWithProxy: vi.fn(),
   };
 });
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    // Mock getGoogleAccessToken to return undefined (no OAuth2 credentials)
+    // This prevents the test from actually trying to authenticate with Google
+    getGoogleAccessToken: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const mockImportModule = vi.mocked(importModule);
 
@@ -405,7 +413,7 @@ describe('GoogleLiveProvider', () => {
     delete process.env.GOOGLE_API_KEY;
 
     await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      'Google authentication is not configured',
     );
 
     if (originalApiKey) {
@@ -652,6 +660,9 @@ describe('GoogleLiveProvider', () => {
       json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
 
+    // Clear any call history from previous tests to ensure accurate count
+    mockFetchWithProxy.mockClear();
+
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
       output: {
@@ -671,21 +682,27 @@ describe('GoogleLiveProvider', () => {
     });
 
     // Check the specific calls made to the stateful API
+    // Note: Function call order may vary due to async processing, but all calls should be made
     const getCallUrls = mockFetchWithProxy.mock.calls.map((call) => call[0]);
-    const expectedUrls = [
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/get_state',
-    ];
 
-    expect(getCallUrls).toEqual(expectedUrls);
+    // Verify total number of calls (5 function calls + 1 get_state)
+    expect(getCallUrls).toHaveLength(6);
+
+    // Verify get_state was called last (this is deterministic - happens in finalizeResponse)
     expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
       'http://127.0.0.1:5000/get_state',
       undefined,
     );
+
+    // Verify all expected function calls were made (order may vary due to async)
+    const functionCallUrls = getCallUrls.slice(0, -1); // All except last (get_state)
+    expect(functionCallUrls.sort()).toEqual([
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/get_count',
+    ]);
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {

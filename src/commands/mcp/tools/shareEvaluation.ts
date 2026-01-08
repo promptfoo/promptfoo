@@ -182,7 +182,7 @@ export function registerShareEvaluationTool(server: McpServer) {
 
         // Create new shareable URL
         logger.debug(`Creating shareable URL for evaluation ${evalRecord.id}`);
-        const shareUrl = await createShareableUrl(evalRecord, showAuth);
+        const shareUrl = await createShareableUrl(evalRecord, { showAuth });
 
         if (!shareUrl) {
           return createToolResponse(
@@ -216,7 +216,7 @@ export function registerShareEvaluationTool(server: McpServer) {
           evaluation: {
             description: evalRecord.config.description || 'No description',
             promptCount: evalRecord.prompts.length,
-            createdAt: (evalRecord as any).createdAt || 'Unknown',
+            createdAt: evalRecord.createdAt || 'Unknown',
             author: evalRecord.author || 'Unknown',
           },
           instructions: {

@@ -3,7 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
@@ -90,7 +90,7 @@ export class PythonProvider implements ApiProvider {
           absPath,
           this.functionName || 'call_api',
           workerCount,
-          this.config.pythonExecutable,
+          getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
         );
 
@@ -235,7 +235,7 @@ export class PythonProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      let result: any;
 
       // Use worker pool instead of runPython
       result = await this.pool!.execute(functionName, args);

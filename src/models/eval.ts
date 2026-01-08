@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
@@ -87,12 +85,14 @@ function sanitizeRuntimeOptions(
   const sanitized = { ...options };
 
   // Remove known non-serializable fields
-  delete (sanitized as any).abortSignal;
+  delete sanitized.abortSignal;
 
   // Remove any function or symbol values
   for (const key in sanitized) {
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
     const value = (sanitized as any)[key];
     if (typeof value === 'function' || typeof value === 'symbol') {
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
       delete (sanitized as any)[key];
     }
   }
@@ -250,6 +250,12 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
 
+  /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
+
   static async latest() {
     const db = getDb();
     const db_results = await db
@@ -307,7 +313,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
-      runtimeOptions: (eval_ as any).runtimeOptions,
+      runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
@@ -407,7 +413,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -515,7 +521,7 @@ export default class Eval {
 
   async save() {
     const db = getDb();
-    const updateObj: Record<string, any> = {
+    const updateObj: Record<string, unknown> = {
       config: this.config,
       prompts: this.prompts,
       description: this.config.description,
@@ -1083,6 +1089,7 @@ export default class Eval {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata,
+        // biome-ignore lint/suspicious/noExplicitAny: FIXME yeah that aint right
         spans: (trace.spans || []).map((span: any) => {
           // Calculate duration
           const durationMs =
@@ -1278,7 +1285,7 @@ export default class Eval {
         const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
           updatedAt: now,
@@ -1422,6 +1429,7 @@ export async function getEvalSummaries(
             if (keys.length === 1 && !('id' in p)) {
               // This is a declarative provider
               const providerId = keys[0];
+              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
               const providerConfig = (p as any)[providerId];
               deserializedProviders.push({
                 id: providerId,
@@ -1430,8 +1438,8 @@ export async function getEvalSummaries(
             } else {
               // `providers: ProviderOptions[]` with explicit id
               deserializedProviders.push({
-                id: (p as any).id ?? 'unknown',
-                label: (p as any).label ?? null,
+                id: p.id ?? 'unknown',
+                label: p.label ?? null,
               });
             }
           }
@@ -1445,7 +1453,7 @@ export async function getEvalSummaries(
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
