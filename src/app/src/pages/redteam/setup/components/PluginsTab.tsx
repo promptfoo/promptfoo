@@ -64,20 +64,20 @@ const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extractio
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
-  onUserInteraction: () => void;
   isRemoteGenerationDisabled: boolean;
 }
 
 export default function PluginsTab({
   selectedPlugins,
   handlePluginToggle,
+  setSelectedPlugins,
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
-  onUserInteraction,
   isRemoteGenerationDisabled,
 }: PluginsTabProps): React.ReactElement {
   const { recordEvent } = useTelemetry();
@@ -370,25 +370,15 @@ export default function PluginsTab({
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
       });
-      onUserInteraction();
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
       } else {
-        preset.plugins.forEach((plugin) => {
-          if (!selectedPlugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        // Remove plugins not in preset
-        selectedPlugins.forEach((plugin) => {
-          if (!preset.plugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
+        // Use setSelectedPlugins for efficient bulk update
+        setSelectedPlugins(new Set(preset.plugins as Set<Plugin>));
         setIsCustomMode(false);
       }
     },
-    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+    [recordEvent, setSelectedPlugins],
   );
 
   const handleGenerateTestCase = useCallback(
@@ -483,12 +473,12 @@ export default function PluginsTab({
                 type="button"
                 className="text-sm text-primary hover:underline"
                 onClick={() => {
-                  onUserInteraction();
+                  // Collect all filtered plugins and merge with existing selection
+                  const newSelected = new Set(selectedPlugins);
                   filteredPlugins.forEach(({ plugin }) => {
-                    if (!selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
+                    newSelected.add(plugin);
                   });
+                  setSelectedPlugins(newSelected);
                 }}
               >
                 Select all
@@ -497,12 +487,12 @@ export default function PluginsTab({
                 type="button"
                 className="text-sm text-primary hover:underline"
                 onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
+                  // Remove only the filtered plugins from selection
+                  const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                  const newSelected = new Set(
+                    [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                  );
+                  setSelectedPlugins(newSelected);
                 }}
               >
                 Select none
@@ -815,8 +805,7 @@ export default function PluginsTab({
                   className="w-full"
                   data-testid="clear-all-plugins-button"
                   onClick={() => {
-                    onUserInteraction();
-                    selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
+                    setSelectedPlugins(new Set());
                   }}
                 >
                   Clear All

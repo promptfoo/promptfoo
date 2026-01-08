@@ -686,16 +686,14 @@ describe('Plugins', () => {
   describe('State Persistence When Switching Tabs', () => {
     it('should maintain plugin selections when switching between tabs', async () => {
       const user = userEvent.setup();
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Select a plugin via preset
-      const recommendedPreset = screen.getByText('Recommended');
-      await user.click(recommendedPreset);
-
-      // Wait for the preset to be applied
-      await waitFor(() => {
-        expect(screen.getByText('Recommended')).toBeInTheDocument();
+      // Start with plugins already selected (simulates preset was applied previously)
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: ['harmful:hate', 'bola', 'pii:direct'],
+        },
+        updatePlugins: mockUpdatePlugins,
       });
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check that the plugins tab shows selected plugins count > 0
       const pluginsTabInitial = screen.getByRole('tab', { name: /Plugins/ });
@@ -709,7 +707,7 @@ describe('Plugins', () => {
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       await user.click(pluginsTab);
 
-      // The plugins count should still be greater than 0 (state persisted)
+      // The plugins count should still be greater than 0 (state persisted via Zustand store)
       await waitFor(() => {
         const pluginsTabAfter = screen.getByRole('tab', { name: /Plugins/ });
         expect(pluginsTabAfter.textContent).not.toBe('Plugins (0)');
