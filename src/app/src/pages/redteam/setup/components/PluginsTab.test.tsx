@@ -4,10 +4,11 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { Plugin } from '@promptfoo/redteam/constants';
+
 import type { LocalPluginConfig } from '../types';
 
 // Mock dependencies
