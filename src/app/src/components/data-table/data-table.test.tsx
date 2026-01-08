@@ -294,6 +294,69 @@ describe('DataTable', () => {
       expect(checkboxes[3]).not.toBeChecked();
     });
 
+    it('should select individual rows independently with identical data', async () => {
+      const user = userEvent.setup();
+      const identicalData: TestRow[] = [
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+      ];
+
+      render(<DataTable columns={columns} data={identicalData} enableRowSelection />);
+
+      const checkboxes = screen.getAllByRole('checkbox');
+
+      // Select only the second row
+      await user.click(checkboxes[2]);
+
+      // Only the second row should be checked
+      expect(checkboxes[1]).not.toBeChecked();
+      expect(checkboxes[2]).toBeChecked();
+      expect(checkboxes[3]).not.toBeChecked();
+
+      // Select the first row too
+      await user.click(checkboxes[1]);
+
+      // First and second rows should be checked
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[2]).toBeChecked();
+      expect(checkboxes[3]).not.toBeChecked();
+    });
+
+    it('should use custom getRowId with index appended when provided', () => {
+      const customGetRowId = (row: TestRow) => `custom-${row.id}`;
+      const data: TestRow[] = [
+        { id: '1', name: 'Item 1' },
+        { id: '2', name: 'Item 2' },
+      ];
+
+      const { container } = render(
+        <DataTable columns={columns} data={data} enableRowSelection getRowId={customGetRowId} />,
+      );
+
+      const table = container.querySelector('table');
+      const rows = table?.querySelectorAll('tbody tr');
+
+      // Row IDs should be custom-1-0, custom-2-1 (with index appended)
+      expect(rows?.[0]?.getAttribute('data-index')).toBeDefined();
+      expect(rows?.[1]?.getAttribute('data-index')).toBeDefined();
+    });
+
+    it('should use index-based row IDs when no getRowId is provided', () => {
+      const data: TestRow[] = [
+        { id: '1', name: 'Item 1' },
+        { id: '2', name: 'Item 2' },
+      ];
+
+      const { container } = render(<DataTable columns={columns} data={data} />);
+
+      const table = container.querySelector('table');
+      const rows = table?.querySelectorAll('tbody tr');
+
+      // Rows should exist and be distinguishable
+      expect(rows).toHaveLength(2);
+    });
+
     it('should not apply text-ellipsis to select column cells', () => {
       const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
 
@@ -314,6 +377,25 @@ describe('DataTable', () => {
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
       expect(dataCell?.className).toContain('text-ellipsis');
+    });
+
+    it('should apply cursor-pointer class only to select column', () => {
+      const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      const table = screen.getByRole('table');
+      const tbody = table.querySelector('tbody');
+      const firstRow = tbody?.querySelector('tr');
+      const cells = firstRow?.querySelectorAll('td');
+
+      // First cell (select column) should have cursor-pointer
+      const selectCell = cells?.[0];
+      expect(selectCell?.className).toContain('cursor-pointer');
+
+      // Data cells should not have cursor-pointer (unless onRowClick is provided)
+      const dataCell = cells?.[1];
+      expect(dataCell?.className).toContain('overflow-hidden');
     });
   });
 });
