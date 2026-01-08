@@ -29,13 +29,13 @@ import {
   RAG_PLUGINS,
   riskCategories,
 } from '@promptfoo/redteam/constants';
-import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
+import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
@@ -255,8 +255,12 @@ describe('PluginsTab', () => {
 
         await waitFor(() => {
           expect(screen.getByTestId(`plugin-list-item-${securityPlugins[0]}`)).toBeInTheDocument();
-          expect(screen.getByTestId(`plugin-list-item-${compliancePlugins[0]}`)).toBeInTheDocument();
-          expect(screen.getByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`)).toBeInTheDocument();
+          expect(
+            screen.getByTestId(`plugin-list-item-${compliancePlugins[0]}`),
+          ).toBeInTheDocument();
+          expect(
+            screen.getByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`),
+          ).toBeInTheDocument();
           expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
         });
       });
@@ -897,11 +901,56 @@ describe('PluginsTab', () => {
       });
 
       describe('Selection updates the Zustand store with the correct plugins when the store is not empty', () => {
-        test('Appends, does not overwrite, existing plugins', async () => {
+        test('Replaces existing plugins with preset plugins', async () => {
           const user = userEvent.setup();
 
-          // Pre-populate the store with a plugin object that's in MINIMAL_TEST_PLUGINS
-          // This plugin has custom config that should be preserved after selecting the preset
+          // Pre-populate the store with a plugin that is NOT in MINIMAL_TEST_PLUGINS
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: ['sql-injection'],
+              },
+            });
+          });
+
+          // Verify initial store state
+          const initialPlugins = useRedTeamConfig.getState().config.plugins;
+          expect(initialPlugins).toHaveLength(1);
+          expect(initialPlugins[0]).toBe('sql-injection');
+
+          renderComponent();
+
+          // Click the "Minimal Test" preset which contains 'harmful:hate' and 'harmful:self-harm'
+          const presetCard = screen.getByTestId('preset-card-minimal-test');
+          await user.click(presetCard);
+
+          // Wait for store update
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
+          });
+
+          // Verify only preset plugins are present (sql-injection should be removed)
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
+          const pluginIdSet = new Set(pluginIds);
+
+          // All preset plugins should be present
+          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
+            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
+          }
+
+          // The original plugin should be removed
+          expect(pluginIdSet.has('sql-injection')).toBe(false);
+        });
+
+        test('Preserves custom config for plugins that overlap with preset', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with a plugin that has custom config
+          // harmful:hate is in the preset, so its config should be preserved
           const customConfig = { numTests: 10 };
           act(() => {
             useRedTeamConfig.setState({
@@ -913,9 +962,10 @@ describe('PluginsTab', () => {
             });
           });
 
-          // Verify initial store state
+          // Verify initial store state has plugin with config
           const initialPlugins = useRedTeamConfig.getState().config.plugins;
           expect(initialPlugins).toHaveLength(1);
+          expect(typeof initialPlugins[0]).toBe('object');
 
           renderComponent();
 
@@ -937,78 +987,30 @@ describe('PluginsTab', () => {
             expect(pluginIdSet.has(expectedPlugin)).toBe(true);
           }
 
-          // Verify the existing plugin's config was preserved (not overwritten)
+          // Verify harmful:hate preserves its custom config since it's in both
+          // the original selection and the preset
           const harmfulHatePlugin = storePlugins.find(
-            (p) => typeof p === 'object' && p.id === 'harmful:hate',
+            (p) => (typeof p === 'string' ? p : p.id) === 'harmful:hate',
           );
-          expect(harmfulHatePlugin).toBeDefined();
-          expect(typeof harmfulHatePlugin).toBe('object');
-          expect(
-            (harmfulHatePlugin as { id: string; config?: { numTests?: number } }).config,
-          ).toEqual(customConfig);
+          expect(harmfulHatePlugin).toEqual({ id: 'harmful:hate', config: customConfig });
         });
 
-        test('Does not add duplicate plugins when existing plugin is a string', async () => {
+        test('Results in exactly the preset plugins with no duplicates', async () => {
           const user = userEvent.setup();
 
-          // Pre-populate the store with a plugin that's already in MINIMAL_TEST_PLUGINS
-          // This simulates selecting 'harmful:hate' before clicking the preset
-          act(() => {
-            useRedTeamConfig.setState({
-              ...initialStoreState,
-              config: { ...initialStoreState.config, plugins: ['harmful:hate'] },
-            });
-          });
-
-          // Verify initial store state has one plugin
-          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(1);
-
-          renderComponent();
-
-          // Click the "Minimal Test" preset which contains 'harmful:hate' and 'harmful:self-harm'
-          const presetCard = screen.getByTestId('preset-card-minimal-test');
-          await user.click(presetCard);
-
-          // Wait for store update and verify no duplicates were added
-          await waitFor(() => {
-            const storePlugins = useRedTeamConfig.getState().config.plugins;
-            // Should be exactly MINIMAL_TEST_PLUGINS.size (2), not 3
-            expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
-          });
-
-          // Verify 'harmful:hate' appears exactly once
-          const storePlugins = useRedTeamConfig.getState().config.plugins;
-          const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
-          const harmfulHateCount = pluginIds.filter((id) => id === 'harmful:hate').length;
-          expect(harmfulHateCount).toBe(1);
-
-          // Verify all expected plugins are present
-          const pluginIdSet = new Set(pluginIds);
-          for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
-            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
-          }
-        });
-
-        test('Does not add duplicate plugins when existing plugin is an object', async () => {
-          const user = userEvent.setup();
-
-          // Pre-populate the store with a plugin object (not a string) that's already in MINIMAL_TEST_PLUGINS
-          // Plugin objects have the shape: { id: string; config?: PluginConfig }
+          // Pre-populate the store with multiple plugins, some overlapping with preset
           act(() => {
             useRedTeamConfig.setState({
               ...initialStoreState,
               config: {
                 ...initialStoreState.config,
-                plugins: [{ id: 'harmful:hate', config: { numTests: 10 } }],
+                plugins: ['harmful:hate', 'sql-injection', 'bola'],
               },
             });
           });
 
-          // Verify initial store state has one plugin object
-          const initialPlugins = useRedTeamConfig.getState().config.plugins;
-          expect(initialPlugins).toHaveLength(1);
-          expect(typeof initialPlugins[0]).toBe('object');
-          expect((initialPlugins[0] as { id: string }).id).toBe('harmful:hate');
+          // Verify initial store state
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(3);
 
           renderComponent();
 
@@ -1016,24 +1018,26 @@ describe('PluginsTab', () => {
           const presetCard = screen.getByTestId('preset-card-minimal-test');
           await user.click(presetCard);
 
-          // Wait for store update and verify no duplicates were added
+          // Wait for store update
           await waitFor(() => {
             const storePlugins = useRedTeamConfig.getState().config.plugins;
-            // Should be exactly MINIMAL_TEST_PLUGINS.size (2), not 3
+            // Should be exactly MINIMAL_TEST_PLUGINS.size (2)
             expect(storePlugins.length).toBe(MINIMAL_TEST_PLUGINS.size);
           });
 
-          // Verify 'harmful:hate' appears exactly once
+          // Verify exactly the preset plugins are present, no extras, no duplicates
           const storePlugins = useRedTeamConfig.getState().config.plugins;
           const pluginIds = storePlugins.map((p) => (typeof p === 'string' ? p : p.id));
-          const harmfulHateCount = pluginIds.filter((id) => id === 'harmful:hate').length;
-          expect(harmfulHateCount).toBe(1);
 
-          // Verify all expected plugins are present
-          const pluginIdSet = new Set(pluginIds);
+          // Check for duplicates
+          const uniqueIds = new Set(pluginIds);
+          expect(uniqueIds.size).toBe(pluginIds.length);
+
+          // Check exact match with preset
           for (const expectedPlugin of MINIMAL_TEST_PLUGINS) {
-            expect(pluginIdSet.has(expectedPlugin)).toBe(true);
+            expect(uniqueIds.has(expectedPlugin)).toBe(true);
           }
+          expect(uniqueIds.size).toBe(MINIMAL_TEST_PLUGINS.size);
         });
       });
     });
@@ -1108,5 +1112,9 @@ describe('PluginsTab', () => {
         });
       });
     });
+
+    describe('Selected Plugins', () => {
+      test('"Clear All" button clears all selected plugins', async () => {});
+    })
   });
 });
