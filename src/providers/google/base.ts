@@ -338,7 +338,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
-      await this.initializationPromise;
+      if (this.initializationPromise) {
+        await this.initializationPromise;
+      }
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }

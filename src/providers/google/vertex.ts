@@ -795,7 +795,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
           error: `Error ${data.error.code}: ${data.error.message}`,
         };
       }
-      const output = data.predictions?.[0].candidates[0].content;
+      const prediction = data.predictions?.[0];
+      if (!prediction?.candidates?.length) {
+        return {
+          error: `No valid predictions returned from API: ${JSON.stringify(data)}`,
+        };
+      }
+      const output = prediction.candidates[0].content;
 
       const response = {
         output,
@@ -1056,20 +1062,21 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
 
-    try {
-      const embedding = data.predictions[0].embeddings.values;
-      const tokenCount = data.predictions[0].embeddings.statistics.token_count;
-      return {
-        embedding,
-        tokenUsage: {
-          total: tokenCount,
-          numRequests: 1,
-        },
-      };
-    } catch (err) {
-      logger.error(`Error parsing Vertex embeddings API response: ${err}`);
-      throw err;
+    const prediction = data.predictions?.[0];
+    const embeddingData = prediction?.embeddings;
+    if (!embeddingData?.values) {
+      const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
+      logger.error(errorMsg);
+      throw new Error(errorMsg);
     }
+
+    return {
+      embedding: embeddingData.values,
+      tokenUsage: {
+        total: embeddingData.statistics?.token_count ?? 0,
+        numRequests: 1,
+      },
+    };
   }
 }
 
