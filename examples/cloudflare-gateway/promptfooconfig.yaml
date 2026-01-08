@@ -1,0 +1,74 @@
+# Cloudflare AI Gateway Example
+#
+# This example demonstrates routing AI requests through Cloudflare AI Gateway
+# for caching, rate limiting, and analytics.
+#
+# Required environment variables:
+#   CLOUDFLARE_ACCOUNT_ID - Your Cloudflare account ID
+#   CLOUDFLARE_GATEWAY_ID - Your AI Gateway ID
+#   OPENAI_API_KEY - OpenAI API key (for openai provider)
+#   ANTHROPIC_API_KEY - Anthropic API key (for anthropic provider)
+#   GROQ_API_KEY - Groq API key (for groq provider)
+#
+# Run with:
+#   npx promptfoo eval -c examples/cloudflare-gateway/promptfooconfig.yaml
+
+description: Cloudflare AI Gateway comparison
+
+prompts:
+  - 'Explain {{topic}} in simple terms, in about 2-3 sentences.'
+
+providers:
+  # Route OpenAI requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:openai:gpt-4o-mini
+    config:
+      accountId: ${CLOUDFLARE_ACCOUNT_ID}
+      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      temperature: 0.7
+      max_tokens: 200
+
+  # Route Anthropic requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:anthropic:claude-3-5-haiku-latest
+    config:
+      accountId: ${CLOUDFLARE_ACCOUNT_ID}
+      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      max_tokens: 200
+
+  # Route Groq requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:groq:llama-3.1-8b-instant
+    config:
+      accountId: ${CLOUDFLARE_ACCOUNT_ID}
+      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      temperature: 0.7
+      max_tokens: 200
+
+tests:
+  - vars:
+      topic: machine learning
+    assert:
+      - type: contains-any
+        value:
+          - algorithm
+          - data
+          - learn
+          - pattern
+
+  - vars:
+      topic: quantum computing
+    assert:
+      - type: contains-any
+        value:
+          - qubit
+          - quantum
+          - superposition
+          - computer
+
+  - vars:
+      topic: blockchain
+    assert:
+      - type: contains-any
+        value:
+          - block
+          - chain
+          - ledger
+          - decentralized
