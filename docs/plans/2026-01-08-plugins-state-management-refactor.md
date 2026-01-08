@@ -489,7 +489,7 @@ However, if any tests reference `onUserInteraction` in expectations or setup, th
 
 ---
 
-## Testing StrategyI
+## Testing Strategy
 
 ### Unit Tests (Existing)
 
