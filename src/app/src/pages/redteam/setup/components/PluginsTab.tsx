@@ -414,7 +414,7 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6">
+      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section */}
