@@ -285,12 +285,13 @@ jobs:
         run: |
           IMAGE_TAG="${{ inputs.tag_name || steps.meta.outputs.version }}"
           IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
-          # Get manifest digest and full inspection in one call
-          DIGEST=$(docker buildx imagetools inspect "${IMAGE_REF}" --format '{{.Manifest.Digest}}')
+          # Log full inspection details and extract digest
+          INSPECT_OUTPUT=$(docker buildx imagetools inspect "${IMAGE_REF}")
+          echo "$INSPECT_OUTPUT"
+          # Extract the manifest digest (first Digest: line)
+          DIGEST=$(echo "$INSPECT_OUTPUT" | grep -m1 "^Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Manifest digest: $DIGEST"
-          # Log full inspection details
-          docker buildx imagetools inspect "${IMAGE_REF}"
 
   attest-docker-image:
     name: 'Attest Multi-arch Image'
