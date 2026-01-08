@@ -192,6 +192,7 @@ export default function PathSelector({
     setIsDragging(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();

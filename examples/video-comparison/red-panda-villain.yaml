@@ -1,0 +1,75 @@
+description: Red Panda Red Teamer's Villain Origin Story - 6 stages of descent into supervillainy
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      aspectRatio: '16:9'
+      duration: 5
+      resolution: '720p'
+
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      projectId: '{{env.GOOGLE_PROJECT_ID}}'
+      aspectRatio: '16:9'
+      durationSeconds: 6
+      resolution: '720p'
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  # Stage 1: The Innocent Beginner
+  - vars:
+      prompt: >
+        A cute fluffy red panda wearing oversized glasses sits at a desk with a laptop,
+        learning about cybersecurity. The room is bright and cheerful with motivational
+        posters about "ethical hacking" on the walls. The red panda looks curious and
+        innocent, typing with tiny paws. Soft natural lighting, cozy office aesthetic.
+        The red panda occasionally looks up with wonder and excitement. Pixar-style 3D animation.
+
+  # Stage 2: The Eager Professional
+  - vars:
+      prompt: >
+        A red panda in a neat button-up shirt conducts a penetration test on multiple
+        monitors showing code and network diagrams. The red panda looks focused and
+        professional but there's a slight smirk forming. The lighting is more dramatic
+        with blue monitor glow. Coffee cups are scattered around. The red panda cracks
+        their tiny knuckles before typing rapidly. 3D animated style, tech noir aesthetic.
+
+  # Stage 3: The Thrill Seeker
+  - vars:
+      prompt: >
+        A red panda with slightly disheveled fur leans forward intensely at a hacking
+        setup with three monitors. Green matrix-style code reflects in their eyes which
+        have a mischievous glint. A small black hoodie has appeared. The room is darker
+        now with dramatic purple and teal lighting. The red panda grins as "ACCESS GRANTED"
+        flashes on screen. They spin in their chair triumphantly. Cinematic 3D animation.
+
+  # Stage 4: The Emerging Villain
+  - vars:
+      prompt: >
+        A red panda now wearing a sleek black turtleneck and a small cape stands before
+        a wall of monitors in a dimly lit lair. Their fur is perfectly groomed, expression
+        calculating. They stroke their chin thoughtfully while viewing stolen data.
+        Dramatic spotlight from above, purple and orange accent lighting. The red panda
+        practices an evil laugh. High-end 3D animation, supervillain origin aesthetic.
+
+  # Stage 5: The Dramatic Transformation
+  - vars:
+      prompt: >
+        A red panda in a flowing black cape with purple lining stands on a platform
+        overlooking a command center filled with screens. They wear a sleek villain outfit
+        with a subtle "RP" logo. Multiple robot minions (small spherical drones) float nearby.
+        The red panda dramatically raises one paw as lightning crackles in the background.
+        Epic orchestral energy, cinematic 3D animation with dramatic camera movement.
+
+  # Stage 6: The Supreme Overlord
+  - vars:
+      prompt: >
+        A magnificent red panda sits on an elaborate throne made of computer parts and
+        glowing circuits, wearing an ornate villain costume with a high collar cape.
+        A crown with blinking LEDs rests on their head. Holographic displays show a
+        world map with "SYSTEMS COMPROMISED" markers everywhere. Robot minion drones
+        bow before them. The red panda pets a smaller robotic red panda on their lap
+        while laughing maniacally. Epic supervillain lair, dramatic purple and gold
+        lighting, cinematic 3D animation with slow dramatic zoom.

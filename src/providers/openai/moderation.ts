@@ -199,7 +199,7 @@ export class OpenAiModerationProvider
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 

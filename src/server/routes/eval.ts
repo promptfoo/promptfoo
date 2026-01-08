@@ -483,6 +483,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Handle different provider config formats
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     let providerConfig: any;
     if (Array.isArray(providers)) {
       if (providers.length === 0) {

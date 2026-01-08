@@ -190,6 +190,7 @@ export default function Review({
     updateConfig('description', event.target.value);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
@@ -205,6 +206,7 @@ export default function Review({
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
   // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
@@ -338,6 +340,7 @@ export default function Review({
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const strategySummary = useMemo(() => {
     const summary = new Map<string, number>();
 

@@ -294,12 +294,12 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
-export async function runPython(
+export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<any> {
+): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -355,7 +355,7 @@ export async function runPython(
     const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
-    let result: { type: 'final_result'; data: any } | undefined;
+    let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
       logger.debug(

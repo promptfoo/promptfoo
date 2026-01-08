@@ -395,6 +395,43 @@ jobs:
       - name: Run Integration Tests
         run: npm run test:integration -- --coverage
 
+  smoke-tests:
+    name: Run Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Use Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.14
+
+      - name: Use Ruby 3.3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.3
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Smoke Tests
+        run: npm run test:smoke
+
   share-test:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

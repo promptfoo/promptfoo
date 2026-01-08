@@ -510,5 +510,6 @@ export const getGoogleClient = GoogleAuthManager.getOAuthClient.bind(GoogleAuthM
 export const resolveProjectId = GoogleAuthManager.resolveProjectId.bind(GoogleAuthManager);
 export const hasGoogleDefaultCredentials =
   GoogleAuthManager.hasDefaultCredentials.bind(GoogleAuthManager);
+export const clearCachedAuth = GoogleAuthManager.clearCache.bind(GoogleAuthManager);
 
 // Note: OAuthClientOptions is already exported as an interface above

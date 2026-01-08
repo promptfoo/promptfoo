@@ -3874,6 +3874,44 @@ describe('runEval', () => {
     expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
   });
 
+  it('should preserve provider error context and plugin metadata on failure', async () => {
+    const apiError: any = new Error('Request failed with status code 400');
+    apiError.response = {
+      status: 400,
+      statusText: 'Bad Request',
+      data: 'Invalid payload',
+    };
+
+    const failingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('failing-provider'),
+      label: 'Azure GPT 5',
+      callApi: vi.fn().mockRejectedValue(apiError),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: failingProvider,
+      prompt: { raw: 'Test prompt', label: 'error-label' },
+      test: { metadata: { pluginId: 'plugin-123', strategyId: 'basic' } },
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.metadata?.errorContext).toMatchObject({
+      providerId: 'failing-provider',
+      providerLabel: 'Azure GPT 5',
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    expect(result.metadata?.errorContext?.responseSnippet).toContain('Invalid payload');
+    expect(result.metadata?.pluginId).toBe('plugin-123');
+    expect(result.metadata?.strategyId).toBe('basic');
+    expect(result.error).toContain('Request failed with status code 400');
+  });
+
   it('should handle registers', async () => {
     const registers = { savedValue: 'stored data' };
 

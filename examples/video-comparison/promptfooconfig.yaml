@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Video generation comparison - Sora 2 vs Veo 3.1
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      aspectRatio: '16:9'
+      duration: 5
+      resolution: '720p'
+
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      projectId: '{{env.GOOGLE_PROJECT_ID}}'
+      aspectRatio: '16:9'
+      durationSeconds: 6 # Veo 3.1 supports 4, 6, or 8 seconds
+      resolution: '720p'
+
+tests:
+  - vars:
+      prompt: A fluffy red panda playing in fresh snow, catching snowflakes with its paws
+  - vars:
+      prompt: Ocean waves gently rolling onto a sandy beach at golden hour sunset
+  - vars:
+      prompt: A hot air balloon floating over a field of lavender in Provence, France

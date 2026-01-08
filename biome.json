@@ -102,7 +102,7 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useExhaustiveDependencies": "off",
+        "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
         "useJsxKeyInIterable": "error"
       },
@@ -272,30 +272,14 @@
     },
     {
       "includes": [
-        "src/app/**/*",
+        "src/app/src/pages/eval/components/**/*",
+        "src/app/src/pages/redteam/setup/components/**/*",
         "src/providers/**/*",
         "src/redteam/**/*",
         "src/util/**/*",
         "src/commands/**/*",
         "src/types/**/*",
-        "src/tracing/**/*",
-        "src/validators/**/*",
-        "src/python/**/*",
-        "src/models/**/*",
-        "src/integrations/**/*",
-        "src/assertions/**/*",
-        "src/server/**/*",
-        "src/blobs/**/*",
-        "src/globalConfig/**/*",
-        "src/prompts/**/*",
-        "src/database/**/*",
-        "src/ruby/**/*",
-        "src/cacheMigration.ts",
-        "src/csv.ts",
-        "src/esm.ts",
-        "src/evaluator.ts",
-        "src/evaluatorHelpers.ts",
-        "src/logger.ts"
+        "src/tracing/**/*"
       ],
       "linter": {
         "rules": {

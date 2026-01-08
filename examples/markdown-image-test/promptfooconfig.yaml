@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Test markdown image rendering in result cells'
+
+prompts:
+  - |
+    Describe this image and include it in your response using markdown:
+    ![Image]({{image_url}})
+
+    Format your response like this:
+    ## Image Analysis
+    ![Preview]({{image_url}})
+
+    **Description:** [Your description here]
+
+providers:
+  - id: echo
+    config:
+      # Echo provider returns the input - useful for testing markdown rendering
+      output: |
+        ## Image Analysis
+        ![Preview]({{image_url}})
+
+        **Description:** This is a beautiful artwork showing {{description}}.
+
+        Here's the image again for reference:
+        ![Full Image]({{image_url}})
+
+tests:
+  - vars:
+      image_url: https://images.metmuseum.org/CRDImages/as/original/DP130155.jpg
+      description: The Great Wave off Kanagawa by Hokusai
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg
+      description: The Starry Night by Vincent van Gogh
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/VanGogh-starry_night_ballance1.jpg/1280px-VanGogh-starry_night_ballance1.jpg
+      description: Another view of Starry Night
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/800px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg
+      description: The Mona Lisa by Leonardo da Vinci
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/1200px-Cat03.jpg
+      description: A cute domestic cat
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png
+      description: A PNG transparency demonstration with dice

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Promptfoo brand mascot video tests
+
+prompts:
+  - id: pr-approval-desk
+    raw: |
+      Video, 8s, 16:9, 24fps, 1080p, silent. 2D vector animation in the Promptfoo red panda brand style: crisp geometric shapes, clean outlines, flat fills with subtle gradients, navy and teal background with warm orange accents, minimal texture, no photorealism, no 3D. The orange-and-cream red panda mascot wears black glasses and a teal button-up, seated at a tidy desk with papers and simple charts. On a monitor, a clean UI shows a pull request diff; the red panda scrolls, nods, then clicks a large "Approve" button. The UI flips to a bold green check with simple legible text "APPROVED," tiny confetti pops, then the final frame holds.
+
+  - id: pr-approval-tablet
+    raw: |
+      Video, 8s, 1:1, 24fps, 1080p, silent. Promptfoo-style 2D vector illustration animation: smooth flat shading, soft gradient shadows, teal/navy palette, orange highlights, high contrast, crisp edges, simple iconography (balance scale, chart, puzzle piece) in the background. The red panda mascot (orange fur, cream face markings, black glasses, teal shirt) reviews a PR on a tablet at a dark teal table. Camera is a gentle over-shoulder angle; the diff highlights a few lines. The red panda taps "Approve," a green check badge stamps onto the screen, and the background icons subtly glow green.
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 8
+
+tests:
+  - vars: {}
