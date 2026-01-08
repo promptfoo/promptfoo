@@ -700,14 +700,20 @@ export default function PluginsTab({
         </div>
 
         {/* Selected Plugins Sidebar */}
-        <div className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto">
+        <div
+          className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto"
+          data-testid="selected-plugins-sidebar"
+        >
           <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="mb-4 text-lg font-semibold">
+            <h3 className="mb-4 text-lg font-semibold" data-testid="selected-plugins-header">
               Selected Plugins ({selectedPlugins.size})
             </h3>
 
             {selectedPlugins.size === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p
+                className="py-8 text-center text-sm text-muted-foreground"
+                data-testid="selected-plugins-empty-state"
+              >
                 No plugins selected yet.
                 <br />
                 Click on plugins to add them here.
@@ -716,7 +722,7 @@ export default function PluginsTab({
               <div className="max-h-[400px] space-y-2 overflow-y-auto">
                 {/* Plugins requiring configuration - shown first */}
                 {pluginsNeedingConfig.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mb-3" data-testid="plugins-needing-config-section">
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-destructive">
                       Needs Configuration
                     </p>
@@ -724,6 +730,7 @@ export default function PluginsTab({
                       {pluginsNeedingConfig.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-needs-config-${plugin}`}
                           onClick={() => handleConfigClick(plugin)}
                           className={cn(
                             'flex cursor-pointer items-center rounded-lg border-2 border-destructive bg-destructive/10 p-3 transition-colors',
@@ -768,7 +775,7 @@ export default function PluginsTab({
 
                 {/* Configured plugins */}
                 {configuredPlugins.length > 0 && (
-                  <div>
+                  <div data-testid="configured-plugins-section">
                     {pluginsNeedingConfig.length > 0 && (
                       <div className="my-3 border-t border-border" />
                     )}
@@ -776,6 +783,7 @@ export default function PluginsTab({
                       {configuredPlugins.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-${plugin}`}
                           className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -805,6 +813,7 @@ export default function PluginsTab({
                   variant="outline"
                   size="sm"
                   className="w-full"
+                  data-testid="clear-all-plugins-button"
                   onClick={() => {
                     onUserInteraction();
                     selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));

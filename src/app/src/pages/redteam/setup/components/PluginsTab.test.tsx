@@ -464,7 +464,105 @@ describe('PluginsTab', () => {
       });
     });
 
-    // describe('Selected Plugins List', () => {});
+    describe('Selected Plugins List', () => {
+      beforeEach(() => {
+        // Reset stores before each selected plugins list test
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: { ...initialStoreState.config, plugins: [] },
+          });
+          useRecentlyUsedPlugins.setState({ ...initialRecentPluginsState, plugins: [] });
+        });
+      });
+
+      afterEach(() => {
+        act(() => {
+          useRedTeamConfig.setState(initialStoreState);
+          useRecentlyUsedPlugins.setState(initialRecentPluginsState);
+        });
+      });
+
+      test('Renders all selected plugins', async () => {
+        // Set up the store with selected plugins from different categories
+        const testPlugins = ['sql-injection', 'harmful:hate', 'contracts', 'bola'];
+
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: testPlugins,
+            },
+          });
+        });
+
+        renderComponent();
+
+        // Verify the sidebar is rendered
+        expect(screen.getByTestId('selected-plugins-sidebar')).toBeInTheDocument();
+
+        // Verify the sidebar header shows the correct count
+        const header = screen.getByTestId('selected-plugins-header');
+        expect(header).toHaveTextContent(`Selected Plugins (${testPlugins.length})`);
+
+        // Verify each selected plugin appears in the sidebar using test IDs
+        expect(screen.getByTestId('selected-plugin-sql-injection')).toBeInTheDocument();
+        expect(screen.getByTestId('selected-plugin-harmful:hate')).toBeInTheDocument();
+        expect(screen.getByTestId('selected-plugin-contracts')).toBeInTheDocument();
+        expect(screen.getByTestId('selected-plugin-bola')).toBeInTheDocument();
+
+        // Verify the "Clear All" button is visible when plugins are selected
+        expect(screen.getByTestId('clear-all-plugins-button')).toBeInTheDocument();
+      });
+
+      test('Renders empty state when no plugins are selected', async () => {
+        renderComponent();
+
+        // Verify the sidebar header shows zero count
+        const header = screen.getByTestId('selected-plugins-header');
+        expect(header).toHaveTextContent('Selected Plugins (0)');
+
+        // Verify the empty state message is displayed
+        expect(screen.getByTestId('selected-plugins-empty-state')).toBeInTheDocument();
+
+        // Verify "Clear All" button is NOT shown when no plugins are selected
+        expect(screen.queryByTestId('clear-all-plugins-button')).not.toBeInTheDocument();
+      });
+
+      test('Renders plugins requiring configuration separately with error styling', async () => {
+        // Set up the store with plugins that require configuration (without providing config)
+        // indirect-prompt-injection and prompt-extraction require config
+        const testPlugins = ['sql-injection', 'indirect-prompt-injection'];
+
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: testPlugins,
+            },
+          });
+        });
+
+        renderComponent();
+
+        // Verify the sidebar header shows the correct total count
+        const header = screen.getByTestId('selected-plugins-header');
+        expect(header).toHaveTextContent(`Selected Plugins (${testPlugins.length})`);
+
+        // Verify the "Needs Configuration" section is displayed
+        expect(screen.getByTestId('plugins-needing-config-section')).toBeInTheDocument();
+
+        // Verify plugins appear in their respective sections
+        // sql-injection is configured (doesn't require additional config)
+        expect(screen.getByTestId('selected-plugin-sql-injection')).toBeInTheDocument();
+        // indirect-prompt-injection requires config and has no config set
+        expect(
+          screen.getByTestId('selected-plugin-needs-config-indirect-prompt-injection'),
+        ).toBeInTheDocument();
+      });
+    });
   });
 
   /**
