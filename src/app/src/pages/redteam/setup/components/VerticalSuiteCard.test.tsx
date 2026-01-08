@@ -41,7 +41,7 @@ const mockRedTeamConfig = {
     plugins: [],
     description: '',
     prompts: [],
-    target: { id: '' },
+    target: { id: '', config: {} },
     strategies: [],
     applicationDefinition: {},
     entities: [],
