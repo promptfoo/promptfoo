@@ -74,7 +74,10 @@ const mockRedTeamConfig = {
     plugins: [],
     description: '',
     prompts: [],
-    target: {},
+    target: { id: '' },
+    strategies: [],
+    applicationDefinition: {},
+    entities: [],
   },
   updatePlugins: vi.fn(),
 };

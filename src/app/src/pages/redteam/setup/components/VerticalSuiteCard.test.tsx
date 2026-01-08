@@ -41,7 +41,10 @@ const mockRedTeamConfig = {
     plugins: [],
     description: '',
     prompts: [],
-    target: {},
+    target: { id: '' },
+    strategies: [],
+    applicationDefinition: {},
+    entities: [],
   },
   updatePlugins: vi.fn(),
 };
@@ -67,7 +70,7 @@ const mockSuite = {
   name: 'Test Suite',
   description: 'A test suite for testing',
   longDescription: 'A longer description for testing',
-  icon: 'test-icon',
+  icon: <span data-testid="mock-icon">Icon</span>,
   plugins: ['bola' as Plugin, 'harmful:hate' as Plugin, 'harmful:self-harm' as Plugin],
   pluginGroups: [
     {
