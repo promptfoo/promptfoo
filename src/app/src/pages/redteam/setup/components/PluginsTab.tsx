@@ -474,11 +474,9 @@ export default function PluginsTab({
                 className="text-sm text-primary hover:underline"
                 onClick={() => {
                   // Collect all filtered plugins and merge with existing selection
-                  const newSelected = new Set(selectedPlugins);
-                  filteredPlugins.forEach(({ plugin }) => {
-                    newSelected.add(plugin);
-                  });
-                  setSelectedPlugins(newSelected);
+                  setSelectedPlugins(
+                    new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                  );
                 }}
               >
                 Select all
