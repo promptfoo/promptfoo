@@ -31,7 +31,12 @@ describe('GeminiImageProvider', () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
 
-    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockLoadCredentials.mockImplementation((creds) => {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
