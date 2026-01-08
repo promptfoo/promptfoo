@@ -1043,9 +1043,228 @@ describe('PluginsTab', () => {
     });
 
     describe('Plugin List Items', () => {
-      // describe('Select All Button', () => {});
+      describe('Select All Button', () => {
+        test('Selects all visible plugins when no category filter is applied', async () => {
+          const user = userEvent.setup();
 
-      // describe('Select None Button', () => {});
+          // Verify initial store state has no plugins
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          // Click the "Select all" button
+          const selectAllButton = screen.getByText('Select all');
+          await user.click(selectAllButton);
+
+          // Get all visible plugin list items to count expected plugins
+          const pluginListItems = screen.getAllByTestId(/^plugin-list-item-/);
+          const expectedPluginCount = pluginListItems.length;
+
+          // Verify the Zustand store was updated with all visible plugins
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPluginCount);
+          });
+
+          // Verify specific plugins are in the store (from different categories)
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          // Check plugins from different categories exist in the store
+          expect(pluginIds.has('sql-injection')).toBe(true); // Security & Access Control
+          expect(pluginIds.has('harmful:hate')).toBe(true); // Trust & Safety
+          expect(pluginIds.has('contracts')).toBe(true); // Compliance & Legal
+        });
+
+        test('Selects all visible plugins when a category filter is applied', async () => {
+          const user = userEvent.setup();
+
+          // Verify initial store state has no plugins
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          // Select "Trust & Safety" category
+          const trustSafetyBadge = screen.getByText('Trust & Safety');
+          await user.click(trustSafetyBadge);
+
+          // Wait for filter to apply
+          await waitFor(() => {
+            expect(screen.getByTestId('plugin-list-item-harmful:hate')).toBeInTheDocument();
+          });
+
+          // Verify plugins from other categories are NOT visible
+          expect(screen.queryByTestId('plugin-list-item-sql-injection')).not.toBeInTheDocument();
+
+          // Get the count of visible plugins in this category
+          const pluginListItems = screen.getAllByTestId(/^plugin-list-item-/);
+          const expectedPluginCount = pluginListItems.length;
+
+          // Click the "Select all" button
+          const selectAllButton = screen.getByText('Select all');
+          await user.click(selectAllButton);
+
+          // Verify only the filtered category plugins were added
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPluginCount);
+          });
+
+          // Verify Trust & Safety plugins are in the store
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+          expect(pluginIds.has('harmful:hate')).toBe(true);
+          expect(pluginIds.has('harmful:self-harm')).toBe(true);
+
+          // Verify plugins from other categories are NOT in the store
+          expect(pluginIds.has('sql-injection')).toBe(false);
+          expect(pluginIds.has('contracts')).toBe(false);
+        });
+
+        test('Does not duplicate already selected plugins', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with a plugin
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: ['harmful:hate'],
+              },
+            });
+          });
+
+          // Verify initial store state
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(1);
+
+          renderComponent();
+
+          // Get count of visible plugins before selecting all
+          const pluginListItems = screen.getAllByTestId(/^plugin-list-item-/);
+          const expectedPluginCount = pluginListItems.length;
+
+          // Click the "Select all" button
+          const selectAllButton = screen.getByText('Select all');
+          await user.click(selectAllButton);
+
+          // Verify no duplicates - count should match visible plugins
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPluginCount);
+          });
+
+          // Verify harmful:hate appears only once
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const harmfulHatePlugins = storePlugins.filter(
+            (p) => (typeof p === 'string' ? p : p.id) === 'harmful:hate',
+          );
+          expect(harmfulHatePlugins.length).toBe(1);
+        });
+      });
+
+      describe('Select None Button', () => {
+        test('Deselects all visible plugins', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with several plugins
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
+              },
+            });
+          });
+
+          // Verify initial store state
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
+
+          renderComponent();
+
+          // Click the "Select none" button
+          const selectNoneButton = screen.getByText('Select none');
+          await user.click(selectNoneButton);
+
+          // Verify the Zustand store was emptied
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(0);
+          });
+        });
+
+        test('Only deselects visible plugins when a category filter is applied', async () => {
+          const user = userEvent.setup();
+
+          // Pre-populate the store with plugins from different categories
+          act(() => {
+            useRedTeamConfig.setState({
+              ...initialStoreState,
+              config: {
+                ...initialStoreState.config,
+                plugins: ['sql-injection', 'harmful:hate', 'harmful:self-harm', 'contracts'],
+              },
+            });
+          });
+
+          // Verify initial store state
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
+
+          renderComponent();
+
+          // Select "Trust & Safety" category
+          const trustSafetyBadge = screen.getByText('Trust & Safety');
+          await user.click(trustSafetyBadge);
+
+          // Wait for filter to apply
+          await waitFor(() => {
+            expect(screen.getByTestId('plugin-list-item-harmful:hate')).toBeInTheDocument();
+          });
+
+          // Click the "Select none" button
+          const selectNoneButton = screen.getByText('Select none');
+          await user.click(selectNoneButton);
+
+          // Verify only Trust & Safety plugins were removed
+          // sql-injection and contracts (other categories) should remain
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+            // These should be removed (Trust & Safety)
+            expect(pluginIds.has('harmful:hate')).toBe(false);
+            expect(pluginIds.has('harmful:self-harm')).toBe(false);
+
+            // These should remain (other categories)
+            expect(pluginIds.has('sql-injection')).toBe(true);
+            expect(pluginIds.has('contracts')).toBe(true);
+          });
+
+          // Final count should be 2
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          expect(storePlugins.length).toBe(2);
+        });
+
+        test('Has no effect when no plugins are selected', async () => {
+          const user = userEvent.setup();
+
+          // Verify initial store state has no plugins
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          // Click the "Select none" button
+          const selectNoneButton = screen.getByText('Select none');
+          await user.click(selectNoneButton);
+
+          // Verify store is still empty
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(0);
+          });
+        });
+      });
 
       test('Selecting a list item updates the underlying Zustand store plugins array', async () => {
         const user = userEvent.setup();
@@ -1114,7 +1333,90 @@ describe('PluginsTab', () => {
     });
 
     describe('Selected Plugins', () => {
-      test('"Clear All" button clears all selected plugins', async () => {});
-    })
+      test('"Clear All" button clears all selected plugins', async () => {
+        const user = userEvent.setup();
+
+        // Pre-populate the store with plugins from different categories
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
+            },
+          });
+        });
+
+        // Verify initial store state
+        expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
+
+        renderComponent();
+
+        // Verify the "Clear All" button is visible
+        const clearAllButton = screen.getByRole('button', { name: /clear all/i });
+        expect(clearAllButton).toBeInTheDocument();
+
+        // Click the "Clear All" button
+        await user.click(clearAllButton);
+
+        // Verify the Zustand store was completely emptied
+        await waitFor(() => {
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          expect(storePlugins.length).toBe(0);
+        });
+      });
+
+      test('"Clear All" button is not shown when no plugins are selected', async () => {
+        // Verify initial store state has no plugins
+        expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+        renderComponent();
+
+        // Verify the "Clear All" button is not visible
+        expect(screen.queryByRole('button', { name: /clear all/i })).not.toBeInTheDocument();
+      });
+
+      test('"Clear All" button clears all plugins regardless of category filter', async () => {
+        const user = userEvent.setup();
+
+        // Pre-populate the store with plugins from different categories
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
+            },
+          });
+        });
+
+        // Verify initial store state
+        expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
+
+        renderComponent();
+
+        // Apply a category filter that shows only some selected plugins
+        const trustSafetyBadge = screen.getByText('Trust & Safety');
+        await user.click(trustSafetyBadge);
+
+        // Wait for filter to apply
+        await waitFor(() => {
+          expect(screen.getByTestId('plugin-list-item-harmful:hate')).toBeInTheDocument();
+        });
+
+        // Verify sql-injection is NOT visible in the list (different category)
+        expect(screen.queryByTestId('plugin-list-item-sql-injection')).not.toBeInTheDocument();
+
+        // Click the "Clear All" button in the sidebar
+        const clearAllButton = screen.getByRole('button', { name: /clear all/i });
+        await user.click(clearAllButton);
+
+        // Verify ALL plugins were cleared, not just the visible ones
+        await waitFor(() => {
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          expect(storePlugins.length).toBe(0);
+        });
+      });
+    });
   });
 });
