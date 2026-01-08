@@ -199,9 +199,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
       // Create new plugins array, preserving configs from existing plugins
       const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
-        const existing = config.plugins.find(
-          (p) => (typeof p === 'string' ? p : p.id) === plugin,
-        );
+        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
         if (existing && typeof existing === 'object' && existing.config) {
           return existing; // Preserve existing config
         }
