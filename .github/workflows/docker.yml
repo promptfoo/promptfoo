@@ -283,11 +283,13 @@ jobs:
         id: inspect
         run: |
           IMAGE_TAG="${{ inputs.tag_name || steps.meta.outputs.version }}"
-          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
-          # Get the manifest digest
-          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}" --format '{{.Manifest.Digest}}')
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          # Get manifest digest and full inspection in one call
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE_REF}" --format '{{.Manifest.Digest}}')
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Manifest digest: $DIGEST"
+          # Log full inspection details
+          docker buildx imagetools inspect "${IMAGE_REF}"
 
   attest-docker-image:
     name: 'Attest Multi-arch Image'
@@ -296,8 +298,16 @@ jobs:
     permissions:
       id-token: write
       attestations: write
+      packages: write
 
     steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
