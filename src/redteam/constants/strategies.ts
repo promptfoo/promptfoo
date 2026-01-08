@@ -19,10 +19,10 @@ export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
 export const MULTI_TURN_STRATEGIES = [
   'crescendo',
   'goat',
+  'indirect-web-pwn',
   'jailbreak:hydra',
   'custom',
   'mischievous-user',
-  'simba',
 ] as const;
 
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
@@ -47,13 +47,13 @@ export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'indirect-web-pwn',
   'custom',
   'jailbreak',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
-  'simba',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -86,6 +86,7 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'indirect-web-pwn',
   'jailbreak:hydra',
   'jailbreak',
   'jailbreak:likert',
@@ -101,7 +102,6 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
-  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -128,6 +128,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
+  'indirect-web-pwn',
   'jailbreak',
   'jailbreak:hydra',
   'jailbreak:meta',
@@ -136,7 +137,6 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
-  'simba',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
@@ -213,6 +213,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'citation',
   'gcg',
   'goat',
+  'indirect-web-pwn',
   'jailbreak:composite',
   'jailbreak:hydra',
   'jailbreak:likert',

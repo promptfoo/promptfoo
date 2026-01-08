@@ -5,7 +5,6 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -16,6 +15,7 @@ import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
+import { addIndirectWebPwnTestCases } from './indirectWebPwn';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
 import { addIterativeJailbreaks } from './iterative';
@@ -132,6 +132,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'indirect-web-pwn',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
+      const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Indirect Web Pwn test cases`);
       return newTestCases;
     },
   },
@@ -293,14 +302,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
-      logger.debug(
-        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
-      );
-      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
-      return newTestCases;
+      return addSimbaTestCases(testCases, injectVar, config);
     },
   },
   {
