@@ -9,7 +9,7 @@ import type { ProviderChoice, ReconResult, Scratchpad } from './types';
 /**
  * Default model for OpenAI Codex SDK
  */
-export const DEFAULT_OPENAI_MODEL = 'gpt-5.2-codex';
+export const DEFAULT_OPENAI_MODEL = 'gpt-5.1-codex';
 
 /**
  * Default model for Claude Agent SDK
