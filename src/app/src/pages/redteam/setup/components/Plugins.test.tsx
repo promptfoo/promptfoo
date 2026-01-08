@@ -152,11 +152,12 @@ describe('Plugins', () => {
     expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
   });
 
-  it('should call onBack when the Back button is clicked', () => {
+  it('should call onBack when the Back button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const backButton = screen.getByRole('button', { name: /Back/i });
-    fireEvent.click(backButton);
+    await user.click(backButton);
     expect(mockOnBack).toHaveBeenCalled();
   });
 
@@ -1058,11 +1059,12 @@ describe('Plugins', () => {
         updatePlugins: mockUpdatePlugins,
       });
 
+      const user = userEvent.setup();
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Select a preset to trigger user interaction and the sync effect
       const recommendedPreset = screen.getByText('Recommended');
-      fireEvent.click(recommendedPreset);
+      await user.click(recommendedPreset);
 
       // updatePlugins should be called a bounded number of times (not infinite)
       // The fix in updatePlugins compares merged output vs current state to prevent loops
@@ -1072,6 +1074,7 @@ describe('Plugins', () => {
     });
 
     it('should preserve policy and intent plugins when syncing regular plugins', async () => {
+      const user = userEvent.setup();
       const intentPlugin = { id: 'intent', config: { intent: ['test intent'] } };
       const policyPlugin = { id: 'policy', config: { policy: 'test policy' } };
 
@@ -1088,7 +1091,7 @@ describe('Plugins', () => {
 
       // Select a preset to add regular plugins
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1113,6 +1116,7 @@ describe('Plugins', () => {
       // The fix: updatePlugins compares merged output vs current state,
       // returning early if they're equal to prevent unnecessary state changes.
 
+      const user = userEvent.setup();
       let updateCallCount = 0;
       const trackingUpdatePlugins = vi.fn(() => {
         updateCallCount++;
@@ -1127,7 +1131,7 @@ describe('Plugins', () => {
 
       // Trigger user interaction
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       // Wait a bit for any potential infinite loops to manifest
       await act(async () => {
@@ -1173,6 +1177,7 @@ describe('Plugins', () => {
       //
       // If the cleanup effect doesn't work, the config would persist and harmful:self-harm
       // would be re-selected WITH its config object instead of as a plain string.
+      const user = userEvent.setup();
       const configWithPluginConfig = {
         plugins: [{ id: 'harmful:self-harm', config: { numTests: 5 } }],
       };
@@ -1186,7 +1191,7 @@ describe('Plugins', () => {
 
       // Step 1: Click "Select none" to deselect all plugins (including harmful:self-harm)
       const selectNoneButton = screen.getByText('Select none');
-      fireEvent.click(selectNoneButton);
+      await user.click(selectNoneButton);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1197,7 +1202,7 @@ describe('Plugins', () => {
 
       // Step 2: Switch to Minimal Test preset (re-selects harmful:self-harm)
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1227,6 +1232,7 @@ describe('Plugins', () => {
   describe('useEffect cleanup logic for orphaned plugin configs', () => {
     it('should clean up config for plugins deselected via preset switch', async () => {
       // Start with a plugin that has config
+      const user = userEvent.setup();
       const configWithPluginConfig = {
         plugins: [
           { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
@@ -1242,7 +1248,7 @@ describe('Plugins', () => {
 
       // Switch to a preset that doesn't include indirect-prompt-injection
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1264,6 +1270,7 @@ describe('Plugins', () => {
 
     it('should preserve configs for plugins that remain selected after preset switch', async () => {
       // Start with harmful:hate with a config
+      const user = userEvent.setup();
       const configWithPluginConfig = {
         plugins: [{ id: 'harmful:hate', config: { numTests: 10 } }],
       };
@@ -1277,7 +1284,7 @@ describe('Plugins', () => {
 
       // Trigger the cleanup effect
       const recommendedPreset = screen.getByText('Recommended');
-      fireEvent.click(recommendedPreset);
+      await user.click(recommendedPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1331,6 +1338,7 @@ describe('Plugins', () => {
 
     it('should handle rapid preset switches without losing config cleanup', async () => {
       // This tests the ref-based synchronous cleanup to prevent race conditions
+      const user = userEvent.setup();
       const configWithPluginConfig = {
         plugins: [
           { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
@@ -1349,9 +1357,9 @@ describe('Plugins', () => {
       const minimalPreset = screen.getByText('Minimal Test');
       const recommendedPreset = screen.getByText('Recommended');
 
-      fireEvent.click(minimalPreset);
-      fireEvent.click(recommendedPreset);
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
+      await user.click(recommendedPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins.mock.calls.length).toBeGreaterThan(0);
@@ -1383,6 +1391,7 @@ describe('Plugins', () => {
 
   describe('handleSetPlugins batch update function', () => {
     it('should set all plugins in a single state update', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: { plugins: [] },
         updatePlugins: mockUpdatePlugins,
@@ -1392,7 +1401,7 @@ describe('Plugins', () => {
 
       // Select a preset which uses handleSetPlugins internally
       const recommendedPreset = screen.getByText('Recommended');
-      fireEvent.click(recommendedPreset);
+      await user.click(recommendedPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1403,6 +1412,7 @@ describe('Plugins', () => {
     });
 
     it('should add plugins to recently used list', async () => {
+      const user = userEvent.setup();
       const mockAddPlugin = vi.fn();
 
       mockUseRedTeamConfig.mockReturnValue({
@@ -1419,7 +1429,7 @@ describe('Plugins', () => {
 
       // Select a preset
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         // addPlugin should be called for plugins in the preset
@@ -1428,6 +1438,7 @@ describe('Plugins', () => {
     });
 
     it('should not add duplicate plugins to recently used list', async () => {
+      const user = userEvent.setup();
       const mockAddPlugin = vi.fn();
       const existingRecentPlugins = ['bola', 'harmful:hate'];
 
@@ -1446,7 +1457,7 @@ describe('Plugins', () => {
       // The recently used snapshot is taken at render time
       // If we select a preset containing bola and harmful:hate, they shouldn't be added again
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         // Wait for some calls to happen
