@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'CrewAI modular agent-task evaluation (code-first)'
+
+providers:
+  - id: file://./composer.py
+    label: 'Composer Provider'
+    config:
+      agent_id: trend_researcher
+      task_id: trend_identification_task
+      model: gpt-4.1
+      temperature: 0.2
+
+prompts:
+  - '{{input_text}}'
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      provider: openai:gpt-4.1
+      value: |
+        Evaluate the response for:
+        1. Instruction adherence (bullet points, <=10)
+        2. Topic focus ({{topic}})
+        3. Depth (not generic)
+        4. Grounding in input_text
+    - type: javascript
+      value: |
+        // Ensure bullet points exist
+        return /\n[-*•]\s/.test(String(output));
+
+tests:
+  - description: 'Electric Vehicles Trend Analysis'
+    options:
+      provider: 'Composer Provider'
+    vars:
+      topic: 'Electric Vehicles'
+      input_text: |
+        The global EV market grew 35% year-over-year in 2024, driven by Asia and Europe...
+
+  - description: 'AI in Healthcare Trend Analysis'
+    options:
+      provider: 'Composer Provider'
+    vars:
+      topic: 'Artificial Intelligence in Healthcare'
+      input_text: |
+        Hospitals are rapidly adopting AI diagnostic tools and pharmaceutical companies are investing in AI drug discovery...
