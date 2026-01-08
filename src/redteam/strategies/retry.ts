@@ -4,6 +4,7 @@ import { evalResultsTable } from '../../database/tables';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
+import { deduplicateTestCases } from '../../util/comparison';
 import invariant from '../../util/invariant';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
@@ -66,19 +67,12 @@ function transformResult(
   }
 }
 
+/**
+ * Deduplicates test cases based on vars and strategyId.
+ * @deprecated Use deduplicateTestCases from '../../util/comparison' instead
+ */
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
-  const seen = new Set<string>();
-  return tests.filter((test) => {
-    // Include strategyId in deduplication key - tests with the same prompt but different
-    // strategies (e.g., plugin-only vs goat) should be considered different test cases
-    const strategyId = test.metadata?.strategyId || 'none';
-    const key = JSON.stringify({ vars: test.vars, strategyId });
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
+  return deduplicateTestCases(tests);
 }
 
 async function getFailedTestCases(
