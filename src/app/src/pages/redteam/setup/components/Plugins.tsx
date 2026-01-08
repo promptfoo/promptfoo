@@ -118,15 +118,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     );
   }, [config.plugins]);
 
-  // Derive pluginConfig from config.plugins
+  // Derive pluginConfig from config.plugins.
   const pluginConfig = useMemo(() => {
-    const configs: LocalPluginConfig = {};
-    config.plugins.forEach((plugin) => {
+    return config.plugins.reduce<LocalPluginConfig>((configs, plugin) => {
       if (typeof plugin === 'object' && plugin.config) {
         configs[plugin.id] = plugin.config;
       }
-    });
-    return configs;
+      return configs;
+    }, {});
   }, [config.plugins]);
 
   // Tab state management
