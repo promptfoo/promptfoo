@@ -35,7 +35,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { PLUGINS_REQUIRING_CONFIG } from '../constants';
+import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -192,7 +192,7 @@ export default function PluginsTab({
   // Helper functions
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
         return true;
       }
       const config = pluginConfig[plugin];
@@ -347,7 +347,7 @@ export default function PluginsTab({
     const configured: Plugin[] = [];
 
     for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)) {
+      if (requiresPluginConfig(plugin) && !isPluginConfigured(plugin)) {
         needsConfig.push(plugin);
       } else {
         configured.push(plugin);
@@ -384,7 +384,7 @@ export default function PluginsTab({
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (requiresPluginConfig(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -534,7 +534,7 @@ export default function PluginsTab({
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
                 const isSelected = selectedPlugins.has(plugin);
-                const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+                const requiresConfig = requiresPluginConfig(plugin);
                 const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
 
                 return (

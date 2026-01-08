@@ -15,7 +15,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
-import { PLUGINS_REQUIRING_CONFIG } from '../constants';
+import { requiresPluginConfig } from '../constants';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
@@ -320,7 +320,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isConfigValid = useCallback(() => {
     for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (requiresPluginConfig(plugin)) {
         const config = pluginConfig[plugin];
         if (!config || Object.keys(config).length === 0) {
           return false;
@@ -370,7 +370,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
         return true;
       }
       const config = pluginConfig[plugin];
@@ -399,7 +399,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
     if (!isConfigValid()) {
       const missingConfigPlugins = Array.from(selectedPlugins).filter(
-        (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
+        (plugin) => requiresPluginConfig(plugin) && !isPluginConfigured(plugin),
       );
 
       if (missingConfigPlugins.length === 1) {

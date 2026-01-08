@@ -15,7 +15,7 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { ChevronDown, HelpCircle, Lock, Settings } from 'lucide-react';
-import { PLUGINS_REQUIRING_CONFIG } from '../constants';
+import { requiresPluginConfig } from '../constants';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -345,7 +345,7 @@ export default function VerticalSuiteCard({
                     {group.plugins.map((plugin) => {
                       const isSelected = selectedPlugins.has(plugin);
                       const pluginDisabled = isPluginDisabled(plugin);
-                      const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+                      const requiresConfig = requiresPluginConfig(plugin);
                       const hasError = requiresConfig && !isPluginConfigured(plugin);
                       const severity = riskCategorySeverityMap[plugin];
 
