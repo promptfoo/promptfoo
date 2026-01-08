@@ -89,23 +89,10 @@ jobs:
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
-      - name: Verify Python and promptfoo
-        run: |
-          echo "Checking Python version:"
-          if ! docker exec promptfoo-container python --version; then
-            echo "Python check failed"
-            exit 1
-          fi
-
-          echo "Checking promptfoo version:"
-          if ! docker exec promptfoo-container promptfoo --version; then
-            echo "promptfoo check failed"
-            exit 1
-          fi
-
       - name: Run health check
         run: |
-          # Loop to check if the server is up
+          # Wait for server to be fully ready (including database migrations)
+          # before running any CLI commands that also trigger migrations
           for ((retry=1; retry<=10; retry++)); do
             if curl -f http://localhost:3000/health; then
               echo -e "\nHealth check passed"
@@ -120,6 +107,20 @@ jobs:
           # If health check did not pass after retries, exit with an error
           if [ -z "$HEALTH_CHECK_PASS" ]; then
             echo -e "\nHealth check failed after multiple attempts" >&2
+            exit 1
+          fi
+
+      - name: Verify Python and promptfoo
+        run: |
+          echo "Checking Python version:"
+          if ! docker exec promptfoo-container python --version; then
+            echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          if ! docker exec promptfoo-container promptfoo --version; then
+            echo "promptfoo check failed"
             exit 1
           fi
 
