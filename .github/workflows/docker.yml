@@ -290,6 +290,10 @@ jobs:
           echo "$INSPECT_OUTPUT"
           # Extract the manifest digest (first Digest: line)
           DIGEST=$(echo "$INSPECT_OUTPUT" | grep -m1 "^Digest:" | awk '{print $2}')
+          if [ -z "$DIGEST" ]; then
+            echo "Error: Failed to extract manifest digest from inspect output"
+            exit 1
+          fi
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Manifest digest: $DIGEST"
 
