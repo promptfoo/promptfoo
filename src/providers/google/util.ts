@@ -299,6 +299,14 @@ export function maybeCoerceToGeminiFormat(
 let cachedAuth: GoogleAuth | undefined;
 
 /**
+ * Clears the cached GoogleAuth instance (for testing)
+ * @internal
+ */
+export function clearCachedAuth() {
+  cachedAuth = undefined;
+}
+
+/**
  * Loads and processes Google credentials from various sources
  */
 export function loadCredentials(credentials?: string): string | undefined {
@@ -393,6 +401,59 @@ export async function hasGoogleDefaultCredentials() {
     return true;
   } catch {
     return false;
+  }
+}
+
+// Separate cached auth client for Generative Language API with specific scopes
+let cachedGenerativeLanguageAuth: InstanceType<
+  typeof import('google-auth-library').GoogleAuth
+> | null = null;
+
+/**
+ * Gets an OAuth2 access token for Google APIs.
+ * Used by providers that need to authenticate via OAuth2 instead of API keys.
+ * @param credentials - Optional credentials JSON string or file:// path
+ * @param scopes - Optional scopes to use. Defaults to cloud-platform + generative-language scopes
+ * @returns The access token string, or undefined if authentication fails
+ */
+export async function getGoogleAccessToken(credentials?: string): Promise<string | undefined> {
+  try {
+    // Try with generative-language scopes first (required for Live API)
+    if (!cachedGenerativeLanguageAuth) {
+      let GoogleAuth;
+      try {
+        const importedModule = await import('google-auth-library');
+        GoogleAuth = importedModule.GoogleAuth;
+        cachedGenerativeLanguageAuth = new GoogleAuth({
+          scopes: [
+            'https://www.googleapis.com/auth/cloud-platform',
+            'https://www.googleapis.com/auth/generative-language.retriever',
+            'https://www.googleapis.com/auth/generative-language.tuning',
+          ],
+        });
+      } catch {
+        throw new Error(
+          'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+        );
+      }
+    }
+
+    const processedCredentials = loadCredentials(credentials);
+
+    let client;
+    if (processedCredentials) {
+      client = await cachedGenerativeLanguageAuth.fromJSON(JSON.parse(processedCredentials));
+    } else {
+      client = await cachedGenerativeLanguageAuth.getClient();
+    }
+
+    const tokenResponse = await client.getAccessToken();
+    return tokenResponse.token || undefined;
+  } catch (error) {
+    logger.debug('[GoogleAuth] Could not get access token', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
   }
 }
 
