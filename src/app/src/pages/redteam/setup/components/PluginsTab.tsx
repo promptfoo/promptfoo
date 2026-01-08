@@ -21,6 +21,7 @@ import {
   HARM_PLUGINS,
   ISO_42001_MAPPING,
   MCP_PLUGINS,
+  MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_AGENTIC_TOP_10_MAPPING,
@@ -29,13 +30,13 @@ import {
   OWASP_LLM_TOP_10_MAPPING,
   PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
+  RAG_PLUGINS,
   riskCategories,
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
 import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -57,6 +58,9 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
+// Constants
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
@@ -64,7 +68,6 @@ export interface PluginsTabProps {
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
-  onUserInteraction: () => void;
   isRemoteGenerationDisabled: boolean;
 }
 
@@ -75,7 +78,6 @@ export default function PluginsTab({
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
-  onUserInteraction,
   isRemoteGenerationDisabled,
 }: PluginsTabProps): React.ReactElement {
   const { recordEvent } = useTelemetry();
@@ -127,11 +129,11 @@ export default function PluginsTab({
       },
       {
         name: 'Minimal Test',
-        plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+        plugins: MINIMAL_TEST_PLUGINS,
       },
       {
         name: 'RAG',
-        plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+        plugins: RAG_PLUGINS,
       },
       {
         name: 'Foundation',
@@ -192,7 +194,7 @@ export default function PluginsTab({
   // Helper functions
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
+      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
         return true;
       }
       const config = pluginConfig[plugin];
@@ -347,7 +349,7 @@ export default function PluginsTab({
     const configured: Plugin[] = [];
 
     for (const plugin of selectedPlugins) {
-      if (requiresPluginConfig(plugin) && !isPluginConfigured(plugin)) {
+      if (PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)) {
         needsConfig.push(plugin);
       } else {
         configured.push(plugin);
@@ -368,23 +370,21 @@ export default function PluginsTab({
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
       });
-      onUserInteraction();
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
       } else {
-        // Batch update: replace all selected plugins with preset plugins in a single state update
-        // This prevents infinite render loops caused by calling handlePluginToggle in a forEach loop
-        setSelectedPlugins(new Set(preset.plugins));
+        // Use setSelectedPlugins for efficient bulk update
+        setSelectedPlugins(new Set(preset.plugins as Set<Plugin>));
         setIsCustomMode(false);
       }
     },
-    [recordEvent, onUserInteraction, setSelectedPlugins],
+    [recordEvent, setSelectedPlugins],
   );
 
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      if (requiresPluginConfig(plugin)) {
+      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -404,25 +404,9 @@ export default function PluginsTab({
     setConfigDialogOpen(true);
   }, []);
 
-  // Batch update: add all filtered plugins to selection in a single state update
-  const handleSelectAll = useCallback(() => {
-    onUserInteraction();
-    const newSelection = new Set(selectedPlugins);
-    filteredPlugins.forEach(({ plugin }) => newSelection.add(plugin));
-    setSelectedPlugins(newSelection);
-  }, [onUserInteraction, selectedPlugins, filteredPlugins, setSelectedPlugins]);
-
-  // Batch update: remove all filtered plugins from selection in a single state update
-  const handleSelectNone = useCallback(() => {
-    onUserInteraction();
-    const newSelection = new Set(selectedPlugins);
-    filteredPlugins.forEach(({ plugin }) => newSelection.delete(plugin));
-    setSelectedPlugins(newSelection);
-  }, [onUserInteraction, selectedPlugins, filteredPlugins, setSelectedPlugins]);
-
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6">
+      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section */}
@@ -453,6 +437,7 @@ export default function PluginsTab({
             <div className="relative min-w-[300px] shrink-0">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                data-testid="plugin-search-input"
                 placeholder="Search plugins..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -487,14 +472,26 @@ export default function PluginsTab({
               <button
                 type="button"
                 className="text-sm text-primary hover:underline"
-                onClick={handleSelectAll}
+                onClick={() => {
+                  // Collect all filtered plugins and merge with existing selection
+                  setSelectedPlugins(
+                    new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                  );
+                }}
               >
                 Select all
               </button>
               <button
                 type="button"
                 className="text-sm text-primary hover:underline"
-                onClick={handleSelectNone}
+                onClick={() => {
+                  // Remove only the filtered plugins from selection
+                  const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                  const newSelected = new Set(
+                    [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                  );
+                  setSelectedPlugins(newSelected);
+                }}
               >
                 Select none
               </button>
@@ -510,7 +507,6 @@ export default function PluginsTab({
                   suite={suite}
                   selectedPlugins={selectedPlugins}
                   onPluginToggle={handlePluginToggle}
-                  setSelectedPlugins={setSelectedPlugins}
                   onConfigClick={handleConfigClick}
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}
@@ -534,12 +530,13 @@ export default function PluginsTab({
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
                 const isSelected = selectedPlugins.has(plugin);
-                const requiresConfig = requiresPluginConfig(plugin);
+                const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
                 const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
 
                 return (
                   <div
                     key={plugin}
+                    data-testid={`plugin-list-item-${plugin}`}
                     onClick={() => {
                       if (pluginDisabled) {
                         toast.showToast(
@@ -691,14 +688,20 @@ export default function PluginsTab({
         </div>
 
         {/* Selected Plugins Sidebar */}
-        <div className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto">
+        <div
+          className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto"
+          data-testid="selected-plugins-sidebar"
+        >
           <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="mb-4 text-lg font-semibold">
+            <h3 className="mb-4 text-lg font-semibold" data-testid="selected-plugins-header">
               Selected Plugins ({selectedPlugins.size})
             </h3>
 
             {selectedPlugins.size === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p
+                className="py-8 text-center text-sm text-muted-foreground"
+                data-testid="selected-plugins-empty-state"
+              >
                 No plugins selected yet.
                 <br />
                 Click on plugins to add them here.
@@ -707,7 +710,7 @@ export default function PluginsTab({
               <div className="max-h-[400px] space-y-2 overflow-y-auto">
                 {/* Plugins requiring configuration - shown first */}
                 {pluginsNeedingConfig.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mb-3" data-testid="plugins-needing-config-section">
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-destructive">
                       Needs Configuration
                     </p>
@@ -715,6 +718,7 @@ export default function PluginsTab({
                       {pluginsNeedingConfig.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-needs-config-${plugin}`}
                           onClick={() => handleConfigClick(plugin)}
                           className={cn(
                             'flex cursor-pointer items-center rounded-lg border-2 border-destructive bg-destructive/10 p-3 transition-colors',
@@ -759,7 +763,7 @@ export default function PluginsTab({
 
                 {/* Configured plugins */}
                 {configuredPlugins.length > 0 && (
-                  <div>
+                  <div data-testid="configured-plugins-section">
                     {pluginsNeedingConfig.length > 0 && (
                       <div className="my-3 border-t border-border" />
                     )}
@@ -767,6 +771,7 @@ export default function PluginsTab({
                       {configuredPlugins.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-${plugin}`}
                           className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -796,9 +801,8 @@ export default function PluginsTab({
                   variant="outline"
                   size="sm"
                   className="w-full"
+                  data-testid="clear-all-plugins-button"
                   onClick={() => {
-                    onUserInteraction();
-                    // Batch update: clear all plugins in a single state update
                     setSelectedPlugins(new Set());
                   }}
                 >
