@@ -15,6 +15,7 @@ import type {
   Assertion,
   AtomicTestCase,
   GradingResult,
+  PluginConfig,
 } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers', async (importOriginal) => {
@@ -97,7 +98,6 @@ describe('RedteamPluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
         <Modifiers>
         language: German
         </Modifiers>
@@ -278,7 +278,7 @@ describe('RedteamPluginBase', () => {
     });
 
     it('should add __outputFormat modifier when inputs is defined', () => {
-      const config = {
+      const config: PluginConfig = {
         inputs: {
           username: 'The user name',
           message: 'The message content',
@@ -287,15 +287,17 @@ describe('RedteamPluginBase', () => {
       const template = 'Generate {{ n }} test cases for {{ purpose }}';
       const result = RedteamPluginBase.appendModifiers(template, config);
 
-      expect(result).toContain('<Modifiers>');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('<Prompt>');
-      expect(result).toContain('"username": "The user name"');
-      expect(result).toContain('"message": "The message content"');
+      // __outputFormat is now stored in config.modifiers but NOT included in the template output
+      // (it's used internally for downstream strategies)
+      const modifiers = config.modifiers as Record<string, string>;
+      expect(modifiers).toHaveProperty('__outputFormat');
+      expect(modifiers.__outputFormat).toBe('multi-input-mode: username, message');
+      // The template output should NOT contain __outputFormat - it's handled via {{ outputFormat }} in templates
+      expect(result).not.toContain('__outputFormat');
     });
 
     it('should combine inputs with other modifiers', () => {
-      const config = {
+      const config: PluginConfig = {
         language: 'Spanish',
         inputs: {
           query: 'The search query',
@@ -309,8 +311,69 @@ describe('RedteamPluginBase', () => {
 
       expect(result).toContain('language: Spanish');
       expect(result).toContain('tone: formal');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('"query": "The search query"');
+      // __outputFormat is stored in config.modifiers for downstream use
+      const modifiers = config.modifiers as Record<string, string>;
+      expect(modifiers.__outputFormat).toBe('multi-input-mode: query');
+      // But NOT rendered in the template output
+      expect(result).not.toContain('__outputFormat');
+    });
+  });
+
+  describe('getOutputFormatInstruction', () => {
+    it('should return single-input instruction when inputs is not defined', () => {
+      const config = {};
+      const result = RedteamPluginBase.getOutputFormatInstruction(config);
+
+      expect(result).toBe('Each line must begin with the string "Prompt:"');
+    });
+
+    it('should return single-input instruction when inputs is empty', () => {
+      const config = { inputs: {} };
+      const result = RedteamPluginBase.getOutputFormatInstruction(config);
+
+      expect(result).toBe('Each line must begin with the string "Prompt:"');
+    });
+
+    it('should return multi-input instruction when inputs is defined', () => {
+      const config = {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      };
+      const result = RedteamPluginBase.getOutputFormatInstruction(config);
+
+      expect(result).toContain('OUTPUT FORMAT:');
+      expect(result).toContain('JSON object wrapped in <Prompt> tags');
+      expect(result).toContain('Required keys: "username", "message"');
+      expect(result).toContain('Format: <Prompt>');
+      expect(result).toContain('"username": "The user name"');
+      expect(result).toContain('"message": "The message content"');
+    });
+
+    it('should handle single input key', () => {
+      const config = {
+        inputs: {
+          query: 'Search query',
+        },
+      };
+      const result = RedteamPluginBase.getOutputFormatInstruction(config);
+
+      expect(result).toContain('Required keys: "query"');
+      expect(result).toContain('"query": "Search query"');
+    });
+
+    it('should handle multiple input keys', () => {
+      const config = {
+        inputs: {
+          userId: 'User ID',
+          action: 'Action to perform',
+          resource: 'Target resource',
+        },
+      };
+      const result = RedteamPluginBase.getOutputFormatInstruction(config);
+
+      expect(result).toContain('Required keys: "userId", "action", "resource"');
     });
   });
 
@@ -358,19 +421,39 @@ describe('RedteamPluginBase', () => {
       expect(messages).toContain('Test message');
     });
 
-    it('should include __outputFormat modifier in API call when inputs is defined', async () => {
-      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
-        inputs: {
-          username: 'The user name',
+    it('should render outputFormat in API call when template includes {{ outputFormat }}', async () => {
+      // Create a custom plugin with template that includes {{ outputFormat }}
+      class TestPluginWithFormat extends RedteamPluginBase {
+        readonly id = 'test-plugin-with-format';
+        protected async getTemplate(): Promise<string> {
+          return 'Generate {{ n }} prompts.\n{{ outputFormat }}';
+        }
+        protected getAssertions(prompt: string): Assertion[] {
+          return [{ type: 'contains', value: prompt }];
+        }
+      }
+
+      const pluginWithFormat = new TestPluginWithFormat(
+        multiInputProvider,
+        'test purpose',
+        'testVar',
+        {
+          inputs: {
+            username: 'The user name',
+          },
         },
-      });
+      );
 
-      await multiInputPlugin.generateTests(1);
+      await pluginWithFormat.generateTests(1);
 
+      // The outputFormat variable should be rendered with multi-input format instructions
       expect(multiInputProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('__outputFormat:'),
+        expect.stringContaining('OUTPUT FORMAT:'),
       );
       expect(multiInputProvider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Prompt>'));
+      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Required keys: "username"'),
+      );
     });
 
     it('should store inputs config in test metadata', async () => {

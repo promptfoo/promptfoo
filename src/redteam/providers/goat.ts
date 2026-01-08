@@ -335,6 +335,8 @@ export default class GoatProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           modifiers: context?.test?.metadata?.modifiers,
           traceSummary: previousTraceSummary,
+          // Pass inputs schema for multi-input mode
+          inputs: this.config.inputs,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
@@ -367,6 +369,19 @@ export default class GoatProvider implements ApiProvider {
 
         // Extract input vars from the attack message for multi-input mode
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
+        // For multi-input mode, extract the 'prompt' field from JSON for the inject var
+        // Cloud returns JSON like: {"prompt": "attack text", "message": "val1", "email": "val2"}
+        if (currentInputVars && this.config.inputs) {
+          try {
+            const parsed = JSON.parse(processedMessage);
+            if (typeof parsed.prompt === 'string') {
+              processedMessage = parsed.prompt;
+            }
+          } catch {
+            // Not valid JSON, use as-is
+          }
+        }
 
         // Build target vars - handle multi-input mode
         const targetVars: Record<string, string | object> = {

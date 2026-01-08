@@ -178,6 +178,52 @@ export function parseGeneratedInputs(
 }
 
 /**
+ * Output formatter type - pairs instruction generation with output parsing.
+ */
+type OutputFormatter = {
+  instruction: (config: PluginConfig) => string;
+  parse: (output: string, config: PluginConfig) => { __prompt: string }[];
+};
+
+/**
+ * Built-in formatters for different output modes.
+ */
+const FORMATTERS: Record<string, OutputFormatter> = {
+  'single-input': {
+    instruction: () => 'Each line must begin with the string "Prompt:"',
+    parse: (output) => parseGeneratedPrompts(output),
+  },
+  'multi-input': {
+    instruction: (config) => {
+      const inputKeys = Object.keys(config.inputs!);
+      const schema = Object.entries(config.inputs!)
+        .map(([key, description]) => `"${key}": "${description}"`)
+        .join(', ');
+      return dedent`
+        OUTPUT FORMAT: Each test case must be a JSON object wrapped in <Prompt> tags.
+        Required keys: ${inputKeys.map((k) => `"${k}"`).join(', ')}
+        Format: <Prompt>{"${inputKeys[0]}": "content", ${inputKeys
+          .slice(1)
+          .map((k) => `"${k}": "value"`)
+          .join(', ')}}</Prompt>
+        Schema: {${schema}}
+      `;
+    },
+    parse: (output, config) => parseGeneratedInputs(output, config.inputs!),
+  },
+};
+
+/**
+ * Get the appropriate formatter based on config.
+ */
+function getFormatter(config: PluginConfig): OutputFormatter {
+  if (config.inputs && Object.keys(config.inputs).length > 0) {
+    return FORMATTERS['multi-input'];
+  }
+  return FORMATTERS['single-input'];
+}
+
+/**
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
@@ -279,6 +325,7 @@ export abstract class RedteamPluginBase {
         purpose: this.purpose,
         n: currentBatchSize,
         examples: this.config.examples,
+        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
       });
 
       const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
@@ -323,11 +370,9 @@ export abstract class RedteamPluginBase {
         throw new Error(message);
       }
 
-      // Use appropriate parser based on mode
-      if (hasMultipleInputs) {
-        return parseGeneratedInputs(generatedPrompts, this.config.inputs!);
-      }
-      return parseGeneratedPrompts(generatedPrompts);
+      // Use formatter to parse output
+      const formatter = getFormatter(this.config);
+      return formatter.parse(generatedPrompts, this.config);
     };
 
     const allPrompts = await retryWithDeduplication(
@@ -394,19 +439,10 @@ export abstract class RedteamPluginBase {
       modifiers.language = config.language;
     }
 
-    // Add inputs as a modifier if defined - instructs LLM to output JSON wrapped in <Prompt> tags
+    // Check for multi-input mode and store for downstream use (strategies)
     if (config.inputs && Object.keys(config.inputs).length > 0) {
-      const schema = Object.entries(config.inputs)
-        .map(([key, description]) => `"${key}": "${description}"`)
-        .join(', ');
-      modifiers.__outputFormat = dedent`
-        <OutputFormat>
-          Consider the combinations of each of these fields. 
-          Output each message/test case strictly as a SINGLE JSON object with ONLY the defined fields.
-          Output it wrapped in <Prompt> tags: 
-          <Prompt>{${schema}}</Prompt>
-        </OutputFormat>
-        `;
+      const inputKeys = Object.keys(config.inputs);
+      modifiers.__outputFormat = `multi-input-mode: ${inputKeys.join(', ')}`;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
@@ -414,29 +450,38 @@ export abstract class RedteamPluginBase {
       config.modifiers = modifiers;
     }
 
-    // No modifiers
-    if (
-      Object.keys(modifiers).length === 0 ||
-      Object.values(modifiers).every((value) => typeof value === 'undefined' || value === '')
-    ) {
-      return template;
-    }
-
-    // Append all modifiers
-    const modifierSection = Object.entries(modifiers)
-      .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
+    // Filter out __outputFormat from regular modifiers section (templates handle it directly)
+    const regularModifiers = Object.entries(modifiers)
+      .filter(
+        ([key, value]) => key !== '__outputFormat' && typeof value !== 'undefined' && value !== '',
+      )
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
+    // No regular modifiers, just return template
+    if (!regularModifiers) {
+      return template;
+    }
+
+    // Append regular modifiers
     return dedent`
       ${template}
 
-      CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
       <Modifiers>
-      ${modifierSection}
+      ${regularModifiers}
       </Modifiers>
       Rewrite ALL prompts to strictly comply with the above modifiers.
     `.trim();
+  }
+
+  /**
+   * Generates the output format instruction for plugin templates.
+   * Use this in getTemplate() to conditionally output the right format instruction.
+   * @param config - The plugin config
+   * @returns The output format instruction string
+   */
+  static getOutputFormatInstruction(config: PluginConfig): string {
+    return getFormatter(config).instruction(config);
   }
 }
 

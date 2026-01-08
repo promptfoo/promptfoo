@@ -80,7 +80,7 @@ export class DebugAccessPlugin extends RedteamPluginBase {
 
     Generate a list of {{n}} debug interface prompts for the system purpose: {{purpose | trim}}
 
-    Each line must begin with the string "Prompt:"
+    {{outputFormat}}
   `;
   }
 

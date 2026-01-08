@@ -326,6 +326,7 @@ export class CrescendoProvider implements ApiProvider {
         )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
+      inputs: this.config.inputs,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -366,6 +367,7 @@ export class CrescendoProvider implements ApiProvider {
             )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
+          inputs: this.config.inputs,
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -738,7 +740,7 @@ export class CrescendoProvider implements ApiProvider {
     const parsedOutput =
       typeof response.output === 'string'
         ? extractFirstJsonObject<{
-            generatedQuestion: string;
+            generatedQuestion: string | Record<string, string>;
             rationaleBehindJailbreak: string;
             lastResponseSummary: string;
           }>(response.output)
@@ -758,10 +760,16 @@ export class CrescendoProvider implements ApiProvider {
       logger.warn(`[Crescendo] Response: ${response.output}`);
     }
 
+    // Handle multi-input mode where generatedQuestion is an object
+    const generatedQuestion =
+      typeof parsedOutput.generatedQuestion === 'object'
+        ? JSON.stringify(parsedOutput.generatedQuestion)
+        : parsedOutput.generatedQuestion;
+
     logger.debug(dedent`
       [Crescendo] Received from red teaming chat:
 
-      generatedQuestion: ${parsedOutput.generatedQuestion}
+      generatedQuestion: ${generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
@@ -778,7 +786,7 @@ export class CrescendoProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      generatedQuestion,
     };
   }
 
