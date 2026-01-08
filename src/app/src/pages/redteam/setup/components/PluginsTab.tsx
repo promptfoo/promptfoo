@@ -35,6 +35,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { PLUGINS_REQUIRING_CONFIG } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -56,12 +57,10 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-// Constants
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
@@ -72,6 +71,7 @@ export interface PluginsTabProps {
 export default function PluginsTab({
   selectedPlugins,
   handlePluginToggle,
+  setSelectedPlugins,
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
@@ -372,21 +372,13 @@ export default function PluginsTab({
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
       } else {
-        preset.plugins.forEach((plugin) => {
-          if (!selectedPlugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        // Remove plugins not in preset
-        selectedPlugins.forEach((plugin) => {
-          if (!preset.plugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
+        // Batch update: replace all selected plugins with preset plugins in a single state update
+        // This prevents infinite render loops caused by calling handlePluginToggle in a forEach loop
+        setSelectedPlugins(new Set(preset.plugins));
         setIsCustomMode(false);
       }
     },
-    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+    [recordEvent, onUserInteraction, setSelectedPlugins],
   );
 
   const handleGenerateTestCase = useCallback(
@@ -411,6 +403,22 @@ export default function PluginsTab({
     setSelectedConfigPlugin(plugin);
     setConfigDialogOpen(true);
   }, []);
+
+  // Batch update: add all filtered plugins to selection in a single state update
+  const handleSelectAll = useCallback(() => {
+    onUserInteraction();
+    const newSelection = new Set(selectedPlugins);
+    filteredPlugins.forEach(({ plugin }) => newSelection.add(plugin));
+    setSelectedPlugins(newSelection);
+  }, [onUserInteraction, selectedPlugins, filteredPlugins, setSelectedPlugins]);
+
+  // Batch update: remove all filtered plugins from selection in a single state update
+  const handleSelectNone = useCallback(() => {
+    onUserInteraction();
+    const newSelection = new Set(selectedPlugins);
+    filteredPlugins.forEach(({ plugin }) => newSelection.delete(plugin));
+    setSelectedPlugins(newSelection);
+  }, [onUserInteraction, selectedPlugins, filteredPlugins, setSelectedPlugins]);
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
@@ -479,28 +487,14 @@ export default function PluginsTab({
               <button
                 type="button"
                 className="text-sm text-primary hover:underline"
-                onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (!selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
+                onClick={handleSelectAll}
               >
                 Select all
               </button>
               <button
                 type="button"
                 className="text-sm text-primary hover:underline"
-                onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
+                onClick={handleSelectNone}
               >
                 Select none
               </button>
@@ -516,6 +510,7 @@ export default function PluginsTab({
                   suite={suite}
                   selectedPlugins={selectedPlugins}
                   onPluginToggle={handlePluginToggle}
+                  setSelectedPlugins={setSelectedPlugins}
                   onConfigClick={handleConfigClick}
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}
@@ -803,7 +798,8 @@ export default function PluginsTab({
                   className="w-full"
                   onClick={() => {
                     onUserInteraction();
-                    selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
+                    // Batch update: clear all plugins in a single state update
+                    setSelectedPlugins(new Set());
                   }}
                 >
                   Clear All

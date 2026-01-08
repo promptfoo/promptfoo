@@ -15,6 +15,7 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { ChevronDown, HelpCircle, Lock, Settings } from 'lucide-react';
+import { PLUGINS_REQUIRING_CONFIG } from '../constants';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -45,6 +46,7 @@ interface VerticalSuiteCardProps {
   suite: VerticalSuite;
   selectedPlugins: Set<Plugin>;
   onPluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   onConfigClick: (plugin: Plugin) => void;
   onGenerateTestCase: (plugin: Plugin) => void;
   isPluginConfigured: (plugin: Plugin) => boolean;
@@ -53,12 +55,11 @@ interface VerticalSuiteCardProps {
   onUpgradeClick?: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-
 export default function VerticalSuiteCard({
   suite,
   selectedPlugins,
   onPluginToggle,
+  setSelectedPlugins,
   onConfigClick,
   onGenerateTestCase,
   isPluginConfigured,
@@ -106,19 +107,19 @@ export default function VerticalSuiteCard({
       if (isLocked) {
         return;
       }
-      suite.plugins.forEach((plugin) => {
-        if (allSelected) {
-          if (selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        } else {
-          if (!selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        }
-      });
+      // Batch update: toggle all suite plugins in a single state update
+      // This prevents infinite render loops caused by calling onPluginToggle in a forEach loop
+      const newSelection = new Set(selectedPlugins);
+      if (allSelected) {
+        // Remove all suite plugins from selection
+        suite.plugins.forEach((plugin) => newSelection.delete(plugin));
+      } else {
+        // Add all suite plugins to selection
+        suite.plugins.forEach((plugin) => newSelection.add(plugin));
+      }
+      setSelectedPlugins(newSelection);
     },
-    [suite.plugins, allSelected, selectedPlugins, onPluginToggle, isLocked],
+    [suite.plugins, allSelected, selectedPlugins, setSelectedPlugins, isLocked],
   );
 
   const handleExpandClick = useCallback(() => {

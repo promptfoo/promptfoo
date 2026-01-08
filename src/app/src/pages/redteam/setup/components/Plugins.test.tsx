@@ -1160,5 +1160,67 @@ describe('Plugins', () => {
       // Without user interaction (hasUserInteracted is false), updatePlugins should not be called
       expect(mockUpdatePlugins).not.toHaveBeenCalled();
     });
+
+    it('should clean up plugin configs when plugins are deselected via bulk operation', async () => {
+      // This test verifies that bulk operations (like "Select none") clean up configs
+      // for deselected plugins, matching the behavior of individual toggles.
+      //
+      // Test flow:
+      // 1. Start with harmful:self-harm having a config (numTests: 5)
+      // 2. Click "Select none" (deselects ALL plugins, including harmful:self-harm)
+      // 3. Switch to Minimal Test preset (which includes harmful:self-harm) - re-selects it
+      // 4. Verify harmful:self-harm is now a plain string without config (config was cleaned up)
+      //
+      // If the cleanup effect doesn't work, the config would persist and harmful:self-harm
+      // would be re-selected WITH its config object instead of as a plain string.
+      const configWithPluginConfig = {
+        plugins: [{ id: 'harmful:self-harm', config: { numTests: 5 } }],
+      };
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithPluginConfig,
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Step 1: Click "Select none" to deselect all plugins (including harmful:self-harm)
+      const selectNoneButton = screen.getByText('Select none');
+      fireEvent.click(selectNoneButton);
+
+      await waitFor(() => {
+        expect(mockUpdatePlugins).toHaveBeenCalled();
+      });
+
+      // Clear mock to track next interaction cleanly
+      mockUpdatePlugins.mockClear();
+
+      // Step 2: Switch to Minimal Test preset (re-selects harmful:self-harm)
+      const minimalPreset = screen.getByText('Minimal Test');
+      fireEvent.click(minimalPreset);
+
+      await waitFor(() => {
+        expect(mockUpdatePlugins).toHaveBeenCalled();
+      });
+
+      // Check the last call to updatePlugins after re-selection
+      const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
+      const pluginsArg = lastCall[0];
+
+      // Find harmful:self-harm in the plugins array
+      const selfHarmPlugin = pluginsArg.find(
+        (p: any) =>
+          (typeof p === 'string' && p === 'harmful:self-harm') ||
+          (typeof p === 'object' && p.id === 'harmful:self-harm'),
+      );
+
+      // The plugin should exist (it's in Minimal Test preset)
+      expect(selfHarmPlugin).toBeDefined();
+
+      // CRITICAL: If cleanup worked, it should be a plain string (no config)
+      // If cleanup didn't work, it would be an object with the old config
+      expect(typeof selfHarmPlugin).toBe('string');
+      expect(selfHarmPlugin).toBe('harmful:self-harm');
+    });
   });
 });

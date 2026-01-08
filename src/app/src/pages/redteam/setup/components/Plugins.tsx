@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -15,6 +15,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
+import { PLUGINS_REQUIRING_CONFIG } from '../constants';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
@@ -30,8 +31,6 @@ interface PluginsProps {
   onNext: () => void;
   onBack: () => void;
 }
-
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -143,6 +142,22 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return initialConfig;
   });
 
+  // Ref to track the "authoritative" clean config synchronously
+  // This is needed because setPluginConfig is async, and when presets are switched rapidly,
+  // the pluginConfig state may not have been updated yet. The ref ensures that once a plugin
+  // is deselected, its config is immediately removed and won't be restored on re-selection.
+  const cleanPluginConfigRef = useRef<LocalPluginConfig>(
+    (() => {
+      const initialConfig: LocalPluginConfig = {};
+      config.plugins.forEach((plugin) => {
+        if (typeof plugin === 'object' && plugin.config) {
+          initialConfig[plugin.id] = plugin.config;
+        }
+      });
+      return initialConfig;
+    })(),
+  );
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
@@ -168,8 +183,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   }, [config.plugins, hasUserInteracted, selectedPlugins]);
 
   // Sync selectedPlugins to config after user interaction
+  // Also cleans up orphaned plugin configs for deselected plugins to ensure bulk operations
+  // (presets, Select None, suite deselect) behave consistently with individual toggles
   useEffect(() => {
     if (hasUserInteracted) {
+      // Clean up orphaned plugin configs - update ref synchronously to handle rapid preset switches
+      // This ensures that once a plugin is deselected, its config won't be restored on re-selection
+      const cleanedPluginConfig: LocalPluginConfig = {};
+      for (const key of Object.keys(cleanPluginConfigRef.current)) {
+        if (selectedPlugins.has(key as Plugin)) {
+          cleanedPluginConfig[key] = cleanPluginConfigRef.current[key];
+        }
+      }
+      // Update ref synchronously (this is the key to fixing the race condition)
+      cleanPluginConfigRef.current = cleanedPluginConfig;
+
+      // Also update state for consistency with handlers that use state
+      setPluginConfig(cleanedPluginConfig);
+
       // Get policy and intent plugins from existing config
       const policyPlugins = config.plugins.filter(
         (p) => typeof p === 'object' && p.id === 'policy',
@@ -179,8 +210,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       );
 
       // Convert selected plugins to config format with their configs
+      // Use cleanedPluginConfig (derived from ref) to ensure deselected plugin configs aren't included
       const regularPlugins = Array.from(selectedPlugins).map((plugin) => {
-        const existingConfig = pluginConfig[plugin];
+        const existingConfig = cleanedPluginConfig[plugin];
         if (existingConfig && Object.keys(existingConfig).length > 0) {
           return {
             id: plugin,
@@ -196,7 +228,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // updatePlugins handles deduplication by comparing merged output vs current state
       updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
     }
-  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
+  }, [selectedPlugins, hasUserInteracted, config.plugins, updatePlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
@@ -207,6 +239,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         if (plugin === 'policy') {
           if (newSet.has(plugin)) {
             newSet.delete(plugin);
+            // Update both ref and state when removing config
+            delete cleanPluginConfigRef.current[plugin];
             setPluginConfig((prevConfig) => {
               const newConfig = { ...prevConfig };
               delete newConfig[plugin];
@@ -220,6 +254,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
         if (newSet.has(plugin)) {
           newSet.delete(plugin);
+          // Update both ref and state when removing config
+          delete cleanPluginConfigRef.current[plugin as keyof LocalPluginConfig];
           setPluginConfig((prevConfig) => {
             const newConfig = { ...prevConfig };
             delete newConfig[plugin as keyof LocalPluginConfig];
@@ -235,8 +271,34 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     [addPlugin],
   );
 
+  // Batch update for preset selection - sets all plugins in a single state update
+  // This prevents infinite render loops caused by calling handlePluginToggle in a forEach loop
+  const handleSetPlugins = useCallback(
+    (plugins: Set<Plugin>) => {
+      setHasUserInteracted(true);
+      setSelectedPlugins(plugins);
+      // Only add plugins that aren't already in recentlyUsed to avoid unnecessary updates
+      plugins.forEach((plugin) => {
+        if (!recentlyUsedSnapshot.includes(plugin)) {
+          addPlugin(plugin);
+        }
+      });
+    },
+    [addPlugin, recentlyUsedSnapshot],
+  );
+
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
+      // Update ref synchronously to keep it in sync
+      const currentRefConfig = cleanPluginConfigRef.current[plugin] || {};
+      cleanPluginConfigRef.current = {
+        ...cleanPluginConfigRef.current,
+        [plugin]: {
+          ...currentRefConfig,
+          ...newConfig,
+        },
+      };
+
       setPluginConfig((prevConfig) => {
         const currentConfig = prevConfig[plugin] || {};
         const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
@@ -431,6 +493,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <PluginsTab
                 selectedPlugins={selectedPlugins}
                 handlePluginToggle={handlePluginToggle}
+                setSelectedPlugins={handleSetPlugins}
                 pluginConfig={pluginConfig}
                 updatePluginConfig={updatePluginConfig}
                 recentlyUsedPlugins={recentlyUsedSnapshot}
