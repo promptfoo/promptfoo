@@ -118,11 +118,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     );
   }, [config.plugins]);
 
-  // Derive pluginConfig from config.plugins.
+  // Derive pluginConfig from config.plugins (excluding intent/policy).
   const pluginConfig = useMemo(() => {
     return config.plugins.reduce<LocalPluginConfig>((configs, plugin) => {
       if (typeof plugin === 'object' && plugin.config) {
-        configs[plugin.id] = plugin.config;
+        // Filter out intent and policy plugins - they don't use this config
+        if (plugin.id !== 'intent' && plugin.id !== 'policy') {
+          configs[plugin.id] = plugin.config;
+        }
       }
       return configs;
     }, {});
