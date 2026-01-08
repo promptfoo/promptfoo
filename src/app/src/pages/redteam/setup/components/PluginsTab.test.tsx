@@ -27,7 +27,9 @@ import {
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   RAG_PLUGINS,
+  riskCategories,
 } from '@promptfoo/redteam/constants';
+import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -141,6 +143,324 @@ describe('PluginsTab', () => {
 
     // Check that the Presets heading is visible
     expect(screen.getByTestId('plugins-tab-container')).toBeInTheDocument();
+  });
+
+  describe('View Logic', () => {
+    test('Plugin search filters the plugin list based on the search query', async () => {
+      const user = userEvent.setup();
+
+      renderComponent();
+
+      // Verify that both sql-injection and harmful:hate plugins are visible initially
+      expect(screen.getByTestId('plugin-list-item-sql-injection')).toBeInTheDocument();
+      expect(screen.getByTestId('plugin-list-item-harmful:hate')).toBeInTheDocument();
+
+      // Find the search input and type a search query
+      const searchInput = screen.getByTestId('plugin-search-input');
+      await user.type(searchInput, 'SQL');
+
+      // Wait for the filtered results to appear
+      await waitFor(() => {
+        // Verify that sql-injection is still visible (matches "SQL Injection" display name)
+        expect(screen.getByTestId('plugin-list-item-sql-injection')).toBeInTheDocument();
+      });
+
+      // Verify that harmful:hate is no longer visible (doesn't match "SQL")
+      expect(screen.queryByTestId('plugin-list-item-harmful:hate')).not.toBeInTheDocument();
+    });
+
+    describe('Category Filtering', () => {
+      beforeEach(() => {
+        // Reset stores before each category filtering test
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: { ...initialStoreState.config, plugins: [] },
+          });
+          useRecentlyUsedPlugins.setState({ ...initialRecentPluginsState, plugins: [] });
+        });
+      });
+
+      afterEach(() => {
+        act(() => {
+          useRedTeamConfig.setState(initialStoreState);
+          useRecentlyUsedPlugins.setState(initialRecentPluginsState);
+        });
+      });
+
+      // Helper to get plugins for a category (excluding intent, policy, and domain-specific plugins)
+      const getVisiblePluginsForCategory = (category: string) => {
+        return riskCategories[category].filter(
+          (plugin) =>
+            plugin !== 'intent' && plugin !== 'policy' && !DOMAIN_SPECIFIC_PLUGINS.includes(plugin),
+        );
+      };
+
+      // Helper to get a sample plugin from a different category for negative assertions
+      const getSamplePluginFromOtherCategory = (excludeCategory: string) => {
+        const otherCategories = Object.keys(riskCategories).filter((c) => c !== excludeCategory);
+        for (const category of otherCategories) {
+          const plugins = getVisiblePluginsForCategory(category);
+          if (plugins.length > 0) {
+            return plugins[0];
+          }
+        }
+        return null;
+      };
+
+      test('Defaults to "All Categories" being selected', async () => {
+        renderComponent();
+
+        // Find the "All Categories" badge - it should be present
+        const allCategoriesBadge = screen.getByText('All Categories');
+        expect(allCategoriesBadge).toBeInTheDocument();
+
+        // Check that plugins from multiple categories are visible
+        // Get first plugin from each category to verify all are shown
+        const securityPlugins = getVisiblePluginsForCategory('Security & Access Control');
+        const compliancePlugins = getVisiblePluginsForCategory('Compliance & Legal');
+        const trustSafetyPlugins = getVisiblePluginsForCategory('Trust & Safety');
+        const brandPlugins = getVisiblePluginsForCategory('Brand');
+
+        expect(screen.getByTestId(`plugin-list-item-${securityPlugins[0]}`)).toBeInTheDocument();
+        expect(screen.getByTestId(`plugin-list-item-${compliancePlugins[0]}`)).toBeInTheDocument();
+        expect(screen.getByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`)).toBeInTheDocument();
+        expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
+      });
+
+      test('Selecting "All Categories" renders correct plugins', async () => {
+        const user = userEvent.setup();
+
+        renderComponent();
+
+        // First select a specific category to change state
+        const securityBadge = screen.getByText('Security & Access Control');
+        await user.click(securityBadge);
+
+        const securityPlugins = getVisiblePluginsForCategory('Security & Access Control');
+
+        // Wait for filtering to apply
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${securityPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Now click "All Categories" to show all plugins again
+        const allCategoriesBadge = screen.getByText('All Categories');
+        await user.click(allCategoriesBadge);
+
+        // Verify plugins from multiple categories are visible again
+        const compliancePlugins = getVisiblePluginsForCategory('Compliance & Legal');
+        const trustSafetyPlugins = getVisiblePluginsForCategory('Trust & Safety');
+        const brandPlugins = getVisiblePluginsForCategory('Brand');
+
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${securityPlugins[0]}`)).toBeInTheDocument();
+          expect(screen.getByTestId(`plugin-list-item-${compliancePlugins[0]}`)).toBeInTheDocument();
+          expect(screen.getByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`)).toBeInTheDocument();
+          expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
+        });
+      });
+
+      test('Selecting "Recently Used" renders correct plugins', async () => {
+        const user = userEvent.setup();
+
+        // Set up recently used plugins in the store using plugins from different categories
+        const securityPlugins = riskCategories['Security & Access Control'];
+        const brandPlugins = riskCategories['Brand'];
+        const recentPlugins = [securityPlugins[0], brandPlugins[0], securityPlugins[1]] as const;
+        act(() => {
+          useRecentlyUsedPlugins.setState({
+            plugins: [...recentPlugins],
+          });
+        });
+
+        renderComponent();
+
+        // Find the "Recently Used" badge in the category filter area (first one)
+        const recentlyUsedBadges = screen.getAllByText('Recently Used');
+        // The first badge is in the filter bar
+        await user.click(recentlyUsedBadges[0]);
+
+        // Verify only recently used plugins are visible
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${recentPlugins[0]}`)).toBeInTheDocument();
+          expect(screen.getByTestId(`plugin-list-item-${recentPlugins[1]}`)).toBeInTheDocument();
+          expect(screen.getByTestId(`plugin-list-item-${recentPlugins[2]}`)).toBeInTheDocument();
+        });
+
+        // Verify plugins NOT in recently used are not visible
+        const datasetsPlugins = riskCategories['Datasets'];
+        expect(
+          screen.queryByTestId(`plugin-list-item-${datasetsPlugins[0]}`),
+        ).not.toBeInTheDocument();
+      });
+
+      test('Selecting "Security & Access Control" renders correct plugins', async () => {
+        const user = userEvent.setup();
+        const categoryName = 'Security & Access Control';
+        const categoryPlugins = getVisiblePluginsForCategory(categoryName);
+
+        renderComponent();
+
+        // Click the category badge
+        const categoryBadge = screen.getByText(categoryName);
+        await user.click(categoryBadge);
+
+        // Verify category plugins are visible (check first few)
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Verify at least 3 more plugins from this category are visible
+        for (let i = 1; i < Math.min(4, categoryPlugins.length); i++) {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[i]}`)).toBeInTheDocument();
+        }
+
+        // Verify plugins from other categories are NOT visible
+        const otherPlugin = getSamplePluginFromOtherCategory(categoryName);
+        if (otherPlugin) {
+          expect(screen.queryByTestId(`plugin-list-item-${otherPlugin}`)).not.toBeInTheDocument();
+        }
+      });
+
+      test('Selecting "Compliance & Legal" renders correct plugins', async () => {
+        const user = userEvent.setup();
+        const categoryName = 'Compliance & Legal';
+        const categoryPlugins = getVisiblePluginsForCategory(categoryName);
+
+        renderComponent();
+
+        // Click the category badge
+        const categoryBadge = screen.getByText(categoryName);
+        await user.click(categoryBadge);
+
+        // Verify category plugins are visible (check first few)
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Verify at least 3 more plugins from this category are visible
+        for (let i = 1; i < Math.min(4, categoryPlugins.length); i++) {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[i]}`)).toBeInTheDocument();
+        }
+
+        // Verify plugins from other categories are NOT visible
+        const otherPlugin = getSamplePluginFromOtherCategory(categoryName);
+        if (otherPlugin) {
+          expect(screen.queryByTestId(`plugin-list-item-${otherPlugin}`)).not.toBeInTheDocument();
+        }
+      });
+
+      test('Selecting "Trust & Safety" renders correct plugins', async () => {
+        const user = userEvent.setup();
+        const categoryName = 'Trust & Safety';
+        const categoryPlugins = getVisiblePluginsForCategory(categoryName);
+
+        renderComponent();
+
+        // Click the category badge
+        const categoryBadge = screen.getByText(categoryName);
+        await user.click(categoryBadge);
+
+        // Verify category plugins are visible (check first few)
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Verify at least 3 more plugins from this category are visible
+        for (let i = 1; i < Math.min(4, categoryPlugins.length); i++) {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[i]}`)).toBeInTheDocument();
+        }
+
+        // Verify plugins from other categories are NOT visible
+        const otherPlugin = getSamplePluginFromOtherCategory(categoryName);
+        if (otherPlugin) {
+          expect(screen.queryByTestId(`plugin-list-item-${otherPlugin}`)).not.toBeInTheDocument();
+        }
+      });
+
+      test('Selecting "Brand" renders correct plugins', async () => {
+        const user = userEvent.setup();
+        const categoryName = 'Brand';
+        const categoryPlugins = getVisiblePluginsForCategory(categoryName);
+
+        renderComponent();
+
+        // Click the category badge
+        const categoryBadge = screen.getByText(categoryName);
+        await user.click(categoryBadge);
+
+        // Verify category plugins are visible (check first few)
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Verify at least 3 more plugins from this category are visible
+        for (let i = 1; i < Math.min(4, categoryPlugins.length); i++) {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[i]}`)).toBeInTheDocument();
+        }
+
+        // Verify plugins from other categories are NOT visible
+        const otherPlugin = getSamplePluginFromOtherCategory(categoryName);
+        if (otherPlugin) {
+          expect(screen.queryByTestId(`plugin-list-item-${otherPlugin}`)).not.toBeInTheDocument();
+        }
+      });
+
+      test('Selecting "Domain-Specific Risks" renders vertical suite cards instead of plugin list', async () => {
+        const user = userEvent.setup();
+
+        renderComponent();
+
+        // Click the "Domain-Specific Risks" badge
+        const domainBadge = screen.getByText('Domain-Specific Risks');
+        await user.click(domainBadge);
+
+        // Domain-Specific Risks shows vertical suite cards instead of the flat plugin list
+        // The standard plugin list items from other categories should not be present
+        const securityPlugins = getVisiblePluginsForCategory('Security & Access Control');
+        const trustSafetyPlugins = getVisiblePluginsForCategory('Trust & Safety');
+
+        await waitFor(() => {
+          expect(
+            screen.queryByTestId(`plugin-list-item-${securityPlugins[0]}`),
+          ).not.toBeInTheDocument();
+          expect(
+            screen.queryByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`),
+          ).not.toBeInTheDocument();
+        });
+      });
+
+      test('Selecting "Datasets" renders correct plugins', async () => {
+        const user = userEvent.setup();
+        const categoryName = 'Datasets';
+        const categoryPlugins = getVisiblePluginsForCategory(categoryName);
+
+        renderComponent();
+
+        // Click the category badge
+        const categoryBadge = screen.getByText(categoryName);
+        await user.click(categoryBadge);
+
+        // Verify category plugins are visible (check first few)
+        await waitFor(() => {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[0]}`)).toBeInTheDocument();
+        });
+
+        // Verify at least 3 more plugins from this category are visible
+        for (let i = 1; i < Math.min(4, categoryPlugins.length); i++) {
+          expect(screen.getByTestId(`plugin-list-item-${categoryPlugins[i]}`)).toBeInTheDocument();
+        }
+
+        // Verify plugins from other categories are NOT visible
+        const otherPlugin = getSamplePluginFromOtherCategory(categoryName);
+        if (otherPlugin) {
+          expect(screen.queryByTestId(`plugin-list-item-${otherPlugin}`)).not.toBeInTheDocument();
+        }
+      });
+    });
+
+    // describe('Selected Plugins List', () => {});
   });
 
   /**
@@ -719,10 +1039,6 @@ describe('PluginsTab', () => {
     });
 
     describe('Plugin List Items', () => {
-      // describe('Search', () => {});
-
-      // describe('Category Filtering', () => {});
-
       // describe('Select All Button', () => {});
 
       // describe('Select None Button', () => {});
@@ -792,7 +1108,5 @@ describe('PluginsTab', () => {
         });
       });
     });
-
-    // describe('Selected Plugins List', () => {});
   });
 });

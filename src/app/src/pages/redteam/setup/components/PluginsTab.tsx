@@ -447,6 +447,7 @@ export default function PluginsTab({
             <div className="relative min-w-[300px] shrink-0">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                data-testid="plugin-search-input"
                 placeholder="Search plugins..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -547,6 +548,7 @@ export default function PluginsTab({
                 return (
                   <div
                     key={plugin}
+                    data-testid={`plugin-list-item-${plugin}`}
                     onClick={() => {
                       if (pluginDisabled) {
                         toast.showToast(
