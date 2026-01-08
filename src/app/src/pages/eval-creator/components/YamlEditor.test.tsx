@@ -90,8 +90,7 @@ describe('YamlEditor', () => {
     render(<YamlEditorComponent />);
 
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Reset to UI State/ })).toBeInTheDocument();
-    expect(screen.getByText('Upload File')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
@@ -243,8 +242,7 @@ describe('YamlEditor', () => {
 
     // Action bar should be hidden when readOnly is true
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Reset to UI State/ })).not.toBeInTheDocument();
-    expect(screen.queryByText('Upload File')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Discard Changes/ })).not.toBeInTheDocument();
 
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;

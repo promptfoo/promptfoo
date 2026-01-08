@@ -242,4 +242,78 @@ describe('DataTable', () => {
       expect(screen.getByText('Item 25')).toBeInTheDocument();
     });
   });
+
+  describe('row selection', () => {
+    it('should render separate checkboxes for identical data rows', () => {
+      // All rows have identical data - this verifies each row gets a unique internal ID
+      const identicalData: TestRow[] = [
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+      ];
+
+      render(<DataTable columns={columns} data={identicalData} enableRowSelection />);
+
+      // Get all checkboxes (header + 3 rows)
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(4); // 1 header + 3 rows
+
+      // Each row should be rendered separately (verifies unique row IDs)
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      expect(rows).toHaveLength(3);
+    });
+
+    it('should select and deselect all rows correctly with identical data', async () => {
+      const user = userEvent.setup();
+      const identicalData: TestRow[] = [
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+        { id: 'same-id', name: 'Same Name' },
+      ];
+
+      render(<DataTable columns={columns} data={identicalData} enableRowSelection />);
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      const selectAllCheckbox = checkboxes[0];
+
+      // Select all
+      await user.click(selectAllCheckbox);
+
+      // All row checkboxes should be checked
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[2]).toBeChecked();
+      expect(checkboxes[3]).toBeChecked();
+
+      // Deselect all
+      await user.click(selectAllCheckbox);
+
+      // All row checkboxes should be unchecked
+      expect(checkboxes[1]).not.toBeChecked();
+      expect(checkboxes[2]).not.toBeChecked();
+      expect(checkboxes[3]).not.toBeChecked();
+    });
+
+    it('should not apply text-ellipsis to select column cells', () => {
+      const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      // Find the table body
+      const table = screen.getByRole('table');
+      const tbody = table.querySelector('tbody');
+      const firstRow = tbody?.querySelector('tr');
+      const cells = firstRow?.querySelectorAll('td');
+
+      // First cell is the select column - should not have overflow-hidden or text-ellipsis
+      const selectCell = cells?.[0];
+      expect(selectCell?.className).not.toContain('overflow-hidden');
+      expect(selectCell?.className).not.toContain('text-ellipsis');
+
+      // Other cells should have overflow-hidden and text-ellipsis
+      const dataCell = cells?.[1];
+      expect(dataCell?.className).toContain('overflow-hidden');
+      expect(dataCell?.className).toContain('text-ellipsis');
+    });
+  });
 });
