@@ -247,7 +247,19 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      const basePath = cliState.basePath || process.cwd();
+      const resolvedPath = path.resolve(basePath, filePath);
+
+      // Path traversal protection: ensure resolved path is within the base directory
+      const normalizedBase = path.normalize(basePath);
+      const normalizedResolved = path.normalize(resolvedPath);
+      if (!normalizedResolved.startsWith(normalizedBase)) {
+        throw new Error(
+          `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
+            `Resolved path '${normalizedResolved}' is not within '${normalizedBase}'.`,
+        );
+      }
+
       logger.debug(
         `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
       );
@@ -306,7 +318,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            // String callbacks that are not file:// references are not supported
+            // for security reasons (would require eval-like execution)
+            throw new Error(
+              `Invalid function callback for '${functionName}': string callbacks must use ` +
+                `'file://' prefix to reference an external file (e.g., 'file://path/to/module.js:functionName'). ` +
+                `Direct function objects are also supported.`,
+            );
           }
 
           // Cache for future use

@@ -371,11 +371,20 @@ export class GoogleAuthManager {
 
     let client;
     if (processedCredentials) {
+      let parsedCredentials;
       try {
-        client = await auth.fromJSON(JSON.parse(processedCredentials));
+        parsedCredentials = JSON.parse(processedCredentials);
+      } catch (parseError) {
+        const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+        throw new Error(`[Google] Invalid credentials JSON format: ${errorMsg}`);
+      }
+
+      try {
+        client = await auth.fromJSON(parsedCredentials);
       } catch (error) {
-        logger.error(`[Google] Could not load credentials: ${error}`);
-        throw new Error(`[Google] Could not load credentials: ${error}`);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.error(`[Google] Could not load credentials: ${errorMsg}`);
+        throw new Error(`[Google] Could not load credentials: ${errorMsg}`);
       }
     } else {
       client = await auth.getClient();

@@ -1005,6 +1005,12 @@ export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<str
  * The discriminator is included as a custom property in fetchWithCache options,
  * which gets included in the cache key automatically.
  *
+ * Security note: We hash auth headers rather than using them directly to avoid
+ * exposing sensitive credentials in cache keys or logs. The hash is truncated
+ * to 16 hex characters (64 bits) for brevity - collision probability is acceptably
+ * low for cache key differentiation (birthday problem: ~4 billion entries needed
+ * for 50% collision probability).
+ *
  * @param headers - Request headers containing auth info
  * @returns A short hash string for cache key differentiation
  */
@@ -1031,6 +1037,6 @@ export function createAuthCacheDiscriminator(headers: Record<string, string>): s
     return '';
   }
 
-  // Create a short hash for cache key
+  // Create a short hash for cache key (16 hex chars = 64 bits, sufficient for cache differentiation)
   return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }
