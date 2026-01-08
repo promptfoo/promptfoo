@@ -286,18 +286,31 @@ export class GoogleAuthManager {
    * Supports:
    * - file:// prefix to load from external file
    * - Raw JSON string
+   * - Pre-parsed object (from config loading pipeline)
    *
-   * @param credentials - Credentials string or file path
+   * @param credentials - Credentials string, file path, or pre-parsed object
    * @returns Processed credentials JSON string
    */
-  static loadCredentials(credentials?: string): string | undefined {
+  static loadCredentials(credentials?: string | object): string | undefined {
     if (!credentials) {
       return undefined;
     }
 
+    // If credentials is already an object (e.g., parsed by config loading pipeline
+    // when processing file:// paths to JSON files), convert it to a JSON string
+    if (typeof credentials === 'object') {
+      return JSON.stringify(credentials);
+    }
+
     if (credentials.startsWith('file://')) {
       try {
-        return maybeLoadFromExternalFile(credentials) as string;
+        const loaded = maybeLoadFromExternalFile(credentials);
+        // maybeLoadFromExternalFile returns parsed object for JSON files,
+        // but we need a JSON string for the Google Auth library
+        if (typeof loaded === 'object') {
+          return JSON.stringify(loaded);
+        }
+        return loaded as string;
       } catch (error) {
         throw new Error(`Failed to load credentials from file: ${error}`);
       }

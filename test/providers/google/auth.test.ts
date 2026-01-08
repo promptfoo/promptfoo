@@ -522,6 +522,27 @@ describe('GoogleAuthManager', () => {
         'Failed to load credentials from file',
       );
     });
+
+    it('should handle pre-parsed object credentials (from config loading pipeline)', () => {
+      // When config loading processes file:// paths to JSON files, it may return
+      // parsed objects instead of strings. The fix handles this case.
+      const parsedCreds = { type: 'service_account', project_id: 'test-project' };
+
+      const result = GoogleAuthManager.loadCredentials(parsedCreds as unknown as string);
+
+      expect(result).toBe(JSON.stringify(parsedCreds));
+    });
+
+    it('should handle maybeLoadFromExternalFile returning parsed object for JSON files', () => {
+      // maybeLoadFromExternalFile parses JSON files and returns objects, not strings
+      const parsedCreds = { type: 'service_account', project_id: 'test-project' };
+      vi.mocked(maybeLoadFromExternalFile).mockReturnValue(parsedCreds);
+
+      const result = GoogleAuthManager.loadCredentials('file:///path/to/creds.json');
+
+      expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file:///path/to/creds.json');
+      expect(result).toBe(JSON.stringify(parsedCreds));
+    });
   });
 
   // Note: getOAuthClient, resolveProjectId (OAuth path), and clearCache tests require
