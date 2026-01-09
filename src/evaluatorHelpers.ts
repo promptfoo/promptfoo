@@ -656,9 +656,11 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       extensionReturnValue = await transform(extension, context, { hookName }, false);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`Extension hook "${hookName}" failed for ${extension}: ${errorMessage}`, {
-        cause: error,
-      });
+      const wrappedError = new Error(
+        `Extension hook "${hookName}" failed for ${extension}: ${errorMessage}`,
+      );
+      (wrappedError as Error & { cause?: unknown }).cause = error;
+      throw wrappedError;
     }
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
