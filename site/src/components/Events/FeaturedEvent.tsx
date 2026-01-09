@@ -146,20 +146,6 @@ export default function FeaturedEvent({ event }: FeaturedEventProps): React.Reac
                 </span>
               </div>
             )}
-            {event.id === 'bsides-sf-2026' && (
-              <div className={styles.imageOverlay}>
-                <span className={styles.overlayTitle}>BSidesSF 2026</span>
-                <span className={styles.overlayMeta}>March 21-22, 2026</span>
-                <span className={styles.overlayVenue}>San Francisco, CA</span>
-              </div>
-            )}
-            {event.id === 'rsa-2026' && (
-              <div className={styles.imageOverlay}>
-                <span className={styles.overlayTitle}>RSA Conference 2026</span>
-                <span className={styles.overlayMeta}>March 23-26, 2026</span>
-                <span className={styles.overlayVenue}>San Francisco, CA</span>
-              </div>
-            )}
           </div>
         </div>
       </div>
