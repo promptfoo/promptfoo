@@ -126,7 +126,8 @@ export function MediaGrid({
     [focusedIndex, items, onItemClick],
   );
 
-  // Reset focused index when items change
+  // Reset focused index when items change (e.g., after filtering)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: items is a prop that triggers re-renders, we intentionally reset on item changes
   useEffect(() => {
     setFocusedIndex(-1);
   }, [items]);

@@ -351,7 +351,8 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     ],
   );
 
-  // Reset state when item changes
+  // Reset state when viewing a different media item
+  // biome-ignore lint/correctness/useExhaustiveDependencies: item?.hash is from props, we intentionally reset when viewing different item
   useEffect(() => {
     setIsPlaying(false);
     setExpandedGraders(new Set());

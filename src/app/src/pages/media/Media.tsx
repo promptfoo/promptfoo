@@ -154,13 +154,14 @@ export default function Media() {
       params.set('hash', selectedItem.hash);
     } else if (lastInternalSelectionRef.current !== 'cleared') {
       // Preserve existing hash from URL for deep linking on initial load
-      const existingHash = searchParams.get('hash');
-      if (existingHash) {
-        params.set('hash', existingHash);
+      // Using hashParam (derived from searchParams at render) instead of calling
+      // searchParams.get() inside effect to avoid adding searchParams as dependency
+      if (hashParam) {
+        params.set('hash', hashParam);
       }
     }
     setSearchParams(params, { replace: true });
-  }, [typeFilter, evalFilter, selectedItem, sort, setSearchParams]); // Removed searchParams from deps
+  }, [typeFilter, evalFilter, selectedItem, sort, setSearchParams, hashParam]);
 
   // Handle hash param for deep linking (external navigation)
   useEffect(() => {

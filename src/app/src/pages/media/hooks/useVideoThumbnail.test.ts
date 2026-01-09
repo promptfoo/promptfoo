@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // We need to extract and test the generateThumbnail function
 // Since it's not exported, we'll test it through the hook behavior

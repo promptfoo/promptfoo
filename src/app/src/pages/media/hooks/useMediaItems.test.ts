@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchMediaItemByHash } from './useMediaItems';
 import * as api from '@app/utils/api';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchMediaItemByHash } from './useMediaItems';
 
 vi.mock('@app/utils/api');
 

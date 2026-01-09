@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatBytes,
-  formatLatency,
   formatCost,
-  hashToNumber,
-  getExtensionFromMimeType,
+  formatLatency,
   generateMediaFilename,
+  getExtensionFromMimeType,
+  hashToNumber,
   resolveVideoSource,
 } from './media';
 
