@@ -50,7 +50,7 @@ export interface CloudflareGatewayConfig extends OpenAiCompletionOptions {
   resourceName?: string;
   /** Azure OpenAI deployment name (required for azure-openai provider) */
   deploymentName?: string;
-  /** Azure OpenAI API version (default: 2024-02-15-preview) */
+  /** Azure OpenAI API version (default: 2024-12-01-preview) */
   apiVersion?: string;
 }
 
@@ -295,7 +295,7 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
 
     // For Azure OpenAI, append the api-version query parameter
     if (underlyingProvider === 'azure-openai') {
-      const apiVersion = providerOptions.config?.apiVersion || '2024-02-15-preview';
+      const apiVersion = providerOptions.config?.apiVersion || '2024-12-01-preview';
       // The endpoint path will be appended by the OpenAI SDK, so we just set the base
       // Azure format: {baseUrl}/chat/completions?api-version={version}
       finalGatewayUrl = `${gatewayUrl}?api-version=${apiVersion}`;

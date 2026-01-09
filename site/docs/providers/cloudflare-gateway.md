@@ -36,7 +36,9 @@ export CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 export CLOUDFLARE_GATEWAY_ID=your_gateway_id_here
 ```
 
-You also need to set the API key for the underlying provider you're routing through:
+### Provider API Keys
+
+You need API keys for the providers you're routing through:
 
 ```sh
 # For OpenAI
@@ -47,6 +49,32 @@ export ANTHROPIC_API_KEY=your_anthropic_key
 
 # For Groq
 export GROQ_API_KEY=your_groq_key
+```
+
+### Using BYOK (Bring Your Own Keys)
+
+If you've configured [BYOK in Cloudflare](https://developers.cloudflare.com/ai-gateway/configuration/byok/), you can omit provider API keys entirely. Cloudflare will use the keys stored in your gateway configuration.
+
+```yaml
+providers:
+  # No OPENAI_API_KEY needed - Cloudflare uses stored key
+  - id: cloudflare-gateway:openai:gpt-4o
+    config:
+      accountId: ${CLOUDFLARE_ACCOUNT_ID}
+      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      cfAigToken: ${CF_AIG_TOKEN}
+```
+
+:::note
+BYOK works best with OpenAI-compatible providers. Anthropic requires an API key because the SDK mandates it.
+:::
+
+### Authenticated Gateways
+
+If your gateway has [Authenticated Gateway](https://developers.cloudflare.com/ai-gateway/configuration/authenticated-gateway/) enabled, you must provide the `cfAigToken`:
+
+```sh
+export CF_AIG_TOKEN=your_gateway_token_here
 ```
 
 ## Basic Usage
@@ -111,7 +139,7 @@ Azure OpenAI requires additional configuration:
 | ---------------- | ------ | ------------------------------------------------- |
 | `resourceName`   | string | Azure OpenAI resource name (required)             |
 | `deploymentName` | string | Azure OpenAI deployment name (required)           |
-| `apiVersion`     | string | Azure API version (default: `2024-02-15-preview`) |
+| `apiVersion`     | string | Azure API version (default: `2024-12-01-preview`) |
 
 ```yaml
 providers:
@@ -121,7 +149,7 @@ providers:
       gatewayId: ${CLOUDFLARE_GATEWAY_ID}
       resourceName: my-azure-resource
       deploymentName: my-gpt4-deployment
-      apiVersion: 2024-02-15-preview
+      apiVersion: 2024-12-01-preview
 ```
 
 ### Workers AI Configuration
