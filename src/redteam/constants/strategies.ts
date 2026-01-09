@@ -19,7 +19,6 @@ export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
 export const MULTI_TURN_STRATEGIES = [
   'crescendo',
   'goat',
-  'indirect-web-pwn',
   'jailbreak:hydra',
   'custom',
   'mischievous-user',

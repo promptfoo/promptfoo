@@ -39,6 +39,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
   'guardrails-eval':
     'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -167,7 +168,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
-  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   'special-token-injection':
     'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
@@ -224,6 +224,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
@@ -334,7 +335,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
-  simba: 'Simba Red Team Agent',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
@@ -972,6 +972,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via web fetch',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -997,7 +998,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
@@ -1015,6 +1015,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
@@ -1035,7 +1036,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
-  simba: 'Simba Red Team Agent',
   video: 'Video',
 };
 
@@ -1050,7 +1050,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
+  'OWASP Top 10 for Agentic Applications': 'OWASP Top 10 for Agentic Applications (ASI01-ASI10)',
   'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
