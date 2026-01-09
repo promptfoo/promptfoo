@@ -30,7 +30,13 @@ export default function EventCard({ event }: EventCardProps): React.ReactElement
         {event.id === 'bsides-sf-2026' && (
           <div className={styles.imageOverlay}>
             <span className={styles.overlayTitle}>BSidesSF 2026</span>
-            <span className={styles.overlayMeta}>March 21-22, 2026 · San Francisco</span>
+            <span className={styles.overlayMeta}>March 21-22, 2026 · San Francisco, CA</span>
+          </div>
+        )}
+        {event.id === 'rsa-2026' && (
+          <div className={styles.imageOverlay}>
+            <span className={styles.overlayTitle}>RSA Conference 2026</span>
+            <span className={styles.overlayMeta}>March 23-26, 2026 · San Francisco, CA</span>
           </div>
         )}
         <span className={`${styles.badge} ${styles[event.status]}`}>
