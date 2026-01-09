@@ -23,7 +23,6 @@ npx promptfoo@latest eval
 | --------------------- | --------------------------- |
 | `quiverai:model`      | Chat completions (default)  |
 | `quiverai:chat:model` | Chat completions (explicit) |
-| `quiverai:svg:model`  | Native SVG API              |
 
 ## Learn More
 

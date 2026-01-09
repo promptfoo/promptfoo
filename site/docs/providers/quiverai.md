@@ -1,11 +1,11 @@
 ---
 sidebar_label: QuiverAI
-description: Configure QuiverAI for chat completions and SVG vector graphics generation with customizable styles and editing capabilities
+description: Configure QuiverAI for chat completions and SVG vector graphics generation
 ---
 
 # QuiverAI
 
-[QuiverAI](https://quiver.ai) provides an OpenAI-compatible chat API and a specialized SVG generation API. The chat provider extends the [OpenAI provider](/docs/providers/openai/) and supports all standard options.
+[QuiverAI](https://quiver.ai) provides an OpenAI-compatible chat API that excels at generating SVG vector graphics. The provider extends the [OpenAI provider](/docs/providers/openai/) and supports all standard options.
 
 ## Setup
 
@@ -18,99 +18,50 @@ description: Configure QuiverAI for chat completions and SVG vector graphics gen
 | -------------------------- | --------------------------- |
 | `quiverai:model-name`      | Chat completions (default)  |
 | `quiverai:chat:model-name` | Chat completions (explicit) |
-| `quiverai:svg:model-name`  | SVG generation              |
 
-## Chat Provider
-
-The chat provider uses QuiverAI's OpenAI-compatible API:
+## Configuration
 
 ```yaml
 providers:
-  - id: quiverai:chat:arrow-0.5
+  - id: quiverai:arrow-0.5
     config:
       temperature: 0.7
-      max_tokens: 4000
+      max_tokens: 4096
 ```
 
-### Chat Configuration Options
+### Configuration Options
 
 All [OpenAI configuration options](/docs/providers/openai/#configuring-parameters) are supported, plus:
 
-- `reasoning_effort` - QuiverAI-specific reasoning parameter
+| Option             | Type   | Description                           |
+| ------------------ | ------ | ------------------------------------- |
+| `reasoning_effort` | string | QuiverAI-specific reasoning parameter |
 
-## SVG Provider
+## SVG Generation Example
 
-The SVG provider generates vector graphics from text prompts:
-
-```yaml
-providers:
-  - id: quiverai:svg:arrow-0.5
-    config:
-      svgParams:
-        mode: icon
-        style: gradient
-```
-
-### SVG Configuration Options
-
-| Option                 | Type                                           | Description                          |
-| ---------------------- | ---------------------------------------------- | ------------------------------------ |
-| `operation`            | `generate` \| `edit`                           | Operation type (default: `generate`) |
-| `svgParams.mode`       | `icon` \| `illustration` \| `logo`             | Generation mode                      |
-| `svgParams.style`      | `flat` \| `outline` \| `duotone` \| `gradient` | Visual style                         |
-| `svgParams.complexity` | number                                         | Complexity level                     |
-| `svgParams.viewBox`    | `{width, height}`                              | Custom viewport dimensions           |
-| `sourceSvg`            | string                                         | Source SVG for edit operation        |
-| `sourceSvgUrl`         | string                                         | URL to source SVG for edit operation |
-| `temperature`          | number                                         | Controls randomness                  |
-| `maxOutputTokens`      | number                                         | Maximum output tokens                |
-| `n`                    | number                                         | Number of generations                |
-
-### SVG Generation Example
+QuiverAI's Arrow model is optimized for generating SVG graphics via chat:
 
 ```yaml
 providers:
-  - id: quiverai:svg:arrow-0.5
+  - id: quiverai:arrow-0.5
     config:
-      svgParams:
-        mode: icon
-        style: gradient
-        complexity: 3
-        viewBox:
-          width: 256
-          height: 256
+      max_tokens: 4096
 
 prompts:
-  - 'Create an icon of: {{subject}}'
+  - |
+    [
+      {"role": "system", "content": "You are a vector graphics designer. Output valid SVG code only."},
+      {"role": "user", "content": "Create an SVG of: {{subject}}"}
+    ]
 
 tests:
   - vars:
-      subject: a rocket ship
-```
-
-### SVG Editing Example
-
-Edit existing SVGs by providing source content:
-
-```yaml
-providers:
-  - id: quiverai:svg:arrow-0.5
-    config:
-      operation: edit
-      sourceSvg: '<svg xmlns="http://www.w3.org/2000/svg">...</svg>'
-
-prompts:
-  - 'Change the color to blue'
-```
-
-Or reference a URL:
-
-```yaml
-providers:
-  - id: quiverai:svg:arrow-0.5
-    config:
-      operation: edit
-      sourceSvgUrl: 'https://example.com/icon.svg'
+      subject: a red heart icon
+    assert:
+      - type: contains
+        value: '<svg'
+      - type: contains
+        value: '</svg>'
 ```
 
 ## Environment Variables
@@ -119,13 +70,6 @@ providers:
 | ----------------------- | ------------------- |
 | `QUIVERAI_API_KEY`      | API key (required)  |
 | `QUIVERAI_API_BASE_URL` | Custom API base URL |
-
-## API Details
-
-- Base URL: `https://api.quiver.ai/v1`
-- Chat endpoint: OpenAI-compatible `/chat/completions`
-- SVG generate endpoint: `/svg/generate`
-- SVG edit endpoint: `/svg/edits`
 
 ## See Also
 
