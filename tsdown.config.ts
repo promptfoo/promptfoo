@@ -39,7 +39,7 @@ export default defineConfig([
   },
   // CLI binary (ESM only)
   {
-    entry: ['src/main.ts'],
+    entry: ['src/entrypoint.ts', 'src/main.ts'],
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
