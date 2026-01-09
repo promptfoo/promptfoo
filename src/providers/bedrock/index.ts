@@ -2265,6 +2265,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         return {
           output: model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }

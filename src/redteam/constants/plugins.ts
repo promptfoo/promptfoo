@@ -400,6 +400,18 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ].sort(),
 ] as const satisfies readonly Plugin[]);
 
+export const MINIMAL_TEST_PLUGINS: ReadonlySet<Plugin> = new Set([
+  'harmful:hate',
+  'harmful:self-harm',
+] as const satisfies readonly Plugin[]);
+
+export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...DEFAULT_PLUGINS,
+  'bola',
+  'bfla',
+  'rbac',
+] as const satisfies readonly Plugin[]);
+
 export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([
     ...DEFAULT_PLUGINS,

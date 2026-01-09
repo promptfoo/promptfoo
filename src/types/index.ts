@@ -164,6 +164,12 @@ export interface RunEvalOptions {
   concurrency?: number;
 
   /**
+   * Evaluation ID for tracking blob references in the database.
+   * When set, allows blob storage to record references for access control.
+   */
+  evalId?: string;
+
+  /**
    * AbortSignal that can be used to cancel the evaluation
    * This is passed to the provider's callApi function
    */

@@ -132,8 +132,22 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const abortController = new AbortController();
     cleanupRefs.abortController = abortController; // Update ref for signal handlers
 
+    // Parse PR context early for auth (if --github-pr provided)
+    // This is needed for fork PR authentication where OIDC is unavailable
+    let parsedPR: { owner: string; repo: string; number: number } | undefined;
+    if (options.githubPr) {
+      const parsed = parseGitHubPr(options.githubPr);
+      if (!parsed) {
+        throw new Error(
+          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
+        );
+      }
+      parsedPR = parsed;
+    }
+
     // Resolve auth credentials for socket.io
-    const auth = resolveAuthCredentials(options.apiKey);
+    // Pass PR context for fork PR authentication fallback
+    const auth = resolveAuthCredentials(options.apiKey, parsedPR);
 
     // Determine API host URL
     const apiHost = resolveApiHost(options, config);
@@ -234,27 +248,21 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
     // Build pull request context if --github-pr flag provided
+    // Reuse parsedPR from earlier (already validated for auth)
     let pullRequest: PullRequestContext | undefined = undefined;
-    if (options.githubPr) {
-      const parsed = parseGitHubPr(options.githubPr);
-      if (!parsed) {
-        throw new Error(
-          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
-        );
-      }
-
+    if (parsedPR) {
       // Get current commit SHA
       const currentCommit = await git.revparse(['HEAD']);
 
       pullRequest = {
-        owner: parsed.owner,
-        repo: parsed.repo,
-        number: parsed.number,
+        owner: parsedPR.owner,
+        repo: parsedPR.repo,
+        number: parsedPR.number,
         sha: currentCommit.trim(),
       };
 
       logger.debug(
-        `GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`,
+        `GitHub PR context: ${parsedPR.owner}/${parsedPR.repo}#${parsedPR.number} (${pullRequest.sha.substring(0, 7)})`,
       );
     }
 

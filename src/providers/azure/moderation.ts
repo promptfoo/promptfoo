@@ -196,7 +196,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
-        return cachedResponse;
+        return { ...cachedResponse, cached: true };
       }
     }
 

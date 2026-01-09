@@ -232,7 +232,7 @@ export function DataTable<TData, TValue = unknown>({
         setPagination(updater);
       });
     },
-    getRowId: getRowId ? (row) => getRowId(row) : undefined,
+    getRowId: (row, index) => (getRowId ? `${getRowId(row)}-${index}` : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -383,8 +383,10 @@ export function DataTable<TData, TValue = unknown>({
                     <td
                       key={cell.id}
                       className={cn(
-                        'px-4 py-3 text-sm overflow-hidden text-ellipsis',
-                        cell.column.id === 'select' && 'cursor-pointer',
+                        'px-4 py-3 text-sm',
+                        cell.column.id === 'select'
+                          ? 'cursor-pointer'
+                          : 'overflow-hidden text-ellipsis',
                       )}
                       style={{ width: cell.column.getSize() }}
                       onClick={
