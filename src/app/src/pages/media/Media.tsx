@@ -82,11 +82,23 @@ export default function Media() {
     useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
   const { evals } = useEvalsWithMedia();
 
-  // Clean up expired thumbnails on page load
+  // Clean up expired thumbnails after initial render (non-blocking)
   useEffect(() => {
-    clearExpiredThumbnails().catch(() => {
-      // Silently ignore cache cleanup errors
-    });
+    // Use requestIdleCallback to run cleanup during idle time, with setTimeout fallback
+    const runCleanup = () => {
+      clearExpiredThumbnails().catch(() => {
+        // Silently ignore cache cleanup errors
+      });
+    };
+
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(runCleanup, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    } else {
+      // Fallback: defer to next macrotask to not block render
+      const id = setTimeout(runCleanup, 1000);
+      return () => clearTimeout(id);
+    }
   }, []);
 
   // Handle Escape key to exit selection mode
