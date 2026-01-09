@@ -262,6 +262,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: any = undefined;
+      let hasFinalized = false;
 
       const isTextExpected =
         this.config.generationConfig?.response_modalities?.includes('text') ?? false;
@@ -283,6 +284,13 @@ export class GoogleLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
+        // Prevent multiple calls to finalizeResponse
+        if (hasFinalized) {
+          logger.debug('finalizeResponse already called, skipping duplicate call');
+          return;
+        }
+        hasFinalized = true;
+
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
