@@ -507,6 +507,7 @@ export default function PluginsTab({
                   suite={suite}
                   selectedPlugins={selectedPlugins}
                   onPluginToggle={handlePluginToggle}
+                  setSelectedPlugins={setSelectedPlugins}
                   onConfigClick={handleConfigClick}
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}

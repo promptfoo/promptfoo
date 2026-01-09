@@ -37,16 +37,13 @@ vi.mock('./TestCaseDialog', () => ({
 }));
 
 const mockRedTeamConfig = {
-  config: {
-    plugins: [],
-    description: '',
-    prompts: [],
-    target: { id: '', config: {} },
-    strategies: [],
-    applicationDefinition: {},
-    entities: [],
-  },
-  updatePlugins: vi.fn(),
+  plugins: [],
+  description: '',
+  prompts: [],
+  target: { id: '', config: {} },
+  strategies: [],
+  applicationDefinition: {},
+  entities: [],
 };
 
 // Helper function for rendering with providers
