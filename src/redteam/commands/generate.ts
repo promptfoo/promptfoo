@@ -115,7 +115,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
@@ -171,7 +170,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    resolvedConfigMetadata = resolved.config.metadata;
     commandLineOptions = resolved.commandLineOptions;
     resolvedConfig = resolved.config;
 
