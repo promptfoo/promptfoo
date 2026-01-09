@@ -206,6 +206,10 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
+  /** UUID of the cloud config when running from cloud */
+  cloudConfigId?: string;
+  /** UUID of the cloud target when running from cloud */
+  cloudTargetId?: string;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -261,6 +265,10 @@ export interface RedteamRunOptions {
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
+  /** UUID of the cloud config when running from cloud */
+  cloudConfigId?: string;
+  /** UUID of the cloud target when running from cloud */
+  cloudTargetId?: string;
 }
 
 export interface SavedRedteamConfig {
