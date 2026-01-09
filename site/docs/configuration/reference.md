@@ -346,16 +346,6 @@ extensions:
 When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
 :::
 
-**Hook-specific extensions**: You can also create extensions that only run for specific hooks by using the hook name as the function name:
-
-```yaml
-extensions:
-  - file://path/to/hooks.js:beforeAll # Only runs for beforeAll
-  - file://path/to/hooks.js:afterEach # Only runs for afterEach
-```
-
-Hook-specific extensions receive `(context, { hookName })` instead of `(hookName, context)`, since they already know which hook they're handling.
-
 Python example extension file:
 
 ```python
