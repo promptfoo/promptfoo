@@ -202,9 +202,7 @@ export class QuiverAiSvgProvider implements ApiProvider {
 
     if (operation === 'edit') {
       if (!config.sourceSvg && !config.sourceSvgUrl) {
-        throw new Error(
-          'SVG edit operation requires sourceSvg or sourceSvgUrl in provider config',
-        );
+        throw new Error('SVG edit operation requires sourceSvg or sourceSvgUrl in provider config');
       }
       body.input = {
         prompt,

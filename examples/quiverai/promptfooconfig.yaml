@@ -1,29 +1,27 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# QuiverAI Provider Example
-# This example demonstrates QuiverAI's SVG generation capabilities.
-#
-# Prerequisites:
-# 1. Set your API key: export QUIVERAI_API_KEY=your-key-here
-# 2. Run: npx promptfoo@latest init --example quiverai
-#    Or:  npm run local -- eval -c examples/quiverai/promptfooconfig.yaml --env-file .env
-
-description: QuiverAI SVG Generation
+description: QuiverAI SVG generation
 
 providers:
-  # Chat provider - uses OpenAI-compatible API
-  - id: quiverai:arrow-0.5
-    label: QuiverAI Arrow
+  - id: quiverai:chat:arrow-0.5
+    config:
+      max_tokens: 4096
 
 prompts:
-  - |
-    [
-      {"role": "system", "content": "You are a helpful assistant that creates SVG graphics."},
-      {"role": "user", "content": "Create an SVG of {{description}}"}
-    ]
+  - file://prompt.json
+
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+    rubricPrompt: |
+      Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
+      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
+
+      SVG: {{ output }}
+      Criteria: {{ value }}
 
 tests:
   - vars:
-      description: a simple red heart icon
+      subject: a red heart icon
     assert:
       - type: contains
         value: '<svg'
@@ -31,13 +29,22 @@ tests:
         value: '</svg>'
 
   - vars:
-      description: a blue checkmark icon
+      subject: a yellow 5-pointed star
     assert:
-      - type: contains
-        value: '<svg'
+      - type: llm-rubric
+        value: Contains a star shape in yellow/gold color
+        threshold: 0.5
 
   - vars:
-      description: a yellow star shape
+      subject: a rocket ship with flames
     assert:
-      - type: contains
-        value: '<svg'
+      - type: llm-rubric
+        value: Contains a rocket shape with exhaust/flames in warm colors
+        threshold: 0.4
+
+  - vars:
+      subject: a cute red panda face
+    assert:
+      - type: llm-rubric
+        value: Contains a face with red/orange coloring suggestive of a red panda
+        threshold: 0.4

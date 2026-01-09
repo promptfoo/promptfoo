@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../src/cache';
 import {
   createQuiverAiProvider,
   QuiverAiChatProvider,
   QuiverAiSvgProvider,
 } from '../../src/providers/quiverai';
-import * as cache from '../../src/cache';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/cache')>();
@@ -151,7 +151,11 @@ describe('QuiverAI Provider', () => {
 
     describe('SVG generation', () => {
       const mockSvgResponse = {
-        data: [{ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>' }],
+        data: [
+          {
+            svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>',
+          },
+        ],
         usage: { input_tokens: 50, output_tokens: 100, total_tokens: 150 },
       };
 

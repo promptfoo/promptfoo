@@ -14,11 +14,11 @@ description: Configure QuiverAI for chat completions and SVG vector graphics gen
 
 ## Provider Formats
 
-| Format                      | Description                    |
-| --------------------------- | ------------------------------ |
-| `quiverai:model-name`       | Chat completions (default)     |
-| `quiverai:chat:model-name`  | Chat completions (explicit)    |
-| `quiverai:svg:model-name`   | SVG generation                 |
+| Format                     | Description                 |
+| -------------------------- | --------------------------- |
+| `quiverai:model-name`      | Chat completions (default)  |
+| `quiverai:chat:model-name` | Chat completions (explicit) |
+| `quiverai:svg:model-name`  | SVG generation              |
 
 ## Chat Provider
 
@@ -53,18 +53,18 @@ providers:
 
 ### SVG Configuration Options
 
-| Option | Type | Description |
-| --- | --- | --- |
-| `operation` | `generate` \| `edit` | Operation type (default: `generate`) |
-| `svgParams.mode` | `icon` \| `illustration` \| `logo` | Generation mode |
-| `svgParams.style` | `flat` \| `outline` \| `duotone` \| `gradient` | Visual style |
-| `svgParams.complexity` | number | Complexity level |
-| `svgParams.viewBox` | `{width, height}` | Custom viewport dimensions |
-| `sourceSvg` | string | Source SVG for edit operation |
-| `sourceSvgUrl` | string | URL to source SVG for edit operation |
-| `temperature` | number | Controls randomness |
-| `maxOutputTokens` | number | Maximum output tokens |
-| `n` | number | Number of generations |
+| Option                 | Type                                           | Description                          |
+| ---------------------- | ---------------------------------------------- | ------------------------------------ |
+| `operation`            | `generate` \| `edit`                           | Operation type (default: `generate`) |
+| `svgParams.mode`       | `icon` \| `illustration` \| `logo`             | Generation mode                      |
+| `svgParams.style`      | `flat` \| `outline` \| `duotone` \| `gradient` | Visual style                         |
+| `svgParams.complexity` | number                                         | Complexity level                     |
+| `svgParams.viewBox`    | `{width, height}`                              | Custom viewport dimensions           |
+| `sourceSvg`            | string                                         | Source SVG for edit operation        |
+| `sourceSvgUrl`         | string                                         | URL to source SVG for edit operation |
+| `temperature`          | number                                         | Controls randomness                  |
+| `maxOutputTokens`      | number                                         | Maximum output tokens                |
+| `n`                    | number                                         | Number of generations                |
 
 ### SVG Generation Example
 
@@ -115,9 +115,9 @@ providers:
 
 ## Environment Variables
 
-| Variable | Description |
-| --- | --- |
-| `QUIVERAI_API_KEY` | API key (required) |
+| Variable                | Description         |
+| ----------------------- | ------------------- |
+| `QUIVERAI_API_KEY`      | API key (required)  |
 | `QUIVERAI_API_BASE_URL` | Custom API base URL |
 
 ## API Details
