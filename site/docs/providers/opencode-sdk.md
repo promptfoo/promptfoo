@@ -299,6 +299,12 @@ providers:
 | `doom_loop`          | Prevents infinite agent loops    |
 | `external_directory` | Access outside working directory |
 
+:::tip Security Recommendation
+
+For security-conscious deployments, set `doom_loop: deny` and `external_directory: deny` to prevent infinite agent loops and restrict file access to the working directory.
+
+:::
+
 ## Session Management
 
 ### Ephemeral Sessions (Default)
