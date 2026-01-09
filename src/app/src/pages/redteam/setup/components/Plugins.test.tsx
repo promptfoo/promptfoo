@@ -152,11 +152,12 @@ describe('Plugins', () => {
     expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
   });
 
-  it('should call onBack when the Back button is clicked', () => {
+  it('should call onBack when the Back button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const backButton = screen.getByRole('button', { name: /Back/i });
-    fireEvent.click(backButton);
+    await user.click(backButton);
     expect(mockOnBack).toHaveBeenCalled();
   });
 
@@ -685,16 +686,14 @@ describe('Plugins', () => {
   describe('State Persistence When Switching Tabs', () => {
     it('should maintain plugin selections when switching between tabs', async () => {
       const user = userEvent.setup();
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Select a plugin via preset
-      const recommendedPreset = screen.getByText('Recommended');
-      await user.click(recommendedPreset);
-
-      // Wait for the preset to be applied
-      await waitFor(() => {
-        expect(screen.getByText('Recommended')).toBeInTheDocument();
+      // Start with plugins already selected (simulates preset was applied previously)
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: ['harmful:hate', 'bola', 'pii:direct'],
+        },
+        updatePlugins: mockUpdatePlugins,
       });
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check that the plugins tab shows selected plugins count > 0
       const pluginsTabInitial = screen.getByRole('tab', { name: /Plugins/ });
@@ -708,7 +707,7 @@ describe('Plugins', () => {
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       await user.click(pluginsTab);
 
-      // The plugins count should still be greater than 0 (state persisted)
+      // The plugins count should still be greater than 0 (state persisted via Zustand store)
       await waitFor(() => {
         const pluginsTabAfter = screen.getByRole('tab', { name: /Plugins/ });
         expect(pluginsTabAfter.textContent).not.toBe('Plugins (0)');
@@ -1045,6 +1044,7 @@ describe('Plugins', () => {
   // Test for infinite loop fix - updatePlugins compares merged output vs current state
   describe('Plugin sync effect stability', () => {
     it('should not cause infinite re-renders when selecting presets', async () => {
+      const user = userEvent.setup();
       // Set up config with existing intent plugin
       const configWithIntent = {
         plugins: [
@@ -1062,7 +1062,7 @@ describe('Plugins', () => {
 
       // Select a preset to trigger user interaction and the sync effect
       const recommendedPreset = screen.getByText('Recommended');
-      fireEvent.click(recommendedPreset);
+      await user.click(recommendedPreset);
 
       // updatePlugins should be called a bounded number of times (not infinite)
       // The fix in updatePlugins compares merged output vs current state to prevent loops
@@ -1072,6 +1072,7 @@ describe('Plugins', () => {
     });
 
     it('should preserve policy and intent plugins when syncing regular plugins', async () => {
+      const user = userEvent.setup();
       const intentPlugin = { id: 'intent', config: { intent: ['test intent'] } };
       const policyPlugin = { id: 'policy', config: { policy: 'test policy' } };
 
@@ -1088,7 +1089,7 @@ describe('Plugins', () => {
 
       // Select a preset to add regular plugins
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
@@ -1107,6 +1108,7 @@ describe('Plugins', () => {
     });
 
     it('should not cause re-render loop when config.plugins changes from updatePlugins', async () => {
+      const user = userEvent.setup();
       // This test verifies the fix for the infinite loop bug
       // The bug was: effect depends on config.plugins -> calls updatePlugins ->
       // config.plugins changes -> effect runs again -> infinite loop
@@ -1127,7 +1129,7 @@ describe('Plugins', () => {
 
       // Trigger user interaction
       const minimalPreset = screen.getByText('Minimal Test');
-      fireEvent.click(minimalPreset);
+      await user.click(minimalPreset);
 
       // Wait a bit for any potential infinite loops to manifest
       await act(async () => {
