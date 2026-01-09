@@ -664,8 +664,13 @@ function buildProviderErrorContext({
   })();
   const errorMessage = String(error);
   const stack = (error as Error)?.stack;
-  const errorWithStack =
-    stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+  // Stack traces typically start with the error message, so check if stack already contains
+  // the message to avoid duplication like "Error: msg\n\nError: msg\n    at ..."
+  const errorWithStack = stack
+    ? stack.startsWith(errorMessage)
+      ? stack // Stack already contains the message
+      : `${errorMessage}\n\n${stack}`
+    : errorMessage;
 
   return {
     errorWithStack,
