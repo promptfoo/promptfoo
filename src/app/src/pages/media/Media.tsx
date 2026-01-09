@@ -23,6 +23,7 @@ import {
 } from '@app/components/ui/dropdown-menu';
 import { Progress } from '@app/components/ui/progress';
 import { Spinner } from '@app/components/ui/spinner';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { generateMediaFilename } from '@app/utils/media';
 import { AlertCircle, ChevronDown, Download, MousePointerClick, RefreshCw, X } from 'lucide-react';
@@ -81,6 +82,9 @@ export default function Media() {
   const { items, total, isLoading, isLoadingMore, error, hasMore, loadMore, refresh } =
     useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
   const { evals } = useEvalsWithMedia();
+
+  // Telemetry
+  const { recordEvent } = useTelemetry();
 
   // Clean up expired thumbnails after initial render (non-blocking)
   useEffect(() => {
@@ -234,17 +238,29 @@ export default function Media() {
     }
   }, [hashParam, items, isLoading]);
 
-  const handleTypeFilterChange = useCallback((type: MediaTypeFilter) => {
-    setTypeFilter(type);
-    lastInternalSelectionRef.current = 'cleared';
-    setSelectedItem(null);
-  }, []);
+  const handleTypeFilterChange = useCallback(
+    (type: MediaTypeFilter) => {
+      setTypeFilter(type);
+      lastInternalSelectionRef.current = 'cleared';
+      setSelectedItem(null);
+      recordEvent('feature_used', {
+        feature: 'media_library_filter',
+        filterType: 'type',
+        value: type,
+      });
+    },
+    [recordEvent],
+  );
 
-  const handleEvalFilterChange = useCallback((evalId: string) => {
-    setEvalFilter(evalId);
-    lastInternalSelectionRef.current = 'cleared';
-    setSelectedItem(null);
-  }, []);
+  const handleEvalFilterChange = useCallback(
+    (evalId: string) => {
+      setEvalFilter(evalId);
+      lastInternalSelectionRef.current = 'cleared';
+      setSelectedItem(null);
+      recordEvent('feature_used', { feature: 'media_library_filter', filterType: 'eval' });
+    },
+    [recordEvent],
+  );
 
   const handleClearFilters = useCallback(() => {
     setTypeFilter('all');
@@ -253,10 +269,14 @@ export default function Media() {
     setSelectedItem(null);
   }, []);
 
-  const handleItemClick = useCallback((item: MediaItem) => {
-    lastInternalSelectionRef.current = item.hash;
-    setSelectedItem(item);
-  }, []);
+  const handleItemClick = useCallback(
+    (item: MediaItem) => {
+      lastInternalSelectionRef.current = item.hash;
+      setSelectedItem(item);
+      recordEvent('feature_used', { feature: 'media_library_view', mediaKind: item.kind });
+    },
+    [recordEvent],
+  );
 
   const handleModalClose = useCallback(() => {
     lastInternalSelectionRef.current = 'cleared';
@@ -309,6 +329,13 @@ export default function Media() {
     if (itemsToDownload.length === 0) {
       return;
     }
+
+    // Track bulk download usage
+    recordEvent('feature_used', {
+      feature: 'media_library_download',
+      downloadType: isSelectionMode && selectedHashes.size > 0 ? 'selected' : 'all',
+      count: itemsToDownload.length,
+    });
 
     // Cancel any existing download
     downloadAbortRef.current?.abort();
@@ -376,7 +403,7 @@ export default function Media() {
         setSelectedHashes(new Set());
       }
     }
-  }, [items, isSelectionMode, selectedHashes]);
+  }, [items, isSelectionMode, selectedHashes, recordEvent]);
 
   const handleCancelDownload = useCallback(() => {
     downloadAbortRef.current?.abort();
