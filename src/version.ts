@@ -11,7 +11,6 @@
 // In development/test environments, these remain undefined.
 declare const __PROMPTFOO_VERSION__: string | undefined;
 declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;
-declare const __PROMPTFOO_ENGINES_NODE__: string | undefined;
 
 /**
  * Application version from package.json.
@@ -29,14 +28,3 @@ export const VERSION: string =
  */
 export const POSTHOG_KEY: string =
   typeof __PROMPTFOO_POSTHOG_KEY__ !== 'undefined' ? __PROMPTFOO_POSTHOG_KEY__ : '';
-
-/**
- * Node.js engine requirements from package.json.
- * Used for version checking at startup.
- */
-export const ENGINES = {
-  node:
-    typeof __PROMPTFOO_ENGINES_NODE__ !== 'undefined'
-      ? __PROMPTFOO_ENGINES_NODE__
-      : (process.env.npm_package_engines_node ?? '>=20.0.0'),
-} as const;

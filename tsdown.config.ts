@@ -10,7 +10,6 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 const versionDefines = {
   __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
   __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
-  __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
 };
 
 // All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
