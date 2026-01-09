@@ -34,7 +34,7 @@ export function DataTableToolbar<TData>({
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
+                <Download className="mr-2 size-4" />
                 Export
               </Button>
             </DropdownMenuTrigger>

@@ -15,7 +15,8 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { Check } from 'lucide-react';
+import yaml from 'js-yaml';
+import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import { InfoBox } from './InfoBox';
@@ -25,7 +26,7 @@ import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { ProviderOptions } from '@promptfoo/types';
+import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 function ErrorFallback({
   error,
@@ -53,6 +54,8 @@ const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
+  const [resetKey, setResetKey] = useState(0);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -76,6 +79,7 @@ const EvaluateTestSuiteCreator = () => {
   }, []);
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     let isMounted = true;
 
@@ -150,7 +154,41 @@ const EvaluateTestSuiteCreator = () => {
 
   const handleReset = () => {
     reset();
+    setResetKey((k) => k + 1);
     setResetDialogOpen(false);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        if (content) {
+          try {
+            const parsedConfig = yaml.load(content) as Record<string, unknown>;
+            if (parsedConfig && typeof parsedConfig === 'object') {
+              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+              setResetKey((k) => k + 1);
+              showToast('Configuration loaded successfully', 'success');
+            } else {
+              showToast('Invalid YAML configuration', 'error');
+            }
+          } catch (err) {
+            showToast(
+              `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`,
+              'error',
+            );
+          }
+        }
+      };
+      reader.onerror = () => {
+        showToast('Failed to read file', 'error');
+      };
+      reader.readAsText(file);
+    }
+    // Reset the input so the same file can be uploaded again
+    event.target.value = '';
   };
 
   return (
@@ -169,6 +207,17 @@ const EvaluateTestSuiteCreator = () => {
 
               <div className="flex items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
+                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="size-4 mr-2" />
+                  Upload YAML
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".yaml,.yml"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
                 <Button variant="outline" onClick={() => setResetDialogOpen(true)}>
                   Reset
                 </Button>
@@ -190,7 +239,7 @@ const EvaluateTestSuiteCreator = () => {
           <div className="container max-w-7xl mx-auto px-4 py-8">
             <div className="flex gap-8">
               {/* Left Sidebar - Step Navigation */}
-              <div className="w-64 flex-shrink-0">
+              <div className="w-64 shrink-0">
                 <div className="sticky top-8 space-y-2">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-4 px-3">
                     SETUP STEPS
@@ -200,7 +249,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(1)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 1 && 'ring-2 ring-primary',
                       normalizedProviders.length > 0
@@ -211,14 +260,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           normalizedProviders.length > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {normalizedProviders.length > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">1</span>
                         )}
@@ -238,7 +287,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(2)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 2 && 'ring-2 ring-primary',
                       normalizedPrompts.length > 0
@@ -249,14 +298,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           normalizedPrompts.length > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {normalizedPrompts.length > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">2</span>
                         )}
@@ -276,7 +325,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(3)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 3 && 'ring-2 ring-primary',
                       testCount > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-background',
@@ -285,14 +334,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           testCount > 0
                             ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {testCount > 0 ? (
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">3</span>
                         )}
@@ -312,7 +361,7 @@ const EvaluateTestSuiteCreator = () => {
                   <button
                     onClick={() => setActiveStep(4)}
                     className={cn(
-                      'w-full text-left px-3 py-3 rounded-lg transition-all',
+                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
                       'hover:bg-muted/50',
                       activeStep === 4 && 'ring-2 ring-primary',
                       config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
@@ -323,14 +372,14 @@ const EvaluateTestSuiteCreator = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0',
+                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
                             ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency ? (
-                          <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          <Check className="size-4 text-blue-600 dark:text-blue-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">4</span>
                         )}
@@ -604,7 +653,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor />
+            <YamlEditor key={resetKey} />
           </div>
         </TabsContent>
       </Tabs>

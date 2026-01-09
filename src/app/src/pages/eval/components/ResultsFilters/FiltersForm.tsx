@@ -156,6 +156,7 @@ function FilterRow({
     fetchMetadataValues,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTypeChange = useCallback(
     (type: ResultsFilter['type']) => {
       const updatedFilter = { ...filter, type, value: '' };
@@ -381,7 +382,7 @@ function FilterRow({
         (metadataKeysLoading ? (
           <div className="relative w-[140px]">
             <Input value="" placeholder="Loading keys..." disabled className="h-8 pr-8" />
-            <Spinner className="h-3 w-3 absolute right-2 top-2.5" />
+            <Spinner className="size-3 absolute right-2 top-2.5" />
           </div>
         ) : metadataKeys && metadataKeys.length > 0 ? (
           <Select value={filter.field || ''} onValueChange={handleFieldChange}>
@@ -485,7 +486,7 @@ function FilterRow({
               disabled={!metadataKey || !evalId}
               className={cn('h-8', metadataValuesHadError && 'border-destructive')}
             />
-            {metadataValuesAreLoading && <Spinner className="h-3 w-3 absolute right-2 top-2.5" />}
+            {metadataValuesAreLoading && <Spinner className="size-3 absolute right-2 top-2.5" />}
             <datalist id={`metadata-values-${filter.id}`}>
               {metadataValueOptions.map((option) => (
                 <option key={option} value={option} />
@@ -506,9 +507,9 @@ function FilterRow({
         variant="ghost"
         size="sm"
         onClick={onRemove}
-        className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-destructive"
+        className="size-8 p-0 shrink-0 text-muted-foreground hover:text-destructive"
       >
-        <X className="h-4 w-4" />
+        <X className="size-4" />
       </Button>
     </div>
   );
@@ -572,10 +573,10 @@ export default function FiltersForm() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <SlidersHorizontal className="h-4 w-4 mr-2" />
+          <SlidersHorizontal className="size-4 mr-2" />
           Filters
           {activeFilterCount > 0 && (
-            <span className="ml-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+            <span className="ml-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
               {activeFilterCount}
             </span>
           )}
@@ -623,7 +624,7 @@ export default function FiltersForm() {
 
           {/* Add filter button */}
           <Button variant="outline" size="sm" onClick={handleAddFilter} className="w-full">
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 size-4" />
             Add filter
           </Button>
         </div>

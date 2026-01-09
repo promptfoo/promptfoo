@@ -263,12 +263,12 @@ export default function ChecksSection({
                   <Button variant="ghost" size="sm">
                     {showAssets ? (
                       <>
-                        <ExpandLessIcon className="h-4 w-4 mr-1" />
+                        <ExpandLessIcon className="size-4 mr-1" />
                         Hide Details
                       </>
                     ) : (
                       <>
-                        <ExpandMoreIcon className="h-4 w-4 mr-1" />
+                        <ExpandMoreIcon className="size-4 mr-1" />
                         Show Details
                       </>
                     )}

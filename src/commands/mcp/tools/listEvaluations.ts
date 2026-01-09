@@ -56,7 +56,7 @@ export function registerListEvaluationsTool(server: McpServer) {
         // Add helpful summary information
         const summary = {
           totalCount: paginatedResult.pagination.totalItems,
-          recentCount: evals.filter((e: any) => {
+          recentCount: evals.filter((e) => {
             const createdAt = new Date(e.createdAt);
             const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             return createdAt > dayAgo;

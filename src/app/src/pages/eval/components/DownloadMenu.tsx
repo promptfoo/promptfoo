@@ -23,7 +23,7 @@ export function DownloadMenuItem({ onClick }: DownloadMenuItemProps) {
   return (
     <DropdownMenuItem onSelect={onClick}>
       <DropdownMenuItemIcon>
-        <Download className="h-4 w-4" />
+        <Download className="size-4" />
       </DropdownMenuItemIcon>
       Download
     </DropdownMenuItem>
@@ -297,7 +297,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             <span className="text-sm font-medium text-muted-foreground">{helpText}</span>
             {isDownloaded && (
               <div className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-emerald-500 mr-1" />
+                <CheckCircle className="size-4 text-emerald-500 mr-1" />
                 <span className="text-sm font-medium text-emerald-500">Downloaded</span>
               </div>
             )}
@@ -311,7 +311,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             className="ml-2 p-1 text-primary hover:bg-primary/15 rounded transition-colors"
             aria-label="Copy command"
           >
-            <Copy className="h-4 w-4" />
+            <Copy className="size-4" />
           </button>
         </div>
       </div>
@@ -336,7 +336,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     Complete configuration file for this evaluation
                   </p>
                   <Button onClick={downloadConfig} className="w-full mb-2">
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="size-4 mr-2" />
                     Download YAML Config
                   </Button>
                   {evalId && (
@@ -361,7 +361,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                       table.body.every((row) => row.outputs.every((output) => output?.pass))
                     }
                   >
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="size-4 mr-2" />
                     Download Failed Tests
                   </Button>
                   {evalId && (
@@ -390,7 +390,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                   className="h-12"
                   disabled={isLoadingCsv}
                 >
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
                 </Button>
 
@@ -400,7 +400,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                   className="h-12"
                   disabled={isLoadingJson}
                 >
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
                 </Button>
               </div>
@@ -418,17 +418,17 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Button onClick={downloadBurpPayloads} variant="outline" className="h-12">
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   Burp Payloads
                 </Button>
 
                 <Button onClick={downloadDpoJson} variant="outline" className="h-12">
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   DPO JSON
                 </Button>
 
                 <Button onClick={downloadHumanEvalTestCases} variant="outline" className="h-12">
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   Human Eval YAML
                 </Button>
               </div>

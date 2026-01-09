@@ -28,7 +28,7 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
 
     // LocalFileSystemProvider has a getStats method
     if ('getStats' in storage && typeof storage.getStats === 'function') {
-      const stats = await (storage as any).getStats();
+      const stats = await storage.getStats();
       res.json({
         success: true,
         data: {

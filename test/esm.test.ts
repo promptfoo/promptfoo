@@ -116,7 +116,8 @@ describe('ESM utilities', () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as NodeJS.ErrnoException).code).toBe('ENOENT');
       expect((error as NodeJS.ErrnoException).path).toBe(nonExistentPath);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
+      // Should NOT log error for missing files - this is expected during config discovery
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('logs debug information during import process', async () => {

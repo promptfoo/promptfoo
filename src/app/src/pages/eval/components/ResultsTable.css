@@ -16,6 +16,7 @@ table.results-table,
 .divTable {
   min-width: 100%;
   background-color: #fff;
+  table-layout: fixed;
 }
 
 [data-theme='dark'] table.results-table,

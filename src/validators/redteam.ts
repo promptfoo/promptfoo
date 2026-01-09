@@ -27,15 +27,17 @@ import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import type {
+  PluginConfig,
   RedteamContext,
   RedteamFileConfig,
   RedteamPluginObject,
   RedteamStrategy,
+  TracingConfig,
 } from '../redteam/types';
 
-const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
+const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
     enabled: z.boolean().optional(),
     includeInAttack: z.boolean().optional(),
@@ -356,7 +358,7 @@ export const RedteamConfigSchema = z
 
     const addPlugin = (
       id: string,
-      config: any,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -376,7 +378,7 @@ export const RedteamConfigSchema = z
 
     const expandCollection = (
       collection: string[] | ReadonlySet<Plugin>,
-      config: any,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -390,8 +392,8 @@ export const RedteamConfigSchema = z
     };
 
     const handleCollectionExpansion = (
-      id: string,
-      config: any,
+      id: Collection,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -417,7 +419,7 @@ export const RedteamConfigSchema = z
     };
 
     const handlePlugin = (plugin: string | RedteamPluginObject) => {
-      const pluginObj =
+      const pluginObj: RedteamPluginObject =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
@@ -425,9 +427,9 @@ export const RedteamConfigSchema = z
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
           plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as any)) {
+            if (COLLECTIONS.includes(id as Collection)) {
               handleCollectionExpansion(
-                id,
+                id as Collection,
                 pluginObj.config,
                 pluginObj.numTests,
                 pluginObj.severity,
@@ -438,9 +440,9 @@ export const RedteamConfigSchema = z
           });
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
-      } else if (COLLECTIONS.includes(pluginObj.id as any)) {
+      } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
         handleCollectionExpansion(
-          pluginObj.id,
+          pluginObj.id as Collection,
           pluginObj.config,
           pluginObj.numTests,
           pluginObj.severity,
@@ -452,9 +454,9 @@ export const RedteamConfigSchema = z
         if (mapping) {
           const [, aliasedMapping] = mapping;
           aliasedMapping[pluginObj.id].plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as any)) {
+            if (COLLECTIONS.includes(id as Collection)) {
               handleCollectionExpansion(
-                id,
+                id as Collection,
                 pluginObj.config,
                 pluginObj.numTests,
                 pluginObj.severity,

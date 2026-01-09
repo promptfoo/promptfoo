@@ -148,6 +148,7 @@ export default function ResultsView({
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleFailureFilterToggle = React.useCallback(
     (columnId: string, checked: boolean) => {
       setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
@@ -518,14 +519,23 @@ export default function ResultsView({
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
 
+  // Determine if charts should be rendered based on score variance
+  const uniqueScores = React.useMemo(() => new Set(resultsChartsScores), [resultsChartsScores]);
+  const hasVariedScores = uniqueScores.size > 1;
+  // When all scores are identical, still show charts if the uniform score
+  // is not a binary edge value (0 or 1). Graded assertions (like llm-rubric)
+  // can produce meaningful uniform scores (e.g., 0.85) that users want to visualize.
+  const hasMeaningfulUniformScore =
+    uniqueScores.size === 1 && ![0, 1].includes([...uniqueScores][0]);
+
   const canRenderResultsCharts =
     table &&
     config &&
     table.head.prompts.length > 1 &&
     // No valid scores available
     resultsChartsScores.length > 0 &&
-    // All scores are the same, charts not useful.
-    new Set(resultsChartsScores).size > 1;
+    // Show charts if scores vary OR if uniform score is meaningful (not binary 0/1)
+    (hasVariedScores || hasMeaningfulUniformScore);
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
@@ -541,7 +551,7 @@ export default function ResultsView({
                   <Chip
                     label="EVAL"
                     onClick={() => setEvalSelectorDialogOpen(true)}
-                    trailingIcon={<ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    trailingIcon={<ChevronDown className="size-4 text-muted-foreground" />}
                     className="w-full justify-start [&>span:first-child]:truncate"
                   >
                     {config?.description || evalId || 'Select...'}
@@ -628,7 +638,7 @@ export default function ResultsView({
                       size="sm"
                       onClick={() => setViewSettingsModalOpen(true)}
                     >
-                      <Settings className="h-4 w-4 mr-2" />
+                      <Settings className="size-4 mr-2" />
                       Table Settings
                     </Button>
                   </TooltipTrigger>
@@ -639,12 +649,12 @@ export default function ResultsView({
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm">
                         Eval actions
-                        <ChevronDown className="h-4 w-4 ml-2" />
+                        <ChevronDown className="size-4 ml-2" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
-                        <Edit className="h-4 w-4 mr-2" />
+                        <Edit className="size-4 mr-2" />
                         Edit name
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -653,24 +663,24 @@ export default function ResultsView({
                           navigate('/setup/');
                         }}
                       >
-                        <Play className="h-4 w-4 mr-2" />
+                        <Play className="size-4 mr-2" />
                         Edit and re-run
                       </DropdownMenuItem>
                       <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
                       <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
-                        <Eye className="h-4 w-4 mr-2" />
+                        <Eye className="size-4 mr-2" />
                         View YAML
                       </DropdownMenuItem>
                       <DownloadMenuItem onClick={() => setDownloadDialogOpen(true)} />
                       <DropdownMenuItem onClick={() => setCopyDialogOpen(true)}>
-                        <Copy className="h-4 w-4 mr-2" />
+                        <Copy className="size-4 mr-2" />
                         Copy
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
                         {shareLoading ? (
-                          <Spinner className="h-4 w-4 mr-2" />
+                          <Spinner className="size-4 mr-2" />
                         ) : (
-                          <Share className="h-4 w-4 mr-2" />
+                          <Share className="size-4 mr-2" />
                         )}
                         Share
                       </DropdownMenuItem>
@@ -678,7 +688,7 @@ export default function ResultsView({
                         onClick={handleDeleteEvalClick}
                         className="text-destructive"
                       >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="size-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -690,7 +700,7 @@ export default function ResultsView({
                     size="sm"
                     onClick={() => setRenderResultsCharts((prev) => !prev)}
                   >
-                    <BarChart className="h-4 w-4 mr-2" />
+                    <BarChart className="size-4 mr-2" />
                     {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
                   </Button>
                 )}
@@ -702,7 +712,7 @@ export default function ResultsView({
                         size="sm"
                         onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
                       >
-                        <Eye className="h-4 w-4 mr-2" />
+                        <Eye className="size-4 mr-2" />
                         Vulnerability Report
                       </Button>
                     </TooltipTrigger>
@@ -731,7 +741,7 @@ export default function ResultsView({
                     onClick={handleClearSearch}
                     className="ml-1 hover:bg-muted rounded-full"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="size-3" />
                   </button>
                 </Badge>
               )}
@@ -743,7 +753,7 @@ export default function ResultsView({
                     onClick={() => setFilterMode('all')}
                     className="ml-1 hover:bg-muted rounded-full"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="size-3" />
                   </button>
                 </Badge>
               )}
@@ -836,7 +846,7 @@ export default function ResultsView({
                         onClick={() => removeFilter(filter.id)}
                         className="ml-1 hover:bg-muted rounded-full"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="size-3" />
                       </button>
                     </Badge>
                   );
@@ -850,7 +860,7 @@ export default function ResultsView({
                 <Tooltip>
                   <TooltipTrigger>
                     <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
-                      <Clock className="h-3.5 w-3.5 mr-1" />
+                      <Clock className="size-3.5 mr-1" />
                       {formatDuration(stats.durationMs)}
                     </Badge>
                   </TooltipTrigger>
@@ -927,7 +937,7 @@ export default function ResultsView({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-destructive" />
+              <Trash2 className="size-5 text-destructive" />
               Delete eval?
             </DialogTitle>
           </DialogHeader>
@@ -960,12 +970,12 @@ export default function ResultsView({
             <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeleting}>
               {isDeleting ? (
                 <>
-                  <Spinner className="h-4 w-4 mr-2" />
+                  <Spinner className="size-4 mr-2" />
                   Deleting...
                 </>
               ) : (
                 <>
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Delete
                 </>
               )}

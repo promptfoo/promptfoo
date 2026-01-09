@@ -257,6 +257,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
       if (isStrategyDisabled(strategyId)) {
@@ -591,7 +592,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertTitle>Remote Generation Disabled</AlertTitle>
           <AlertDescription>
             Some strategies require remote generation and are currently unavailable. These
@@ -605,7 +606,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
           <AlertDescription>
             Selecting many strategies is usually not efficient and will significantly increase

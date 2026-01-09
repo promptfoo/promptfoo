@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
-import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -67,7 +67,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="p-4 max-w-full">
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <div className="flex-1">
               <AlertTitle>
                 Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
@@ -76,7 +76,13 @@ class ErrorBoundary extends React.Component<Props, State> {
                 Please try reloading the page.
               </AlertDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={this.handleReload}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={this.handleReload}
+              className="shrink-0 gap-1"
+            >
+              <RefreshCw className="size-3" />
               Reload Page
             </Button>
           </Alert>
@@ -88,12 +94,12 @@ class ErrorBoundary extends React.Component<Props, State> {
                   <Button variant="outline" size="sm" className="mb-2 gap-1">
                     {this.state.showDetails ? (
                       <>
-                        <ChevronUp className="h-4 w-4" />
+                        <ChevronUp className="size-4" />
                         Hide Error Details
                       </>
                     ) : (
                       <>
-                        <ChevronDown className="h-4 w-4" />
+                        <ChevronDown className="size-4" />
                         Show Error Details
                       </>
                     )}
@@ -107,19 +113,21 @@ class ErrorBoundary extends React.Component<Props, State> {
                     )}
                   >
                     <h6 className="text-base font-semibold mb-2">Error Details:</h6>
-                    <pre className="m-0 whitespace-pre-wrap">
+                    <pre className="m-0 whitespace-pre-wrap text-red-700 dark:text-red-400">
                       {this.state.error?.name}: {this.state.error?.message}
                     </pre>
                     {this.state.error?.stack && (
                       <>
                         <h6 className="text-base font-semibold mt-4 mb-2">Stack Trace:</h6>
-                        <pre className="m-0 whitespace-pre-wrap">{this.state.error.stack}</pre>
+                        <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
+                          {this.state.error.stack}
+                        </pre>
                       </>
                     )}
                     {this.state.errorInfo && (
                       <>
                         <h6 className="text-base font-semibold mt-4 mb-2">Component Stack:</h6>
-                        <pre className="m-0 whitespace-pre-wrap">
+                        <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
                           {this.state.errorInfo.componentStack}
                         </pre>
                       </>

@@ -61,6 +61,14 @@ vi.mock('../../../src/util/fetch', async (importOriginal) => {
     fetchWithProxy: vi.fn(),
   };
 });
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    // Mock getGoogleAccessToken to return undefined (no OAuth2 credentials)
+    // This prevents the test from actually trying to authenticate with Google
+    getGoogleAccessToken: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const mockImportModule = vi.mocked(importModule);
 
@@ -405,7 +413,7 @@ describe('GoogleLiveProvider', () => {
     delete process.env.GOOGLE_API_KEY;
 
     await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      'Google authentication is not configured',
     );
 
     if (originalApiKey) {
@@ -651,6 +659,9 @@ describe('GoogleLiveProvider', () => {
       ok: true,
       json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
+
+    // Clear any call history from previous tests to ensure accurate count
+    mockFetchWithProxy.mockClear();
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({

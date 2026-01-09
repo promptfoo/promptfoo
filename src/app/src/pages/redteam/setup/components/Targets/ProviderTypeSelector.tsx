@@ -1031,7 +1031,7 @@ export default function ProviderTypeSelector({
     return (
       <div>
         <div className="flex w-full items-center rounded-lg border-2 border-primary bg-primary/5 p-4">
-          <CheckCircle className="mr-4 h-5 w-5 flex-shrink-0 text-primary" />
+          <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
 
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-2">
@@ -1047,7 +1047,7 @@ export default function ProviderTypeSelector({
             </p>
           </div>
 
-          <div className="ml-4 flex flex-shrink-0 items-center">
+          <div className="ml-4 flex shrink-0 items-center">
             {/* Documentation link */}
             {hasSpecificDocumentation(selectedOption.value) && (
               <Tooltip>
@@ -1058,7 +1058,7 @@ export default function ProviderTypeSelector({
                     rel="noopener noreferrer"
                     className="mr-2 text-muted-foreground hover:text-foreground"
                   >
-                    <HelpCircle className="h-4 w-4" />
+                    <HelpCircle className="size-4" />
                   </a>
                 </TooltipTrigger>
                 <TooltipContent>View {selectedOption.label} documentation</TooltipContent>
@@ -1066,7 +1066,7 @@ export default function ProviderTypeSelector({
             )}
 
             <Button variant="outline" size="sm" onClick={handleEditSelection}>
-              <Edit className="mr-1 h-4 w-4" />
+              <Edit className="mr-1 size-4" />
               Change
             </Button>
           </div>
@@ -1127,7 +1127,7 @@ export default function ProviderTypeSelector({
 
         {/* Search */}
         <div className="relative w-64 shrink-0">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search providers..."
             value={searchTerm}
@@ -1140,7 +1140,7 @@ export default function ProviderTypeSelector({
               onClick={() => setSearchTerm('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </button>
           )}
         </div>
@@ -1209,7 +1209,7 @@ export default function ProviderTypeSelector({
                     </p>
                   </div>
 
-                  <div className="ml-4 flex flex-shrink-0 items-center gap-2">
+                  <div className="ml-4 flex shrink-0 items-center gap-2">
                     {/* Documentation link */}
                     {hasSpecificDocumentation(option.value) && (
                       <Tooltip>
@@ -1221,14 +1221,14 @@ export default function ProviderTypeSelector({
                             onClick={(e) => e.stopPropagation()}
                             className="text-muted-foreground hover:text-foreground"
                           >
-                            <HelpCircle className="h-4 w-4" />
+                            <HelpCircle className="size-4" />
                           </a>
                         </TooltipTrigger>
                         <TooltipContent>View {option.label} documentation</TooltipContent>
                       </Tooltip>
                     )}
 
-                    {isSelected && <CheckCircle className="h-5 w-5 text-primary" />}
+                    {isSelected && <CheckCircle className="size-5 text-primary" />}
                   </div>
                 </div>
               </Fragment>

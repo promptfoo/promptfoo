@@ -89,11 +89,11 @@ function StatCard({
             'active:translate-y-0 active:shadow-md',
           )}
         >
-          <Icon className={cn('h-10 w-10 mb-3', styles.icon)} />
+          <Icon className={cn('size-10 mb-3', styles.icon)} />
           <span className={cn('text-4xl font-bold tracking-tight', styles.count)}>{count}</span>
           <span className="text-sm font-medium text-muted-foreground mt-1">{label}</span>
           {isSelected && (
-            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary animate-pulse" />
+            <span className="absolute -top-1 -right-1 size-3 rounded-full bg-primary animate-pulse" />
           )}
         </button>
       </TooltipTrigger>

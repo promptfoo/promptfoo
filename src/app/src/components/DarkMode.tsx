@@ -15,7 +15,7 @@ function DarkModeToggle({ onToggleDarkMode }: DarkModeToggleProps) {
       onClick={onToggleDarkMode}
       aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
       className={cn(
-        'relative inline-flex h-9 w-9 items-center justify-center rounded-full p-2',
+        'relative inline-flex size-9 items-center justify-center rounded-full p-2',
         'transition-all duration-200',
         'hover:bg-black/[0.04] dark:hover:bg-white/[0.08]',
         'hover:rotate-[15deg]',
@@ -25,14 +25,14 @@ function DarkModeToggle({ onToggleDarkMode }: DarkModeToggleProps) {
       {/* Moon icon - visible in dark mode */}
       <Moon
         className={cn(
-          'h-5 w-5 absolute transition-all duration-200',
+          'size-5 absolute transition-all duration-200',
           isDarkMode ? 'opacity-100 rotate-0' : 'opacity-0 -rotate-90',
         )}
       />
       {/* Sun icon - visible in light mode */}
       <Sun
         className={cn(
-          'h-5 w-5 transition-all duration-200',
+          'size-5 transition-all duration-200',
           isDarkMode ? 'opacity-0 rotate-90' : 'opacity-100 rotate-0',
         )}
       />

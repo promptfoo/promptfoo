@@ -106,7 +106,7 @@ Set default values for command-line options. These defaults will be used unless 
 | var                      | object             | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                       |
 | **Filtering**            |                    |                                                                                                                       |
 | filterPattern            | string             | Only run tests whose description matches the regular expression pattern                                               |
-| filterProviders          | string             | Only run tests with providers matching this regex                                                                     |
+| filterProviders          | string             | Only run tests with providers matching this regex (matches against provider `id` or `label`)                          |
 | filterTargets            | string             | Only run tests with targets matching this regex (alias for filterProviders)                                           |
 | filterFirstN             | number             | Only run the first N test cases                                                                                       |
 | filterSample             | number             | Run a random sample of N test cases                                                                                   |

@@ -160,7 +160,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         {/* Info alert when system is not stateful */}
         {selectedTarget.config.stateful === false && (
           <Alert variant="info" className="mt-3">
-            <Info className="h-4 w-4" />
+            <Info className="size-4" />
             <AlertDescription className="text-sm">
               Since your system doesn't maintain conversation history, the full context will be
               included in each request during multi-turn testing. Session management configuration
@@ -258,7 +258,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               </div>
 
               <Alert variant="info">
-                <Info className="h-4 w-4" />
+                <Info className="size-4" />
                 <AlertDescription className="text-sm">
                   <p className="mb-1.5 font-medium">Common patterns:</p>
                   <ul className="list-inside list-disc space-y-0.5">
@@ -282,7 +282,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             </>
           ) : (
             <Alert variant="info">
-              <Info className="h-4 w-4" />
+              <Info className="size-4" />
               <AlertDescription className="text-sm">
                 <p className="mb-2 font-medium">Client-generated sessions enabled</p>
                 <p className="mb-2">
@@ -313,7 +313,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             {/* Header */}
             <div className="border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
-                <Send className="h-3.5 w-3.5 text-primary" />
+                <Send className="size-3.5 text-primary" />
                 <span className="text-sm font-medium">Test Session Configuration</span>
               </div>
             </div>
@@ -333,16 +333,16 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 className="mb-3"
               >
                 {isTestRunning ? (
-                  <Spinner className="mr-1.5 h-3.5 w-3.5" />
+                  <Spinner className="mr-1.5 size-3.5" />
                 ) : (
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                  <Play className="mr-1.5 size-3.5" />
                 )}
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
               {!selectedTarget.config.url && (
                 <Alert variant="warning" className="mb-3">
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
                     Please configure the target URL in the endpoint configuration before testing
                     sessions.
@@ -355,9 +355,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   {/* Result Alert */}
                   <Alert variant={testResult.success ? 'success' : 'destructive'}>
                     {testResult.success ? (
-                      <CheckCircle className="h-4 w-4" />
+                      <CheckCircle className="size-4" />
                     ) : (
-                      <AlertCircle className="h-4 w-4" />
+                      <AlertCircle className="size-4" />
                     )}
                     <AlertDescription className="text-sm">
                       <p className="font-medium">
@@ -378,7 +378,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                         <span className="text-sm font-medium">Session Test Details</span>
                         <ChevronDown
                           className={cn(
-                            'h-4 w-4 text-muted-foreground transition-transform',
+                            'size-4 text-muted-foreground transition-transform',
                             detailsExpanded && 'rotate-180',
                           )}
                         />
@@ -388,7 +388,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                           {/* Troubleshooting - only show on failure */}
                           {!testResult.success && (
                             <Alert variant="warning">
-                              <AlertTriangle className="h-4 w-4" />
+                              <AlertTriangle className="size-4" />
                               <AlertDescription className="text-sm">
                                 <p className="mb-1.5 font-medium">Troubleshooting</p>
                                 <ul className="m-0 list-disc space-y-0.5 pl-4">
@@ -464,9 +464,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                           {testResult.reason && (
                             <Alert variant={testResult.success ? 'success' : 'warning'}>
                               {testResult.success ? (
-                                <CheckCircle className="h-4 w-4" />
+                                <CheckCircle className="size-4" />
                               ) : (
-                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTriangle className="size-4" />
                               )}
                               <AlertDescription className="text-sm">
                                 <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}

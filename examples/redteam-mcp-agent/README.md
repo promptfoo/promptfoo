@@ -19,7 +19,7 @@ The example includes:
 
 ## Prerequisites
 
-- Node.js (v20 or higher)
+- Node.js 20+
 - Python 3.8+ (for the Python MCP server example)
 - OpenAI API key
 

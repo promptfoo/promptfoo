@@ -182,7 +182,7 @@ describe('langfuse integration', () => {
       mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
-      const vars = { name: 'John', age: 30, city: 'New York' };
+      const vars = { name: 'John', age: '30', city: 'New York' };
       const result = await getPrompt('test-prompt', vars, 'text', 1);
 
       expect(mockPrompt.compile).toHaveBeenCalledWith(vars);

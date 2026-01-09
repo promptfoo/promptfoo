@@ -203,7 +203,7 @@ export function StrategyItem({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  'h-8 w-8',
+                  'size-8',
                   requiresConfig
                     ? 'text-destructive hover:bg-destructive/10'
                     : 'opacity-60 hover:opacity-100',
@@ -213,7 +213,7 @@ export function StrategyItem({
                   onConfigClick(strategy.id);
                 }}
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{settingsTooltipTitle}</TooltipContent>

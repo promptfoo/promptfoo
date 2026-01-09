@@ -737,7 +737,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             parsedResult.metadata.originalPrompt = prompt;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
@@ -936,7 +936,7 @@ export class SageMakerEmbeddingProvider
             parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails

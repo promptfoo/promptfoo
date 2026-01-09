@@ -19,13 +19,13 @@ describe('Separator', () => {
   it('applies correct horizontal styles', () => {
     const { container } = render(<Separator orientation="horizontal" />);
     const separator = container.firstChild;
-    expect(separator).toHaveClass('h-[1px]', 'w-full');
+    expect(separator).toHaveClass('h-px', 'w-full');
   });
 
   it('applies correct vertical styles', () => {
     const { container } = render(<Separator orientation="vertical" />);
     const separator = container.firstChild;
-    expect(separator).toHaveClass('h-full', 'w-[1px]');
+    expect(separator).toHaveClass('h-full', 'w-px');
   });
 
   it('is decorative by default', () => {

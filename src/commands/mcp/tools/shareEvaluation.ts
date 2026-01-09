@@ -216,7 +216,7 @@ export function registerShareEvaluationTool(server: McpServer) {
           evaluation: {
             description: evalRecord.config.description || 'No description',
             promptCount: evalRecord.prompts.length,
-            createdAt: (evalRecord as any).createdAt || 'Unknown',
+            createdAt: evalRecord.createdAt || 'Unknown',
             author: evalRecord.author || 'Unknown',
           },
           instructions: {

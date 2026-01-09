@@ -130,7 +130,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
           onClick={() => setTestOpen(true)}
           className="absolute right-2 top-2 z-10"
         >
-          <Play className="mr-1 h-4 w-4" />
+          <Play className="mr-1 size-4" />
           Test
         </Button>
       </div>

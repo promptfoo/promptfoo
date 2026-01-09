@@ -42,8 +42,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
-    resetFilters,
-    addFilter,
     setIsStreaming,
   } = useTableStore();
 
@@ -82,6 +80,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
       try {
@@ -171,10 +170,14 @@ export default function Eval({ fetchId }: EvalOptions) {
     return () => unsubscribe();
   }, [setSearchParams]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
 
-    resetFilters();
+    // Use getState() to avoid adding functions to dependencies
+    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
+
+    doResetFilters();
 
     // Read search params
     const filtersParam = _searchParams.get('filter');
@@ -184,11 +187,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
       } catch {
-        showToast('URL contains invalid JSON-encoded filters', 'error');
+        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
         return;
       }
       filters.forEach((filter: ResultsFilter) => {
-        addFilter(filter);
+        doAddFilter(filter);
       });
     }
 
@@ -322,8 +325,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    resetFilters,
     setIsStreaming,
+    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({
@@ -356,7 +359,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return (
       <div className="notice">
         <div>
-          <Spinner className="h-5 w-5" />
+          <Spinner className="size-5" />
         </div>
         <div>Waiting for eval data</div>
       </div>

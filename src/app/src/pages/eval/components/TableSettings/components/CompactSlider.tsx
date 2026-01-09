@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { Slider } from '@app/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -32,6 +32,20 @@ const CompactSlider = ({
   const displayValue =
     unlimited && value >= max ? 'Unlimited' : `${value}${unit ? ` ${unit}` : ''}`;
 
+  const handleValueChange = useCallback(
+    ([newValue]: number[]) => {
+      onChange(newValue);
+    },
+    [onChange],
+  );
+
+  const handleValueCommit = useCallback(
+    ([newValue]: number[]) => {
+      onChangeCommitted?.(newValue);
+    },
+    [onChangeCommitted],
+  );
+
   return (
     <div className="[&:not(:last-child)]:mb-3">
       <div className="flex items-center justify-between mb-1">
@@ -48,7 +62,7 @@ const CompactSlider = ({
                   className="p-0.5 ml-1 text-muted-foreground/40 hover:text-muted-foreground"
                   aria-label={`Information about ${label}`}
                 >
-                  <Info className="h-3.5 w-3.5" />
+                  <Info className="size-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">{tooltipText}</TooltipContent>
@@ -61,8 +75,8 @@ const CompactSlider = ({
       </div>
       <Slider
         value={[value]}
-        onValueChange={([newValue]) => onChange(newValue)}
-        onValueCommit={onChangeCommitted ? ([newValue]) => onChangeCommitted(newValue) : undefined}
+        onValueChange={handleValueChange}
+        onValueCommit={onChangeCommitted ? handleValueCommit : undefined}
         min={min}
         max={max}
         step={1}

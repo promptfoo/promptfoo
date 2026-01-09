@@ -65,6 +65,7 @@ export const CommandLineOptionsSchema = z.object({
   watch: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
+  filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.string().optional(),
   filterPattern: z.string().optional(),
@@ -161,6 +162,12 @@ export interface RunEvalOptions {
   isRedteam: boolean;
 
   concurrency?: number;
+
+  /**
+   * Evaluation ID for tracking blob references in the database.
+   * When set, allows blob storage to record references for access control.
+   */
+  evalId?: string;
 
   /**
    * AbortSignal that can be used to cancel the evaluation
@@ -334,15 +341,18 @@ export interface EvaluateTableOutput {
     duration?: number;
   };
   video?: {
-    id?: string; // Provider video ID (e.g., Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data
-    url?: string; // Legacy: API path to serve video (deprecated, use blobRef)
+    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
+    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
+    storageRef?: { key?: string }; // Storage reference for video file (Sora)
+    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
     size?: string; // '1280x720' or '720x1280'
     duration?: number; // Seconds
-    model?: string; // Model used (e.g., 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16'
-    resolution?: string; // '720p' or '1080p'
+    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
+    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
+    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
+    aspectRatio?: string; // '16:9' or '9:16' (Veo)
+    resolution?: string; // '720p' or '1080p' (Veo)
   };
 }
 

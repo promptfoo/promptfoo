@@ -70,7 +70,7 @@ const TestSection: React.FC<TestSectionProps> = ({
       {/* Header */}
       <div className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Send className="h-3.5 w-3.5 text-primary" />
+          <Send className="size-3.5 text-primary" />
           <span className="text-sm font-medium">Test Target Configuration</span>
         </div>
       </div>
@@ -90,16 +90,16 @@ const TestSection: React.FC<TestSectionProps> = ({
           className="mb-3"
         >
           {isTestRunning ? (
-            <Spinner className="mr-1.5 h-3.5 w-3.5" />
+            <Spinner className="mr-1.5 size-3.5" />
           ) : (
-            <Play className="mr-1.5 h-3.5 w-3.5" />
+            <Play className="mr-1.5 size-3.5" />
           )}
           {isTestRunning ? 'Testing...' : 'Test Target'}
         </Button>
 
         {!selectedTarget.config.url && !selectedTarget.config.request && (
           <Alert variant="warning" className="mb-3">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertDescription className="text-sm">
               Please configure the target URL or request before testing.
             </AlertDescription>
@@ -120,11 +120,11 @@ const TestSection: React.FC<TestSectionProps> = ({
                 }
               >
                 {testResult.changes_needed ? (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="size-4" />
                 ) : testResult.success ? (
-                  <CheckCircle className="h-4 w-4" />
+                  <CheckCircle className="size-4" />
                 ) : (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="size-4" />
                 )}
                 <AlertDescription className="text-sm">
                   <p className="font-medium">
@@ -163,7 +163,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                 <span className="text-sm font-medium">Request & Response Details</span>
                 <ChevronDown
                   className={cn(
-                    'h-4 w-4 text-muted-foreground transition-transform',
+                    'size-4 text-muted-foreground transition-transform',
                     detailsExpanded && 'rotate-180',
                   )}
                 />
@@ -259,7 +259,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                         <Label className="text-sm font-medium">Final Response</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground" />
+                            <Info className="size-3.5 cursor-help text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent className="text-sm">
                             This is what promptfoo will use for evaluation. Configure the response

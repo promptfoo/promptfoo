@@ -96,7 +96,7 @@ describe('Navigation', () => {
   it('should have the correct z-index class', () => {
     renderNavigation();
     const header = screen.getByRole('banner');
-    expect(header).toHaveClass('z-[var(--z-appbar)]');
+    expect(header).toHaveClass('z-(--z-appbar)');
   });
 
   it('shows the Model Audit item in the Create dropdown', () => {

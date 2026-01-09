@@ -21,6 +21,7 @@ import {
   HARM_PLUGINS,
   ISO_42001_MAPPING,
   MCP_PLUGINS,
+  MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_AGENTIC_TOP_10_MAPPING,
@@ -29,6 +30,7 @@ import {
   OWASP_LLM_TOP_10_MAPPING,
   PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
+  RAG_PLUGINS,
   riskCategories,
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
@@ -62,20 +64,20 @@ const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extractio
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
-  onUserInteraction: () => void;
   isRemoteGenerationDisabled: boolean;
 }
 
 export default function PluginsTab({
   selectedPlugins,
   handlePluginToggle,
+  setSelectedPlugins,
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
-  onUserInteraction,
   isRemoteGenerationDisabled,
 }: PluginsTabProps): React.ReactElement {
   const { recordEvent } = useTelemetry();
@@ -127,11 +129,11 @@ export default function PluginsTab({
       },
       {
         name: 'Minimal Test',
-        plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+        plugins: MINIMAL_TEST_PLUGINS,
       },
       {
         name: 'RAG',
-        plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+        plugins: RAG_PLUGINS,
       },
       {
         name: 'Foundation',
@@ -368,25 +370,15 @@ export default function PluginsTab({
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
       });
-      onUserInteraction();
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
       } else {
-        preset.plugins.forEach((plugin) => {
-          if (!selectedPlugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        // Remove plugins not in preset
-        selectedPlugins.forEach((plugin) => {
-          if (!preset.plugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
+        // Use setSelectedPlugins for efficient bulk update
+        setSelectedPlugins(new Set(preset.plugins as Set<Plugin>));
         setIsCustomMode(false);
       }
     },
-    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+    [recordEvent, setSelectedPlugins],
   );
 
   const handleGenerateTestCase = useCallback(
@@ -414,7 +406,7 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6">
+      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section */}
@@ -443,8 +435,9 @@ export default function PluginsTab({
           {/* Search and Filter section */}
           <div className="mb-6 flex items-center gap-4">
             <div className="relative min-w-[300px] shrink-0">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                data-testid="plugin-search-input"
                 placeholder="Search plugins..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -480,12 +473,10 @@ export default function PluginsTab({
                 type="button"
                 className="text-sm text-primary hover:underline"
                 onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (!selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
+                  // Collect all filtered plugins and merge with existing selection
+                  setSelectedPlugins(
+                    new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                  );
                 }}
               >
                 Select all
@@ -494,12 +485,12 @@ export default function PluginsTab({
                 type="button"
                 className="text-sm text-primary hover:underline"
                 onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
+                  // Remove only the filtered plugins from selection
+                  const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                  const newSelected = new Set(
+                    [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                  );
+                  setSelectedPlugins(newSelected);
                 }}
               >
                 Select none
@@ -545,6 +536,7 @@ export default function PluginsTab({
                 return (
                   <div
                     key={plugin}
+                    data-testid={`plugin-list-item-${plugin}`}
                     onClick={() => {
                       if (pluginDisabled) {
                         toast.showToast(
@@ -601,7 +593,7 @@ export default function PluginsTab({
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                'h-8 w-8',
+                                'size-8',
                                 hasConfigError ? 'text-destructive' : 'text-muted-foreground',
                               )}
                               onClick={(e) => {
@@ -609,7 +601,7 @@ export default function PluginsTab({
                                 handleConfigClick(plugin);
                               }}
                             >
-                              <Settings className="h-4 w-4" />
+                              <Settings className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -659,13 +651,13 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className="size-8"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(getPluginDocumentationUrl(plugin), '_blank');
                               }}
                             >
-                              <HelpCircle className="h-4 w-4" />
+                              <HelpCircle className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>View documentation</TooltipContent>
@@ -696,14 +688,20 @@ export default function PluginsTab({
         </div>
 
         {/* Selected Plugins Sidebar */}
-        <div className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto">
+        <div
+          className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto"
+          data-testid="selected-plugins-sidebar"
+        >
           <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="mb-4 text-lg font-semibold">
+            <h3 className="mb-4 text-lg font-semibold" data-testid="selected-plugins-header">
               Selected Plugins ({selectedPlugins.size})
             </h3>
 
             {selectedPlugins.size === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p
+                className="py-8 text-center text-sm text-muted-foreground"
+                data-testid="selected-plugins-empty-state"
+              >
                 No plugins selected yet.
                 <br />
                 Click on plugins to add them here.
@@ -712,7 +710,7 @@ export default function PluginsTab({
               <div className="max-h-[400px] space-y-2 overflow-y-auto">
                 {/* Plugins requiring configuration - shown first */}
                 {pluginsNeedingConfig.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mb-3" data-testid="plugins-needing-config-section">
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-destructive">
                       Needs Configuration
                     </p>
@@ -720,6 +718,7 @@ export default function PluginsTab({
                       {pluginsNeedingConfig.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-needs-config-${plugin}`}
                           onClick={() => handleConfigClick(plugin)}
                           className={cn(
                             'flex cursor-pointer items-center rounded-lg border-2 border-destructive bg-destructive/10 p-3 transition-colors',
@@ -727,7 +726,7 @@ export default function PluginsTab({
                           )}
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                            <AlertCircle className="size-4 shrink-0 text-destructive" />
                             <span className="text-sm font-medium text-destructive">
                               {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                             </span>
@@ -736,24 +735,24 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 text-destructive hover:text-destructive"
+                              className="size-6 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleConfigClick(plugin);
                               }}
                             >
-                              <Settings className="h-4 w-4" />
+                              <Settings className="size-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6"
+                              className="size-6"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handlePluginToggle(plugin);
                               }}
                             >
-                              <Minus className="h-4 w-4" />
+                              <Minus className="size-4" />
                             </Button>
                           </div>
                         </div>
@@ -764,7 +763,7 @@ export default function PluginsTab({
 
                 {/* Configured plugins */}
                 {configuredPlugins.length > 0 && (
-                  <div>
+                  <div data-testid="configured-plugins-section">
                     {pluginsNeedingConfig.length > 0 && (
                       <div className="my-3 border-t border-border" />
                     )}
@@ -772,6 +771,7 @@ export default function PluginsTab({
                       {configuredPlugins.map((plugin) => (
                         <div
                           key={plugin}
+                          data-testid={`selected-plugin-${plugin}`}
                           className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -782,10 +782,10 @@ export default function PluginsTab({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="ml-2 h-6 w-6"
+                            className="ml-2 size-6"
                             onClick={() => handlePluginToggle(plugin)}
                           >
-                            <Minus className="h-4 w-4" />
+                            <Minus className="size-4" />
                           </Button>
                         </div>
                       ))}
@@ -801,9 +801,9 @@ export default function PluginsTab({
                   variant="outline"
                   size="sm"
                   className="w-full"
+                  data-testid="clear-all-plugins-button"
                   onClick={() => {
-                    onUserInteraction();
-                    selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
+                    setSelectedPlugins(new Set());
                   }}
                 >
                   Clear All

@@ -491,6 +491,7 @@ export default function ChatInterface() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages is a trigger dependency - scrollToBottom is stable
   useEffect(() => {
     scrollToBottom();
   }, [messages]);

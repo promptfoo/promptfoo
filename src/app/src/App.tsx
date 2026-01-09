@@ -131,7 +131,7 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

@@ -38,7 +38,7 @@ export default function NotFoundPage() {
           </p>
 
           <Button onClick={() => navigate('/evals')} size="lg">
-            <ClipboardList className="h-5 w-5 mr-2" />
+            <ClipboardList className="size-5 mr-2" />
             See Evals
           </Button>
         </Card>

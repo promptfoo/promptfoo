@@ -23,7 +23,7 @@ export const pythonPromptFunction = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: unknown;
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
@@ -51,7 +51,7 @@ export const pythonPromptFunctionLegacy = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: Record<string, unknown>;
   },
 ): Promise<string> => {
   invariant(context?.provider?.id, 'provider.id is required');
