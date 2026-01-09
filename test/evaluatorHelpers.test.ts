@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   collectFileMetadata,
   extractTextFromPDF,
+  getExtensionHookName,
   renderPrompt,
   resolveVariables,
   runExtensionHook,
@@ -784,6 +785,195 @@ describe('evaluatorHelpers', () => {
           expect(result.test).toBe('invalid_test_value');
         });
       });
+    });
+
+    describe('hook filtering with function names', () => {
+      const context = {
+        suite: {
+          providers: [mockApiProvider],
+          prompts: [{ raw: 'test prompt', label: 'test' } as Prompt],
+          tests: [{ vars: { var1: 'value1' } }],
+        } as TestSuite,
+      };
+
+      beforeEach(() => {
+        vi.mocked(transform).mockResolvedValue(undefined);
+      });
+
+      it('should skip extension with hook name that does not match current hook', async () => {
+        // Extension specifies :afterAll but we're running beforeAll
+        await runExtensionHook(['file://path/to/hooks.js:afterAll'], 'beforeAll', context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should run extension with hook name that matches current hook', async () => {
+        // Extension specifies :beforeAll and we're running beforeAll
+        await runExtensionHook(['file://path/to/hooks.js:beforeAll'], 'beforeAll', context);
+        expect(transform).toHaveBeenCalledWith(
+          'file://path/to/hooks.js:beforeAll',
+          context,
+          { hookName: 'beforeAll' },
+          false,
+        );
+      });
+
+      it('should run extension with custom function name for ALL hooks', async () => {
+        // Extension specifies :myHandler (custom name) - should run for all hooks
+        const customExtension = 'file://path/to/hooks.js:myHandler';
+
+        await runExtensionHook([customExtension], 'beforeAll', context);
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          context,
+          { hookName: 'beforeAll' },
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        await runExtensionHook([customExtension], 'beforeEach', { test: {} as TestCase });
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          { test: {} },
+          { hookName: 'beforeEach' },
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        await runExtensionHook([customExtension], 'afterEach', {
+          test: {} as TestCase,
+          result: {} as any,
+        });
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          expect.anything(),
+          { hookName: 'afterEach' },
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        await runExtensionHook([customExtension], 'afterAll', {
+          results: [],
+          suite: {} as TestSuite,
+          prompts: [],
+        });
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          expect.anything(),
+          { hookName: 'afterAll' },
+          false,
+        );
+      });
+
+      it('should run extension without function name for ALL hooks', async () => {
+        // Extension without function name - should run for all hooks
+        const noFunctionExtension = 'file://path/to/hooks.js';
+
+        await runExtensionHook([noFunctionExtension], 'beforeAll', context);
+        expect(transform).toHaveBeenCalled();
+
+        vi.mocked(transform).mockClear();
+        await runExtensionHook([noFunctionExtension], 'afterEach', {
+          test: {} as TestCase,
+          result: {} as any,
+        });
+        expect(transform).toHaveBeenCalled();
+      });
+
+      it('should handle mixed extensions correctly', async () => {
+        // Mix of hook-specific and generic extensions
+        const extensions = [
+          'file://hooks.js:beforeAll', // Only runs for beforeAll
+          'file://hooks.js:myHandler', // Runs for all hooks
+          'file://hooks.js:afterAll', // Only runs for afterAll
+        ];
+
+        await runExtensionHook(extensions, 'beforeAll', context);
+        // Should call transform twice (beforeAll and myHandler, skip afterAll)
+        expect(transform).toHaveBeenCalledTimes(2);
+        expect(transform).toHaveBeenCalledWith(
+          'file://hooks.js:beforeAll',
+          expect.anything(),
+          { hookName: 'beforeAll' },
+          false,
+        );
+        expect(transform).toHaveBeenCalledWith(
+          'file://hooks.js:myHandler',
+          expect.anything(),
+          { hookName: 'beforeAll' },
+          false,
+        );
+      });
+    });
+  });
+
+  describe('getExtensionHookName', () => {
+    it('should extract function name from file:// path', () => {
+      expect(getExtensionHookName('file://path/to/hooks.js:beforeAll')).toBe('beforeAll');
+      expect(getExtensionHookName('file://path/to/hooks.py:afterEach')).toBe('afterEach');
+      expect(getExtensionHookName('file://hooks.js:myHandler')).toBe('myHandler');
+    });
+
+    it('should return undefined when no function name specified', () => {
+      expect(getExtensionHookName('file://path/to/hooks.js')).toBeUndefined();
+      expect(getExtensionHookName('file://hooks.py')).toBeUndefined();
+    });
+
+    it('should return undefined for non-file:// paths', () => {
+      expect(getExtensionHookName('path/to/hooks.js:beforeAll')).toBeUndefined();
+      expect(getExtensionHookName('hooks.js:beforeAll')).toBeUndefined();
+    });
+
+    it('should handle Windows drive letters correctly', () => {
+      // Position 7 is C:, position 8 is the colon after drive letter
+      // The function should not treat C: as function name
+      expect(getExtensionHookName('file://C:/path/to/hooks.js')).toBeUndefined();
+      expect(getExtensionHookName('file://C:/path/to/hooks.js:beforeAll')).toBe('beforeAll');
+      expect(getExtensionHookName('file://D:/hooks.js:myHandler')).toBe('myHandler');
+    });
+
+    it('should extract the last colon-separated segment', () => {
+      // Multiple colons - should get the last one
+      expect(getExtensionHookName('file://path:with:colons/hooks.js:functionName')).toBe(
+        'functionName',
+      );
+    });
+
+    it('should return undefined for trailing colon (empty function name)', () => {
+      // Edge case: "file://hooks.js:" should not return empty string
+      expect(getExtensionHookName('file://hooks.js:')).toBeUndefined();
+      expect(getExtensionHookName('file://path/to/hooks.py:')).toBeUndefined();
+    });
+  });
+
+  describe('runExtensionHook error handling', () => {
+    const context = {
+      suite: {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'test prompt', label: 'test' } as Prompt],
+        tests: [{ vars: { var1: 'value1' } }],
+      } as TestSuite,
+    };
+
+    it('should wrap transform errors with hook context', async () => {
+      const originalError = new Error('Python script failed');
+      vi.mocked(transform).mockRejectedValue(originalError);
+
+      await expect(
+        runExtensionHook(['file://broken.py:handler'], 'beforeAll', context),
+      ).rejects.toThrow('Extension hook "beforeAll" failed for file://broken.py:handler');
+    });
+
+    it('should preserve original error as cause', async () => {
+      const originalError = new Error('Original error message');
+      vi.mocked(transform).mockRejectedValue(originalError);
+
+      try {
+        await runExtensionHook(['file://broken.js:handler'], 'beforeAll', context);
+        expect.fail('Expected error to be thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).cause).toBe(originalError);
+      }
     });
   });
 

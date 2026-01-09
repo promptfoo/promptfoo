@@ -1,16 +1,29 @@
+/**
+ * WARNING: The `counter` variable is NOT thread-safe. When running with concurrency > 1,
+ * the counter may not accurately track test numbers. Consider using per-test metadata
+ * for accurate tracking in concurrent scenarios.
+ */
 let counter = 0;
 
 /**
  * Handles different extension hooks for promptfoo.
  *
- * @param {string} hookName - The name of the hook being called. Can be one of
- *   "beforeAll", "beforeEach", "afterEach", or "afterAll".
+ * IMPORTANT: The function signature is (context, { hookName }) where:
+ * - context: The hook-specific data (e.g., { suite } for beforeAll)
+ * - hookName: 'beforeAll' | 'beforeEach' | 'afterEach' | 'afterAll'
+ *
  * @param {Object} context - A dictionary containing contextual information for the hook.
- *   The contents of this dictionary vary depending on the hook being called.
+ *   The contents vary depending on the hook being called:
+ *   - beforeAll: { suite: TestSuite }
+ *   - beforeEach: { test: TestCase }
+ *   - afterEach: { test: TestCase, result: EvaluateResult }
+ *   - afterAll: { results: EvaluateResult[], suite: TestSuite, ... }
+ * @param {Object} hookContext - Contains metadata about the hook.
+ * @param {string} hookContext.hookName - The name of the hook being called.
  * @returns {Object|undefined} The "beforeAll" and "beforeEach" hooks should return the context object,
  *   while the "afterAll" and "afterEach" hooks should not return anything.
  */
-async function extensionHook(hookName, context) {
+async function extensionHook(context, { hookName }) {
   if (hookName === 'beforeAll') {
     console.log(`Setting up test suite: ${context.suite.description || 'Unnamed suite'}`);
     console.log(`Total prompts: ${context.suite.prompts?.length || 0}`);

@@ -581,18 +581,29 @@ export type ExtensionHookContextMap = {
  *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
 /**
+ * Valid hook names that can be used to filter which hooks an extension runs for.
+ * If an extension specifies one of these as its function name (e.g., file://path:beforeAll),
+ * it will only run for that specific hook.
+ * If an extension specifies a custom function name (e.g., file://path:myHandler),
+ * it will run for ALL hooks.
+ */
+const EXTENSION_HOOK_NAMES = new Set(['beforeAll', 'beforeEach', 'afterEach', 'afterAll']);
+
+/**
  * Extracts the hook name from an extension path.
  * Format: file://path/to/file.js:hookName or file://path/to/file.py:hook_name
  * @returns The hook name or undefined if not specified
  */
-function getExtensionHookName(extension: string): string | undefined {
+export function getExtensionHookName(extension: string): string | undefined {
   if (!extension.startsWith('file://')) {
     return undefined;
   }
   const lastColonIndex = extension.lastIndexOf(':');
   // Check if colon is part of Windows drive letter (position 8 after file://) or not present
   if (lastColonIndex > 8) {
-    return extension.slice(lastColonIndex + 1);
+    const functionName = extension.slice(lastColonIndex + 1);
+    // Return undefined for empty strings (e.g., "file://hooks.js:")
+    return functionName || undefined;
   }
   return undefined;
 }
@@ -610,24 +621,45 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
     feature: 'extension_hook',
   });
 
+  logger.debug(`Running ${hookName} hook with ${extensions.length} extension(s)`);
+
   let updatedContext: ExtensionHookContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
 
-    // Only run extensions that match the current hook name
-    // Extension format: file://path/to/file.js:hookName
+    // Only run extensions that match the current hook name.
+    // Extension format: file://path/to/file.js:functionName
+    //
+    // Behavior:
+    // - If functionName is a known hook name (beforeAll, beforeEach, afterEach, afterAll),
+    //   only run for that specific hook.
+    // - If functionName is a custom name (e.g., myHandler, extension_hook),
+    //   run for ALL hooks (generic handler pattern).
+    // - If no functionName is specified, run for ALL hooks.
     const extensionHookName = getExtensionHookName(extension);
-    if (extensionHookName && extensionHookName !== hookName) {
+    if (
+      extensionHookName &&
+      EXTENSION_HOOK_NAMES.has(extensionHookName) &&
+      extensionHookName !== hookName
+    ) {
       logger.debug(
-        `Skipping extension ${extension} for hook ${hookName} (extension is for ${extensionHookName})`,
+        `Skipping extension ${extension} for hook ${hookName} (extension targets ${extensionHookName} only)`,
       );
       continue;
     }
 
-    logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
+    logger.debug(`Running extension ${extension} for hook ${hookName}`);
 
-    const extensionReturnValue = await transform(extension, context, { hookName }, false);
+    let extensionReturnValue;
+    try {
+      extensionReturnValue = await transform(extension, context, { hookName }, false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Extension hook "${hookName}" failed for ${extension}: ${errorMessage}`, {
+        cause: error,
+      });
+    }
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
     // This also provides backwards compatibility for extension hooks that do not return a value.
