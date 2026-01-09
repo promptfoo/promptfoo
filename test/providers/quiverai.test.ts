@@ -35,10 +35,6 @@ describe('QuiverAI Provider', () => {
     vi.resetAllMocks();
   });
 
-  // ============================================
-  // CHAT PROVIDER TESTS
-  // ============================================
-
   describe('QuiverAiChatProvider', () => {
     it('should initialize with correct model name', () => {
       const provider = new QuiverAiChatProvider('arrow-0.5', {});
@@ -69,10 +65,6 @@ describe('QuiverAI Provider', () => {
       expect(provider.config.passthrough).toEqual({ reasoning_effort: 'high' });
     });
   });
-
-  // ============================================
-  // SVG PROVIDER TESTS
-  // ============================================
 
   describe('QuiverAiSvgProvider', () => {
     describe('constructor and configuration', () => {
@@ -500,10 +492,6 @@ describe('QuiverAI Provider', () => {
       });
     });
   });
-
-  // ============================================
-  // FACTORY FUNCTION TESTS
-  // ============================================
 
   describe('createQuiverAiProvider', () => {
     it('should create chat provider for quiverai:model format', () => {

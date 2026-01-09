@@ -15,28 +15,22 @@ import type {
 
 const QUIVERAI_API_BASE_URL = 'https://api.quiver.ai/v1';
 
-// ============================================
-// CHAT PROVIDER (extends OpenAI)
-// ============================================
-
 /**
  * QuiverAI chat provider extends OpenAI chat completion provider.
  * QuiverAI's chat API is OpenAI-compatible.
  */
 export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
+    const config = providerOptions.config || {};
     super(modelName, {
       ...providerOptions,
       config: {
-        ...providerOptions.config,
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || QUIVERAI_API_BASE_URL,
+        ...config,
+        apiBaseUrl: config.apiBaseUrl || QUIVERAI_API_BASE_URL,
         apiKeyEnvar: 'QUIVERAI_API_KEY',
         passthrough: {
-          // QuiverAI-specific: reasoning_effort
-          ...(providerOptions.config?.reasoning_effort && {
-            reasoning_effort: providerOptions.config.reasoning_effort,
-          }),
-          ...(providerOptions.config?.passthrough || {}),
+          ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort }),
+          ...config.passthrough,
         },
       },
     });
@@ -54,10 +48,6 @@ export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
     return QUIVERAI_API_BASE_URL;
   }
 }
-
-// ============================================
-// SVG PROVIDER (standalone)
-// ============================================
 
 type SvgOperation = 'generate' | 'edit';
 
@@ -115,13 +105,7 @@ export class QuiverAiSvgProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    if (this.config.apiKey) {
-      return this.config.apiKey;
-    }
-    if (this.env?.QUIVERAI_API_KEY) {
-      return this.env.QUIVERAI_API_KEY;
-    }
-    return getEnvString('QUIVERAI_API_KEY');
+    return this.config.apiKey || this.env?.QUIVERAI_API_KEY || getEnvString('QUIVERAI_API_KEY');
   }
 
   private getApiUrl(): string {
@@ -195,45 +179,41 @@ export class QuiverAiSvgProvider implements ApiProvider {
     config: QuiverAiSvgConfig,
     operation: SvgOperation,
   ): Record<string, unknown> {
+    if (operation === 'edit' && !config.sourceSvg && !config.sourceSvgUrl) {
+      throw new Error('SVG edit operation requires sourceSvg or sourceSvgUrl in provider config');
+    }
+
     const body: Record<string, unknown> = {
       model: this.modelName,
       stream: false,
+      input:
+        operation === 'edit'
+          ? {
+              prompt,
+              source: config.sourceSvgUrl
+                ? { svg_url: config.sourceSvgUrl }
+                : { svg: config.sourceSvg },
+            }
+          : { prompt },
     };
 
-    if (operation === 'edit') {
-      if (!config.sourceSvg && !config.sourceSvgUrl) {
-        throw new Error('SVG edit operation requires sourceSvg or sourceSvgUrl in provider config');
-      }
-      body.input = {
-        prompt,
-        source: config.sourceSvgUrl ? { svg_url: config.sourceSvgUrl } : { svg: config.sourceSvg },
-      };
-    } else {
-      body.input = { prompt };
-    }
-
     if (config.svgParams) {
+      const { mode, viewBox, style, complexity } = config.svgParams;
       const svgParams: Record<string, unknown> = {};
 
-      if (config.svgParams.mode) {
-        svgParams.mode = config.svgParams.mode;
+      if (mode) {
+        svgParams.mode = mode;
       }
-
-      if (config.svgParams.viewBox) {
-        svgParams.canvas = {
-          view_box: {
-            width: config.svgParams.viewBox.width,
-            height: config.svgParams.viewBox.height,
-          },
-        };
+      if (viewBox) {
+        svgParams.canvas = { view_box: { width: viewBox.width, height: viewBox.height } };
       }
 
       const design: Record<string, unknown> = {};
-      if (config.svgParams.style) {
-        design.style_preset = config.svgParams.style;
+      if (style) {
+        design.style_preset = style;
       }
-      if (config.svgParams.complexity !== undefined) {
-        design.complexity = config.svgParams.complexity;
+      if (complexity !== undefined) {
+        design.complexity = complexity;
       }
       if (Object.keys(design).length > 0) {
         svgParams.design = design;
@@ -299,17 +279,13 @@ export class QuiverAiSvgProvider implements ApiProvider {
   }
 }
 
-// ============================================
-// FACTORY FUNCTION
-// ============================================
-
 export function createQuiverAiProvider(
   providerPath: string,
   providerOptions: ProviderOptions = {},
   env?: EnvOverrides,
 ): ApiProvider {
   const splits = providerPath.split(':');
-  const modelType = splits[1]; // 'svg', 'chat', or model name
+  const modelType = splits[1];
   const effectiveEnv = env || providerOptions.env;
 
   if (modelType === 'svg') {
@@ -320,12 +296,8 @@ export function createQuiverAiProvider(
     });
   }
 
-  if (modelType === 'chat') {
-    const modelName = splits.slice(2).join(':') || 'arrow-0.5';
-    return new QuiverAiChatProvider(modelName, { ...providerOptions, env: effectiveEnv });
-  }
-
-  // Default: treat as chat with model name
-  const modelName = splits.slice(1).join(':') || 'arrow-0.5';
+  // For 'chat' or direct model name, create chat provider
+  const modelName =
+    (modelType === 'chat' ? splits.slice(2) : splits.slice(1)).join(':') || 'arrow-0.5';
   return new QuiverAiChatProvider(modelName, { ...providerOptions, env: effectiveEnv });
 }
