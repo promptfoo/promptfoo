@@ -313,7 +313,7 @@ export function DataTable<TData, TValue = unknown>({
         style={maxHeight ? { maxHeight } : undefined}
       >
         <table className="w-full" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-muted/50 sticky top-0 z-10">
+          <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
@@ -325,7 +325,7 @@ export function DataTable<TData, TValue = unknown>({
                     <th
                       key={header.id}
                       className={cn(
-                        'px-4 py-3 text-left text-sm font-semibold relative',
+                        'px-4 py-3 text-left text-sm font-semibold relative overflow-hidden',
                         canSort && 'cursor-pointer select-none hover:bg-muted/80',
                       )}
                       style={{
@@ -334,10 +334,12 @@ export function DataTable<TData, TValue = unknown>({
                       onClick={header.column.getToggleSortingHandler()}
                     >
                       {header.isPlaceholder ? null : (
-                        <div className="flex items-center gap-1">
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="truncate">
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </span>
                           {canSort && (
-                            <span className="ml-1">
+                            <span className="shrink-0">
                               {sortDirection === 'asc' ? (
                                 <ArrowUp className="size-4" />
                               ) : sortDirection === 'desc' ? (
