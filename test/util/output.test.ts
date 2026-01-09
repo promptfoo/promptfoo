@@ -160,13 +160,27 @@ describe('writeOutput', () => {
     const templateContent = realFs.readFileSync(templatePath, 'utf-8');
 
     // Check that the template has escape filters on all user-provided content
-    expect(templateContent).toContain('{{ header | escape }}');
-    expect(templateContent).toContain('{{ cell | escape }}');
+    // Headers: var names and prompt labels/providers
+    expect(templateContent).toContain('{{ varName | escape }}');
+    expect(templateContent).toContain('{{ prompt.provider | escape }}');
+    expect(templateContent).toContain('{{ prompt.label | escape }}');
 
-    // Ensure both data-content attribute and cell content are escaped
-    const cellRegex =
-      /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
-    expect(templateContent).toMatch(cellRegex);
+    // Cell content: variable values and output text
+    expect(templateContent).toContain('{{ varValue | escape }}');
+    expect(templateContent).toContain('{{ output.text | escape }}');
+
+    // Error/fail messages should be escaped
+    expect(templateContent).toContain('{{ output.error | escape }}');
+    expect(templateContent).toContain('{{ output.gradingResult.reason | escape }}');
+
+    // Named scores should be escaped
+    expect(templateContent).toContain('{{ name | escape }}');
+
+    // URLs should be escaped
+    expect(templateContent).toContain('{{ shareableUrl | escape }}');
+
+    // Audio transcript should be escaped
+    expect(templateContent).toContain('{{ output.audio.transcript | escape }}');
   });
 
   it('writes output to Google Sheets', async () => {

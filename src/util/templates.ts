@@ -5,6 +5,40 @@ import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types/index';
 
 /**
+ * Format a number with locale-aware thousands separators.
+ */
+function numberFormatFilter(value: number | undefined | null): string {
+  if (value === undefined || value === null) {
+    return '0';
+  }
+  return value.toLocaleString();
+}
+
+/**
+ * Format milliseconds as a human-readable duration string.
+ */
+function durationFilter(ms: number | undefined | null): string {
+  if (ms === undefined || ms === null || ms === 0) {
+    return '0s';
+  }
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+/**
  * Get a Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.
  * @param throwOnUndefined - Whether to throw an error on undefined variables.
@@ -45,6 +79,10 @@ export function getNunjucksEngine(
   env.addFilter('load', function (str) {
     return JSON.parse(str);
   });
+
+  // HTML output template filters
+  env.addFilter('numberFormat', numberFormatFilter);
+  env.addFilter('duration', durationFilter);
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {

@@ -197,18 +197,96 @@ export async function writeOutput(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
     );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-    ];
-    const htmlOutput = getNunjucksEngine().renderString(template, {
+
+    // Calculate total cost from all outputs
+    let totalCost = 0;
+    for (const row of table.body) {
+      for (const output of row.outputs) {
+        if (output.cost) {
+          totalCost += output.cost;
+        }
+      }
+    }
+
+    // Detect if output is an image based on provider or content
+    const isImageOutput = (output: EvaluateTableOutput): boolean => {
+      // Check if provider is an image provider
+      if (output.provider) {
+        const provider = output.provider.toLowerCase();
+        if (
+          provider.includes(':image:') ||
+          provider.includes(':image-') ||
+          provider.includes('-image-') ||
+          provider.includes('-image') ||
+          provider.includes('dall-e') ||
+          provider.includes('dalle') ||
+          provider.includes('stability') ||
+          provider.includes('midjourney') ||
+          provider.includes('imagen')
+        ) {
+          return true;
+        }
+      }
+      // Check if text is a data URL for an image
+      if (output.text && output.text.startsWith('data:image/')) {
+        return true;
+      }
+      // Check if text is an HTTP URL pointing to an image
+      if (output.text) {
+        const text = output.text.toLowerCase();
+        if (
+          (text.startsWith('http://') || text.startsWith('https://')) &&
+          (text.endsWith('.png') ||
+            text.endsWith('.jpg') ||
+            text.endsWith('.jpeg') ||
+            text.endsWith('.gif') ||
+            text.endsWith('.webp') ||
+            text.endsWith('.svg'))
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Build structured data for the template
+    const templateData = {
       config: evalRecord.config,
-      table: htmlTable,
-      results: summary,
-    });
+      timestamp: new Date().toISOString(),
+      shareableUrl,
+      stats: {
+        ...summary.stats,
+        totalCost: totalCost > 0 ? totalCost : undefined,
+      },
+      headers: {
+        vars: table.head.vars,
+        prompts: table.head.prompts,
+      },
+      rows: table.body.map((row) => ({
+        vars: row.vars,
+        outputs: row.outputs.map((output) => ({
+          pass: output.pass,
+          failureReason:
+            output.failureReason === ResultFailureReason.ERROR
+              ? 'ERROR'
+              : output.failureReason === ResultFailureReason.ASSERT
+                ? 'ASSERT'
+                : undefined,
+          score: output.score,
+          namedScores: output.namedScores,
+          error: output.error,
+          gradingResult: output.gradingResult,
+          text: output.text,
+          isImage: isImageOutput(output),
+          audio: output.audio,
+          tokenUsage: output.tokenUsage,
+          latencyMs: output.latencyMs,
+          cost: output.cost,
+        })),
+      })),
+    };
+
+    const htmlOutput = getNunjucksEngine().renderString(template, templateData);
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     // Truncate file first for consistent behavior with other formats
