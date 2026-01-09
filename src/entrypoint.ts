@@ -10,6 +10,7 @@
  */
 import { fileURLToPath } from 'node:url';
 
+// process.version is always "vX.Y.Z" (e.g., "v20.0.0"), so slice(1) gives "20.0.0"
 const major = parseInt(process.version.slice(1), 10);
 if (major < 20) {
   console.error(
@@ -22,4 +23,5 @@ if (major < 20) {
 process.argv[1] = fileURLToPath(new URL('./main.js', import.meta.url));
 await import('./main.js');
 
+// Required for top-level await - makes this file an ES module
 export {};
