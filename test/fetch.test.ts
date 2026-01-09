@@ -150,10 +150,14 @@ describe('fetchWithProxy', () => {
     delete process.env.npm_config_http_proxy;
     delete process.env.npm_config_proxy;
     delete process.env.all_proxy;
+    delete process.env.PROMPTFOO_INSECURE_SSL;
+    delete process.env.PROMPTFOO_CA_CERT_PATH;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    delete process.env.PROMPTFOO_INSECURE_SSL;
+    delete process.env.PROMPTFOO_CA_CERT_PATH;
   });
 
   it('should add version header to all requests', async () => {
@@ -380,6 +384,12 @@ describe('fetchWithProxy', () => {
       }
       if (key === 'HTTPS_PROXY') {
         return mockProxyUrl;
+      }
+      return defaultValue;
+    });
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_INSECURE_SSL') {
+        return false;
       }
       return defaultValue;
     });
