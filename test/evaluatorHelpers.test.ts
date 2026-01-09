@@ -658,13 +658,14 @@ describe('evaluatorHelpers', () => {
       });
 
       describe('extensions provided', () => {
-        it('should call transform for each extension', async () => {
+        it('should call transform for each extension using LEGACY convention', async () => {
+          // Non-file:// extensions use LEGACY calling convention: (hookName, context)
           const extensions = ['ext1', 'ext2', 'ext3'];
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
+          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -745,13 +746,15 @@ describe('evaluatorHelpers', () => {
       });
 
       describe('extensions provided', () => {
-        it('should call transform for each extension', async () => {
+        it('should call transform for each extension using LEGACY convention', async () => {
+          // Extensions without file:// prefix or function name use LEGACY convention
           const extensions = ['ext1', 'ext2', 'ext3'];
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
+          // LEGACY convention: (extension, hookName, context, false)
+          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -817,91 +820,106 @@ describe('evaluatorHelpers', () => {
         );
       });
 
-      it('should run extension with custom function name for ALL hooks', async () => {
+      it('should run extension with custom function name for ALL hooks using LEGACY convention', async () => {
         // Extension specifies :myHandler (custom name) - should run for all hooks
+        // Uses LEGACY calling convention: (hookName, context)
         const customExtension = 'file://path/to/hooks.js:myHandler';
 
         await runExtensionHook([customExtension], 'beforeAll', context);
         expect(transform).toHaveBeenCalledWith(
           customExtension,
-          context,
-          { hookName: 'beforeAll' },
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
           false,
         );
 
         vi.mocked(transform).mockClear();
-        await runExtensionHook([customExtension], 'beforeEach', { test: {} as TestCase });
+        const beforeEachContext = { test: {} as TestCase };
+        await runExtensionHook([customExtension], 'beforeEach', beforeEachContext);
         expect(transform).toHaveBeenCalledWith(
           customExtension,
-          { test: {} },
-          { hookName: 'beforeEach' },
+          'beforeEach',
+          beforeEachContext,
           false,
         );
 
         vi.mocked(transform).mockClear();
-        await runExtensionHook([customExtension], 'afterEach', {
+        const afterEachContext = {
           test: {} as TestCase,
           result: {} as any,
-        });
+        };
+        await runExtensionHook([customExtension], 'afterEach', afterEachContext);
         expect(transform).toHaveBeenCalledWith(
           customExtension,
-          expect.anything(),
-          { hookName: 'afterEach' },
+          'afterEach',
+          afterEachContext,
           false,
         );
 
         vi.mocked(transform).mockClear();
-        await runExtensionHook([customExtension], 'afterAll', {
+        const afterAllContext = {
           results: [],
           suite: {} as TestSuite,
           prompts: [],
           evalId: 'test-eval-id',
           config: {},
-        });
+        };
+        await runExtensionHook([customExtension], 'afterAll', afterAllContext);
+        expect(transform).toHaveBeenCalledWith(customExtension, 'afterAll', afterAllContext, false);
+      });
+
+      it('should run extension without function name for ALL hooks using LEGACY convention', async () => {
+        // Extension without function name - should run for all hooks
+        // Uses LEGACY calling convention: (hookName, context)
+        const noFunctionExtension = 'file://path/to/hooks.js';
+
+        await runExtensionHook([noFunctionExtension], 'beforeAll', context);
         expect(transform).toHaveBeenCalledWith(
-          customExtension,
-          expect.anything(),
-          { hookName: 'afterAll' },
+          noFunctionExtension,
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        const afterEachContext = {
+          test: {} as TestCase,
+          result: {} as any,
+        };
+        await runExtensionHook([noFunctionExtension], 'afterEach', afterEachContext);
+        expect(transform).toHaveBeenCalledWith(
+          noFunctionExtension,
+          'afterEach',
+          afterEachContext,
           false,
         );
       });
 
-      it('should run extension without function name for ALL hooks', async () => {
-        // Extension without function name - should run for all hooks
-        const noFunctionExtension = 'file://path/to/hooks.js';
-
-        await runExtensionHook([noFunctionExtension], 'beforeAll', context);
-        expect(transform).toHaveBeenCalled();
-
-        vi.mocked(transform).mockClear();
-        await runExtensionHook([noFunctionExtension], 'afterEach', {
-          test: {} as TestCase,
-          result: {} as any,
-        });
-        expect(transform).toHaveBeenCalled();
-      });
-
-      it('should handle mixed extensions correctly', async () => {
+      it('should handle mixed extensions with correct calling conventions', async () => {
         // Mix of hook-specific and generic extensions
         const extensions = [
-          'file://hooks.js:beforeAll', // Only runs for beforeAll
-          'file://hooks.js:myHandler', // Runs for all hooks
-          'file://hooks.js:afterAll', // Only runs for afterAll
+          'file://hooks.js:beforeAll', // Only runs for beforeAll, NEW convention
+          'file://hooks.js:myHandler', // Runs for all hooks, LEGACY convention
+          'file://hooks.js:afterAll', // Only runs for afterAll (skipped here)
         ];
 
         await runExtensionHook(extensions, 'beforeAll', context);
         // Should call transform twice (beforeAll and myHandler, skip afterAll)
         expect(transform).toHaveBeenCalledTimes(2);
+
+        // First call: :beforeAll uses NEW convention
         expect(transform).toHaveBeenCalledWith(
           'file://hooks.js:beforeAll',
-          expect.anything(),
-          { hookName: 'beforeAll' },
+          context, // NEW: context as first arg
+          { hookName: 'beforeAll' }, // NEW: hookName in object as second arg
           false,
         );
+
+        // Second call: :myHandler uses LEGACY convention
         expect(transform).toHaveBeenCalledWith(
           'file://hooks.js:myHandler',
-          expect.anything(),
-          { hookName: 'beforeAll' },
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
           false,
         );
       });

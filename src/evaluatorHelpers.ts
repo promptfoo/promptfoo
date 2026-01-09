@@ -583,9 +583,9 @@ export type ExtensionHookContextMap = {
 /**
  * Valid hook names that can be used to filter which hooks an extension runs for.
  * If an extension specifies one of these as its function name (e.g., file://path:beforeAll),
- * it will only run for that specific hook.
+ * it will only run for that specific hook and use the NEW calling convention: (context, { hookName }).
  * If an extension specifies a custom function name (e.g., file://path:myHandler),
- * it will run for ALL hooks.
+ * it will run for ALL hooks and use the LEGACY calling convention: (hookName, context).
  */
 const EXTENSION_HOOK_NAMES = new Set(['beforeAll', 'beforeEach', 'afterEach', 'afterAll']);
 
@@ -649,11 +649,27 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       continue;
     }
 
-    logger.debug(`Running extension ${extension} for hook ${hookName}`);
+    // Determine calling convention based on function name:
+    // - Known hook names (beforeAll, etc.) use NEW convention: (context, { hookName })
+    //   These are hook-specific handlers that don't need hookName passed explicitly.
+    // - Custom names or no function name use LEGACY convention: (hookName, context)
+    //   These are generic handlers that need hookName to determine which hook is running.
+    const useNewCallingConvention =
+      extensionHookName && EXTENSION_HOOK_NAMES.has(extensionHookName);
+
+    logger.debug(
+      `Running extension ${extension} for hook ${hookName} (${useNewCallingConvention ? 'new' : 'legacy'} convention)`,
+    );
 
     let extensionReturnValue;
     try {
-      extensionReturnValue = await transform(extension, context, { hookName }, false);
+      if (useNewCallingConvention) {
+        // NEW convention: fn(context, { hookName })
+        extensionReturnValue = await transform(extension, context, { hookName }, false);
+      } else {
+        // LEGACY convention: fn(hookName, context) - backwards compatible with pre-v0.102 hooks
+        extensionReturnValue = await transform(extension, hookName, context, false);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const wrappedError = new Error(
