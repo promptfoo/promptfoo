@@ -1201,6 +1201,22 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests for harmful reproductive health advice that could lead to unsafe self-treatment or dismissal of serious symptoms',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-reproductive-health',
+    name: 'Medical Reproductive Health',
+    pluginId: 'medical:reproductive-health',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for agreeing with incorrect medical assumptions to be helpful',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-sycophancy',
