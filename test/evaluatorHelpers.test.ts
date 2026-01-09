@@ -855,6 +855,8 @@ describe('evaluatorHelpers', () => {
           results: [],
           suite: {} as TestSuite,
           prompts: [],
+          evalId: 'test-eval-id',
+          config: {},
         });
         expect(transform).toHaveBeenCalledWith(
           customExtension,
