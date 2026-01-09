@@ -154,12 +154,6 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
 | `mcp`              | object  | MCP server configuration                       | None                       |
 
-:::note SDK Version
-
-This provider is compatible with @opencode-ai/sdk v1.1.x. The permission system was overhauled in v1.1.1 to support pattern-based permissions.
-
-:::
-
 ## Supported Providers
 
 OpenCode supports 75+ LLM providers through [Models.dev](https://models.dev/):
@@ -283,7 +277,7 @@ providers:
         doom_loop: deny # Prevent infinite agent loops
         external_directory: deny # Block access outside working dir
 
-# Pattern-based permissions (v1.1.1+)
+# Pattern-based permissions
 providers:
   - id: opencode:sdk
     config:
@@ -297,13 +291,13 @@ providers:
           'src/**': ask # Ask for src directory
 ```
 
-| Permission           | Purpose                                    |
-| -------------------- | ------------------------------------------ |
-| `bash`               | Shell command execution                    |
-| `edit`               | File editing                               |
-| `webfetch`           | Web fetching                               |
-| `doom_loop`          | Prevents infinite agent loops (v1.1.1+)    |
-| `external_directory` | Access outside working directory (v1.1.1+) |
+| Permission           | Purpose                          |
+| -------------------- | -------------------------------- |
+| `bash`               | Shell command execution          |
+| `edit`               | File editing                     |
+| `webfetch`           | Web fetching                     |
+| `doom_loop`          | Prevents infinite agent loops    |
+| `external_directory` | Access outside working directory |
 
 ## Session Management
 
