@@ -251,7 +251,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       const resolvedPath = path.resolve(basePath, filePath);
 
       // Path traversal protection: ensure resolved path is within the base directory
-      const normalizedBase = path.normalize(basePath);
+      // Use path.resolve() for normalizedBase to ensure drive letter is included on Windows
+      // (path.normalize() on a Unix-style path like '/test/path' doesn't add the drive letter)
+      const normalizedBase = path.resolve(basePath);
       const normalizedResolved = path.normalize(resolvedPath);
       if (!normalizedResolved.startsWith(normalizedBase)) {
         throw new Error(
