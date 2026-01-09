@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# QuiverAI Provider Example
+# This example demonstrates QuiverAI's SVG generation capabilities.
+#
+# Prerequisites:
+# 1. Set your API key: export QUIVERAI_API_KEY=your-key-here
+# 2. Run: npx promptfoo@latest init --example quiverai
+#    Or:  npm run local -- eval -c examples/quiverai/promptfooconfig.yaml --env-file .env
+
+description: QuiverAI SVG Generation
+
+providers:
+  # Chat provider - uses OpenAI-compatible API
+  - id: quiverai:arrow-0.5
+    label: QuiverAI Arrow
+
+prompts:
+  - |
+    [
+      {"role": "system", "content": "You are a helpful assistant that creates SVG graphics."},
+      {"role": "user", "content": "Create an SVG of {{description}}"}
+    ]
+
+tests:
+  - vars:
+      description: a simple red heart icon
+    assert:
+      - type: contains
+        value: '<svg'
+      - type: contains
+        value: '</svg>'
+
+  - vars:
+      description: a blue checkmark icon
+    assert:
+      - type: contains
+        value: '<svg'
+
+  - vars:
+      description: a yellow star shape
+    assert:
+      - type: contains
+        value: '<svg'

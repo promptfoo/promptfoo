@@ -1,0 +1,221 @@
+# Progressive Complexity SVG Generation Test
+#
+# Stress-tests QuiverAI with progressively complex red panda prompts.
+# Level 1-3: Basic (face, features, expression)
+# Level 4-6: Intermediate (full body, action, objects)
+# Level 7-10: Advanced (scenes, narrative, artistic style)
+
+description: Progressive complexity stress test - red panda series
+
+providers:
+  - id: quiverai:chat:arrow-0.5
+    config:
+      # 4096 is the reliable sweet spot for complex prompts
+      # Default is 1024 (truncates), 8192+ causes timeouts on complex prompts
+      max_tokens: 4096
+
+prompts:
+  - id: file://svg-prompt-detailed.json
+    label: "SVG Artist"
+
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+    rubricPrompt:
+      - role: system
+        content: |
+          Evaluate this SVG against the criteria. Be fair - stylized interpretations
+          are acceptable if core elements are recognizable.
+
+          Output JSON only:
+          {"reason": "<2-3 sentences>", "pass": true|false, "score": 0.0-1.0}
+
+      - role: user
+        content: |
+          SVG: {{ output }}
+
+          Criteria: {{ criteria }}
+
+tests:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 1: Basic Icon (★☆☆☆☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Simple red panda face icon.
+        - Rounded face, two pointed ears
+        - Reddish-orange color (#D35400 or similar)
+        - Minimal, icon-suitable
+      criteria: |
+        Must have: rounded face shape, two ears, reddish-orange color.
+        Style: Simple icon.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.6
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 2: Facial Markings (★★☆☆☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda face with characteristic markings.
+        - White patches on cheeks/around eyes
+        - Dark nose, reddish-orange fur
+        - The distinctive mask pattern
+      criteria: |
+        Must have: red panda face shape, white patches, dark nose, mask pattern.
+        Should be recognizable as red panda (not raccoon).
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 3: Happy Expression (★★☆☆☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Happy, smiling red panda face.
+        - Curved/squinting happy eyes
+        - Visible smile
+        - Ears perked up, cheerful mood
+      criteria: |
+        Must have: red panda face, happy eyes, smile/happy mouth.
+        Mood: Must read as happy/cheerful, not neutral.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.45
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 4: Full Body (★★★☆☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Full-body red panda sitting upright.
+        - Complete body: head, torso, four limbs, fluffy ringed tail
+        - Sitting pose with front paws visible
+        - Reddish body, darker legs, lighter belly
+      criteria: |
+        Must have: head with face, body/torso, front paws, back legs indicated,
+        ringed tail with alternating colors.
+        Anatomy: Complete animal, not just floating head.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.4
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 5: Climbing Action (★★★☆☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda climbing a tree branch.
+        - Paws gripping brown wooden branch
+        - Climbing pose, tail for balance
+        - Dynamic, suggests movement
+      criteria: |
+        Must have: red panda body, distinct tree branch, at least 2 paws touching branch.
+        Pose: Should suggest climbing/gripping, not just sitting.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.35
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 6: Developer Character (★★★★☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda software developer at computer.
+        - Wearing glasses, sitting at laptop/monitor
+        - Screen shows code/text lines
+        - Paws on keyboard, focused expression
+        - Tech mascot aesthetic
+      criteria: |
+        Must have: red panda, glasses, computer/laptop, screen with content indication,
+        typing/working pose.
+        Character: Should read as "developer working" not just "animal near computer".
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.3
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 7: Forest Scene (★★★★☆)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda in bamboo forest at sunset.
+        - Central red panda subject
+        - Multiple bamboo stalks and leaves behind
+        - Sunset colors: orange, pink, purple sky
+        - Atmospheric depth, peaceful mood
+      criteria: |
+        Must have: visible red panda, bamboo stalks (3+), bamboo leaves,
+        warm sunset colors in background.
+        Composition: Panda framed within scene, depth between foreground/background.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.3
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 8: Teaching Scene (★★★★★)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda teacher with baby red panda students.
+        - Larger adult at front near chalkboard
+        - 2-3 smaller baby pandas as students
+        - Board with marks/writing behind teacher
+        - Classroom arrangement, educational context
+      criteria: |
+        Must have: larger teacher panda, 2+ smaller student pandas, board element,
+        teaching gesture, students facing teacher.
+        Narrative: Scene reads as classroom/lesson happening.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.25
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 9: Space Poster Style (★★★★★)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Red panda astronaut in space - retro 1960s poster style.
+        - Space suit with helmet, floating zero-gravity pose
+        - Stars and Earth/planet in background
+        - Bold shapes, limited palette, vintage feel
+        - Deep blues, warm oranges, heroic mood
+      criteria: |
+        Must have: red panda, space suit/helmet, floating pose, stars, planet/Earth.
+        Style: Retro/bold graphic style (not photorealistic), limited color palette.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.2
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEVEL 10: Epic Warrior Scene (★★★★★)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - vars:
+      subject: |
+        Epic: Red panda samurai warrior on mountain peak at dawn.
+        - Samurai armor (chest plate, shoulder guards)
+        - Standing victorious on rocky peak, paw raised or holding banner
+        - Flowing cape/banner in wind
+        - Dawn sky gradient (purple to orange to gold), rising sun
+        - Distant misty mountains, dramatic lighting
+        - Triumphant hero's journey climax mood
+      criteria: |
+        Must have: red panda warrior, armor elements, heroic pose, mountain peak,
+        dawn sky with warm colors, sun element.
+        Bonus: cape/banner, distant mountains, wind effects.
+        Mood: Epic, triumphant movie poster feeling.
+    assert:
+      - type: llm-rubric
+        value: "{{ criteria }}"
+        threshold: 0.15

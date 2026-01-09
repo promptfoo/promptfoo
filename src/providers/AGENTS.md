@@ -85,9 +85,23 @@ Every provider needs tests in `test/providers/`:
 
 ## Adding a Provider
 
+**All five items are required** before a provider is complete:
+
 1. Implement `ApiProvider` interface
 2. Add tests in `test/providers/`
-3. Add docs in `site/docs/providers/`
-4. Add example in `examples/`
+3. Add docs in `site/docs/providers/<provider>.md`
+4. Add entry to `site/docs/providers/index.md` table (alphabetical order)
+5. Add example in `examples/<provider>/`
+
+**Verify completeness:**
+
+```bash
+# Check all pieces exist
+ls src/providers/myprovider.ts
+ls test/providers/myprovider.test.ts
+ls site/docs/providers/myprovider.md
+grep -q "myprovider" site/docs/providers/index.md && echo "index.md updated"
+ls examples/myprovider/promptfooconfig.yaml
+```
 
 **Reference existing providers** - 50+ implementations to learn from.
