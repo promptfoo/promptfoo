@@ -74,6 +74,8 @@ export const PluginConfigSchema = z.object({
   targetIdentifiers: z.array(z.string()).optional(),
   // BFLA
   targetSystems: z.array(z.string()).optional(),
+  // BOPLA
+  targetProperties: z.array(z.string()).optional(),
   // Competitor
   mentions: z.boolean().optional(),
   // SSRF
@@ -83,6 +85,10 @@ export const PluginConfigSchema = z.object({
   name: z.string().optional(),
   // CyberSecEval
   multilingual: z.boolean().optional(),
+  // Resource Consumption
+  targetResources: z.array(z.string()).optional(),
+  // Unrestricted Access
+  targetFlows: z.array(z.string()).optional(),
 
   indirectInjectionVar: z.string().optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),

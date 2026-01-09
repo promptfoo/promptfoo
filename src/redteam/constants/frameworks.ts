@@ -184,11 +184,11 @@ export const OWASP_API_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:api:03': {
-    plugins: ['excessive-agency', 'overreliance'],
+    plugins: ['bopla'],
     strategies: [],
   },
   'owasp:api:04': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session'],
+    plugins: ['resource-consumption'],
     strategies: [],
   },
   'owasp:api:05': {
@@ -196,7 +196,7 @@ export const OWASP_API_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:api:06': {
-    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    plugins: ['unrestricted-access'],
     strategies: [],
   },
   'owasp:api:07': {

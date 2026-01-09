@@ -72,6 +72,6 @@ By incorporating the BFLA plugin in your LLM red teaming strategy, you can ident
 
 - [RBAC (Role-Based Access Control)](rbac.md)
 - [BOLA (Broken Object Level Authorization)](bola.md)
-- [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
+- [BOPLA (Broken Object Property Level Authorization)](bopla.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
