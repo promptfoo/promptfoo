@@ -76,7 +76,9 @@ function ProviderConfigEditor({
     } else if (field === 'body') {
       updatedTarget.config.body = value;
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      if (bodyStr.includes('{{prompt}}')) {
+      const hasInputs =
+        (updatedTarget as any).inputs && Object.keys((updatedTarget as any).inputs).length > 0;
+      if (bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
         setBodyError(
@@ -97,7 +99,9 @@ function ProviderConfigEditor({
       }
     } else if (field === 'request') {
       updatedTarget.config.request = value;
-      if (value && !value.includes('{{prompt}}')) {
+      const hasInputs =
+        (updatedTarget as any).inputs && Object.keys((updatedTarget as any).inputs).length > 0;
+      if (value && !value.includes('{{prompt}}') && !hasInputs) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
         setBodyError(null);
@@ -110,6 +114,17 @@ function ProviderConfigEditor({
       updatedTarget.delay = value;
     } else if (field === 'config') {
       updatedTarget.config = value;
+    } else if (field === 'inputs') {
+      // Handle top-level inputs field for multi-variable input configuration
+      if (value === undefined) {
+        delete (updatedTarget as any).inputs;
+      } else {
+        (updatedTarget as any).inputs = value;
+        // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
+        if (Object.keys(value).length > 0) {
+          setBodyError(null);
+        }
+      }
     } else {
       updatedTarget.config[field] = value;
     }
@@ -379,6 +394,8 @@ function ProviderConfigEditor({
 
       <div className="mt-6">
         <CommonConfigurationOptions
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}

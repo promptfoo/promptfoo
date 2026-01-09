@@ -63,6 +63,7 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
 export async function testProviderConnectivity(
   provider: ApiProvider,
   prompt: string = 'Hello World!',
+  inputs?: Record<string, string>,
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
@@ -71,6 +72,15 @@ export async function testProviderConnectivity(
   // requests will use the server-returned session ID
   if (!provider?.config?.sessionParser) {
     vars['sessionId'] = crypto.randomUUID();
+  }
+
+  // Generate dummy values for each input variable defined in multi-input configuration
+  // The inputs object has variable names as keys and descriptions as values
+  if (inputs && typeof inputs === 'object') {
+    for (const [varName, _description] of Object.entries(inputs)) {
+      // Generate a placeholder test value for each variable
+      vars[varName] = `test_${varName}`;
+    }
   }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
@@ -413,6 +423,7 @@ export async function testProviderSession(
   provider: ApiProvider,
   sessionConfig?: { sessionSource?: string; sessionParser?: string },
   options?: { skipConfigValidation?: boolean },
+  inputs?: Record<string, string>,
 ): Promise<SessionTestResult> {
   try {
     // Validate sessions config
@@ -432,6 +443,14 @@ export async function testProviderSession(
 
     const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
 
+    // Generate dummy values for each input variable defined in multi-input configuration
+    const inputVars: Record<string, string> = {};
+    if (inputs && typeof inputs === 'object') {
+      for (const [varName, _description] of Object.entries(inputs)) {
+        inputVars[varName] = `test_${varName}`;
+      }
+    }
+
     const firstPrompt = 'What can you help me with?';
     const secondPrompt = 'What was the last thing I asked you?';
 
@@ -445,6 +464,7 @@ export async function testProviderSession(
     const firstContext = {
       vars: {
         ...(initialSessionId ? { sessionId: initialSessionId } : {}),
+        ...inputVars,
       },
       prompt: {
         raw: firstPrompt,
@@ -505,6 +525,7 @@ export async function testProviderSession(
     const secondContext = {
       vars: {
         ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
+        ...inputVars,
       },
       prompt: {
         raw: secondPrompt,
