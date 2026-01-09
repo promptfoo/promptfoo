@@ -4,9 +4,9 @@ This module provides functionality for handling extension hooks in promptfoo.
 It allows for executing custom actions before and after test suites and
 individual evaluations, as well as running setup and teardown commands.
 
-IMPORTANT: The function signature is (context, hook_context) where:
+IMPORTANT: The function signature is (hook_name, context) where:
+- hook_name: 'beforeAll', 'beforeEach', 'afterEach', or 'afterAll'
 - context: The hook-specific data (e.g., {'suite': ...} for beforeAll)
-- hook_context: Contains {'hookName': 'beforeAll'|'beforeEach'|'afterEach'|'afterAll'}
 
 WARNING: The `counter` variable is NOT thread-safe. When running with concurrency > 1,
 the counter may not accurately track test numbers. Consider using thread-safe counters
@@ -34,21 +34,21 @@ if not logging.getLogger().handlers:
 counter = 0
 
 
-def extension_hook(context: dict, hook_context: dict) -> Optional[dict]:
+def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
     """Handles different extension hooks for promptfoo.
 
     This function is called at various points during the test execution process.
     It logs information about the test suite and individual tests.
 
     Args:
+        hook_name (str): The name of the hook being called.
+            One of: 'beforeAll', 'beforeEach', 'afterEach', 'afterAll'
         context (dict): A dictionary containing contextual information for the hook.
             The contents vary depending on the hook being called:
             - beforeAll: {'suite': TestSuite}
             - beforeEach: {'test': TestCase}
             - afterEach: {'test': TestCase, 'result': EvaluateResult}
             - afterAll: {'results': EvaluateResult[], 'suite': TestSuite, ...}
-        hook_context (dict): Contains metadata about the hook, including:
-            - hookName (str): 'beforeAll', 'beforeEach', 'afterEach', or 'afterAll'
 
     Returns:
         context (Optional[dict]): The "beforeAll" and "beforeEach" hooks should return
@@ -64,8 +64,6 @@ def extension_hook(context: dict, hook_context: dict) -> Optional[dict]:
         completion, results, and token usage.
     """
     global counter
-
-    hook_name = hook_context.get("hookName")
 
     if hook_name == "beforeAll":
         suite = context.get("suite", {})
