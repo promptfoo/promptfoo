@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# VLSU Plugin Example Configuration
+# This example demonstrates how to use the VLSU plugin for testing
+# compositional safety - where individually safe images and text combine to produce harmful outputs
+
+description: VLSU compositional safety testing for multi-modal models
+
+prompts:
+  - file://vlsu-prompt.json
+
+targets:
+  # You can use any multi-modal model
+  - openai:gpt-4o
+  # - anthropic:claude-3-5-sonnet-latest
+
+redteam:
+  # Number of test cases to generate
+  numTests: 3
+
+  plugins:
+    # Basic VLSU with all categories
+    - vlsu
+
+    # Or test only compositional cases (safe+safe=unsafe)
+    # - id: vlsu
+    #   config:
+    #     compositionalOnly: true
+
+    # Or filter by specific categories
+    # - id: vlsu
+    #   config:
+    #     categories: [C4, C9, C12]  # Self-harm, Violence, Terrorism
+
+    # Or filter by severity patterns
+    # - id: vlsu
+    #   config:
+    #     severityPatterns:
+    #       - safe_safe_unsafe
