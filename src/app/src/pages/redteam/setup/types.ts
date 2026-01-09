@@ -1,28 +1,13 @@
 import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import type { TestCase } from '@promptfoo/types';
+import type {
+  ApplicationDefinition as ApplicationDefinitionType,
+  ReconContext as ReconContextType,
+} from '@promptfoo/validators/recon';
 
-export interface ApplicationDefinition {
-  purpose?: string;
-  features?: string;
-  hasAccessTo?: string;
-  doesNotHaveAccessTo?: string;
-  userTypes?: string;
-  securityRequirements?: string;
-  exampleIdentifiers?: string;
-  industry?: string;
-  sensitiveDataTypes?: string;
-  criticalActions?: string;
-  forbiddenTopics?: string;
-  competitors?: string;
-  systemPrompt?: string;
-  redteamUser?: string;
-  accessToData?: string;
-  forbiddenData?: string;
-  accessToActions?: string;
-  forbiddenActions?: string;
-  connectedSystems?: string;
-  attackConstraints?: string;
-}
+// Re-export shared types from validators (single source of truth)
+export type ApplicationDefinition = ApplicationDefinitionType;
+export type ReconContext = ReconContextType;
 
 export interface Config {
   description: string;

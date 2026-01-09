@@ -7,7 +7,13 @@ description: Red team AI systems through automated target discovery to detect vu
 
 # Target Discovery
 
-Promptfoo's **Target Discovery Agent** automatically extracts useful information about generative AI systems that you want to red team. This information is used to craft adversarial inputs that are unique to the target system, improving attack efficacy and response evaluation quality.
+Promptfoo's **Target Discovery Agent** automatically extracts useful information about generative AI systems that you want to red team. This is a **black-box** approach that probes a running target to extract information about its purpose, limitations, and capabilities.
+
+:::tip Have source code access?
+
+If you have access to the application's source code, use [`recon`](/docs/red-team/recon/) instead for white-box analysis. It extracts system prompts, discovers tools, and generates a complete red team configuration.
+
+:::
 
 ## Usage
 
@@ -42,3 +48,8 @@ The agent discovers four key areas:
 4. **User Context**: How the system perceives and categorizes users
 
 The responses are synthesized into a comprehensive profile to inform attack strategies. For privacy, target responses are not stored except in error cases where they may appear in Promptfoo Cloud's error logs for debugging purposes.
+
+## See Also
+
+- [Codebase Recon](/docs/red-team/recon/) - White-box analysis of source code (when you have code access)
+- [Configuration](/docs/red-team/configuration/#purpose) - Manual purpose field configuration
