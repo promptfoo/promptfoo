@@ -1035,7 +1035,121 @@ describe('ResultsView Chart Rendering', () => {
     expect(resultsCharts).toBeNull();
   });
 
-  it('should not render ResultsCharts if all scores are the same', async () => {
+  it('should not render ResultsCharts if all scores are binary edge values (all 1s)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 1 }, { score: 1 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should not render ResultsCharts if all scores are binary edge values (all 0s)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1084,11 +1198,9 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
-
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    // Uniform score of 0.8 is meaningful (graded assertion), should show charts
+    const showChartsButton = screen.queryByText('Hide Charts');
+    expect(showChartsButton).toBeInTheDocument();
   });
 
   it('should not render ResultsCharts if there are no valid scores', async () => {
