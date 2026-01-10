@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
-import { useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 // Import shared sanitization utilities from backend
 import {
   isSecretField,
@@ -129,9 +129,6 @@ export function ProviderDisplay({
   providersArray,
   fallbackIndex,
 }: ProviderDisplayProps) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-
   const { config: providerConfig, matchType } = useMemo(
     () => findProviderConfig(providerString, providersArray, fallbackIndex),
     [providerString, providersArray, fallbackIndex],
@@ -205,59 +202,51 @@ export function ProviderDisplay({
     }
   }, [providerConfig, displayId]);
 
-  // Don't render tooltip wrapper if there's no content to show
-  const content = (
-    <span style={{ cursor: tooltipContent ? 'help' : 'default' }}>
-      {label ? (
-        <strong>{label}</strong>
-      ) : prefix && prefix !== name ? (
-        // Standard format: "openai:gpt-4o"
-        <>
-          {prefix}:<strong>{name}</strong>
-        </>
-      ) : (
-        // Provider without colon (e.g., "echo", "ollama") - just show name
-        <strong>{name}</strong>
-      )}
+  // Provider name display content
+  const providerLabel = label ? (
+    <span className="font-semibold">{label}</span>
+  ) : prefix && prefix !== name ? (
+    // Standard format: "openai:gpt-4o"
+    <span>
+      <span className="text-muted-foreground">{prefix}:</span>
+      <span className="font-semibold">{name}</span>
     </span>
+  ) : (
+    // Provider without colon (e.g., "echo", "ollama") - just show name
+    <span className="font-semibold">{name}</span>
   );
 
   // Only wrap in Tooltip if there's content to display
   if (!tooltipContent) {
-    return content;
+    return <span className="cursor-default">{providerLabel}</span>;
   }
 
   return (
-    <Tooltip
-      title={
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>
+        <span className="cursor-help">{providerLabel}</span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="start"
+        className={cn(
+          'max-w-[400px] p-3',
+          'bg-gray-100 dark:bg-gray-900',
+          'text-gray-900 dark:text-gray-100',
+          'border border-border',
+        )}
+      >
         <pre
-          style={{
-            margin: 0,
-            fontSize: '0.7rem',
-            maxHeight: '300px',
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
+          className={cn(
+            'm-0 text-[11px] leading-relaxed',
+            'max-h-[300px] overflow-auto',
+            'whitespace-pre-wrap break-words',
+            'font-mono',
+          )}
         >
           {tooltipContent}
         </pre>
-      }
-      placement="bottom-start"
-      slotProps={{
-        tooltip: {
-          sx: {
-            bgcolor: isDark ? 'grey.900' : 'grey.100',
-            color: isDark ? 'grey.100' : 'grey.900',
-            border: '1px solid',
-            borderColor: 'divider',
-            p: 1.5,
-            maxWidth: 400,
-          },
-        },
-      }}
-    >
-      {content}
+      </TooltipContent>
     </Tooltip>
   );
 }

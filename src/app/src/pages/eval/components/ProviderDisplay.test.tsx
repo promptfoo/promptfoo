@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -311,11 +312,13 @@ describe('ProviderDisplay', () => {
     fallbackIndex?: number,
   ) => {
     return render(
-      <ProviderDisplay
-        providerString={providerString}
-        providersArray={providersArray}
-        fallbackIndex={fallbackIndex}
-      />,
+      <TooltipProvider>
+        <ProviderDisplay
+          providerString={providerString}
+          providersArray={providersArray}
+          fallbackIndex={fallbackIndex}
+        />
+      </TooltipProvider>,
     );
   };
 
@@ -373,11 +376,13 @@ describe('ProviderDisplay', () => {
       renderWithProviders('openai:gpt-4o', providers);
 
       const providerElement = screen.getByText('gpt-4o');
-      expect(providerElement.closest('span')).toHaveStyle({ cursor: 'help' });
+      // Navigate up to find the wrapper span with cursor class (parent > parent)
+      const wrapperSpan = providerElement.parentElement?.parentElement;
+      expect(wrapperSpan).toHaveClass('cursor-help');
 
       await user.hover(providerElement);
 
-      // Wait for MUI tooltip to appear
+      // Wait for Radix tooltip to appear
       await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
       const tooltip = document.querySelector('[role="tooltip"]');
       expect(tooltip?.textContent).toContain('temperature');
@@ -452,16 +457,18 @@ describe('ProviderDisplay', () => {
 
       expect(screen.getByText('gpt-4o')).toBeInTheDocument();
       // Cursor should be default (not help) since no tooltip content
-      const span = screen.getByText('gpt-4o').closest('span');
-      expect(span).toHaveStyle({ cursor: 'default' });
+      // Navigate up to find the wrapper span with cursor class (parent > parent)
+      const wrapperSpan = screen.getByText('gpt-4o').parentElement?.parentElement;
+      expect(wrapperSpan).toHaveClass('cursor-default');
     });
 
     it('does not show tooltip for string-only provider', () => {
       const providers = ['openai:gpt-4o', 'anthropic:claude-3'];
       renderWithProviders('openai:gpt-4o', providers);
 
-      const span = screen.getByText('gpt-4o').closest('span');
-      expect(span).toHaveStyle({ cursor: 'default' });
+      // Navigate up to find the wrapper span with cursor class (parent > parent)
+      const wrapperSpan = screen.getByText('gpt-4o').parentElement?.parentElement;
+      expect(wrapperSpan).toHaveClass('cursor-default');
     });
   });
 
@@ -524,9 +531,10 @@ describe('ProviderDisplay', () => {
 
       // Should show the whole label, not split it
       expect(screen.getByText('prod:us-east:gpt4')).toBeInTheDocument();
-      // Verify it's shown as a single strong element (label display)
-      const strongElement = screen.getByText('prod:us-east:gpt4');
-      expect(strongElement.tagName).toBe('STRONG');
+      // Verify it's shown as a single span element with font-semibold (label display)
+      const labelElement = screen.getByText('prod:us-east:gpt4');
+      expect(labelElement.tagName).toBe('SPAN');
+      expect(labelElement).toHaveClass('font-semibold');
     });
 
     it('handles fallback to index when provider not found by id/label', async () => {
