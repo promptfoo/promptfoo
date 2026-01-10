@@ -18,10 +18,6 @@ export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
         ...config,
         apiBaseUrl: config.apiBaseUrl || QUIVERAI_API_BASE_URL,
         apiKeyEnvar: 'QUIVERAI_API_KEY',
-        passthrough: {
-          ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort }),
-          ...config.passthrough,
-        },
       },
     });
   }

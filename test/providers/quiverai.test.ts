@@ -33,15 +33,6 @@ describe('QuiverAI Provider', () => {
       expect(provider.getApiUrlDefault()).toBe('https://api.quiver.ai/v1');
     });
 
-    it('should pass through reasoning_effort config', () => {
-      const provider = new QuiverAiChatProvider('arrow-0.5', {
-        config: {
-          reasoning_effort: 'high',
-        },
-      });
-      expect(provider.config.passthrough).toEqual({ reasoning_effort: 'high' });
-    });
-
     it('should use custom apiBaseUrl when provided', () => {
       const provider = new QuiverAiChatProvider('arrow-0.5', {
         config: {
@@ -69,6 +60,12 @@ describe('QuiverAI Provider', () => {
       const provider = createQuiverAiProvider('quiverai:');
       expect(provider).toBeInstanceOf(QuiverAiChatProvider);
       expect(provider.id()).toBe('quiverai:arrow-0.5');
+    });
+
+    it('should support preview model', () => {
+      const provider = createQuiverAiProvider('quiverai:arrow-0.5-preview');
+      expect(provider).toBeInstanceOf(QuiverAiChatProvider);
+      expect(provider.id()).toBe('quiverai:arrow-0.5-preview');
     });
 
     it('should pass config to chat provider', () => {
