@@ -613,7 +613,7 @@ const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
 }).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-    error: 'Either privateKeyPath or privateKey must be provided for PEM type'
+  error: 'Either privateKeyPath or privateKey must be provided for PEM type',
 });
 
 // JKS signature auth schema
@@ -624,7 +624,7 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   keystorePassword: z.string().optional(),
   keyAlias: z.string().optional(),
 }).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-    error: 'Either keystorePath or keystoreContent must be provided for JKS type'
+  error: 'Either keystorePath or keystoreContent must be provided for JKS type',
 });
 
 // PFX signature auth schema
@@ -647,45 +647,50 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
     );
   },
   {
-      error: 'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type'
-},
+    error:
+      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
+  },
 );
 
 // Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = z.looseObject(BaseSignatureAuthSchema.extend({
-  privateKeyPath: z.string().optional(),
-  privateKey: z.string().optional(),
-  keystorePath: z.string().optional(),
-  keystorePassword: z.string().optional(),
-  keyAlias: z.string().optional(),
-  keyPassword: z.string().optional(),
-  pfxPath: z.string().optional(),
-  pfxPassword: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-}).shape);
+const LegacySignatureAuthSchema = z.looseObject(
+  BaseSignatureAuthSchema.extend({
+    privateKeyPath: z.string().optional(),
+    privateKey: z.string().optional(),
+    keystorePath: z.string().optional(),
+    keystorePassword: z.string().optional(),
+    keyAlias: z.string().optional(),
+    keyPassword: z.string().optional(),
+    pfxPath: z.string().optional(),
+    pfxPassword: z.string().optional(),
+    certPath: z.string().optional(),
+    keyPath: z.string().optional(),
+  }).shape,
+);
 
 // Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = z.looseObject(BaseSignatureAuthSchema.extend({
-  certificateContent: z.string().optional(),
-  certificatePassword: z.string().optional(),
-  certificateFilename: z.string().optional(),
-  type: z.enum(['pem', 'jks', 'pfx']).optional(),
-  // Include type-specific fields that might be present or added by transform
-  pfxContent: z.string().optional(),
-  pfxPassword: z.string().optional(),
-  pfxPath: z.string().optional(),
-  keystoreContent: z.string().optional(),
-  keystorePassword: z.string().optional(),
-  keystorePath: z.string().optional(),
-  privateKey: z.string().optional(),
-  privateKeyPath: z.string().optional(),
-  keyAlias: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-  certContent: z.string().optional(),
-  keyContent: z.string().optional(),
-}).shape);
+const GenericCertificateAuthSchema = z.looseObject(
+  BaseSignatureAuthSchema.extend({
+    certificateContent: z.string().optional(),
+    certificatePassword: z.string().optional(),
+    certificateFilename: z.string().optional(),
+    type: z.enum(['pem', 'jks', 'pfx']).optional(),
+    // Include type-specific fields that might be present or added by transform
+    pfxContent: z.string().optional(),
+    pfxPassword: z.string().optional(),
+    pfxPath: z.string().optional(),
+    keystoreContent: z.string().optional(),
+    keystorePassword: z.string().optional(),
+    keystorePath: z.string().optional(),
+    privateKey: z.string().optional(),
+    privateKeyPath: z.string().optional(),
+    keyAlias: z.string().optional(),
+    certPath: z.string().optional(),
+    keyPath: z.string().optional(),
+    certContent: z.string().optional(),
+    keyContent: z.string().optional(),
+  }).shape,
+);
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -743,7 +748,8 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-        error: 'Both certificate and key must be provided for client certificate authentication (unless using PFX)'
+      error:
+        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
     },
   );
 

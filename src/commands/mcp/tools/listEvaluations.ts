@@ -18,12 +18,14 @@ export function registerListEvaluationsTool(server: McpServer) {
         .describe(
           'Filter evaluations by dataset ID (SHA256 hash). Example: "0e65b35936119614815dfb3a2bd2c09863d8abbcd32d0cae1e98902b04b5df4e" or leave empty to see all evaluations',
         ),
-      page: z.int()
+      page: z
+        .int()
         .positive()
         .optional()
         .prefault(1)
         .describe('Page number for pagination (default: 1)'),
-      pageSize: z.int()
+      pageSize: z
+        .int()
         .min(1)
         .max(100)
         .optional()

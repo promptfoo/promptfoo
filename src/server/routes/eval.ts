@@ -154,8 +154,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
     res.json(
       ApiSchemas.Eval.UpdateAuthor.Response.parse({
-          error: 'Author updated successfully'
-    }),
+        error: 'Author updated successfully',
+      }),
     );
   } catch (error) {
     if (error instanceof z.ZodError) {

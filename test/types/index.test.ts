@@ -674,7 +674,7 @@ describe('TestSuiteConfigSchema', () => {
           return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
         },
         {
-            error: "Exactly one of 'targets' or 'providers' must be provided, but not both"
+          error: "Exactly one of 'targets' or 'providers' must be provided, but not both",
         },
       );
 

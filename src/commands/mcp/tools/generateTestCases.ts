@@ -50,7 +50,8 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           `,
         ),
 
-      numTestCases: z.int()
+      numTestCases: z
+        .int()
         .min(1)
         .max(50)
         .prefault(5)

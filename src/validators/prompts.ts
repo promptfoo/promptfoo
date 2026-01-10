@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
-import type { ApiProvider } from '../types/providers';
 
 // Zod schemas for validation
 export const PromptConfigSchema = z.object({
@@ -9,11 +8,7 @@ export const PromptConfigSchema = z.object({
   suffix: z.string().optional(),
 });
 
-const PromptFunctionSchema = z
-  .function({ input: [z.object({
-          vars: z.record(z.string(), z.union([z.string(), z.any()])),
-          provider: z.custom<ApiProvider>().optional(),
-        })], output: z.promise(z.union([z.string(), z.any()])) });
+const PromptFunctionSchema = z.custom<PromptFunction>();
 
 export const PromptSchema = z.object({
   id: z.string().optional(),

@@ -32,26 +32,22 @@ const CallApiContextParamsSchema = z.object({
   logger: z.optional(z.any()),
   originalProvider: z.optional(z.any()),
   prompt: PromptSchema,
-  vars: z.record(z.string(), z.union([z.string(), z.object({})])),
+  vars: z.record(z.string(), z.union([z.string(), z.custom<object>()])),
 });
 
 const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
 });
 
-const CallApiFunctionSchema = z
-  .function({ input: [z.string().describe('prompt'), CallApiContextParamsSchema.optional(), CallApiOptionsParamsSchema.optional()], output: z.promise(z.custom<ProviderResponse>()) })
-  .and(z.object({ label: z.string().optional() }));
+const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>();
 
 export const ApiProviderSchema = z.object({
-  id: z.function({ input: undefined, output: z.string() }),
+  id: z.custom<() => string>(),
   callApi: z.custom<CallApiFunction>(),
-  callEmbeddingApi: z
-        .function()
-    .optional({ input: [z.string()], output: z.promise(z.custom<ProviderEmbeddingResponse>()) }),
+  callEmbeddingApi: z.custom<(prompt: string) => Promise<ProviderEmbeddingResponse>>().optional(),
   callClassificationApi: z
-        .function()
-    .optional({ input: [z.string()], output: z.promise(z.custom<ProviderClassificationResponse>()) }),
+    .custom<(prompt: string) => Promise<ProviderClassificationResponse>>()
+    .optional(),
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),

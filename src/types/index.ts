@@ -682,7 +682,8 @@ const ProviderPromptMapSchema = z.record(
 const MetadataSchema = z.record(z.string(), z.any());
 
 export const VarsSchema = z.record(
-  z.string(), z.union([
+  z.string(),
+  z.union([
     z.string(),
     z.number(),
     z.boolean(),
@@ -724,7 +725,7 @@ export const TestCaseSchema = z.object({
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  providerOutput: z.union([z.string(), z.object({})]).optional(),
+  providerOutput: z.union([z.string(), z.custom<object>()]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
@@ -807,7 +808,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.string(), z.union([z.string(), z.object({})])).optional(),
+  vars: z.record(z.string(), z.union([z.string(), z.custom<object>()])).optional(),
 }).strict();
 
 export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
@@ -865,8 +866,10 @@ export const DerivedMetricSchema = z.object({
   // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
   value: z.union([
     z.string(),
-    z
-                  .function({ input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()], output: z.number() }),
+    z.function({
+      input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()],
+      output: z.number(),
+    }),
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
@@ -898,8 +901,8 @@ export const TestSuiteSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-          error: 'defaultTest string must start with file://'
-    }),
+        error: 'defaultTest string must start with file://',
+      }),
       TestCaseSchema.omit({ description: true }),
     ])
     .optional(),
@@ -919,7 +922,7 @@ export const TestSuiteSchema = z.object({
       z
         .string()
         .refine((value) => value.startsWith('file://'), {
-            error: 'Extension must start with file://'
+          error: 'Extension must start with file://',
         })
         .refine(
           (value) => {
@@ -927,8 +930,8 @@ export const TestSuiteSchema = z.object({
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
-              error: 'Extension must be of the form file://path/to/file.py:function_name'
-        },
+            error: 'Extension must be of the form file://path/to/file.py:function_name',
+          },
         )
         .refine(
           (value) => {
@@ -939,8 +942,9 @@ export const TestSuiteSchema = z.object({
             );
           },
           {
-              error: 'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name'
-        },
+            error:
+              'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
+          },
         ),
     )
     .nullable()
@@ -1034,8 +1038,8 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-          error: 'defaultTest string must start with file://'
-    }),
+        error: 'defaultTest string must start with file://',
+      }),
       TestCaseSchema.omit({ description: true }),
     ])
     .optional(),
@@ -1147,7 +1151,7 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
     },
     {
-        error: "Exactly one of 'targets' or 'providers' must be provided, but not both"
+      error: "Exactly one of 'targets' or 'providers' must be provided, but not both",
     },
   )
   .transform((data) => {

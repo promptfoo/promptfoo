@@ -9,12 +9,12 @@ import { RedteamPluginBase } from './base';
 import type { ApiProvider, Assertion, TestCase } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z.strictObject({
-    generator: z.string().min(1, 'Generator must not be empty').trim(),
-    grader: z.string().min(1, 'Grader must not be empty').trim(),
-    threshold: z.number().optional(),
-    metric: z.string().optional(),
-    id: z.string().optional(),
-  });
+  generator: z.string().min(1, 'Generator must not be empty').trim(),
+  grader: z.string().min(1, 'Grader must not be empty').trim(),
+  threshold: z.number().optional(),
+  metric: z.string().optional(),
+  id: z.string().optional(),
+});
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 

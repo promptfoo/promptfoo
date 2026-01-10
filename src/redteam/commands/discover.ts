@@ -75,8 +75,8 @@ export const ArgsSchema = z
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
     path: ['config', 'target'],
-      error: 'Cannot specify both config and target!'
-});
+    error: 'Cannot specify both config and target!',
+  });
 
 // ========================================================
 // Types

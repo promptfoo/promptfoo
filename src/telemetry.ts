@@ -26,7 +26,10 @@ export const TelemetryEventSchema = z.object({
     'webui_page_view',
   ]),
   packageVersion: z.string().optional().prefault(VERSION),
-  properties: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+  properties: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  ),
 });
 type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
