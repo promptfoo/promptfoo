@@ -2,18 +2,18 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import {
-  withGenAISpan,
-  getTraceparent,
-  sanitizeBody,
   type GenAISpanContext,
   type GenAISpanResult,
+  getTraceparent,
+  sanitizeBody,
+  withGenAISpan,
 } from '../../tracing/genaiTracer';
 
 import type { EnvOverrides } from '../../types/env';
