@@ -1,0 +1,2 @@
+agentdojo>=0.1.14
+openai>=1.0.0
