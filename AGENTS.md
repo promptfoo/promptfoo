@@ -273,7 +273,6 @@ Read these when relevant to your task:
 | `docs/agents/pr-conventions.md`        | Creating pull requests         |
 | `docs/agents/git-workflow.md`          | Git operations                 |
 | `docs/agents/dependency-management.md` | Updating packages              |
-| `docs/agents/linting.md`               | Biome linting rules/overrides  |
 | `docs/agents/logging.md`               | Adding logging to code         |
 | `docs/agents/python.md`                | Python providers/scripts       |
 | `src/app/AGENTS.md`                    | Frontend React development     |
