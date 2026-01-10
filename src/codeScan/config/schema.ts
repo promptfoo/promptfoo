@@ -15,15 +15,15 @@ export const ConfigSchema = z
     minimumSeverity: CodeScanSeveritySchema.optional().describe('Alias for minSeverity'),
     diffsOnly: z
       .boolean()
-      .default(false)
+      .prefault(false)
       .describe('Only scan PR diffs, skip filesystem exploration (default: explore full repo)'),
     apiHost: z.string().optional().describe('Scan server URL (default: https://api.promptfoo.app)'),
     guidance: z.string().optional().describe('Custom guidance for the security scan'),
     guidanceFile: z.string().optional().describe('Path to file containing custom guidance'),
   })
   .refine((data) => !(data.guidance && data.guidanceFile), {
-    message: 'Cannot specify both guidance and guidanceFile',
-  })
+      error: 'Cannot specify both guidance and guidanceFile'
+})
   .transform((data) => {
     // Resolve severity with precedence: minSeverity > minimumSeverity > default
     const minimumSeverity = data.minSeverity ?? data.minimumSeverity ?? CodeScanSeverity.MEDIUM;

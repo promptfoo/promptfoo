@@ -595,15 +595,15 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
 }
 
 const TokenEstimationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  multiplier: z.number().min(0.01).default(1.3),
+  enabled: z.boolean().prefault(false),
+  multiplier: z.number().min(0.01).prefault(1.3),
 });
 
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().default(300000),
-  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().default('SHA256'),
+  signatureValidityMs: z.number().prefault(300000),
+  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().prefault('SHA256'),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
@@ -613,7 +613,7 @@ const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
 }).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-  message: 'Either privateKeyPath or privateKey must be provided for PEM type',
+    error: 'Either privateKeyPath or privateKey must be provided for PEM type'
 });
 
 // JKS signature auth schema
@@ -624,7 +624,7 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   keystorePassword: z.string().optional(),
   keyAlias: z.string().optional(),
 }).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-  message: 'Either keystorePath or keystoreContent must be provided for JKS type',
+    error: 'Either keystorePath or keystoreContent must be provided for JKS type'
 });
 
 // PFX signature auth schema
@@ -647,13 +647,12 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
     );
   },
   {
-    message:
-      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
-  },
+      error: 'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type'
+},
 );
 
 // Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
+const LegacySignatureAuthSchema = z.looseObject(BaseSignatureAuthSchema.extend({
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
   keystorePath: z.string().optional(),
@@ -664,10 +663,10 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-}).passthrough();
+}).shape);
 
 // Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
+const GenericCertificateAuthSchema = z.looseObject(BaseSignatureAuthSchema.extend({
   certificateContent: z.string().optional(),
   certificatePassword: z.string().optional(),
   certificateFilename: z.string().optional(),
@@ -686,7 +685,7 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyPath: z.string().optional(),
   certContent: z.string().optional(),
   keyContent: z.string().optional(),
-}).passthrough();
+}).shape);
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -715,7 +714,7 @@ const TlsCertificateSchema = z
     passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
 
     // Security options
-    rejectUnauthorized: z.boolean().default(true),
+    rejectUnauthorized: z.boolean().prefault(true),
     servername: z.string().optional(),
 
     // Cipher configuration
@@ -744,8 +743,7 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-      message:
-        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
+        error: 'Both certificate and key must be provided for client certificate authentication (unless using PFX)'
     },
   );
 
@@ -796,11 +794,11 @@ const AuthSchema = z.union([
 ]);
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
     .boolean()
@@ -813,7 +811,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
   /**
    * @deprecated use transformResponse instead

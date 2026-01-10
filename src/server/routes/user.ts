@@ -114,7 +114,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     const { apiKey, apiHost } = z
       .object({
         apiKey: z.string().min(1, 'API key is required').max(512, 'API key too long'),
-        apiHost: z.string().url().optional(),
+        apiHost: z.url().optional(),
       })
       .parse(req.body);
 

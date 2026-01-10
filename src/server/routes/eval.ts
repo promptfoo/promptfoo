@@ -154,8 +154,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
     res.json(
       ApiSchemas.Eval.UpdateAuthor.Response.parse({
-        message: 'Author updated successfully',
-      }),
+          error: 'Author updated successfully'
+    }),
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -171,18 +171,18 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 // Query parameter schemas
 const evalTableQuerySchema = z.object({
   format: z.string().optional(),
-  limit: z.coerce.number().positive().default(50),
-  offset: z.coerce.number().nonnegative().default(0),
-  filterMode: EvalResultsFilterMode.default('all'),
-  search: z.string().default(''),
+  limit: z.coerce.number().positive().prefault(50),
+  offset: z.coerce.number().nonnegative().prefault(0),
+  filterMode: EvalResultsFilterMode.prefault('all'),
+  search: z.string().prefault(''),
   filter: z
     .union([z.string(), z.array(z.string())])
     .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
+    .prefault([]),
   comparisonEvalIds: z
     .union([z.string(), z.array(z.string())])
     .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
+    .prefault([]),
 });
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
