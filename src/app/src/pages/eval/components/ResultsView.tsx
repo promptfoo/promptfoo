@@ -542,8 +542,14 @@ export default function ResultsView({
 
   return (
     <>
-      <div className="px-4 pt-4" style={{ isolation: 'isolate' }}>
-        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900">
+      <div
+        className="px-4 pt-4 flex flex-col"
+        style={{
+          isolation: 'isolate',
+          minHeight: 'calc(100vh - 3.5rem - var(--update-banner-height, 0px))',
+        }}
+      >
+        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900 shrink-0">
           <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row eval-header">
             <div className="flex items-center w-full max-w-[250px]">
               <Tooltip>
