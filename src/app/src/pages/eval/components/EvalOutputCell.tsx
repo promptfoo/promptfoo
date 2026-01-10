@@ -335,9 +335,14 @@ function EvalOutputCell({
     }
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc
+    inlineImageSrc ||
+    text?.trim().startsWith('<svg')
   ) {
-    const src = inlineImageSrc || text;
+    // Convert raw SVG to data URI if needed
+    let src = inlineImageSrc || text;
+    if (text?.trim().startsWith('<svg')) {
+      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+    }
     node = (
       <img
         src={src}
