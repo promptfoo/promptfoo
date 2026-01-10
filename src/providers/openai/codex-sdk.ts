@@ -7,11 +7,6 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -487,67 +482,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Set up tracing context
-    const modelName = config.model || 'gpt-5.1-codex';
-    const spanContext: GenAISpanContext = {
-      system: 'openai',
-      operationName: 'chat',
-      model: modelName,
-      providerId: this.id(),
-      // Promptfoo context from test case if available
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-
-      return result;
-    };
-
-    // Wrap the API call in a span
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, callOptions, config),
-      resultExtractor,
-    );
-  }
-
-  /**
-   * Internal implementation of callApi without tracing wrapper.
-   * This is called by callApi after setting up the tracing span.
-   */
-  private async callApiInternal(
-    prompt: string,
-    _context: CallApiContextParams | undefined,
-    callOptions: CallApiOptionsParams | undefined,
-    config: OpenAICodexSDKConfig,
-  ): Promise<ProviderResponse> {
     // Prepare environment
     const env: Record<string, string> = this.prepareEnvironment(config);
 
