@@ -31,19 +31,14 @@ function getBaseSchema(schema: ZodType): ZodType {
   return schema;
 }
 
-interface OverrideCtx {
-  zodSchema: ZodType;
-  jsonSchema: Record<string, unknown>;
-  path: (string | number)[];
-}
-
 const innerSchema = getInnerSchema(UnifiedConfigSchema);
 
 // Use Zod v4's native toJSONSchema with override to handle nested ZodPipe schemas
 const schemaContent = z.toJSONSchema(innerSchema, {
   unrepresentable: 'any',
-  override: (ctx: OverrideCtx) => {
-    const zodSchema = ctx.zodSchema;
+  // biome-ignore lint/suspicious/noExplicitAny: Zod v4 internal types are not publicly exported
+  override: (ctx: any) => {
+    const zodSchema = ctx.zodSchema as ZodType;
     const def = zodSchema._def as { type?: string; in?: ZodType; innerType?: ZodType };
 
     // Handle optional/nullable wrapping a pipe/transform
