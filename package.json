@@ -161,8 +161,7 @@
     "tsdown": "^0.18.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14",
-    "winston-transport": "^4.9.0",
-    "zod-to-json-schema": "^3.25.1"
+    "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.77",

@@ -1332,7 +1332,69 @@
                                               "webhook"
                                             ]
                                           },
-                                          {},
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "answer-relevance",
+                                              "bleu",
+                                              "classifier",
+                                              "contains",
+                                              "contains-all",
+                                              "contains-any",
+                                              "contains-html",
+                                              "contains-json",
+                                              "contains-sql",
+                                              "contains-xml",
+                                              "context-faithfulness",
+                                              "context-recall",
+                                              "context-relevance",
+                                              "conversation-relevance",
+                                              "cost",
+                                              "equals",
+                                              "factuality",
+                                              "finish-reason",
+                                              "g-eval",
+                                              "gleu",
+                                              "guardrails",
+                                              "icontains",
+                                              "icontains-all",
+                                              "icontains-any",
+                                              "is-html",
+                                              "is-json",
+                                              "is-refusal",
+                                              "is-sql",
+                                              "is-valid-function-call",
+                                              "is-valid-openai-function-call",
+                                              "is-valid-openai-tools-call",
+                                              "is-xml",
+                                              "javascript",
+                                              "latency",
+                                              "levenshtein",
+                                              "llm-rubric",
+                                              "pi",
+                                              "meteor",
+                                              "model-graded-closedqa",
+                                              "model-graded-factuality",
+                                              "moderation",
+                                              "perplexity",
+                                              "perplexity-score",
+                                              "python",
+                                              "regex",
+                                              "rouge-n",
+                                              "ruby",
+                                              "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
+                                              "starts-with",
+                                              "tool-call-f1",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
+                                              "search-rubric",
+                                              "webhook"
+                                            ]
+                                          },
                                           {
                                             "type": "string",
                                             "enum": ["select-best", "human", "max-score"]
@@ -1458,7 +1520,69 @@
                                         "webhook"
                                       ]
                                     },
-                                    {},
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "answer-relevance",
+                                        "bleu",
+                                        "classifier",
+                                        "contains",
+                                        "contains-all",
+                                        "contains-any",
+                                        "contains-html",
+                                        "contains-json",
+                                        "contains-sql",
+                                        "contains-xml",
+                                        "context-faithfulness",
+                                        "context-recall",
+                                        "context-relevance",
+                                        "conversation-relevance",
+                                        "cost",
+                                        "equals",
+                                        "factuality",
+                                        "finish-reason",
+                                        "g-eval",
+                                        "gleu",
+                                        "guardrails",
+                                        "icontains",
+                                        "icontains-all",
+                                        "icontains-any",
+                                        "is-html",
+                                        "is-json",
+                                        "is-refusal",
+                                        "is-sql",
+                                        "is-valid-function-call",
+                                        "is-valid-openai-function-call",
+                                        "is-valid-openai-tools-call",
+                                        "is-xml",
+                                        "javascript",
+                                        "latency",
+                                        "levenshtein",
+                                        "llm-rubric",
+                                        "pi",
+                                        "meteor",
+                                        "model-graded-closedqa",
+                                        "model-graded-factuality",
+                                        "moderation",
+                                        "perplexity",
+                                        "perplexity-score",
+                                        "python",
+                                        "regex",
+                                        "rouge-n",
+                                        "ruby",
+                                        "similar",
+                                        "similar:cosine",
+                                        "similar:dot",
+                                        "similar:euclidean",
+                                        "starts-with",
+                                        "tool-call-f1",
+                                        "trace-error-spans",
+                                        "trace-span-count",
+                                        "trace-span-duration",
+                                        "search-rubric",
+                                        "webhook"
+                                      ]
+                                    },
                                     {
                                       "type": "string",
                                       "enum": ["select-best", "human", "max-score"]
@@ -2283,7 +2407,69 @@
                                                 "webhook"
                                               ]
                                             },
-                                            {},
+                                            {
+                                              "type": "string",
+                                              "enum": [
+                                                "answer-relevance",
+                                                "bleu",
+                                                "classifier",
+                                                "contains",
+                                                "contains-all",
+                                                "contains-any",
+                                                "contains-html",
+                                                "contains-json",
+                                                "contains-sql",
+                                                "contains-xml",
+                                                "context-faithfulness",
+                                                "context-recall",
+                                                "context-relevance",
+                                                "conversation-relevance",
+                                                "cost",
+                                                "equals",
+                                                "factuality",
+                                                "finish-reason",
+                                                "g-eval",
+                                                "gleu",
+                                                "guardrails",
+                                                "icontains",
+                                                "icontains-all",
+                                                "icontains-any",
+                                                "is-html",
+                                                "is-json",
+                                                "is-refusal",
+                                                "is-sql",
+                                                "is-valid-function-call",
+                                                "is-valid-openai-function-call",
+                                                "is-valid-openai-tools-call",
+                                                "is-xml",
+                                                "javascript",
+                                                "latency",
+                                                "levenshtein",
+                                                "llm-rubric",
+                                                "pi",
+                                                "meteor",
+                                                "model-graded-closedqa",
+                                                "model-graded-factuality",
+                                                "moderation",
+                                                "perplexity",
+                                                "perplexity-score",
+                                                "python",
+                                                "regex",
+                                                "rouge-n",
+                                                "ruby",
+                                                "similar",
+                                                "similar:cosine",
+                                                "similar:dot",
+                                                "similar:euclidean",
+                                                "starts-with",
+                                                "tool-call-f1",
+                                                "trace-error-spans",
+                                                "trace-span-count",
+                                                "trace-span-duration",
+                                                "search-rubric",
+                                                "webhook"
+                                              ]
+                                            },
                                             {
                                               "type": "string",
                                               "enum": ["select-best", "human", "max-score"]
@@ -2409,7 +2595,69 @@
                                           "webhook"
                                         ]
                                       },
-                                      {},
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "answer-relevance",
+                                          "bleu",
+                                          "classifier",
+                                          "contains",
+                                          "contains-all",
+                                          "contains-any",
+                                          "contains-html",
+                                          "contains-json",
+                                          "contains-sql",
+                                          "contains-xml",
+                                          "context-faithfulness",
+                                          "context-recall",
+                                          "context-relevance",
+                                          "conversation-relevance",
+                                          "cost",
+                                          "equals",
+                                          "factuality",
+                                          "finish-reason",
+                                          "g-eval",
+                                          "gleu",
+                                          "guardrails",
+                                          "icontains",
+                                          "icontains-all",
+                                          "icontains-any",
+                                          "is-html",
+                                          "is-json",
+                                          "is-refusal",
+                                          "is-sql",
+                                          "is-valid-function-call",
+                                          "is-valid-openai-function-call",
+                                          "is-valid-openai-tools-call",
+                                          "is-xml",
+                                          "javascript",
+                                          "latency",
+                                          "levenshtein",
+                                          "llm-rubric",
+                                          "pi",
+                                          "meteor",
+                                          "model-graded-closedqa",
+                                          "model-graded-factuality",
+                                          "moderation",
+                                          "perplexity",
+                                          "perplexity-score",
+                                          "python",
+                                          "regex",
+                                          "rouge-n",
+                                          "ruby",
+                                          "similar",
+                                          "similar:cosine",
+                                          "similar:dot",
+                                          "similar:euclidean",
+                                          "starts-with",
+                                          "tool-call-f1",
+                                          "trace-error-spans",
+                                          "trace-span-count",
+                                          "trace-span-duration",
+                                          "search-rubric",
+                                          "webhook"
+                                        ]
+                                      },
                                       {
                                         "type": "string",
                                         "enum": ["select-best", "human", "max-score"]
@@ -3111,7 +3359,69 @@
                                                 "webhook"
                                               ]
                                             },
-                                            {},
+                                            {
+                                              "type": "string",
+                                              "enum": [
+                                                "answer-relevance",
+                                                "bleu",
+                                                "classifier",
+                                                "contains",
+                                                "contains-all",
+                                                "contains-any",
+                                                "contains-html",
+                                                "contains-json",
+                                                "contains-sql",
+                                                "contains-xml",
+                                                "context-faithfulness",
+                                                "context-recall",
+                                                "context-relevance",
+                                                "conversation-relevance",
+                                                "cost",
+                                                "equals",
+                                                "factuality",
+                                                "finish-reason",
+                                                "g-eval",
+                                                "gleu",
+                                                "guardrails",
+                                                "icontains",
+                                                "icontains-all",
+                                                "icontains-any",
+                                                "is-html",
+                                                "is-json",
+                                                "is-refusal",
+                                                "is-sql",
+                                                "is-valid-function-call",
+                                                "is-valid-openai-function-call",
+                                                "is-valid-openai-tools-call",
+                                                "is-xml",
+                                                "javascript",
+                                                "latency",
+                                                "levenshtein",
+                                                "llm-rubric",
+                                                "pi",
+                                                "meteor",
+                                                "model-graded-closedqa",
+                                                "model-graded-factuality",
+                                                "moderation",
+                                                "perplexity",
+                                                "perplexity-score",
+                                                "python",
+                                                "regex",
+                                                "rouge-n",
+                                                "ruby",
+                                                "similar",
+                                                "similar:cosine",
+                                                "similar:dot",
+                                                "similar:euclidean",
+                                                "starts-with",
+                                                "tool-call-f1",
+                                                "trace-error-spans",
+                                                "trace-span-count",
+                                                "trace-span-duration",
+                                                "search-rubric",
+                                                "webhook"
+                                              ]
+                                            },
                                             {
                                               "type": "string",
                                               "enum": ["select-best", "human", "max-score"]
@@ -3237,7 +3547,69 @@
                                           "webhook"
                                         ]
                                       },
-                                      {},
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "answer-relevance",
+                                          "bleu",
+                                          "classifier",
+                                          "contains",
+                                          "contains-all",
+                                          "contains-any",
+                                          "contains-html",
+                                          "contains-json",
+                                          "contains-sql",
+                                          "contains-xml",
+                                          "context-faithfulness",
+                                          "context-recall",
+                                          "context-relevance",
+                                          "conversation-relevance",
+                                          "cost",
+                                          "equals",
+                                          "factuality",
+                                          "finish-reason",
+                                          "g-eval",
+                                          "gleu",
+                                          "guardrails",
+                                          "icontains",
+                                          "icontains-all",
+                                          "icontains-any",
+                                          "is-html",
+                                          "is-json",
+                                          "is-refusal",
+                                          "is-sql",
+                                          "is-valid-function-call",
+                                          "is-valid-openai-function-call",
+                                          "is-valid-openai-tools-call",
+                                          "is-xml",
+                                          "javascript",
+                                          "latency",
+                                          "levenshtein",
+                                          "llm-rubric",
+                                          "pi",
+                                          "meteor",
+                                          "model-graded-closedqa",
+                                          "model-graded-factuality",
+                                          "moderation",
+                                          "perplexity",
+                                          "perplexity-score",
+                                          "python",
+                                          "regex",
+                                          "rouge-n",
+                                          "ruby",
+                                          "similar",
+                                          "similar:cosine",
+                                          "similar:dot",
+                                          "similar:euclidean",
+                                          "starts-with",
+                                          "tool-call-f1",
+                                          "trace-error-spans",
+                                          "trace-span-count",
+                                          "trace-span-duration",
+                                          "search-rubric",
+                                          "webhook"
+                                        ]
+                                      },
                                       {
                                         "type": "string",
                                         "enum": ["select-best", "human", "max-score"]
@@ -3946,7 +4318,69 @@
                                         "webhook"
                                       ]
                                     },
-                                    {},
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "answer-relevance",
+                                        "bleu",
+                                        "classifier",
+                                        "contains",
+                                        "contains-all",
+                                        "contains-any",
+                                        "contains-html",
+                                        "contains-json",
+                                        "contains-sql",
+                                        "contains-xml",
+                                        "context-faithfulness",
+                                        "context-recall",
+                                        "context-relevance",
+                                        "conversation-relevance",
+                                        "cost",
+                                        "equals",
+                                        "factuality",
+                                        "finish-reason",
+                                        "g-eval",
+                                        "gleu",
+                                        "guardrails",
+                                        "icontains",
+                                        "icontains-all",
+                                        "icontains-any",
+                                        "is-html",
+                                        "is-json",
+                                        "is-refusal",
+                                        "is-sql",
+                                        "is-valid-function-call",
+                                        "is-valid-openai-function-call",
+                                        "is-valid-openai-tools-call",
+                                        "is-xml",
+                                        "javascript",
+                                        "latency",
+                                        "levenshtein",
+                                        "llm-rubric",
+                                        "pi",
+                                        "meteor",
+                                        "model-graded-closedqa",
+                                        "model-graded-factuality",
+                                        "moderation",
+                                        "perplexity",
+                                        "perplexity-score",
+                                        "python",
+                                        "regex",
+                                        "rouge-n",
+                                        "ruby",
+                                        "similar",
+                                        "similar:cosine",
+                                        "similar:dot",
+                                        "similar:euclidean",
+                                        "starts-with",
+                                        "tool-call-f1",
+                                        "trace-error-spans",
+                                        "trace-span-count",
+                                        "trace-span-duration",
+                                        "search-rubric",
+                                        "webhook"
+                                      ]
+                                    },
                                     {
                                       "type": "string",
                                       "enum": ["select-best", "human", "max-score"]
@@ -4072,7 +4506,69 @@
                                   "webhook"
                                 ]
                               },
-                              {},
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "answer-relevance",
+                                  "bleu",
+                                  "classifier",
+                                  "contains",
+                                  "contains-all",
+                                  "contains-any",
+                                  "contains-html",
+                                  "contains-json",
+                                  "contains-sql",
+                                  "contains-xml",
+                                  "context-faithfulness",
+                                  "context-recall",
+                                  "context-relevance",
+                                  "conversation-relevance",
+                                  "cost",
+                                  "equals",
+                                  "factuality",
+                                  "finish-reason",
+                                  "g-eval",
+                                  "gleu",
+                                  "guardrails",
+                                  "icontains",
+                                  "icontains-all",
+                                  "icontains-any",
+                                  "is-html",
+                                  "is-json",
+                                  "is-refusal",
+                                  "is-sql",
+                                  "is-valid-function-call",
+                                  "is-valid-openai-function-call",
+                                  "is-valid-openai-tools-call",
+                                  "is-xml",
+                                  "javascript",
+                                  "latency",
+                                  "levenshtein",
+                                  "llm-rubric",
+                                  "pi",
+                                  "meteor",
+                                  "model-graded-closedqa",
+                                  "model-graded-factuality",
+                                  "moderation",
+                                  "perplexity",
+                                  "perplexity-score",
+                                  "python",
+                                  "regex",
+                                  "rouge-n",
+                                  "ruby",
+                                  "similar",
+                                  "similar:cosine",
+                                  "similar:dot",
+                                  "similar:euclidean",
+                                  "starts-with",
+                                  "tool-call-f1",
+                                  "trace-error-spans",
+                                  "trace-span-count",
+                                  "trace-span-duration",
+                                  "search-rubric",
+                                  "webhook"
+                                ]
+                              },
                               {
                                 "type": "string",
                                 "enum": ["select-best", "human", "max-score"]
@@ -4655,8 +5151,12 @@
                   {
                     "type": "string"
                   },
-                  {},
-                  {}
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
                 ]
               }
             }
@@ -4703,7 +5203,1199 @@
           },
           "additionalProperties": {}
         },
-        "redteam": {},
+        "redteam": {
+          "type": "object",
+          "properties": {
+            "injectVar": {
+              "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
+              "type": "string"
+            },
+            "purpose": {
+              "description": "Purpose override string - describes the prompt templates",
+              "type": "string"
+            },
+            "testGenerationInstructions": {
+              "description": "Additional instructions for test generation applied to each plugin",
+              "type": "string"
+            },
+            "provider": {
+              "description": "Provider used for generating adversarial inputs",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {},
+                    "callApi": {},
+                    "callEmbeddingApi": {},
+                    "callClassificationApi": {},
+                    "label": {},
+                    "transform": {
+                      "type": "string"
+                    },
+                    "delay": {
+                      "type": "number"
+                    },
+                    "config": {},
+                    "inputs": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": ["id", "callApi"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {},
+                    "label": {},
+                    "config": {},
+                    "prompts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "transform": {
+                      "type": "string"
+                    },
+                    "delay": {
+                      "type": "number"
+                    },
+                    "env": {
+                      "type": "object",
+                      "properties": {
+                        "AI21_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AI21_API_KEY": {
+                          "type": "string"
+                        },
+                        "AIML_API_KEY": {
+                          "type": "string"
+                        },
+                        "ANTHROPIC_API_KEY": {
+                          "type": "string"
+                        },
+                        "ANTHROPIC_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AWS_BEDROCK_REGION": {
+                          "type": "string"
+                        },
+                        "AZURE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_API_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_AUTHORITY_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_CLIENT_ID": {
+                          "type": "string"
+                        },
+                        "AZURE_CLIENT_SECRET": {
+                          "type": "string"
+                        },
+                        "AZURE_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_TENANT_ID": {
+                          "type": "string"
+                        },
+                        "AZURE_TOKEN_SCOPE": {
+                          "type": "string"
+                        },
+                        "CLAUDE_CODE_USE_BEDROCK": {
+                          "type": "string"
+                        },
+                        "CLAUDE_CODE_USE_VERTEX": {
+                          "type": "string"
+                        },
+                        "CLOUDFLARE_ACCOUNT_ID": {
+                          "type": "string"
+                        },
+                        "CLOUDFLARE_API_KEY": {
+                          "type": "string"
+                        },
+                        "COMETAPI_KEY": {
+                          "type": "string"
+                        },
+                        "COHERE_API_KEY": {
+                          "type": "string"
+                        },
+                        "COHERE_CLIENT_NAME": {
+                          "type": "string"
+                        },
+                        "DATABRICKS_TOKEN": {
+                          "type": "string"
+                        },
+                        "DATABRICKS_WORKSPACE_URL": {
+                          "type": "string"
+                        },
+                        "DOCKER_MODEL_RUNNER_BASE_URL": {
+                          "type": "string"
+                        },
+                        "DOCKER_MODEL_RUNNER_API_KEY": {
+                          "type": "string"
+                        },
+                        "ELEVENLABS_API_KEY": {
+                          "type": "string"
+                        },
+                        "FAL_KEY": {
+                          "type": "string"
+                        },
+                        "GITHUB_TOKEN": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_HOST": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_KEY": {
+                          "type": "string"
+                        },
+                        "GOOGLE_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "GOOGLE_LOCATION": {
+                          "type": "string"
+                        },
+                        "GOOGLE_GENERATIVE_AI_API_KEY": {
+                          "type": "string"
+                        },
+                        "GEMINI_API_KEY": {
+                          "type": "string"
+                        },
+                        "GROQ_API_KEY": {
+                          "type": "string"
+                        },
+                        "HELICONE_API_KEY": {
+                          "type": "string"
+                        },
+                        "HF_API_TOKEN": {
+                          "type": "string"
+                        },
+                        "HF_TOKEN": {
+                          "type": "string"
+                        },
+                        "HYPERBOLIC_API_KEY": {
+                          "type": "string"
+                        },
+                        "HUGGING_FACE_HUB_TOKEN": {
+                          "type": "string"
+                        },
+                        "JFROG_API_KEY": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_HOST": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_PUBLIC_KEY": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_SECRET_KEY": {
+                          "type": "string"
+                        },
+                        "LITELLM_API_BASE": {
+                          "type": "string"
+                        },
+                        "LLAMA_BASE_URL": {
+                          "type": "string"
+                        },
+                        "LOCALAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_HOST": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_KEY": {
+                          "type": "string"
+                        },
+                        "NSCALE_SERVICE_TOKEN": {
+                          "type": "string"
+                        },
+                        "NSCALE_API_KEY": {
+                          "type": "string"
+                        },
+                        "OLLAMA_API_KEY": {
+                          "type": "string"
+                        },
+                        "OLLAMA_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_HOST": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "OPENAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_ORGANIZATION": {
+                          "type": "string"
+                        },
+                        "CODEX_API_KEY": {
+                          "type": "string"
+                        },
+                        "PALM_API_HOST": {
+                          "type": "string"
+                        },
+                        "PALM_API_KEY": {
+                          "type": "string"
+                        },
+                        "PORTKEY_API_KEY": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_CA_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_PFX_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_PFX_PASSWORD": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_PASSWORD": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_ALIAS": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_INSECURE_SSL": {
+                          "type": "string"
+                        },
+                        "REPLICATE_API_KEY": {
+                          "type": "string"
+                        },
+                        "REPLICATE_API_TOKEN": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_BASE_URL": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_CLIENT_ID": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_TENANT_ID": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_HOST": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_KEY": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_VERSION": {
+                          "type": "string"
+                        },
+                        "VERTEX_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "VERTEX_PUBLISHER": {
+                          "type": "string"
+                        },
+                        "VERTEX_REGION": {
+                          "type": "string"
+                        },
+                        "VOYAGE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "VOYAGE_API_KEY": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_APIKEY": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_AUTH_TYPE": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_BEARER_TOKEN": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_API_VERSION": {
+                          "type": "string"
+                        },
+                        "AWS_REGION": {
+                          "type": "string"
+                        },
+                        "AWS_DEFAULT_REGION": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_MAX_TOKENS": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_TEMPERATURE": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_TOP_P": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_MAX_RETRIES": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "inputs": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "numTests": {
+              "description": "Number of tests to generate",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "language": {
+              "description": "Language(s) of tests to generate for this plugin",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "frameworks": {
+              "description": "Compliance frameworks to include across reports and commands",
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              }
+            },
+            "entities": {
+              "description": "Names of people, brands, or organizations related to your LLM application",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "contexts": {
+              "description": "Security contexts for testing multiple states - each context has its own purpose",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique identifier for the context"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "description": "Purpose/context for this context - used for generation and grading"
+                  },
+                  "vars": {
+                    "description": "Variables passed to provider (e.g., context_file, user_role)",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["id", "purpose"],
+                "additionalProperties": false
+              }
+            },
+            "plugins": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "aegis",
+                          "agentic:memory-poisoning",
+                          "ascii-smuggling",
+                          "beavertails",
+                          "bfla",
+                          "bias",
+                          "bias:age",
+                          "bias:disability",
+                          "bias:gender",
+                          "bias:race",
+                          "bola",
+                          "cca",
+                          "competitors",
+                          "contracts",
+                          "coppa",
+                          "cross-session-leak",
+                          "cyberseceval",
+                          "debug-access",
+                          "default",
+                          "divergent-repetition",
+                          "donotanswer",
+                          "ecommerce",
+                          "ecommerce:compliance-bypass",
+                          "ecommerce:order-fraud",
+                          "ecommerce:pci-dss",
+                          "ecommerce:price-manipulation",
+                          "eu:ai-act",
+                          "eu:ai-act:annex3:biometric-id",
+                          "eu:ai-act:annex3:critical-infrastructure",
+                          "eu:ai-act:annex3:education",
+                          "eu:ai-act:annex3:employment",
+                          "eu:ai-act:annex3:essential-services",
+                          "eu:ai-act:annex3:justice-democracy",
+                          "eu:ai-act:annex3:law-enforcement",
+                          "eu:ai-act:annex3:migration-border",
+                          "eu:ai-act:art5:biometric-categorisation",
+                          "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                          "eu:ai-act:art5:remote-biometric-id-live",
+                          "eu:ai-act:art5:remote-biometric-id-post",
+                          "eu:ai-act:art5:social-scoring",
+                          "eu:ai-act:art5:subliminal-manipulation",
+                          "excessive-agency",
+                          "ferpa",
+                          "financial",
+                          "financial:calculation-error",
+                          "financial:compliance-violation",
+                          "financial:confidential-disclosure",
+                          "financial:counterfactual",
+                          "financial:data-leakage",
+                          "financial:defamation",
+                          "financial:hallucination",
+                          "financial:impartiality",
+                          "financial:misconduct",
+                          "financial:sycophancy",
+                          "foundation",
+                          "gdpr",
+                          "gdpr:art15",
+                          "gdpr:art17",
+                          "gdpr:art22",
+                          "gdpr:art25",
+                          "gdpr:art32",
+                          "gdpr:art5",
+                          "gdpr:art9",
+                          "goal-misalignment",
+                          "guardrails-eval",
+                          "hallucination",
+                          "harmbench",
+                          "harmful",
+                          "harmful:chemical-biological-weapons",
+                          "harmful:child-exploitation",
+                          "harmful:copyright-violations",
+                          "harmful:cybercrime",
+                          "harmful:cybercrime:malicious-code",
+                          "harmful:graphic-content",
+                          "harmful:harassment-bullying",
+                          "harmful:hate",
+                          "harmful:illegal-activities",
+                          "harmful:illegal-drugs",
+                          "harmful:illegal-drugs:meth",
+                          "harmful:indiscriminate-weapons",
+                          "harmful:insults",
+                          "harmful:intellectual-property",
+                          "harmful:misinformation-disinformation",
+                          "harmful:non-violent-crime",
+                          "harmful:privacy",
+                          "harmful:profanity",
+                          "harmful:radicalization",
+                          "harmful:self-harm",
+                          "harmful:sex-crime",
+                          "harmful:sexual-content",
+                          "harmful:specialized-advice",
+                          "harmful:unsafe-practices",
+                          "harmful:violent-crime",
+                          "harmful:weapons:ied",
+                          "hijacking",
+                          "illegal-activity",
+                          "imitation",
+                          "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
+                          "intent",
+                          "iso:42001",
+                          "iso:42001:accountability",
+                          "iso:42001:fairness",
+                          "iso:42001:privacy",
+                          "iso:42001:robustness",
+                          "iso:42001:safety",
+                          "iso:42001:security",
+                          "iso:42001:transparency",
+                          "mcp",
+                          "medical",
+                          "medical:anchoring-bias",
+                          "medical:hallucination",
+                          "medical:incorrect-knowledge",
+                          "medical:off-label-use",
+                          "medical:prioritization-error",
+                          "medical:sycophancy",
+                          "misinformation",
+                          "mitre:atlas",
+                          "mitre:atlas:exfiltration",
+                          "mitre:atlas:impact",
+                          "mitre:atlas:initial-access",
+                          "mitre:atlas:ml-attack-staging",
+                          "mitre:atlas:reconnaissance",
+                          "mitre:atlas:resource-development",
+                          "nist:ai",
+                          "nist:ai:measure",
+                          "nist:ai:measure:1.1",
+                          "nist:ai:measure:1.2",
+                          "nist:ai:measure:2.1",
+                          "nist:ai:measure:2.10",
+                          "nist:ai:measure:2.11",
+                          "nist:ai:measure:2.12",
+                          "nist:ai:measure:2.13",
+                          "nist:ai:measure:2.2",
+                          "nist:ai:measure:2.3",
+                          "nist:ai:measure:2.4",
+                          "nist:ai:measure:2.5",
+                          "nist:ai:measure:2.6",
+                          "nist:ai:measure:2.7",
+                          "nist:ai:measure:2.8",
+                          "nist:ai:measure:2.9",
+                          "nist:ai:measure:3.1",
+                          "nist:ai:measure:3.2",
+                          "nist:ai:measure:3.3",
+                          "nist:ai:measure:4.1",
+                          "nist:ai:measure:4.2",
+                          "nist:ai:measure:4.3",
+                          "off-topic",
+                          "overreliance",
+                          "owasp:agentic",
+                          "owasp:agentic:asi01",
+                          "owasp:agentic:asi02",
+                          "owasp:agentic:asi03",
+                          "owasp:agentic:asi04",
+                          "owasp:agentic:asi05",
+                          "owasp:agentic:asi06",
+                          "owasp:agentic:asi07",
+                          "owasp:agentic:asi08",
+                          "owasp:agentic:asi09",
+                          "owasp:agentic:asi10",
+                          "owasp:api",
+                          "owasp:api:01",
+                          "owasp:api:02",
+                          "owasp:api:03",
+                          "owasp:api:04",
+                          "owasp:api:05",
+                          "owasp:api:06",
+                          "owasp:api:07",
+                          "owasp:api:08",
+                          "owasp:api:09",
+                          "owasp:api:10",
+                          "owasp:llm",
+                          "owasp:llm:01",
+                          "owasp:llm:02",
+                          "owasp:llm:03",
+                          "owasp:llm:04",
+                          "owasp:llm:05",
+                          "owasp:llm:06",
+                          "owasp:llm:07",
+                          "owasp:llm:08",
+                          "owasp:llm:09",
+                          "owasp:llm:10",
+                          "owasp:llm:redteam:implementation",
+                          "owasp:llm:redteam:model",
+                          "owasp:llm:redteam:runtime",
+                          "owasp:llm:redteam:system",
+                          "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
+                          "pii",
+                          "pii:api-db",
+                          "pii:direct",
+                          "pii:session",
+                          "pii:social",
+                          "pliny",
+                          "policy",
+                          "politics",
+                          "prompt-extraction",
+                          "rag-document-exfiltration",
+                          "rag-poisoning",
+                          "rbac",
+                          "reasoning-dos",
+                          "religion",
+                          "shell-injection",
+                          "special-token-injection",
+                          "sql-injection",
+                          "ssrf",
+                          "system-prompt-override",
+                          "tool-discovery",
+                          "tool-discovery:multi-turn",
+                          "toxic-chat",
+                          "toxicity",
+                          "unsafebench",
+                          "unverifiable-claims",
+                          "vlguard",
+                          "wordplay",
+                          "xstest"
+                        ]
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Name of the plugin or path to custom plugin"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "aegis",
+                              "agentic:memory-poisoning",
+                              "ascii-smuggling",
+                              "beavertails",
+                              "bfla",
+                              "bias",
+                              "bias:age",
+                              "bias:disability",
+                              "bias:gender",
+                              "bias:race",
+                              "bola",
+                              "cca",
+                              "competitors",
+                              "contracts",
+                              "coppa",
+                              "cross-session-leak",
+                              "cyberseceval",
+                              "debug-access",
+                              "default",
+                              "divergent-repetition",
+                              "donotanswer",
+                              "ecommerce",
+                              "ecommerce:compliance-bypass",
+                              "ecommerce:order-fraud",
+                              "ecommerce:pci-dss",
+                              "ecommerce:price-manipulation",
+                              "eu:ai-act",
+                              "eu:ai-act:annex3:biometric-id",
+                              "eu:ai-act:annex3:critical-infrastructure",
+                              "eu:ai-act:annex3:education",
+                              "eu:ai-act:annex3:employment",
+                              "eu:ai-act:annex3:essential-services",
+                              "eu:ai-act:annex3:justice-democracy",
+                              "eu:ai-act:annex3:law-enforcement",
+                              "eu:ai-act:annex3:migration-border",
+                              "eu:ai-act:art5:biometric-categorisation",
+                              "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                              "eu:ai-act:art5:remote-biometric-id-live",
+                              "eu:ai-act:art5:remote-biometric-id-post",
+                              "eu:ai-act:art5:social-scoring",
+                              "eu:ai-act:art5:subliminal-manipulation",
+                              "excessive-agency",
+                              "ferpa",
+                              "financial",
+                              "financial:calculation-error",
+                              "financial:compliance-violation",
+                              "financial:confidential-disclosure",
+                              "financial:counterfactual",
+                              "financial:data-leakage",
+                              "financial:defamation",
+                              "financial:hallucination",
+                              "financial:impartiality",
+                              "financial:misconduct",
+                              "financial:sycophancy",
+                              "foundation",
+                              "gdpr",
+                              "gdpr:art15",
+                              "gdpr:art17",
+                              "gdpr:art22",
+                              "gdpr:art25",
+                              "gdpr:art32",
+                              "gdpr:art5",
+                              "gdpr:art9",
+                              "goal-misalignment",
+                              "guardrails-eval",
+                              "hallucination",
+                              "harmbench",
+                              "harmful",
+                              "harmful:chemical-biological-weapons",
+                              "harmful:child-exploitation",
+                              "harmful:copyright-violations",
+                              "harmful:cybercrime",
+                              "harmful:cybercrime:malicious-code",
+                              "harmful:graphic-content",
+                              "harmful:harassment-bullying",
+                              "harmful:hate",
+                              "harmful:illegal-activities",
+                              "harmful:illegal-drugs",
+                              "harmful:illegal-drugs:meth",
+                              "harmful:indiscriminate-weapons",
+                              "harmful:insults",
+                              "harmful:intellectual-property",
+                              "harmful:misinformation-disinformation",
+                              "harmful:non-violent-crime",
+                              "harmful:privacy",
+                              "harmful:profanity",
+                              "harmful:radicalization",
+                              "harmful:self-harm",
+                              "harmful:sex-crime",
+                              "harmful:sexual-content",
+                              "harmful:specialized-advice",
+                              "harmful:unsafe-practices",
+                              "harmful:violent-crime",
+                              "harmful:weapons:ied",
+                              "hijacking",
+                              "illegal-activity",
+                              "imitation",
+                              "indirect-prompt-injection",
+                              "insurance",
+                              "insurance:coverage-discrimination",
+                              "insurance:network-misinformation",
+                              "insurance:phi-disclosure",
+                              "intent",
+                              "iso:42001",
+                              "iso:42001:accountability",
+                              "iso:42001:fairness",
+                              "iso:42001:privacy",
+                              "iso:42001:robustness",
+                              "iso:42001:safety",
+                              "iso:42001:security",
+                              "iso:42001:transparency",
+                              "mcp",
+                              "medical",
+                              "medical:anchoring-bias",
+                              "medical:hallucination",
+                              "medical:incorrect-knowledge",
+                              "medical:off-label-use",
+                              "medical:prioritization-error",
+                              "medical:sycophancy",
+                              "misinformation",
+                              "mitre:atlas",
+                              "mitre:atlas:exfiltration",
+                              "mitre:atlas:impact",
+                              "mitre:atlas:initial-access",
+                              "mitre:atlas:ml-attack-staging",
+                              "mitre:atlas:reconnaissance",
+                              "mitre:atlas:resource-development",
+                              "nist:ai",
+                              "nist:ai:measure",
+                              "nist:ai:measure:1.1",
+                              "nist:ai:measure:1.2",
+                              "nist:ai:measure:2.1",
+                              "nist:ai:measure:2.10",
+                              "nist:ai:measure:2.11",
+                              "nist:ai:measure:2.12",
+                              "nist:ai:measure:2.13",
+                              "nist:ai:measure:2.2",
+                              "nist:ai:measure:2.3",
+                              "nist:ai:measure:2.4",
+                              "nist:ai:measure:2.5",
+                              "nist:ai:measure:2.6",
+                              "nist:ai:measure:2.7",
+                              "nist:ai:measure:2.8",
+                              "nist:ai:measure:2.9",
+                              "nist:ai:measure:3.1",
+                              "nist:ai:measure:3.2",
+                              "nist:ai:measure:3.3",
+                              "nist:ai:measure:4.1",
+                              "nist:ai:measure:4.2",
+                              "nist:ai:measure:4.3",
+                              "off-topic",
+                              "overreliance",
+                              "owasp:agentic",
+                              "owasp:agentic:asi01",
+                              "owasp:agentic:asi02",
+                              "owasp:agentic:asi03",
+                              "owasp:agentic:asi04",
+                              "owasp:agentic:asi05",
+                              "owasp:agentic:asi06",
+                              "owasp:agentic:asi07",
+                              "owasp:agentic:asi08",
+                              "owasp:agentic:asi09",
+                              "owasp:agentic:asi10",
+                              "owasp:api",
+                              "owasp:api:01",
+                              "owasp:api:02",
+                              "owasp:api:03",
+                              "owasp:api:04",
+                              "owasp:api:05",
+                              "owasp:api:06",
+                              "owasp:api:07",
+                              "owasp:api:08",
+                              "owasp:api:09",
+                              "owasp:api:10",
+                              "owasp:llm",
+                              "owasp:llm:01",
+                              "owasp:llm:02",
+                              "owasp:llm:03",
+                              "owasp:llm:04",
+                              "owasp:llm:05",
+                              "owasp:llm:06",
+                              "owasp:llm:07",
+                              "owasp:llm:08",
+                              "owasp:llm:09",
+                              "owasp:llm:10",
+                              "owasp:llm:redteam:implementation",
+                              "owasp:llm:redteam:model",
+                              "owasp:llm:redteam:runtime",
+                              "owasp:llm:redteam:system",
+                              "personal-safety",
+                              "pharmacy",
+                              "pharmacy:controlled-substance-compliance",
+                              "pharmacy:dosage-calculation",
+                              "pharmacy:drug-interaction",
+                              "pii",
+                              "pii:api-db",
+                              "pii:direct",
+                              "pii:session",
+                              "pii:social",
+                              "pliny",
+                              "policy",
+                              "politics",
+                              "prompt-extraction",
+                              "rag-document-exfiltration",
+                              "rag-poisoning",
+                              "rbac",
+                              "reasoning-dos",
+                              "religion",
+                              "shell-injection",
+                              "special-token-injection",
+                              "sql-injection",
+                              "ssrf",
+                              "system-prompt-override",
+                              "tool-discovery",
+                              "tool-discovery:multi-turn",
+                              "toxic-chat",
+                              "toxicity",
+                              "unsafebench",
+                              "unverifiable-claims",
+                              "vlguard",
+                              "wordplay",
+                              "xstest"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Name of the plugin"
+                      },
+                      "numTests": {
+                        "description": "Number of tests to generate for this plugin",
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "config": {
+                        "description": "Plugin-specific configuration",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "severity": {
+                        "description": "Severity level for this plugin",
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low"]
+                      }
+                    },
+                    "required": ["id", "numTests"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Plugins to use for redteam generation"
+            },
+            "strategies": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "audio",
+                          "authoritative-markup-injection",
+                          "base64",
+                          "basic",
+                          "best-of-n",
+                          "camelcase",
+                          "citation",
+                          "crescendo",
+                          "custom",
+                          "default",
+                          "emoji",
+                          "gcg",
+                          "goat",
+                          "hex",
+                          "homoglyph",
+                          "image",
+                          "jailbreak",
+                          "jailbreak:composite",
+                          "jailbreak:hydra",
+                          "jailbreak:likert",
+                          "jailbreak:meta",
+                          "jailbreak:tree",
+                          "layer",
+                          "leetspeak",
+                          "math-prompt",
+                          "mischievous-user",
+                          "morse",
+                          "multilingual",
+                          "other-encodings",
+                          "piglatin",
+                          "prompt-injection",
+                          "retry",
+                          "rot13",
+                          "video"
+                        ]
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "audio",
+                              "authoritative-markup-injection",
+                              "base64",
+                              "basic",
+                              "best-of-n",
+                              "camelcase",
+                              "citation",
+                              "crescendo",
+                              "custom",
+                              "default",
+                              "emoji",
+                              "gcg",
+                              "goat",
+                              "hex",
+                              "homoglyph",
+                              "image",
+                              "jailbreak",
+                              "jailbreak:composite",
+                              "jailbreak:hydra",
+                              "jailbreak:likert",
+                              "jailbreak:meta",
+                              "jailbreak:tree",
+                              "layer",
+                              "leetspeak",
+                              "math-prompt",
+                              "mischievous-user",
+                              "morse",
+                              "multilingual",
+                              "other-encodings",
+                              "piglatin",
+                              "prompt-injection",
+                              "retry",
+                              "rot13",
+                              "video"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "config": {
+                        "description": "Strategy-specific configuration",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+            },
+            "maxConcurrency": {
+              "description": "Maximum number of concurrent API calls",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "delay": {
+              "description": "Delay in milliseconds between plugin API calls",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "excludeTargetOutputFromAgenticAttackGeneration": {
+              "description": "Whether to exclude target output from the agentific attack generation process",
+              "type": "boolean"
+            },
+            "tracing": {
+              "description": "Tracing defaults applied to all strategies unless overridden",
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": ["plugins", "strategies"],
+          "additionalProperties": false,
+          "$defs": {
+            "__schema0": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "includeInAttack": {
+                  "type": "boolean"
+                },
+                "includeInGrading": {
+                  "type": "boolean"
+                },
+                "includeInternalSpans": {
+                  "type": "boolean"
+                },
+                "maxSpans": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "maxDepth": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "retryDelayMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "spanFilter": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sanitizeAttributes": {
+                  "type": "boolean"
+                },
+                "strategies": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
         "writeLatestResults": {
           "type": "boolean"
         },
