@@ -519,22 +519,37 @@ export default function ResultsView({
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
 
+  // Determine if charts should be rendered based on score variance
+  const uniqueScores = React.useMemo(() => new Set(resultsChartsScores), [resultsChartsScores]);
+  const hasVariedScores = uniqueScores.size > 1;
+  // When all scores are identical, still show charts if the uniform score
+  // is not a binary edge value (0 or 1). Graded assertions (like llm-rubric)
+  // can produce meaningful uniform scores (e.g., 0.85) that users want to visualize.
+  const hasMeaningfulUniformScore =
+    uniqueScores.size === 1 && ![0, 1].includes([...uniqueScores][0]);
+
   const canRenderResultsCharts =
     table &&
     config &&
     table.head.prompts.length > 1 &&
     // No valid scores available
     resultsChartsScores.length > 0 &&
-    // All scores are the same, charts not useful.
-    new Set(resultsChartsScores).size > 1;
+    // Show charts if scores vary OR if uniform score is meaningful (not binary 0/1)
+    (hasVariedScores || hasMeaningfulUniformScore);
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
   return (
     <>
-      <div className="px-4 pt-4" style={{ isolation: 'isolate' }}>
-        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900">
+      <div
+        className="px-4 pt-4 flex flex-col"
+        style={{
+          isolation: 'isolate',
+          minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
+        }}
+      >
+        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900 shrink-0">
           <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row eval-header">
             <div className="flex items-center w-full max-w-[250px]">
               <Tooltip>

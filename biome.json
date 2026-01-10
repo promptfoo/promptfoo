@@ -21,7 +21,6 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/adaline-gateway/**/prompt.json",
       "!!examples/multiple-turn-conversation/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json"
@@ -104,7 +103,8 @@
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
-        "useJsxKeyInIterable": "error"
+        "useJsxKeyInIterable": "error",
+        "useIsNan": "error"
       },
       "style": {
         "noEnum": "error",
@@ -143,18 +143,30 @@
         }
       },
       "suspicious": {
+        "noAsyncPromiseExecutor": "error",
+        "noDebugger": "error",
         "noExplicitAny": "error",
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
-        "noRedundantUseStrict": "error"
+        "noRedundantUseStrict": "error",
+        "noThenProperty": "error",
+        "useErrorMessage": "warn",
+        "useIterableCallbackReturn": "off",
+        "noSelfCompare": "error"
       },
       "performance": {
-        "noDelete": "off"
+        "noDelete": "off",
+        "noBarrelFile": "off",
+        "noReExportAll": "off"
       },
       "a11y": {
         "recommended": false,
         "useButtonType": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
       }
     }
   },
@@ -194,7 +206,6 @@
   "overrides": [
     {
       "includes": [
-        "examples/adaline-gateway/**/prompt.json",
         "examples/multiple-turn-conversation/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
@@ -247,6 +258,9 @@
           },
           "suspicious": {
             "noExplicitAny": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
       }
@@ -257,6 +271,33 @@
         "rules": {
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/**/*"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["code-scan-action/**/*"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
       }
@@ -305,6 +346,13 @@
           },
           "suspicious": {
             "noExplicitAny": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
       }

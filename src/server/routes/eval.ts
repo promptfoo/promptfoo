@@ -112,7 +112,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 });
 
-evalRouter.patch('/:id', (req: Request, res: Response): void => {
+evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
   const { table, config } = req.body;
 
@@ -122,7 +122,7 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    await updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });

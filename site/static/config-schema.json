@@ -300,6 +300,9 @@
                             "PROMPTFOO_INSECURE_SSL": {
                               "type": "string"
                             },
+                            "QUIVERAI_API_KEY": {
+                              "type": "string"
+                            },
                             "REPLICATE_API_KEY": {
                               "type": "string"
                             },
