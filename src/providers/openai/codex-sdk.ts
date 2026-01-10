@@ -54,9 +54,23 @@ export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted';
 
 /**
- * Reasoning effort levels
+ * Reasoning effort levels for model reasoning intensity.
+ *
+ * Model support varies:
+ * - gpt-5.2: 'none', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-4o, o3-mini: 'low', 'medium', 'high'
+ *
+ * Values:
+ * - 'none': No reasoning overhead (gpt-5.2 only)
+ * - 'minimal': SDK alias for minimal reasoning (maps to 'none' or 'low')
+ * - 'low': Light reasoning, faster responses
+ * - 'medium': Balanced (default)
+ * - 'high': Thorough reasoning for complex tasks
+ * - 'xhigh': Maximum reasoning depth (gpt-5.2, gpt-5.1-codex-max)
  */
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
@@ -102,10 +116,12 @@ export interface OpenAICodexSDKConfig {
   sandbox_mode?: SandboxMode;
 
   /**
-   * Model reasoning intensity
+   * Model reasoning intensity. Support varies by model:
+   * - 'none': No reasoning (gpt-5.2 only)
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
+   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
    */
   model_reasoning_effort?: ReasoningEffort;
 
