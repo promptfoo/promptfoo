@@ -21,7 +21,6 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/adaline-gateway/**/prompt.json",
       "!!examples/multiple-turn-conversation/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json"
@@ -194,7 +193,6 @@
   "overrides": [
     {
       "includes": [
-        "examples/adaline-gateway/**/prompt.json",
         "examples/multiple-turn-conversation/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
