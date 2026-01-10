@@ -18,17 +18,6 @@
   ],
   "packageRules": [
     {
-      "description": "Group @adaline provider packages together across all dependency types",
-      "matchPackagePatterns": ["^@adaline/"],
-      "matchDepTypes": [
-        "dependencies",
-        "devDependencies",
-        "optionalDependencies",
-        "peerDependencies"
-      ],
-      "groupName": "@adaline packages"
-    },
-    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
@@ -196,7 +185,6 @@
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
       "matchPackagePatterns": [
-        "^@adaline/",
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
         "^@aws-sdk/client-sagemaker",

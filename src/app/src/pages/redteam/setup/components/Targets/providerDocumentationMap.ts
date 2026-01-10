@@ -75,7 +75,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'text-generation-webui': `${BASE_DOCS_URL}/text-generation-webui`,
 
   // Additional providers found in docs
-  adaline: `${BASE_DOCS_URL}/adaline`,
   alibaba: `${BASE_DOCS_URL}/alibaba`,
   cerebras: `${BASE_DOCS_URL}/cerebras`,
   cloudera: `${BASE_DOCS_URL}/cloudera`,
