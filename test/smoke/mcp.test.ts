@@ -4,11 +4,12 @@ import * as path from 'path';
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/entrypoint.js');
+const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
 
-describe('MCP Command Stdio Transport', () => {
+describe('MCP Stdio Server', () => {
   let child: ChildProcess | undefined;
   let timeoutId: NodeJS.Timeout | undefined;
+  let killTimeoutId: NodeJS.Timeout | undefined;
 
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
@@ -19,18 +20,25 @@ describe('MCP Command Stdio Transport', () => {
   afterEach(() => {
     if (timeoutId) {
       clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+    if (killTimeoutId) {
+      clearTimeout(killTimeoutId);
+      killTimeoutId = undefined;
     }
     if (child) {
       child.removeAllListeners();
+      child.stdout?.removeAllListeners();
+      child.stderr?.removeAllListeners();
       if (child.exitCode === null) {
         child.kill('SIGINT');
         // Fallback to SIGKILL after 2 seconds if still running
-        const killTimeout = setTimeout(() => {
-          if (child?.exitCode === null) {
-            child.kill('SIGKILL');
+        const proc = child;
+        killTimeoutId = setTimeout(() => {
+          if (proc.exitCode === null) {
+            proc.kill('SIGKILL');
           }
         }, 2000);
-        killTimeout.unref();
       }
       child = undefined;
     }
@@ -43,22 +51,38 @@ describe('MCP Command Stdio Transport', () => {
     });
 
     let stdoutData = '';
-    const responsePromise = new Promise<void>((resolve, reject) => {
+    let stderrData = '';
+    let hasExited = false;
+
+    const responsePromise = new Promise<string>((resolve, reject) => {
       child?.stdout?.on('data', (data) => {
         stdoutData += data.toString();
-        if (stdoutData.includes('jsonrpc')) {
-          resolve();
+        // Look for a complete JSON-RPC response
+        if (stdoutData.includes('"jsonrpc"') && stdoutData.includes('"result"')) {
+          resolve(stdoutData);
         }
+      });
+
+      child?.stderr?.on('data', (data) => {
+        stderrData += data.toString();
       });
 
       child?.on('exit', (code) => {
-        // Only reject if it's an unexpected non-zero exit code
-        if (code !== null && code !== 0 && code !== 130) {
-          reject(new Error(`Process exited with code ${code}`));
+        hasExited = true;
+        // Reject if process exits before we get a response
+        if (!stdoutData.includes('"jsonrpc"')) {
+          reject(
+            new Error(
+              `Process exited with code ${code} before sending response. stderr: ${stderrData}`,
+            ),
+          );
         }
       });
 
-      timeoutId = setTimeout(() => reject(new Error('Timeout waiting for MCP response')), 15000);
+      timeoutId = setTimeout(
+        () => reject(new Error(`Timeout waiting for MCP response. stderr: ${stderrData}`)),
+        15000,
+      );
     });
 
     const initRequest = {
@@ -74,10 +98,51 @@ describe('MCP Command Stdio Transport', () => {
 
     child.stdin?.write(JSON.stringify(initRequest) + '\n');
 
-    await expect(responsePromise).resolves.toBeUndefined();
+    const responseData = await responsePromise;
 
-    const response = JSON.parse(stdoutData.trim());
+    // Parse the JSON response (handle potential extra whitespace/newlines)
+    let response;
+    try {
+      response = JSON.parse(responseData.trim());
+    } catch {
+      // Try to extract JSON from the response if there's extra content
+      const jsonMatch = responseData.match(/\{[\s\S]*"jsonrpc"[\s\S]*\}/);
+      if (jsonMatch) {
+        response = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error(`Failed to parse JSON response: ${responseData}`);
+      }
+    }
+
     expect(response.id).toBe(1);
     expect(response.result.serverInfo.name).toBe('Promptfoo MCP');
+
+    // Verify process is still alive after responding
+    expect(hasExited).toBe(false);
+    expect(child?.exitCode).toBeNull();
+  });
+
+  it('should shutdown gracefully on SIGINT', async () => {
+    child = spawn('node', [CLI_PATH, 'mcp', '--transport', 'stdio'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PROMPTFOO_DISABLE_TELEMETRY: 'true' },
+    });
+
+    // Wait for process to start up
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Verify process is running
+    expect(child.exitCode).toBeNull();
+
+    // Send SIGINT and wait for graceful shutdown
+    const exitPromise = new Promise<number | null>((resolve, reject) => {
+      child?.on('exit', (code) => resolve(code));
+      timeoutId = setTimeout(() => reject(new Error('Timeout waiting for process exit')), 5000);
+    });
+
+    child.kill('SIGINT');
+
+    const exitCode = await exitPromise;
+    expect(exitCode).toBe(0);
   });
 });
