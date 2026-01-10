@@ -197,8 +197,22 @@ export async function startStdioMcpServer(): Promise<void> {
       }
       isShuttingDown = true;
 
+      // Add timeout to prevent indefinite hangs, matching HTTP server pattern
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
       // Clean up the server and transport properly
-      server.close().finally(resolve);
+      server
+        .close()
+        .catch(() => {
+          // Ignore close errors during shutdown
+        })
+        .finally(() => {
+          clearTimeout(forceCloseTimeout);
+          resolve();
+        });
     };
 
     // Register shutdown handlers for signals
