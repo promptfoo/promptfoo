@@ -29,7 +29,7 @@ import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult, VarValue } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -369,7 +369,7 @@ export default class GoatProvider implements ApiProvider {
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
 
         // Build target vars - handle multi-input mode
-        const targetVars: Record<string, string | object> = {
+        const targetVars: Record<string, VarValue> = {
           ...context.vars,
           [this.config.injectVar]: processedMessage,
           ...(currentInputVars || {}),

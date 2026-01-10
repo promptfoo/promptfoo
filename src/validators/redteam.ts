@@ -89,10 +89,8 @@ export const RedteamPluginObjectSchema = z.object({
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: 'invalid_type',
-            options: pluginOptions,
-            received: val,
-            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+            code: 'custom',
+            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
         }
       }),
@@ -124,10 +122,8 @@ export const RedteamPluginSchema = z.union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: 'invalid_type',
-            options: pluginOptions,
-            received: val,
-            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+            code: 'custom',
+            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
         }
       }),
@@ -152,10 +148,8 @@ export const strategyIdSchema = z.union([
     }
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
-        code: 'invalid_type',
-        options: [...ALL_STRATEGIES] as [string, ...string[]],
-        received: val,
-        message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        code: 'custom',
+        message: `Invalid strategy name "${val}". Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
       });
     }
   }),

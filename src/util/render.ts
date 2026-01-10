@@ -3,6 +3,7 @@ import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
 import type { EnvOverrides } from '../types/env';
+import type { VarValue } from '../types';
 
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
@@ -97,7 +98,7 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
   return obj;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;

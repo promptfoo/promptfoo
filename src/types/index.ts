@@ -6,6 +6,7 @@ import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+export { ProvidersSchema };
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
@@ -24,7 +25,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+export type { VarValue } from './shared';
 import type { TraceData } from './tracing';
 
 export * from '../redteam/types';
@@ -141,7 +143,7 @@ export type EvalConversations = Record<
   { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
-export type EvalRegisters = Record<string, string | object>;
+export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
   provider: ApiProvider;
@@ -176,7 +178,7 @@ export interface RunEvalOptions {
   abortSignal?: AbortSignal;
 }
 
-const EvaluateOptionsSchema = z.object({
+export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
   eventSource: z.string().optional(),
@@ -189,16 +191,15 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(
-      z.tuple([
-        z.number(),
-        z.number(),
-        z.number(),
-        z.custom<RunEvalOptions>(),
-        z.custom<PromptMetrics>(),
-      ]),
-      z.void(),
-    )
+    .custom<
+      (
+        completed: number,
+        total: number,
+        index: number,
+        evalStep: RunEvalOptions,
+        metrics: PromptMetrics,
+      ) => void
+    >()
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -625,7 +626,7 @@ export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;
@@ -681,19 +682,11 @@ const ProviderPromptMapSchema = z.record(
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-export const VarsSchema = z.record(
-  z.string(),
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.union([z.string(), z.number(), z.boolean()])),
-    z.record(z.string(), z.any()),
-    z.array(z.any()),
-  ]),
-);
+// Vars represents template variables - allowing primitives, arrays, and objects
+export type Vars = Record<string, VarValue>;
 
-export type Vars = z.infer<typeof VarsSchema>;
+// VarsSchema uses z.custom to match the Vars type while allowing runtime validation flexibility
+export const VarsSchema = z.custom<Vars>();
 
 export type ScoringFunction = (
   namedScores: Record<string, number>,
@@ -808,7 +801,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.string(), z.union([z.string(), z.custom<object>()])).optional(),
+  vars: VarsSchema.optional(),
 }).strict();
 
 export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;

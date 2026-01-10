@@ -1,5 +1,6 @@
 import { getEnvString } from '../envars';
 import type Langfuse from 'langfuse';
+import type { VarValue } from '../types';
 
 const langfuseParams = {
   publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
@@ -11,7 +12,7 @@ let langfuse: Langfuse;
 
 export async function getPrompt(
   id: string,
-  vars: Record<string, string | object>,
+  vars: Record<string, VarValue>,
   type: 'text' | 'chat' | undefined,
   version?: number,
   label?: string,
