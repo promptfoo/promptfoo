@@ -527,6 +527,14 @@ class RedteamIterativeProvider implements ApiProvider {
 
   constructor(readonly config: Record<string, VarValue>) {
     // Redteam provider can be set from the config.
+    invariant(
+      config.redteamProvider === undefined ||
+        typeof config.redteamProvider === 'string' ||
+        (typeof config.redteamProvider === 'object' &&
+          config.redteamProvider !== null &&
+          !Array.isArray(config.redteamProvider)),
+      'Expected redteamProvider to be a provider id string or provider config object',
+    );
     this.redteamProvider = config.redteamProvider as RedteamFileConfig['provider'];
   }
 

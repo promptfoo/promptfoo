@@ -22,7 +22,7 @@ export const ConfigSchema = z
     guidanceFile: z.string().optional().describe('Path to file containing custom guidance'),
   })
   .refine((data) => !(data.guidance && data.guidanceFile), {
-    error: 'Cannot specify both guidance and guidanceFile',
+    message: 'Cannot specify both guidance and guidanceFile',
   })
   .transform((data) => {
     // Resolve severity with precedence: minSeverity > minimumSeverity > default

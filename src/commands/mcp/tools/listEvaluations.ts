@@ -33,7 +33,7 @@ export function registerListEvaluationsTool(server: McpServer) {
         .describe('Number of items per page (1-100, default: 20)'),
     },
     async (args) => {
-      const { datasetId, page = 1, pageSize = 20 } = args;
+      const { datasetId, page, pageSize } = args;
 
       try {
         // Check cache first

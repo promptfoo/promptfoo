@@ -410,11 +410,16 @@ export class WatsonXProvider implements ApiProvider {
       const parsedResponse = TextGenResponseSchema.safeParse(apiResponse.result);
 
       if (!parsedResponse.success) {
-        logger.error(
-          `Watsonx: Invalid response structure for response: ${JSON.stringify(apiResponse.result)}, errors: ${JSON.stringify(parsedResponse.error.issues)}`,
-        );
+        const resultKeys =
+          apiResponse?.result && typeof apiResponse.result === 'object'
+            ? Object.keys(apiResponse.result as unknown as Record<string, unknown>)
+            : undefined;
+        logger.error('Watsonx: Invalid response structure from API', {
+          issues: parsedResponse.error.issues,
+          resultKeys,
+        });
         throw new Error(
-          `Invalid API response structure: ${JSON.stringify(parsedResponse.error.issues)}`,
+          `Invalid API response structure: ${parsedResponse.error.issues.map((i) => i.message).join(', ')}`,
         );
       }
 

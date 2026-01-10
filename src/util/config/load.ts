@@ -182,8 +182,8 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       prompts: TestSuiteConfigSchema.shape.prompts.optional(),
     }).refine(
       (data) => {
-        const hasTargets = Boolean(data.targets);
-        const hasProviders = Boolean(data.providers);
+        const hasTargets = data.targets !== undefined;
+        const hasProviders = data.providers !== undefined;
         return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
       },
       {

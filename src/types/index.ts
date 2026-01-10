@@ -1165,12 +1165,12 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
 })
   .refine(
     (data) => {
-      const hasTargets = Boolean(data.targets);
-      const hasProviders = Boolean(data.providers);
+      const hasTargets = data.targets !== undefined;
+      const hasProviders = data.providers !== undefined;
       return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
     },
     {
-      error: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
     },
   )
   .transform((data) => {

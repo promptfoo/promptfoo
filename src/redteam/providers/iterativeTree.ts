@@ -1055,6 +1055,14 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         inputs: this.inputs,
       });
     } else {
+      invariant(
+        this.config.redteamProvider === undefined ||
+          typeof this.config.redteamProvider === 'string' ||
+          (typeof this.config.redteamProvider === 'object' &&
+            this.config.redteamProvider !== null &&
+            !Array.isArray(this.config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
       redteamProvider = await redteamProviderManager.getProvider({
         provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,

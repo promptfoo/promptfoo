@@ -720,6 +720,14 @@ class RedteamIterativeProvider implements ApiProvider {
         inputs: this.inputs,
       });
     } else {
+      invariant(
+        config.redteamProvider === undefined ||
+          typeof config.redteamProvider === 'string' ||
+          (typeof config.redteamProvider === 'object' &&
+            config.redteamProvider !== null &&
+            !Array.isArray(config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
       this.redteamProvider = config.redteamProvider as RedteamFileConfig['provider'];
     }
   }

@@ -17,7 +17,7 @@ export type Intent = string | string[];
 // Policy Types
 export const PolicyObjectSchema = z.object({
   id: z.string().refine(isValidPolicyId, {
-    error: 'ID must be either a UUID or a 12-character hex string',
+    message: 'ID must be either a UUID or a 12-character hex string',
   }),
   text: z.string().optional(),
   name: z.string().optional(),
