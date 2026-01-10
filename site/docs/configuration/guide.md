@@ -551,7 +551,7 @@ tests:
       headline: 'Articles about {{ env.TOPIC }}'
 ```
 
-Environment variables control file paths and API keys—only use them in trusted environments.
+Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
 
 ## Tools and Functions
 
