@@ -129,13 +129,9 @@ export class BatchProcessor<T, R> {
 
     try {
       const results = await this.processor(items);
-      batch.forEach((b, i) => {
-        b.resolve(results[i]);
-      });
+      batch.forEach((b, i) => b.resolve(results[i]));
     } catch (error) {
-      batch.forEach((b) => {
-        b.reject(error as Error);
-      });
+      batch.forEach((b) => b.reject(error as Error));
     }
 
     this.processing = false;

@@ -95,9 +95,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     const metrics = new Set<string>();
     table.head.prompts.forEach((prompt) => {
       if (prompt.metrics?.namedScores) {
-        Object.keys(prompt.metrics.namedScores).forEach((metric) => {
-          metrics.add(metric);
-        });
+        Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
       }
     });
     return Array.from(metrics).sort();

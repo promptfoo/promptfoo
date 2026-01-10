@@ -726,9 +726,7 @@ export function runMigration(cachePath: string, newCacheFilePath: string): Migra
     // Log errors if any
     if (stats.errors.length > 0) {
       logger.warn(`[Cache Migration] Encountered ${stats.errors.length} errors:`);
-      stats.errors.slice(0, 10).forEach((err) => {
-        logger.warn(`  - ${err}`);
-      });
+      stats.errors.slice(0, 10).forEach((err) => logger.warn(`  - ${err}`));
       if (stats.errors.length > 10) {
         logger.warn(`  ... and ${stats.errors.length - 10} more errors`);
       }

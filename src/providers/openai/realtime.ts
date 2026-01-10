@@ -1732,9 +1732,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
       // Clear all timeouts
-      this.activeTimeouts.forEach((t) => {
-        clearTimeout(t);
-      });
+      this.activeTimeouts.forEach((t) => clearTimeout(t));
       this.activeTimeouts.clear();
 
       // Reset audio state

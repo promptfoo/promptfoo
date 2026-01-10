@@ -280,9 +280,7 @@ function main() {
     if (!result.valid) {
       console.log(result.message);
       if (result.entries) {
-        result.entries.forEach((entry) => {
-          console.log(`  ${entry}`);
-        });
+        result.entries.forEach((entry) => console.log(`  ${entry}`));
       }
       if (result.footer) {
         console.log(result.footer);

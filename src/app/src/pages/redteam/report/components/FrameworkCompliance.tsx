@@ -56,9 +56,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
       const allPlugins = new Set<string>();
       Object.values(mappings).forEach(({ plugins }) => {
         const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => {
-          allPlugins.add(plugin);
-        });
+        expanded.forEach((plugin) => allPlugins.add(plugin));
       });
 
       // Then filter for non-compliant ones
@@ -124,9 +122,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
 
       Object.values(mappings).forEach(({ plugins }) => {
         const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => {
-          allFrameworkPlugins.add(plugin);
-        });
+        expanded.forEach((plugin) => allFrameworkPlugins.add(plugin));
       });
     });
 

@@ -22,9 +22,7 @@ export function listCommand(program: Command) {
       const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
 
       if (cmdObj.idsOnly) {
-        evals.forEach((evl) => {
-          logger.info(evl.id);
-        });
+        evals.forEach((evl) => logger.info(evl.id));
         return;
       }
 
@@ -75,9 +73,7 @@ export function listCommand(program: Command) {
       );
 
       if (cmdObj.idsOnly) {
-        prompts.forEach((prompt) => {
-          logger.info(prompt.id);
-        });
+        prompts.forEach((prompt) => logger.info(prompt.id));
         return;
       }
 
@@ -119,9 +115,7 @@ export function listCommand(program: Command) {
       );
 
       if (cmdObj.idsOnly) {
-        datasets.forEach((dataset) => {
-          logger.info(dataset.id);
-        });
+        datasets.forEach((dataset) => logger.info(dataset.id));
         return;
       }
 

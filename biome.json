@@ -152,7 +152,7 @@
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
         "useErrorMessage": "warn",
-        "useIterableCallbackReturn": "error",
+        "useIterableCallbackReturn": "off",
         "noSelfCompare": "error"
       },
       "performance": {

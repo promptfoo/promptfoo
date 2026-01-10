@@ -126,9 +126,7 @@ const CSVExporter = ({
         if (ALIASED_PLUGIN_MAPPINGS[frameworkId]) {
           Object.values(ALIASED_PLUGIN_MAPPINGS[frameworkId]).forEach(({ plugins }) => {
             const expanded = expandPluginCollections(plugins, categoryStats);
-            expanded.forEach((plugin) => {
-              frameworkPlugins.add(plugin);
-            });
+            expanded.forEach((plugin) => frameworkPlugins.add(plugin));
           });
         }
 

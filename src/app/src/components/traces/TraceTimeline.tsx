@@ -121,14 +121,10 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
     // Calculate depths
     const calculateDepth = (span: ProcessedSpan, depth: number) => {
       span.depth = depth;
-      span.children.forEach((child) => {
-        calculateDepth(child, depth + 1);
-      });
+      span.children.forEach((child) => calculateDepth(child, depth + 1));
     };
 
-    rootSpans.forEach((span) => {
-      calculateDepth(span, 0);
-    });
+    rootSpans.forEach((span) => calculateDepth(span, 0));
 
     // Flatten spans for rendering
     const flattenSpans = (spans: ProcessedSpan[]): ProcessedSpan[] => {
