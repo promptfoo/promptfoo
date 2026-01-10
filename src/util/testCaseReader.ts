@@ -362,10 +362,13 @@ export async function loadTestsFromGlob(
     const pathWithoutFunction: string =
       lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
+    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+    const pathWithoutSheet = testFile.split('#')[0];
+
     if (
       testFile.endsWith('.csv') ||
-      testFile.endsWith('.xlsx') ||
-      testFile.endsWith('.xls') ||
+      pathWithoutSheet.endsWith('.xlsx') ||
+      pathWithoutSheet.endsWith('.xls') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py')
