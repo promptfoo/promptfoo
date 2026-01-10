@@ -308,9 +308,7 @@ describe('envars', () => {
 
     beforeEach(() => {
       // Clear all CI-related environment variables before each test
-      ciEnvironments.forEach((env) => {
-        delete process.env[env];
-      });
+      ciEnvironments.forEach((env) => delete process.env[env]);
     });
 
     it('should return false when no CI environment variables are set', () => {

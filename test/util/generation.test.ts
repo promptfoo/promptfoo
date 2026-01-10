@@ -77,9 +77,7 @@ describe('sampleArray', () => {
 
     expect(result).toHaveLength(3);
     expect(new Set(result).size).toBe(3); // All items are unique
-    result.forEach((item) => {
-      expect(array).toContain(item);
-    });
+    result.forEach((item) => expect(array).toContain(item));
   });
 
   it('should return all items when n is equal to array length', () => {

@@ -713,9 +713,7 @@ describe('OpenAI Realtime Provider', () => {
       const promise = provider.directWebSocketRequest('hi');
 
       // Trigger open to allow client to send
-      mockHandlers.open.forEach((h) => {
-        h();
-      });
+      mockHandlers.open.forEach((h) => h());
       simulateMinimalFlow();
 
       await promise;
@@ -732,9 +730,7 @@ describe('OpenAI Realtime Provider', () => {
       });
       const promise = provider.directWebSocketRequest('hi');
 
-      mockHandlers.open.forEach((h) => {
-        h();
-      });
+      mockHandlers.open.forEach((h) => h());
       simulateMinimalFlow();
 
       await promise;
@@ -754,9 +750,7 @@ describe('OpenAI Realtime Provider', () => {
       });
       const promise = provider.directWebSocketRequest('hi');
 
-      mockHandlers.open.forEach((h) => {
-        h();
-      });
+      mockHandlers.open.forEach((h) => h());
       simulateMinimalFlow();
 
       await promise;
@@ -775,9 +769,7 @@ describe('OpenAI Realtime Provider', () => {
       });
       const promise = provider.webSocketRequest('secret123', 'hi');
 
-      mockHandlers.open.forEach((h) => {
-        h();
-      });
+      mockHandlers.open.forEach((h) => h());
       simulateMinimalFlow();
 
       await promise;
