@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.11](https://github.com/promptfoo/promptfoo/compare/0.120.10...0.120.11) (2026-01-10)
+
+
+### Features
+
+* **app:** add Combobox component  ([#6946](https://github.com/promptfoo/promptfoo/issues/6946)) ([a1fb9ed](https://github.com/promptfoo/promptfoo/commit/a1fb9ed64d49d4fc4cf58c96dfa89454eddc59d0))
+* **codeScan:** add fork PR authentication support ([#6958](https://github.com/promptfoo/promptfoo/issues/6958)) ([9c0fee4](https://github.com/promptfoo/promptfoo/commit/9c0fee4904af3135492545802f6d3bb872a31651))
+* **fetch:** add automatic retries for transient 5xx errors ([#6721](https://github.com/promptfoo/promptfoo/issues/6721)) ([eb0a608](https://github.com/promptfoo/promptfoo/commit/eb0a608fb0842ed9430d424ee99a9eecb9209cad))
+* **model-audit:** add auto-sharing with --share and --no-share flags ([#6928](https://github.com/promptfoo/promptfoo/issues/6928)) ([d66fdbc](https://github.com/promptfoo/promptfoo/commit/d66fdbc5140b209356e7fb4a241b68e92645018b))
+* **providers:** add OpenCode SDK v1.1.x feature support ([#6984](https://github.com/promptfoo/promptfoo/issues/6984)) ([42ba31b](https://github.com/promptfoo/promptfoo/commit/42ba31b14236d14d5a2bbe5585cda44108fcca5d))
+
+
+### Bug Fixes
+
+* **app:** improve prompt/response readability in risk category drawer ([#6871](https://github.com/promptfoo/promptfoo/issues/6871)) ([7b82477](https://github.com/promptfoo/promptfoo/commit/7b8247720f37fddcab7607faf71768dcf364ddde))
+* **app:** show charts for meaningful uniform scores ([#6961](https://github.com/promptfoo/promptfoo/issues/6961)) ([ad75924](https://github.com/promptfoo/promptfoo/commit/ad75924f4bc61048cf0f03806241a52066ff365d))
+* **app:** UI improvements and bug fixes for eval creator and data table ([#6968](https://github.com/promptfoo/promptfoo/issues/6968)) ([d31c632](https://github.com/promptfoo/promptfoo/commit/d31c6329018778c7c7b776bc05a917dd745411b6))
+* **blobs:** store audio blobs locally and pass evalId for access control ([#6923](https://github.com/promptfoo/promptfoo/issues/6923)) ([112a08a](https://github.com/promptfoo/promptfoo/commit/112a08a8985277f7c24881aabd2977abe95e6d03))
+* **ci:** add missing permissions for docker attestation workflow call ([#6985](https://github.com/promptfoo/promptfoo/issues/6985)) ([08d4779](https://github.com/promptfoo/promptfoo/commit/08d4779e33d27208442ec3125f13dfcaa93d0dd0))
+* **ci:** prevent database migration race condition in Docker tests ([#6965](https://github.com/promptfoo/promptfoo/issues/6965)) ([bec6473](https://github.com/promptfoo/promptfoo/commit/bec647392bb2c05d70c3ba46416e97c63f7eeb17))
+* **code-scan-action:** pass base branch to CLI for stacked PRs ([#6892](https://github.com/promptfoo/promptfoo/issues/6892)) ([642a409](https://github.com/promptfoo/promptfoo/commit/642a4095dc65e6e875625d5b8ce664a00f7f5835))
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.25.2 ([#6976](https://github.com/promptfoo/promptfoo/issues/6976)) ([067d82b](https://github.com/promptfoo/promptfoo/commit/067d82bab50331c48b69ebb64468c323643bde93))
+* **filter-providers:** Handle edge cases with null/empty provider IDs ([#6948](https://github.com/promptfoo/promptfoo/issues/6948)) ([1385760](https://github.com/promptfoo/promptfoo/commit/1385760957347bf85086d62447481fe090012799))
+* Plugin Form State Management Errors ([#6967](https://github.com/promptfoo/promptfoo/issues/6967)) ([d33cc8a](https://github.com/promptfoo/promptfoo/commit/d33cc8ac323eba01609ee37951d635a725c0e38e))
+* **providers:** await finalizeResponse to prevent race condition ([#6960](https://github.com/promptfoo/promptfoo/issues/6960)) ([faeed3f](https://github.com/promptfoo/promptfoo/commit/faeed3ffc9bc1d6e68e767d376fd4692162de676))
+* **providers:** prevent race condition in Google Live finalizeResponse ([#6975](https://github.com/promptfoo/promptfoo/issues/6975)) ([fa26643](https://github.com/promptfoo/promptfoo/commit/fa266436f899c0114ba4e956f955749d8cc1dae4))
+* **providers:** set cached flag on cache hits across 10 providers ([#6944](https://github.com/promptfoo/promptfoo/issues/6944)) ([202f192](https://github.com/promptfoo/promptfoo/commit/202f192f7bbaf935e939ca0e41ae71c2c95c79d4))
+* show helpful error for unsupported Node.js versions ([#6995](https://github.com/promptfoo/promptfoo/issues/6995)) ([99a8a7f](https://github.com/promptfoo/promptfoo/commit/99a8a7ff8bef7d7457978b57d801b5681c7d3505))
+* **test:** remove MUI imports from test files ([#6949](https://github.com/promptfoo/promptfoo/issues/6949)) ([806eff9](https://github.com/promptfoo/promptfoo/commit/806eff991a541a198b1a96688e03f44232ab5abd))
+
 ## [0.120.10](https://github.com/promptfoo/promptfoo/compare/0.120.9...0.120.10) (2026-01-06)
 
 ### Features
