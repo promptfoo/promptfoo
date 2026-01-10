@@ -2,9 +2,9 @@
 description: QuiverAI SVG generation
 
 providers:
-  - id: quiverai:chat:arrow-0.5
+  - id: quiverai:arrow-0.5
     config:
-      max_tokens: 4096
+      max_tokens: 8192
 
 prompts:
   - file://prompt.json
@@ -21,30 +21,33 @@ defaultTest:
 
 tests:
   - vars:
-      subject: a red heart icon
+      subject: a red heart
     assert:
-      - type: contains
-        value: '<svg'
-      - type: contains
-        value: '</svg>'
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a heart shape in red color
+        threshold: 0.5
 
   - vars:
-      subject: a yellow 5-pointed star
+      subject: a yellow star
     assert:
+      - type: is-xml
       - type: llm-rubric
         value: Contains a star shape in yellow/gold color
         threshold: 0.5
 
   - vars:
-      subject: a rocket ship with flames
+      subject: a rocket ship
     assert:
+      - type: is-xml
       - type: llm-rubric
-        value: Contains a rocket shape with exhaust/flames in warm colors
-        threshold: 0.4
+        value: Contains a rocket or spaceship shape
+        threshold: 0.5
 
   - vars:
-      subject: a cute red panda face
+      subject: a red panda face
     assert:
+      - type: is-xml
       - type: llm-rubric
         value: Contains a face with red/orange coloring suggestive of a red panda
         threshold: 0.4
