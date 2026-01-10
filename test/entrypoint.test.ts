@@ -25,22 +25,64 @@ describe('entrypoint version check logic', () => {
       }
     });
 
-    it('identifies Node.js versions below 20 as unsupported', () => {
+    it('identifies Node.js versions below minimum as unsupported', () => {
+      const minNodeVersion = 20;
       const unsupportedVersions = ['v18.19.0', 'v16.20.2', 'v14.21.3', 'v12.22.12'];
 
       for (const version of unsupportedVersions) {
         const major = parseInt(version.slice(1), 10);
-        expect(major < 20).toBe(true);
+        expect(major < minNodeVersion).toBe(true);
       }
     });
 
-    it('identifies Node.js versions 20+ as supported', () => {
+    it('identifies Node.js versions at or above minimum as supported', () => {
+      const minNodeVersion = 20;
       const supportedVersions = ['v20.0.0', 'v20.11.1', 'v21.0.0', 'v22.0.0'];
 
       for (const version of supportedVersions) {
         const major = parseInt(version.slice(1), 10);
-        expect(major < 20).toBe(false);
+        expect(major < minNodeVersion).toBe(false);
       }
+    });
+
+    it('works with different minimum version thresholds', () => {
+      // Simulates if engines.node was bumped to >=22
+      const minNodeVersion = 22;
+
+      expect(parseInt('v20.0.0'.slice(1), 10) < minNodeVersion).toBe(true); // 20 < 22
+      expect(parseInt('v21.0.0'.slice(1), 10) < minNodeVersion).toBe(true); // 21 < 22
+      expect(parseInt('v22.0.0'.slice(1), 10) < minNodeVersion).toBe(false); // 22 >= 22
+      expect(parseInt('v23.0.0'.slice(1), 10) < minNodeVersion).toBe(false); // 23 >= 22
+    });
+  });
+
+  describe('NaN handling for malformed versions', () => {
+    it('returns NaN for malformed version strings', () => {
+      const malformedVersions = ['vX.Y.Z', 'v', '', 'node-20.0.0', 'invalid'];
+
+      for (const version of malformedVersions) {
+        const major = parseInt(version.slice(1), 10);
+        expect(Number.isNaN(major)).toBe(true);
+      }
+    });
+
+    it('treats NaN as unsupported (fails safely)', () => {
+      const minNodeVersion = 20;
+      const version = 'vX.Y.Z'; // malformed
+      const major = parseInt(version.slice(1), 10);
+
+      // The check used in entrypoint.ts: Number.isNaN(major) || major < minNodeVersion
+      const isUnsupported = Number.isNaN(major) || major < minNodeVersion;
+      expect(isUnsupported).toBe(true);
+    });
+
+    it('NaN comparison would incorrectly pass without explicit check', () => {
+      // This demonstrates why we need the explicit NaN check
+      const major = NaN;
+      // NaN < 20 is false! (NaN comparisons always return false)
+      expect(major < 20).toBe(false);
+      // So without Number.isNaN check, malformed versions would pass through
+      expect(Number.isNaN(major)).toBe(true);
     });
   });
 
@@ -129,7 +171,8 @@ describe('entrypoint version check logic', () => {
   describe('error message formatting', () => {
     it('produces a yellow-colored error message with version info', () => {
       const version = 'v18.19.0';
-      const errorMessage = `\x1b[33mNode.js ${version} is not supported. Please upgrade to Node.js 20 or later.\x1b[0m`;
+      const minNodeVersion = 20;
+      const errorMessage = `\x1b[33mNode.js ${version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`;
 
       expect(errorMessage).toContain('v18.19.0');
       expect(errorMessage).toContain('Node.js 20 or later');
@@ -137,6 +180,34 @@ describe('entrypoint version check logic', () => {
       expect(errorMessage).toContain('\x1b[33m');
       // Contains ANSI reset code
       expect(errorMessage).toContain('\x1b[0m');
+    });
+
+    it('uses dynamic minimum version in error message', () => {
+      const version = 'v20.0.0';
+      const minNodeVersion = 22; // Simulates bumped engines requirement
+      const errorMessage = `\x1b[33mNode.js ${version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`;
+
+      expect(errorMessage).toContain('Node.js 22 or later');
+    });
+  });
+
+  describe('build-time constant behavior', () => {
+    it('uses fallback when __PROMPTFOO_MIN_NODE_VERSION__ is undefined', () => {
+      // In development/testing, the constant is undefined
+      const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined = undefined;
+      const minNodeVersion =
+        typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
+
+      expect(minNodeVersion).toBe(20);
+    });
+
+    it('uses injected value when __PROMPTFOO_MIN_NODE_VERSION__ is defined', () => {
+      // At build time, the constant is replaced with the actual value
+      const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined = 22;
+      const minNodeVersion =
+        typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
+
+      expect(minNodeVersion).toBe(22);
     });
   });
 });

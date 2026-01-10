@@ -5,11 +5,17 @@ import { defineConfig } from 'tsdown';
 // Read package.json for version constants
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
+// Extract minimum Node.js version from engines field (e.g., ">=20.0.0" → 20)
+// This is injected into entrypoint.ts for the version check
+const minNodeVersion = parseInt(packageJson.engines?.node?.replace(/[^\d.]/g, '') || '20', 10);
+
 // Build-time constants injected into all builds
-// These replace the __PROMPTFOO_*__ placeholders in src/version.ts
+// These replace the __PROMPTFOO_*__ placeholders in source files
+// Note: tsdown define requires all values to be strings
 const versionDefines = {
   __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
   __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
+  __PROMPTFOO_MIN_NODE_VERSION__: String(minNodeVersion),
 };
 
 // All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
