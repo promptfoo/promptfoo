@@ -40,7 +40,9 @@ export function StrategySection({
       onSelectNone(selectedStrategiesInSection);
     } else {
       // Fallback to the old approach if onSelectNone not provided
-      selectedStrategiesInSection.forEach((id) => onToggle(id));
+      selectedStrategiesInSection.forEach((id) => {
+        onToggle(id);
+      });
     }
   };
 

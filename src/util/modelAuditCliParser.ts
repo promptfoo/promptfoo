@@ -163,7 +163,9 @@ export function parseModelAuditArgs(paths: string[], options: unknown): Validate
         break;
       case 'array':
         if (Array.isArray(value)) {
-          value.forEach((item) => args.push(config.flag, String(item)));
+          value.forEach((item) => {
+            args.push(config.flag, String(item));
+          });
         }
         break;
     }

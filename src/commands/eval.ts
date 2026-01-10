@@ -767,11 +767,11 @@ export async function doEval(
             await runEvaluation();
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
-          .on('ready', () =>
-            watchPaths.forEach((watchPath) =>
-              logger.info(`Watching for file changes on ${watchPath} ...`),
-            ),
-          );
+          .on('ready', () => {
+            watchPaths.forEach((watchPath) => {
+              logger.info(`Watching for file changes on ${watchPath} ...`);
+            });
+          });
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);

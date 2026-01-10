@@ -521,9 +521,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     });
 
     // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
-      logger.warn(warningText),
-    );
+    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) => {
+      logger.warn(warningText);
+    });
 
     if (providerChoices.length > 0) {
       if (providerChoices.length > 3) {

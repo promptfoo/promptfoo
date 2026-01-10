@@ -81,12 +81,24 @@ describe('metadata constants', () => {
       const allDefinedPlugins = new Set<Plugin>();
 
       // Add plugins from various constant arrays
-      [...BASE_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      [...ADDITIONAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      [...BIAS_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      [...PII_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      [...MEDICAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      [...FINANCIAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...BASE_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
+      [...ADDITIONAL_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
+      [...BIAS_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
+      [...PII_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
+      [...MEDICAL_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
+      [...FINANCIAL_PLUGINS].forEach((plugin) => {
+        allDefinedPlugins.add(plugin);
+      });
 
       // Add plugins from HARM_PLUGINS object
       Object.keys(HARM_PLUGINS).forEach((plugin) => {

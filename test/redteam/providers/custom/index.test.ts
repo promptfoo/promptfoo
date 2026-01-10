@@ -97,7 +97,9 @@ describe('MemorySystem', () => {
       { role: 'assistant', content: 'assistant message 2' },
     ];
 
-    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
+    messages.forEach((msg) => {
+      memorySystem.addMessage(conversationId, msg);
+    });
 
     const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
     const newConversation = memorySystem.getConversation(newConversationId);

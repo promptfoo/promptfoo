@@ -43,13 +43,17 @@ async function loadPluginsFromConstants(): Promise<Set<string>> {
   for (const arrayName of pluginArrays) {
     const array = pluginsModule[arrayName];
     if (Array.isArray(array)) {
-      array.forEach((plugin: string) => allPlugins.add(plugin));
+      array.forEach((plugin: string) => {
+        allPlugins.add(plugin);
+      });
     }
   }
 
   // Add harm plugins
   if (pluginsModule.HARM_PLUGINS) {
-    Object.keys(pluginsModule.HARM_PLUGINS).forEach((plugin) => allPlugins.add(plugin));
+    Object.keys(pluginsModule.HARM_PLUGINS).forEach((plugin) => {
+      allPlugins.add(plugin);
+    });
   }
 
   return allPlugins;
@@ -116,7 +120,9 @@ describe('Plugin Documentation', () => {
 
       if (missingFromDocs.length > 0) {
         console.log('\nPlugins missing from documentation data:');
-        missingFromDocs.forEach((plugin) => console.log(`  - ${plugin}`));
+        missingFromDocs.forEach((plugin) => {
+          console.log(`  - ${plugin}`);
+        });
         console.log('\nAdd these plugins to site/docs/_shared/data/plugins.ts');
       }
 
@@ -134,7 +140,9 @@ describe('Plugin Documentation', () => {
 
       if (missingFromConstants.length > 0) {
         console.log('\nOrphaned plugins in documentation data:');
-        missingFromConstants.forEach((plugin) => console.log(`  - ${plugin}`));
+        missingFromConstants.forEach((plugin) => {
+          console.log(`  - ${plugin}`);
+        });
         console.log(
           '\nRemove these from site/docs/_shared/data/plugins.ts or add them to src/redteam/constants/plugins.ts',
         );

@@ -671,7 +671,7 @@ export async function synthesize({
     return true;
   });
 
-  validateStrategies(strategies);
+  await validateStrategies(strategies);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
@@ -782,9 +782,9 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
+    mapping.plugins.forEach((p: string) => {
+      expandedPlugins.push({ id: p, numTests: plugin.numTests });
+    });
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 

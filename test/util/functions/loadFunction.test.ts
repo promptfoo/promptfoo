@@ -55,7 +55,9 @@ describe('loadFunction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Clear the function cache
-    Object.keys(functionCache).forEach((key) => delete functionCache[key]);
+    Object.keys(functionCache).forEach((key) => {
+      delete functionCache[key];
+    });
   });
 
   describe('JavaScript functions', () => {

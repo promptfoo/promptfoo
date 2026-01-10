@@ -107,7 +107,7 @@ export class BatchProcessor<T, R> {
   async add(item: T): Promise<R> {
     return new Promise((resolve, reject) => {
       this.queue.push({ item, resolve, reject });
-      this.processQueue();
+      void this.processQueue();
     });
   }
 
@@ -129,16 +129,20 @@ export class BatchProcessor<T, R> {
 
     try {
       const results = await this.processor(items);
-      batch.forEach((b, i) => b.resolve(results[i]));
+      batch.forEach((b, i) => {
+        b.resolve(results[i]);
+      });
     } catch (error) {
-      batch.forEach((b) => b.reject(error as Error));
+      batch.forEach((b) => {
+        b.reject(error as Error);
+      });
     }
 
     this.processing = false;
 
     // Continue processing if more items
     if (this.queue.length > 0) {
-      this.processQueue();
+      void this.processQueue();
     }
   }
 }

@@ -366,7 +366,9 @@ export function stripHtml(html: string): string {
   if (typeof document !== 'undefined') {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     // Remove script and style elements before getting textContent
-    doc.querySelectorAll('script, style').forEach((el) => el.remove());
+    doc.querySelectorAll('script, style').forEach((el) => {
+      el.remove();
+    });
     return doc.body.textContent || '';
   }
 

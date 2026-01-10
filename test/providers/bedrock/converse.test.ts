@@ -1087,7 +1087,9 @@ Third line`;
 
     afterEach(() => {
       // Clean up any cache-related spies
-      cacheSpies.forEach((spy) => spy.mockRestore());
+      cacheSpies.forEach((spy) => {
+        spy.mockRestore();
+      });
       cacheSpies = [];
     });
 

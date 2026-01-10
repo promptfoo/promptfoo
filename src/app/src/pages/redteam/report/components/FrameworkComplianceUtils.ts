@@ -33,7 +33,9 @@ export const expandPluginCollections = (
       // Add all harmful:* plugins that have stats
       Object.keys(categoryStats)
         .filter((key) => key.startsWith('harmful:'))
-        .forEach((key) => expandedPlugins.add(key));
+        .forEach((key) => {
+          expandedPlugins.add(key);
+        });
     } else {
       expandedPlugins.add(plugin);
     }
