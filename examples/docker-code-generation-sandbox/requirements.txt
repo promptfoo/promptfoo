@@ -7,4 +7,4 @@ python-dateutil==2.9.0.post0
 requests==2.32.5
 six==1.16.0
 structlog==24.2.0
-urllib3==2.6.0
+urllib3==2.6.3

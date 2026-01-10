@@ -257,6 +257,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
       if (isStrategyDisabled(strategyId)) {

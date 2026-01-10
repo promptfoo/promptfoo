@@ -65,6 +65,7 @@ export default function CustomIntentSection() {
     return { totalPages: total, startIndex: start, currentIntents: current };
   }, [localConfig.intent, currentPage]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const debouncedUpdatePlugins = useCallback(
     (newIntents: (string | string[])[]) => {
       if (updateTimeout) {
@@ -311,6 +312,7 @@ export default function CustomIntentSection() {
     setIsDragOver(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);

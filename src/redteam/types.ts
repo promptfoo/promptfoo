@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
+
+// Re-export Inputs from shared to maintain backwards compatibility
+export { InputsSchema, type Inputs };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -86,6 +90,10 @@ export const PluginConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
+
+  // Multi-variable inputs - allows generating test cases with multiple variables
+  // Keys are variable names, values are descriptions of what each variable should contain
+  inputs: InputsSchema.optional(),
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
@@ -209,6 +217,8 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
+  // Multi-variable inputs for test case generation (from target)
+  inputs?: Inputs;
   language?: string | string[];
   maxConcurrency?: number;
   numTests: number;
@@ -322,6 +332,8 @@ export interface RedteamHistoryEntry {
   outputAudio?: RedteamMediaData;
   /** Image data from the target response */
   outputImage?: RedteamMediaData;
+  /** Extracted input variables for multi-input mode */
+  inputVars?: Record<string, string>;
 }
 
 /**

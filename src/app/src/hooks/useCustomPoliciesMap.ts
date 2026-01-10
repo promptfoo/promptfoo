@@ -26,6 +26,7 @@ export function useCustomPoliciesMap(
   // Stringify plugins for deep comparison to prevent infinite loops when plugins array reference changes
   const pluginsKey = useMemo(() => JSON.stringify(plugins), [plugins]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: using pluginsKey for deep comparison to prevent infinite loops
   useEffect(() => {
     async function buildPoliciesMap() {
       const policyPlugins = plugins.filter(

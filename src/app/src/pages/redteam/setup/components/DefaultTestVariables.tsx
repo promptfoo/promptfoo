@@ -39,6 +39,7 @@ export default function DefaultTestVariables() {
   }, [config.defaultTest?.vars]);
 
   // Sync local state back to global config
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const syncToGlobalState = useCallback(() => {
     const vars: Record<string, string> = {};
     variables.forEach((variable) => {

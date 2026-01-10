@@ -65,6 +65,7 @@ export const CommandLineOptionsSchema = z.object({
   watch: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
+  filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.string().optional(),
   filterPattern: z.string().optional(),
@@ -161,6 +162,12 @@ export interface RunEvalOptions {
   isRedteam: boolean;
 
   concurrency?: number;
+
+  /**
+   * Evaluation ID for tracking blob references in the database.
+   * When set, allows blob storage to record references for access control.
+   */
+  evalId?: string;
 
   /**
    * AbortSignal that can be used to cancel the evaluation

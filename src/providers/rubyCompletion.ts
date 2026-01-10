@@ -185,7 +185,7 @@ export class RubyProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      let result: any;
 
       switch (apiType) {
         case 'call_api':

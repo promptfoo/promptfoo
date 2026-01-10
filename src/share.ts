@@ -90,11 +90,11 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
 }
 
 // Helper functions
-function getResultSize(result: any): number {
+function getResultSize(result: unknown): number {
   return Buffer.byteLength(JSON.stringify(result), 'utf8');
 }
 
-function findLargestResultSize(results: any[], sampleSize: number = 1000): number {
+function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000): number {
   // Get the result size of the first sampleSize results
   const sampleSizes = results.slice(0, Math.min(sampleSize, results.length)).map(getResultSize);
   // find the largest result size
@@ -176,7 +176,7 @@ async function sendEvalRecord(
 }
 
 async function sendChunkOfResults(
-  chunk: any[],
+  chunk: EvalResult[],
   url: string,
   evalId: string,
   headers: Record<string, string>,
