@@ -947,6 +947,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('replicate:'),
     create: async (
       providerPath: string,

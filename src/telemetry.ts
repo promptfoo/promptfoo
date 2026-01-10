@@ -72,9 +72,7 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify().then(() => {
-      // Intentionally empty - fire and forget
-    });
+    void this.identify();
   }
 
   async identify() {
