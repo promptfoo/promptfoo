@@ -9,12 +9,12 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 // This is injected into entrypoint.ts for the version check
 // Note: Assumes engines.node is a simple semver constraint like ">=20.0.0"
 const enginesNode: string = packageJson.engines?.node ?? '';
-const minNodeVersion = parseInt(enginesNode.replace(/[^\d.]/g, ''), 10);
+let minNodeVersion = parseInt(enginesNode.replace(/[^\d.]/g, ''), 10);
 if (Number.isNaN(minNodeVersion)) {
-  throw new Error(
-    `Failed to parse minimum Node.js version from package.json engines.node: "${enginesNode}". ` +
-      'Expected a semver constraint like ">=20.0.0".',
+  console.warn(
+    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to Node.js 20.`,
   );
+  minNodeVersion = 20;
 }
 
 // Build-time constants injected into all builds
