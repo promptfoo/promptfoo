@@ -22,6 +22,7 @@ import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
+import MediaPage from './pages/media/page';
 import ModelAuditHistoryPage from './pages/model-audit-history/page';
 import ModelAuditLatestPage from './pages/model-audit-latest/page';
 import ModelAuditResultPage from './pages/model-audit-result/page';
@@ -69,6 +70,8 @@ const router = createBrowserRouter(
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
           <Route path="/progress" element={<Navigate to="/history" replace />} />
           <Route path="/history" element={<HistoryPage />} />
+
+          <Route path="/media" element={<MediaPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
 
