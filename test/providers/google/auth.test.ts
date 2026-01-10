@@ -172,7 +172,7 @@ describe('GoogleAuthManager', () => {
       expect(result.source).toBe('none');
     });
 
-    it('should warn when both GOOGLE_API_KEY and GEMINI_API_KEY are set (SDK aligned)', () => {
+    it('should log debug when both GOOGLE_API_KEY and GEMINI_API_KEY are set (SDK aligned)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'GOOGLE_API_KEY') {
           return 'google-key';
@@ -185,12 +185,13 @@ describe('GoogleAuthManager', () => {
 
       GoogleAuthManager.getApiKey({});
 
-      expect(logger.warn).toHaveBeenCalledWith(
+      // This is not an error condition - GOOGLE_API_KEY correctly takes precedence
+      expect(logger.debug).toHaveBeenCalledWith(
         '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
       );
     });
 
-    it('should warn even when both keys have the same value (SDK aligned)', () => {
+    it('should log debug even when both keys have the same value (SDK aligned)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'GOOGLE_API_KEY') {
           return 'same-key';
@@ -203,8 +204,8 @@ describe('GoogleAuthManager', () => {
 
       GoogleAuthManager.getApiKey({});
 
-      // SDK warns whenever both are set, regardless of value
-      expect(logger.warn).toHaveBeenCalledWith(
+      // This is not an error condition - just informational
+      expect(logger.debug).toHaveBeenCalledWith(
         '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
       );
     });

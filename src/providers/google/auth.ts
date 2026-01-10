@@ -133,9 +133,12 @@ export class GoogleAuthManager {
     // 5. PALM_API_KEY (legacy, AI Studio only - deprecated)
     const palmKey = isVertexMode ? undefined : env?.PALM_API_KEY || getEnvString('PALM_API_KEY');
 
-    // SDK alignment: warn whenever both GOOGLE_API_KEY and GEMINI_API_KEY are set
+    // SDK alignment: note when both GOOGLE_API_KEY and GEMINI_API_KEY are set
+    // This is not an error - GOOGLE_API_KEY correctly takes precedence (SDK-aligned)
     if (googleKey && geminiKey) {
-      logger.warn('[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.');
+      logger.debug(
+        '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
+      );
     }
 
     if (googleKey) {

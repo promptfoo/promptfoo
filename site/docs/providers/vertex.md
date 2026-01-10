@@ -306,7 +306,7 @@ GOOGLE_API_KEY=your-api-key  # For express mode
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
 
 :::tip Recommended Environment Variables
-Prefer `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy variables (`VERTEX_API_KEY`, `GEMINI_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported.
+Prefer `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy Vertex-specific variables (`VERTEX_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported for backward compatibility.
 :::
 
 ### Authentication Configuration Details
