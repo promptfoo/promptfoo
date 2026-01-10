@@ -67,13 +67,12 @@ describe('entrypoint version check logic', () => {
     });
 
     it('treats NaN as unsupported (fails safely)', () => {
-      const minNodeVersion = 20;
       const version = 'vX.Y.Z'; // malformed
       const major = parseInt(version.slice(1), 10);
 
-      // The check used in entrypoint.ts: Number.isNaN(major) || major < minNodeVersion
-      const isUnsupported = Number.isNaN(major) || major < minNodeVersion;
-      expect(isUnsupported).toBe(true);
+      // entrypoint.ts checks NaN separately and shows a distinct error message
+      expect(Number.isNaN(major)).toBe(true);
+      // This would trigger the "Unexpected Node.js version format" error
     });
 
     it('NaN comparison would incorrectly pass without explicit check', () => {
@@ -169,17 +168,28 @@ describe('entrypoint version check logic', () => {
   });
 
   describe('error message formatting', () => {
-    it('produces a yellow-colored error message with version info', () => {
+    it('produces a yellow-colored error message for unsupported versions', () => {
       const version = 'v18.19.0';
       const minNodeVersion = 20;
       const errorMessage = `\x1b[33mNode.js ${version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`;
 
       expect(errorMessage).toContain('v18.19.0');
+      expect(errorMessage).toContain('is not supported');
       expect(errorMessage).toContain('Node.js 20 or later');
       // Contains ANSI yellow color code
       expect(errorMessage).toContain('\x1b[33m');
       // Contains ANSI reset code
       expect(errorMessage).toContain('\x1b[0m');
+    });
+
+    it('produces a distinct error message for malformed versions', () => {
+      const version = 'vX.Y.Z';
+      const minNodeVersion = 20;
+      const errorMessage = `\x1b[33mUnexpected Node.js version format: ${version}. Please use Node.js ${minNodeVersion} or later.\x1b[0m`;
+
+      expect(errorMessage).toContain('Unexpected Node.js version format');
+      expect(errorMessage).toContain('vX.Y.Z');
+      expect(errorMessage).toContain('Node.js 20 or later');
     });
 
     it('uses dynamic minimum version in error message', () => {

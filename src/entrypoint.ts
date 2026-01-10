@@ -25,7 +25,13 @@ if (!isBun && !isDeno) {
   // process.version is always "vX.Y.Z" (e.g., "v20.0.0"), so slice(1) gives "20.0.0"
   const major = parseInt(process.version.slice(1), 10);
   // NaN check handles malformed version strings - fail safely rather than allowing through
-  if (Number.isNaN(major) || major < minNodeVersion) {
+  if (Number.isNaN(major)) {
+    console.error(
+      `\x1b[33mUnexpected Node.js version format: ${process.version}. Please use Node.js ${minNodeVersion} or later.\x1b[0m`,
+    );
+    process.exit(1);
+  }
+  if (major < minNodeVersion) {
     console.error(
       `\x1b[33mNode.js ${process.version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`,
     );
