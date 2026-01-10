@@ -97,9 +97,9 @@ export async function readStandaloneTestsFile(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  // Remove sheet specifier (e.g., #Sheet1) before extracting file extension
-  const pathWithoutSheet = pathWithoutFunction.split('#')[0];
-  const fileExtension = parsePath(pathWithoutSheet).ext.slice(1);
+  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
+  const extensionWithoutSheet = fileExtension.split('#')[0];
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -188,7 +188,7 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
-  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+  } else if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
