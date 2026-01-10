@@ -97,7 +97,9 @@ export async function readStandaloneTestsFile(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  // Remove sheet specifier (e.g., #Sheet1) before extracting file extension
+  const pathWithoutSheet = pathWithoutFunction.split('#')[0];
+  const fileExtension = parsePath(pathWithoutSheet).ext.slice(1);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -362,13 +364,8 @@ export async function loadTestsFromGlob(
     const pathWithoutFunction: string =
       lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
-    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-    const pathWithoutSheet = testFile.split('#')[0];
-
     if (
       testFile.endsWith('.csv') ||
-      pathWithoutSheet.endsWith('.xlsx') ||
-      pathWithoutSheet.endsWith('.xls') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py')
@@ -434,10 +431,14 @@ export async function readTests(
         const lastColonIndex = globOrTest.lastIndexOf(':');
         const pathWithoutFunction: string =
           lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
-        // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
+        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+        const pathWithoutSheet = globOrTest.split('#')[0];
+        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
         if (
           isJavascriptFile(pathWithoutFunction) ||
           pathWithoutFunction.endsWith('.py') ||
+          pathWithoutSheet.endsWith('.xlsx') ||
+          pathWithoutSheet.endsWith('.xls') ||
           globOrTest.replace(/^file:\/\//, '').includes(':')
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
