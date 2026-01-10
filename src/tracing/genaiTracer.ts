@@ -152,6 +152,8 @@ export interface GenAISpanResult {
   cacheHit?: boolean;
   /** Response body (will be truncated to MAX_BODY_LENGTH) */
   responseBody?: string;
+  /** Additional provider-specific attributes to add to the span */
+  additionalAttributes?: Record<string, string | number | boolean>;
 }
 
 /**
@@ -316,7 +318,7 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
  * Sanitize sensitive data from a body string.
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
-function sanitizeBody(body: string): string {
+export function sanitizeBody(body: string): string {
   let sanitized = body;
   for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
     if (typeof replacement === 'function') {
@@ -418,6 +420,21 @@ export function setGenAIResponseAttributes(
       PromptfooAttributes.RESPONSE_BODY,
       truncateBody(result.responseBody, sanitize),
     );
+  }
+
+  // Provider-specific additional attributes
+  // Apply same sanitization/truncation as request/response bodies to prevent secret leakage
+  if (result.additionalAttributes) {
+    for (const [key, value] of Object.entries(result.additionalAttributes)) {
+      if (value !== undefined && value !== null) {
+        // Sanitize string values (e.g., reasoning text, conversation content)
+        if (typeof value === 'string') {
+          span.setAttribute(key, truncateBody(value, sanitize));
+        } else {
+          span.setAttribute(key, value);
+        }
+      }
+    }
   }
 }
 

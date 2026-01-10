@@ -101,7 +101,7 @@ describe('OpenAICodexSDKProvider', () => {
     it('should initialize with custom config', () => {
       const config = {
         apiKey: 'test-key',
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         working_dir: '/test/dir',
       };
 
@@ -132,7 +132,7 @@ describe('OpenAICodexSDKProvider', () => {
     it('should not warn about known OpenAI models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -680,7 +680,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: '/test/dir',
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -835,7 +835,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
@@ -845,7 +845,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).toHaveBeenCalledWith({
           workingDirectory: undefined,
           skipGitRepoCheck: false,
-          model: 'gpt-4o',
+          model: 'gpt-5.2',
         });
       });
 
