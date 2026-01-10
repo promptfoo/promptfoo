@@ -214,6 +214,7 @@ export class GoogleProvider extends GoogleGenericProvider {
    * Express mode is used when:
    * 1. API key is available (VERTEX_API_KEY, GOOGLE_API_KEY, or config.apiKey)
    * 2. User hasn't explicitly disabled it with `expressMode: false`
+   * 3. No OAuth/ADC credentials are configured (OAuth takes priority)
    */
   private isExpressMode(): boolean {
     if (!this.isVertexMode) {
@@ -223,8 +224,17 @@ export class GoogleProvider extends GoogleGenericProvider {
     const hasApiKey = Boolean(this.getApiKey());
     const explicitlyDisabled = this.config.expressMode === false;
 
-    // Auto-enable express mode when API key is available (unless explicitly disabled)
-    return hasApiKey && !explicitlyDisabled;
+    // Check if OAuth/ADC credentials are explicitly configured - they take priority
+    const hasOAuthConfig = Boolean(
+      this.config.credentials ||
+        this.config.keyFilename ||
+        this.config.googleAuthOptions?.keyFilename ||
+        this.config.googleAuthOptions?.credentials,
+    );
+
+    // Auto-enable express mode when API key is available AND no OAuth config
+    // OAuth credentials take priority over express mode
+    return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
   /**
@@ -299,7 +309,12 @@ export class GoogleProvider extends GoogleGenericProvider {
       safetySettings: config.safetySettings,
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
-      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+      // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
+      ...(systemInstruction
+        ? this.isVertexMode
+          ? { systemInstruction }
+          : { system_instruction: systemInstruction }
+        : {}),
     };
 
     // Handle response schema

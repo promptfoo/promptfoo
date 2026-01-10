@@ -214,8 +214,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
-    // Get tools from config (may be file reference)
-    const configTools = this.config.tools;
+    // Get tools from prompt-level config first, fall back to provider config
+    // This allows per-prompt tool overrides in test cases
+    const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
+    const configTools = promptConfig?.tools ?? this.config.tools;
     const fileTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
@@ -251,11 +253,16 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       const resolvedPath = path.resolve(basePath, filePath);
 
       // Path traversal protection: ensure resolved path is within the base directory
-      // Use path.resolve() for normalizedBase to ensure drive letter is included on Windows
-      // (path.normalize() on a Unix-style path like '/test/path' doesn't add the drive letter)
+      // Use path.relative() to get relative path from base to target
+      // If path starts with '..' or is absolute, it's outside the base directory
       const normalizedBase = path.resolve(basePath);
-      const normalizedResolved = path.normalize(resolvedPath);
-      if (!normalizedResolved.startsWith(normalizedBase)) {
+      const normalizedResolved = path.resolve(resolvedPath);
+      const relativePath = path.relative(normalizedBase, normalizedResolved);
+
+      // Check if path escapes the base directory:
+      // - Starts with '..' means it goes up out of base
+      // - path.isAbsolute() handles edge cases on Windows where relative might return absolute path
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         throw new Error(
           `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
             `Resolved path '${normalizedResolved}' is not within '${normalizedBase}'.`,
@@ -320,13 +327,24 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            // String callbacks that are not file:// references are not supported
-            // for security reasons (would require eval-like execution)
-            throw new Error(
-              `Invalid function callback for '${functionName}': string callbacks must use ` +
-                `'file://' prefix to reference an external file (e.g., 'file://path/to/module.js:functionName'). ` +
-                `Direct function objects are also supported.`,
+            // Inline function string (backward compatibility with existing behavior)
+            // This uses Function constructor which has security implications
+            logger.warn(
+              `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
+                `Use 'file://path/to/module.js:functionName' for better security.`,
             );
+            try {
+              // eslint-disable-next-line no-new-func
+              callback = new Function('return ' + callbackStr)();
+              if (typeof callback !== 'function') {
+                throw new Error(`Expression did not return a function`);
+              }
+            } catch (err) {
+              throw new Error(
+                `Failed to parse inline function for '${functionName}': ${err}. ` +
+                  `Consider using 'file://' prefix to reference an external file.`,
+              );
+            }
           }
 
           // Cache for future use

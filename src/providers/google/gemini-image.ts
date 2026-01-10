@@ -104,7 +104,8 @@ export class GeminiImageProvider implements ApiProvider {
 
     const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
     const apiVersion = this.modelName.startsWith('gemini-3-') ? 'v1alpha' : 'v1beta';
-    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent?key=${apiKey}`;
+    // Use header-based auth instead of query param to avoid API key in logs
+    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
 
     const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
     const body = this.buildRequestBody(contents);
@@ -112,6 +113,7 @@ export class GeminiImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);

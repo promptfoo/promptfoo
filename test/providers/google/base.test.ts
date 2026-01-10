@@ -104,10 +104,12 @@ class TestGoogleProvider extends GoogleGenericProvider {
 describe('GoogleGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mock instance methods
-    mockMcpInstance.initialize.mockClear().mockResolvedValue(undefined);
-    mockMcpInstance.getAllTools.mockClear().mockReturnValue([]);
-    mockMcpInstance.cleanup.mockClear().mockResolvedValue(undefined);
+    // Reset hoisted mock instance methods to ensure test isolation
+    mockMcpInstance.initialize.mockReset().mockResolvedValue(undefined);
+    mockMcpInstance.getAllTools.mockReset().mockReturnValue([]);
+    mockMcpInstance.cleanup.mockReset().mockResolvedValue(undefined);
+    // Reset utility mocks
+    vi.mocked(maybeLoadToolsFromExternalFile).mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {

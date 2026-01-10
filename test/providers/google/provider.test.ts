@@ -98,6 +98,9 @@ vi.mock('fs', async (importOriginal) => {
 describe('GoogleProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset hoisted mocks to default pass-through behavior
+    mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input) => input);
+    mockMaybeLoadFromExternalFile.mockReset().mockImplementation((input) => input);
     vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
       return {
         renderString: vi.fn((str) => str),

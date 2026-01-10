@@ -2139,7 +2139,7 @@ describe('util', () => {
     // especially on systems with gcloud configured. The clearCachedAuth() helper works for
     // most tests, but this specific test requires mocking the GoogleAuth instance itself,
     // which has proven unreliable with Vitest's current mocking system.
-    // See: https://github.com/promptfoo/promptfoo/pull/XXXX
+    // See: https://github.com/promptfoo/promptfoo/pull/6924
     it.skip('should fall back to Google Auth Library when no config or env vars', async () => {
       clearCachedAuth();
 

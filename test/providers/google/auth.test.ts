@@ -560,69 +560,9 @@ describe('GoogleAuthManager', () => {
   // These are tested in integration tests with the actual library.
   // See: test/providers/google/vertex.test.ts for integration coverage
 
-  describe('getOAuthClient', () => {
-    // Note: getOAuthClient uses dynamic import() for google-auth-library which
-    // requires proper constructor mocking. These tests require integration testing
-    // with the actual library. See: test/providers/google/vertex.test.ts
-    //
-    // The key functionality tested here (via other tests):
-    // - googleAuthOptions passthrough
-    // - scopes configuration
-    // - keyFilename support
-    // - credentials loading
-    //
-    // Unit tests focus on the synchronous helper methods.
-
-    it.skip('should create OAuth client successfully (requires integration test)', async () => {
-      // Requires proper constructor mock for GoogleAuth
-    });
-
-    it.skip('should handle string credentials option for backward compatibility (requires integration test)', async () => {
-      // Requires proper constructor mock for GoogleAuth
-    });
-
-    it.skip('should load credentials from JSON string (requires integration test)', async () => {
-      // Requires proper constructor mock for GoogleAuth
-    });
-
-    it.skip('should use getClient when no credentials provided (requires integration test)', async () => {
-      // Requires proper constructor mock for GoogleAuth
-    });
-
-    it.skip('should pass through googleAuthOptions (requires integration test)', () => {
-      // googleAuthOptions passthrough is tested via integration tests
-    });
-
-    it.skip('should use explicit scopes over googleAuthOptions.scopes (requires integration test)', () => {
-      // scopes override is tested via integration tests
-    });
-
-    it.skip('should pass keyFilename to GoogleAuth (requires integration test)', () => {
-      // keyFilename passthrough is tested via integration tests
-    });
-  });
-
-  describe('resolveProjectId', () => {
-    // Note: resolveProjectId calls getOAuthClient internally, which requires the library.
-    // Config priority tests work because config.projectId is checked first.
-
-    it.skip('should prioritize config.projectId over all other sources (requires integration test)', async () => {
-      // This test calls getOAuthClient internally which requires the library
-      // Tested in integration tests
-    });
-
-    it.skip('should use VERTEX_PROJECT_ID env var (requires integration test)', async () => {
-      // This path calls getOAuthClient which requires the library
-    });
-
-    it.skip('should use GOOGLE_CLOUD_PROJECT env var (requires integration test)', async () => {
-      // This path calls getOAuthClient which requires the library
-    });
-
-    it.skip('should fall back to detected project ID (requires integration test)', async () => {
-      // This path calls getOAuthClient which requires the library
-    });
-  });
+  // Note: getOAuthClient and resolveProjectId tests require the google-auth-library
+  // package with proper constructor mocking. These are tested in integration tests.
+  // See: test/providers/google/vertex.test.ts for integration coverage
 
   describe('clearCache', () => {
     it('should reset cachedAuth to undefined', () => {

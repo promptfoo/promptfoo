@@ -502,8 +502,12 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=gemini-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'gemini-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
@@ -546,8 +550,12 @@ describe('GeminiImageProvider', () => {
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=config-api-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'config-api-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
