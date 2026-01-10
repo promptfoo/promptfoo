@@ -1,6 +1,11 @@
 import { type ZodType, z } from 'zod';
 import { UnifiedConfigSchema } from '../src/types';
 
+// NOTE: This script accesses Zod's internal _def property to extract the input schema
+// from pipe/transform wrappers. This is necessary because UnifiedConfigSchema uses
+// .pipe() for transforms, and we need the input schema for JSON Schema generation.
+// This may need updating if Zod's internal structure changes.
+
 // UnifiedConfigSchema is wrapped in a .pipe() transform, so we need to extract
 // the inner schema to generate JSON schema properly
 function getInnerSchema(schema: ZodType): ZodType {
@@ -33,15 +38,20 @@ function getBaseSchema(schema: ZodType): ZodType {
 
 const innerSchema = getInnerSchema(UnifiedConfigSchema);
 
-// Common options for toJSONSchema calls
-const toJSONSchemaOptions = {
+// Options for nested toJSONSchema calls (without reused:'ref' to avoid orphaned definitions)
+const nestedOptions = {
   target: 'draft-07' as const,
   unrepresentable: 'any' as const,
 };
 
-// Use Zod v4's native toJSONSchema with override to handle nested ZodPipe schemas
+// Generate JSON Schema using Zod v4's native toJSONSchema
+// - target: 'draft-07' for compatibility with most tooling
+// - unrepresentable: 'any' converts z.custom() functions to {} (accepts any)
+// - reused: 'ref' extracts duplicate schemas to definitions, reducing size significantly
+// - override: handles nested pipe/transform schemas that Zod doesn't convert automatically
 const schemaContent = z.toJSONSchema(innerSchema, {
-  ...toJSONSchemaOptions,
+  ...nestedOptions,
+  reused: 'ref' as const,
   // biome-ignore lint/suspicious/noExplicitAny: Zod v4 internal types are not publicly exported
   override: (ctx: any) => {
     const zodSchema = ctx.zodSchema as ZodType;
@@ -51,12 +61,10 @@ const schemaContent = z.toJSONSchema(innerSchema, {
     if ((def?.type === 'optional' || def?.type === 'nullable') && def?.innerType) {
       const innerDef = def.innerType._def as { type?: string };
       if (innerDef?.type === 'pipe' || innerDef?.type === 'transform') {
-        // Check if the current jsonSchema is empty (meaning the pipe wasn't handled)
         if (Object.keys(ctx.jsonSchema).length === 0) {
           const baseSchema = getBaseSchema(zodSchema);
-          const result = z.toJSONSchema(baseSchema, toJSONSchemaOptions);
+          const result = z.toJSONSchema(baseSchema, nestedOptions);
           const { $schema: _, ...rest } = result as Record<string, unknown>;
-          // Mutate the jsonSchema in place
           Object.assign(ctx.jsonSchema, rest);
         }
       }
@@ -64,64 +72,33 @@ const schemaContent = z.toJSONSchema(innerSchema, {
 
     // Handle pipe/transform directly
     if ((def?.type === 'pipe' || def?.type === 'transform') && def?.in) {
-      // Check if the current jsonSchema is empty
       if (Object.keys(ctx.jsonSchema).length === 0) {
         const baseSchema = getBaseSchema(zodSchema);
-        const result = z.toJSONSchema(baseSchema, toJSONSchemaOptions);
+        const result = z.toJSONSchema(baseSchema, nestedOptions);
         const { $schema: _, ...rest } = result as Record<string, unknown>;
-        // Mutate the jsonSchema in place
         Object.assign(ctx.jsonSchema, rest);
       }
     }
   },
 });
 
-// Remove the $schema from the inner schema (we'll add it at the top level)
-const { $schema: _, ...schemaWithoutMeta } = schemaContent as Record<string, unknown>;
+// Extract the main schema parts
+const {
+  $schema: _,
+  definitions: zodDefinitions,
+  ...mainSchema
+} = schemaContent as Record<string, unknown>;
 
-// Post-process to filter out empty {} from anyOf arrays
-// This handles z.custom() function types that serialize as {} (unrepresentable)
-// which would otherwise make anyOf accept anything
-function filterEmptySchemas(obj: unknown): unknown {
-  if (Array.isArray(obj)) {
-    return obj.map(filterEmptySchemas);
-  }
-  if (obj && typeof obj === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'anyOf' && Array.isArray(value)) {
-        // Filter out empty {} schemas from anyOf
-        const filtered = value.filter(
-          (item) => !(item && typeof item === 'object' && Object.keys(item).length === 0),
-        );
-        // If only one item remains, unwrap the anyOf
-        if (filtered.length === 1) {
-          const unwrapped = filterEmptySchemas(filtered[0]);
-          if (unwrapped && typeof unwrapped === 'object') {
-            Object.assign(result, unwrapped);
-          }
-        } else if (filtered.length > 1) {
-          result[key] = filtered.map(filterEmptySchemas);
-        }
-        // If no items remain, skip the anyOf entirely
-      } else {
-        result[key] = filterEmptySchemas(value);
-      }
-    }
-    return result;
-  }
-  return obj;
-}
-
-const cleanedSchema = filterEmptySchemas(schemaWithoutMeta);
-
-// Wrap in the expected format with $ref
+// Build final schema with proper structure and metadata
 const jsonSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  $id: 'https://promptfoo.dev/config-schema.json',
+  title: 'Promptfoo Configuration Schema',
   $ref: '#/definitions/PromptfooConfigSchema',
   definitions: {
-    PromptfooConfigSchema: cleanedSchema,
+    PromptfooConfigSchema: mainSchema,
+    ...(zodDefinitions as Record<string, unknown>),
   },
-  $schema: 'http://json-schema.org/draft-07/schema#',
 };
 
 console.log(JSON.stringify(jsonSchema, null, 2));
