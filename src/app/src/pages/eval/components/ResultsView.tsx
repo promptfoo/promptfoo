@@ -546,7 +546,7 @@ export default function ResultsView({
         className="px-4 pt-4 flex flex-col"
         style={{
           isolation: 'isolate',
-          minHeight: 'calc(100vh - 3.5rem - var(--update-banner-height, 0px))',
+          minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
         }}
       >
         <Card className="p-4 mb-4 bg-white dark:bg-zinc-900 shrink-0">
