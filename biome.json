@@ -157,8 +157,8 @@
       },
       "performance": {
         "noDelete": "off",
-        "noBarrelFile": "warn",
-        "noReExportAll": "warn"
+        "noBarrelFile": "off",
+        "noReExportAll": "off"
       },
       "a11y": {
         "recommended": false,

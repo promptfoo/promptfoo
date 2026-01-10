@@ -210,7 +210,7 @@ async function main() {
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
-  showCommand(program);
+  void showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
