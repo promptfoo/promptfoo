@@ -1,7 +1,30 @@
+import logger from '../logger';
 import { getGraderById } from '../redteam/graders';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+/**
+ * Analyzes grader errors in the redteam history.
+ * Returns whether some (but not all) turns have grader errors.
+ * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
+ */
+function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+  hasAnyErrors: boolean;
+  allTurnsHaveErrors: boolean;
+} {
+  if (!redteamHistory || !Array.isArray(redteamHistory) || redteamHistory.length === 0) {
+    return { hasAnyErrors: false, allTurnsHaveErrors: false };
+  }
+
+  const turnsWithErrors = redteamHistory.filter(
+    (turn) => turn.graderError && turn.graderError.length > 0,
+  );
+  const hasAnyErrors = turnsWithErrors.length > 0;
+  const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
+
+  return { hasAnyErrors, allTurnsHaveErrors };
+}
 
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
@@ -25,6 +48,12 @@ export const handleRedteam = async ({
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
 
+    // Check if any turns had grader errors (even though we have a stored result)
+    const redteamHistory = providerResponse.metadata?.redteamHistory as
+      | Array<{ graderError?: string }>
+      | undefined;
+    const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
+
     return {
       ...storedResult,
       assertion: {
@@ -34,6 +63,8 @@ export const handleRedteam = async ({
       metadata: {
         ...test.metadata,
         ...storedResult.metadata,
+        // Propagate gradingIncomplete if any turns had grader errors
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   }
@@ -41,29 +72,64 @@ export const handleRedteam = async ({
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
   invariant(prompt, `Grader ${baseType} must have a prompt`);
-  const { grade, rubric, suggestions } = await grader.getResult(
-    prompt,
-    outputString,
-    test,
-    provider,
-    renderedValue,
-  );
 
-  return {
-    ...grade,
-    ...(grade.assertion || assertion
-      ? {
-          assertion: {
-            ...(grade.assertion ?? assertion),
-            value: rubric,
-          },
-        }
-      : {}),
-    suggestions,
-    metadata: {
-      // Pass through all test metadata for redteam
-      ...test.metadata,
-      ...grade.metadata,
-    },
-  };
+  try {
+    const { grade, rubric, suggestions } = await grader.getResult(
+      prompt,
+      outputString,
+      test,
+      provider,
+      renderedValue,
+    );
+
+    return {
+      ...grade,
+      ...(grade.assertion || assertion
+        ? {
+            assertion: {
+              ...(grade.assertion ?? assertion),
+              value: rubric,
+            },
+          }
+        : {}),
+      suggestions,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
+    };
+  } catch (error) {
+    // For iterative strategies, check if only SOME turns had grader errors (not all).
+    // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
+    const redteamHistory = providerResponse.metadata?.redteamHistory as
+      | Array<{ graderError?: string }>
+      | undefined;
+    const { hasAnyErrors, allTurnsHaveErrors } = analyzeGraderErrors(redteamHistory);
+
+    // Only handle gracefully if this is an iterative test with SOME (not all) grader errors
+    if (test.metadata?.strategyId && hasAnyErrors && !allTurnsHaveErrors) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn('[Redteam] Grading failed for iterative test with some prior grader errors', {
+        error: errorMessage,
+        strategyId: test.metadata.strategyId,
+        pluginId: test.metadata.pluginId,
+      });
+
+      return {
+        pass: true,
+        score: 0,
+        reason: `Some grading calls failed during iterative testing. Check the Messages tab for details.`,
+        assertion,
+        metadata: {
+          ...test.metadata,
+          gradingIncomplete: true,
+          gradingError: errorMessage,
+        },
+      };
+    }
+
+    // For non-iterative tests, tests without grader errors, or tests where ALL turns failed, re-throw
+    throw error;
+  }
 };
