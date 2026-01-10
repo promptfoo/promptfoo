@@ -96,9 +96,7 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   const variableSet = new Set<string>();
   for (const template of templates) {
     const variables = extractVariablesFromTemplate(template);
-    variables.forEach((variable) => {
-      variableSet.add(variable);
-    });
+    variables.forEach((variable) => variableSet.add(variable));
   }
   return Array.from(variableSet);
 }

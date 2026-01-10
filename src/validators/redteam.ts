@@ -438,9 +438,7 @@ export const RedteamConfigSchema = z
               addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
             }
           });
-          strategies.forEach((strategy) => {
-            strategySet.add(strategy as Strategy);
-          });
+          strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
       } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
         handleCollectionExpansion(
@@ -467,9 +465,9 @@ export const RedteamConfigSchema = z
               addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
             }
           });
-          aliasedMapping[pluginObj.id].strategies.forEach((strategy) => {
-            strategySet.add(strategy as Strategy);
-          });
+          aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
+            strategySet.add(strategy as Strategy),
+          );
         } else {
           addPlugin(pluginObj.id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
         }

@@ -103,9 +103,7 @@ function buildSpanTree(spans: SpanData[]): Map<string, number> {
     return depth;
   };
 
-  spans.forEach((span) => {
-    computeDepth(span);
-  });
+  spans.forEach((span) => computeDepth(span));
 
   return depthMap;
 }
