@@ -4,6 +4,7 @@ import { gzip } from 'zlib';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
+import { validateUrlForSSRF } from './urlValidation';
 
 import type { FetchOptions } from './types';
 
@@ -26,6 +27,9 @@ export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
 ): Promise<Response> {
+  // Validate URL to prevent SSRF attacks
+  validateUrlForSSRF(url);
+
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const headers = (options?.headers as Record<string, string>) || {};
   const isSilent = headers['x-promptfoo-silent'] === 'true';
