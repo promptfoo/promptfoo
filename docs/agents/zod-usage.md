@@ -19,6 +19,7 @@ Comprehensive documentation of how Zod schema validation is used throughout the 
 ## Overview
 
 The codebase uses Zod v3 for runtime schema validation across:
+
 - **59 files** with Zod imports
 - Configuration validation (YAML configs, CLI options)
 - API request/response validation
@@ -27,6 +28,7 @@ The codebase uses Zod v3 for runtime schema validation across:
 - Redteam plugin/strategy validation
 
 **Key Observation**: The codebase is in transition - `src/types/index.ts` contains a note:
+
 > "Note: This file is in the process of being deconstructed into `types/` and `validators/`"
 
 ---
@@ -35,72 +37,72 @@ The codebase uses Zod v3 for runtime schema validation across:
 
 ### Core Validators (`src/validators/`)
 
-| File | Purpose |
-|------|---------|
-| `shared.ts` | `NunjucksFilterMapSchema` - shared utility schemas |
-| `providers.ts` | Provider schemas: `ProviderOptionsSchema`, `ApiProviderSchema`, `ProviderResponseSchema`, `ProvidersSchema` |
-| `prompts.ts` | Prompt schemas: `PromptConfigSchema`, `PromptSchema`, `PromptFunctionSchema` |
-| `redteam.ts` | Redteam config: `RedteamConfigSchema`, `RedteamPluginSchema`, `RedteamStrategySchema`, `RedteamGenerateOptionsSchema` |
-| `testProvider.ts` | Provider testing utilities |
-| `util.ts` | Validation helper functions (no Zod schemas) |
+| File              | Purpose                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `shared.ts`       | `NunjucksFilterMapSchema` - shared utility schemas                                                                    |
+| `providers.ts`    | Provider schemas: `ProviderOptionsSchema`, `ApiProviderSchema`, `ProviderResponseSchema`, `ProvidersSchema`           |
+| `prompts.ts`      | Prompt schemas: `PromptConfigSchema`, `PromptSchema`, `PromptFunctionSchema`                                          |
+| `redteam.ts`      | Redteam config: `RedteamConfigSchema`, `RedteamPluginSchema`, `RedteamStrategySchema`, `RedteamGenerateOptionsSchema` |
+| `testProvider.ts` | Provider testing utilities                                                                                            |
+| `util.ts`         | Validation helper functions (no Zod schemas)                                                                          |
 
 ### Type Definitions (`src/types/`)
 
-| File | Purpose |
-|------|---------|
-| `index.ts` | **Main types file** - contains majority of schemas (700+ lines with Zod) |
-| `shared.ts` | `BaseTokenUsageSchema` |
-| `env.ts` | `ProviderEnvOverridesSchema` |
-| `codeScan.ts` | `CodeScanSeveritySchema` |
+| File          | Purpose                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| `index.ts`    | **Main types file** - contains majority of schemas (700+ lines with Zod) |
+| `shared.ts`   | `BaseTokenUsageSchema`                                                   |
+| `env.ts`      | `ProviderEnvOverridesSchema`                                             |
+| `codeScan.ts` | `CodeScanSeveritySchema`                                                 |
 
 ### Server Routes (`src/server/`)
 
-| File | Purpose |
-|------|---------|
-| `apiSchemas.ts` | API request/response schemas organized by endpoint |
-| `routes/eval.ts` | Uses `fromZodError` for validation error formatting |
-| `routes/redteam.ts` | Redteam API validation |
-| `routes/providers.ts` | Provider API validation |
-| `routes/user.ts` | User API validation |
+| File                  | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| `apiSchemas.ts`       | API request/response schemas organized by endpoint  |
+| `routes/eval.ts`      | Uses `fromZodError` for validation error formatting |
+| `routes/redteam.ts`   | Redteam API validation                              |
+| `routes/providers.ts` | Provider API validation                             |
+| `routes/user.ts`      | User API validation                                 |
 
 ### Commands (`src/commands/`)
 
-| File | Purpose |
-|------|---------|
-| `eval.ts` | CLI option parsing |
-| `config.ts` | Email validation with `z.string().email()` |
-| `validate.ts` | Config validation using `UnifiedConfigSchema.safeParse()` |
-| `modelScan.ts` | Model scanning schemas |
-| `mcp/tools/*.ts` | MCP tool parameter definitions (10+ files) |
+| File             | Purpose                                                   |
+| ---------------- | --------------------------------------------------------- |
+| `eval.ts`        | CLI option parsing                                        |
+| `config.ts`      | Email validation with `z.string().email()`                |
+| `validate.ts`    | Config validation using `UnifiedConfigSchema.safeParse()` |
+| `modelScan.ts`   | Model scanning schemas                                    |
+| `mcp/tools/*.ts` | MCP tool parameter definitions (10+ files)                |
 
 ### Redteam (`src/redteam/`)
 
-| File | Purpose |
-|------|---------|
-| `types.ts` | `PolicyObjectSchema`, `PluginConfigSchema`, `StrategyConfigSchema`, `ConversationMessageSchema` |
-| `constants/metadata.ts` | Redteam metadata schemas |
-| `commands/generate.ts` | Config validation with `RedteamConfigSchema.safeParse()` |
-| `commands/discover.ts` | Discovery schemas and state management |
-| `extraction/util.ts` | Response parsing schemas |
+| File                    | Purpose                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `types.ts`              | `PolicyObjectSchema`, `PluginConfigSchema`, `StrategyConfigSchema`, `ConversationMessageSchema` |
+| `constants/metadata.ts` | Redteam metadata schemas                                                                        |
+| `commands/generate.ts`  | Config validation with `RedteamConfigSchema.safeParse()`                                        |
+| `commands/discover.ts`  | Discovery schemas and state management                                                          |
+| `extraction/util.ts`    | Response parsing schemas                                                                        |
 
 ### Providers (`src/providers/`)
 
-| File | Purpose |
-|------|---------|
-| `http.ts` | HTTP provider configuration |
-| `sagemaker.ts` | SageMaker provider validation |
-| `watsonx.ts` | Watsonx provider validation |
-| `google/util.ts` | Google provider utilities |
+| File             | Purpose                       |
+| ---------------- | ----------------------------- |
+| `http.ts`        | HTTP provider configuration   |
+| `sagemaker.ts`   | SageMaker provider validation |
+| `watsonx.ts`     | Watsonx provider validation   |
+| `google/util.ts` | Google provider utilities     |
 
 ### Other Notable Files
 
-| File | Purpose |
-|------|---------|
-| `src/telemetry.ts` | `TelemetryEventSchema` for event tracking |
-| `src/globalConfig/accounts.ts` | Email validation |
-| `src/assertions/validateAssertions.ts` | Assertion validation with error handling |
-| `src/codeScan/config/schema.ts` | Code scanning configuration |
-| `src/models/prompt.ts` | Prompt model schema |
+| File                                   | Purpose                                   |
+| -------------------------------------- | ----------------------------------------- |
+| `src/telemetry.ts`                     | `TelemetryEventSchema` for event tracking |
+| `src/globalConfig/accounts.ts`         | Email validation                          |
+| `src/assertions/validateAssertions.ts` | Assertion validation with error handling  |
+| `src/codeScan/config/schema.ts`        | Code scanning configuration               |
+| `src/models/prompt.ts`                 | Prompt model schema                       |
 
 ---
 
@@ -135,8 +137,13 @@ export const UnifiedConfigSchema = z.object({
 ```typescript
 // src/types/index.ts
 export const BaseAssertionTypesSchema = z.enum([
-  'answer-relevance', 'bleu', 'classifier', 'contains',
-  'contains-all', 'contains-any', 'contains-json',
+  'answer-relevance',
+  'bleu',
+  'classifier',
+  'contains',
+  'contains-all',
+  'contains-any',
+  'contains-json',
   // ... 40+ assertion types
 ]);
 
@@ -205,12 +212,14 @@ export const RedteamPluginObjectSchema = z.object({
   severity: SeveritySchema.optional(),
 });
 
-export const RedteamConfigSchema = z.object({
-  // ... many fields
-}).transform((data): RedteamFileConfig => {
-  // Complex transformation logic for plugin/strategy expansion
-  // ~200 lines of transformation code
-});
+export const RedteamConfigSchema = z
+  .object({
+    // ... many fields
+  })
+  .transform((data): RedteamFileConfig => {
+    // Complex transformation logic for plugin/strategy expansion
+    // ~200 lines of transformation code
+  });
 ```
 
 ### 5. API Schemas
@@ -230,14 +239,27 @@ export const ApiSchemas = {
       Response: z.object({
         hasEmail: z.boolean(),
         email: EmailSchema.optional(),
-        status: z.enum(['ok', 'exceeded_limit', 'show_usage_warning', 'no_email', 'risky_email', 'disposable_email']),
+        status: z.enum([
+          'ok',
+          'exceeded_limit',
+          'show_usage_warning',
+          'no_email',
+          'risky_email',
+          'disposable_email',
+        ]),
       }),
     },
   },
   Eval: {
-    UpdateAuthor: { /* ... */ },
-    MetadataKeys: { /* ... */ },
-    Copy: { /* ... */ },
+    UpdateAuthor: {
+      /* ... */
+    },
+    MetadataKeys: {
+      /* ... */
+    },
+    Copy: {
+      /* ... */
+    },
   },
 };
 ```
@@ -246,21 +268,29 @@ export const ApiSchemas = {
 
 ```typescript
 // src/commands/mcp/tools/runEvaluation.ts
-server.tool('run_evaluation', {
-  configPath: z.string().optional().describe('Path to config file'),
-  testCaseIndices: z.union([
-    z.number(),
-    z.array(z.number()),
-    z.object({
-      start: z.number().describe('Start index (inclusive)'),
-      end: z.number().describe('End index (exclusive)'),
-    }),
-  ]).optional(),
-  maxConcurrency: z.number().min(1).max(20).optional(),
-  timeoutMs: z.number().min(1000).max(300000).optional(),
-  cache: z.boolean().optional().default(true),
-  // ...
-}, async (args) => { /* handler */ });
+server.tool(
+  'run_evaluation',
+  {
+    configPath: z.string().optional().describe('Path to config file'),
+    testCaseIndices: z
+      .union([
+        z.number(),
+        z.array(z.number()),
+        z.object({
+          start: z.number().describe('Start index (inclusive)'),
+          end: z.number().describe('End index (exclusive)'),
+        }),
+      ])
+      .optional(),
+    maxConcurrency: z.number().min(1).max(20).optional(),
+    timeoutMs: z.number().min(1000).max(300000).optional(),
+    cache: z.boolean().optional().default(true),
+    // ...
+  },
+  async (args) => {
+    /* handler */
+  },
+);
 ```
 
 ---
@@ -320,11 +350,11 @@ export const RedteamConfigSchema = z.object({
 z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
   if (!pluginOptions.includes(val)) {
     ctx.addIssue({
-      code: 'custom',  // Use 'custom' instead of deprecated z.ZodIssueCode.invalid_enum_value
+      code: 'custom', // Use 'custom' instead of deprecated z.ZodIssueCode.invalid_enum_value
       message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')}`,
     });
   }
-})
+});
 ```
 
 **Note**: In Zod v4, `z.ZodIssueCode.invalid_enum_value` is deprecated. Use `'custom'` code instead.
@@ -337,7 +367,7 @@ z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
 // src/types/index.ts
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
-  assert: z.array(z.lazy(() => AssertionSchema)),  // Recursive reference
+  assert: z.array(z.lazy(() => AssertionSchema)), // Recursive reference
   // ...
 });
 ```
@@ -367,12 +397,14 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
 export const ProvidersSchema = z.union([
   z.string(),
   CallApiFunctionSchema,
-  z.array(z.union([
-    z.string(),
-    CallApiFunctionSchema,
-    z.record(z.string(), ProviderOptionsSchema),
-    ProviderOptionsSchema,
-  ])),
+  z.array(
+    z.union([
+      z.string(),
+      CallApiFunctionSchema,
+      z.record(z.string(), ProviderOptionsSchema),
+      ProviderOptionsSchema,
+    ]),
+  ),
 ]);
 ```
 
@@ -409,7 +441,7 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 ```typescript
 // src/types/index.ts
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
-  abortSignal?: AbortSignal;  // Added manually
+  abortSignal?: AbortSignal; // Added manually
 };
 ```
 
@@ -467,12 +499,16 @@ if (!result.success) {
 // src/commands/mcp/tools/*.ts
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-server.tool('tool_name', {
-  param1: z.string().describe('Description'),
-  param2: z.number().min(1).max(100).optional(),
-}, async (args) => {
-  // Args are validated by MCP SDK using Zod schema
-});
+server.tool(
+  'tool_name',
+  {
+    param1: z.string().describe('Description'),
+    param2: z.number().min(1).max(100).optional(),
+  },
+  async (args) => {
+    // Args are validated by MCP SDK using Zod schema
+  },
+);
 ```
 
 ### 3. Custom Types Integration
@@ -535,9 +571,11 @@ return result.success || result.error.errors[0].message;
 ### 1. Mixed Schema/Type Locations
 
 The codebase acknowledges this in `src/types/index.ts`:
+
 > "Note: This file is in the process of being deconstructed into `types/` and `validators/`"
 
 **Impact**:
+
 - `src/types/index.ts` is ~1000+ lines with both Zod schemas and TypeScript types
 - Unclear separation between validation logic and type definitions
 - Circular import potential between `types/` and `validators/`
@@ -567,6 +605,7 @@ export const RedteamConfigSchema = z.object({...}).transform((data) => {
 ### 4. Inconsistent Type Equality Patterns
 
 Two different patterns used:
+
 ```typescript
 // Pattern 1: src/validators/prompts.ts
 type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
@@ -588,6 +627,7 @@ type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 ### 6. Duplicate Validation Logic
 
 Email validation exists in multiple places:
+
 - `src/server/apiSchemas.ts`
 - `src/globalConfig/accounts.ts`
 - `src/commands/config.ts`
@@ -631,7 +671,7 @@ export const RedteamConfigInputSchema = z.object({
 
 // utils/redteam.ts
 export function normalizeRedteamConfig(
-  input: z.infer<typeof RedteamConfigInputSchema>
+  input: z.infer<typeof RedteamConfigInputSchema>,
 ): RedteamFileConfig {
   // Business logic here
 }
@@ -655,8 +695,7 @@ Create shared utility:
 ```typescript
 // src/utils/typeAssert.ts
 export type TypeEquals<T, U> =
-  (<V>() => V extends T ? 1 : 2) extends
-  (<V>() => V extends U ? 1 : 2) ? true : false;
+  (<V>() => V extends T ? 1 : 2) extends <V>() => V extends U ? 1 : 2 ? true : false;
 
 export function assertTypeEquals<T extends true>() {}
 ```
@@ -697,17 +736,17 @@ export const TestCaseSchema = TestCaseSchemaV2; // Current version
 
 ## Summary Statistics
 
-| Metric | Count |
-|--------|-------|
-| Files with Zod imports | 59 |
-| Schema definitions | ~80+ |
-| Uses of `z.infer<>` | ~40+ |
-| Uses of `.safeParse()` | ~15+ |
-| Uses of `.transform()` | ~5 |
-| Uses of `.superRefine()` | ~5 |
-| Uses of `z.lazy()` | ~3 |
-| Uses of `z.custom<T>()` | ~20+ |
-| Uses of `z.any()` | ~10+ |
+| Metric                   | Count |
+| ------------------------ | ----- |
+| Files with Zod imports   | 59    |
+| Schema definitions       | ~80+  |
+| Uses of `z.infer<>`      | ~40+  |
+| Uses of `.safeParse()`   | ~15+  |
+| Uses of `.transform()`   | ~5    |
+| Uses of `.superRefine()` | ~5    |
+| Uses of `z.lazy()`       | ~3    |
+| Uses of `z.custom<T>()`  | ~20+  |
+| Uses of `z.any()`        | ~10+  |
 
 ---
 
