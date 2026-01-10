@@ -60,7 +60,6 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.2: 'none', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
- * - gpt-4o, o3-mini: 'low', 'medium', 'high'
  *
  * Values:
  * - 'none': No reasoning overhead (gpt-5.2 only)
@@ -103,7 +102,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'codex', 'codex-mini', 'gpt-5.2', 'gpt-4o', 'o3-mini')
+   * Model to use (e.g., 'gpt-5.2', 'gpt-5.1-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -241,15 +240,6 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-5-codex': { input: 2.0, output: 8.0 },
   'gpt-5-codex-mini': { input: 0.5, output: 2.0 },
   'gpt-5': { input: 2.0, output: 8.0 },
-  // GPT-4 models
-  'gpt-4o': { input: 2.5, output: 10.0 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4-turbo': { input: 10.0, output: 30.0 },
-  'gpt-4': { input: 30.0, output: 60.0 },
-  // Reasoning models
-  'o3-mini': { input: 1.1, output: 4.4 },
-  o1: { input: 15.0, output: 60.0 },
-  'o1-mini': { input: 3.0, output: 12.0 },
 };
 
 export class OpenAICodexSDKProvider implements ApiProvider {
@@ -265,15 +255,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
-    // GPT-4 models
-    'gpt-4',
-    'gpt-4-turbo',
-    'gpt-4o',
-    'gpt-4o-mini',
-    // Reasoning models
-    'o1',
-    'o1-mini',
-    'o3-mini',
   ];
 
   config: OpenAICodexSDKConfig;

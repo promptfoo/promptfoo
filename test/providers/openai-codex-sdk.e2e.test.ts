@@ -46,7 +46,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: process.cwd(),
             skip_git_repo_check: false,
           },
@@ -75,7 +75,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             output_schema: {
@@ -116,7 +116,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             persist_threads: true,
@@ -156,7 +156,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: examplesDir,
             skip_git_repo_check: true, // examples might not be a git repo
           },
@@ -177,7 +177,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             enable_streaming: true,
@@ -200,7 +200,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             persist_threads: true,
@@ -211,15 +211,15 @@ describe('OpenAICodexSDKProvider E2E', () => {
         // Create 3 different threads
         const response1 = await provider.callApi('Test 1', {
           vars: {},
-          prompt: { config: { model: 'gpt-4o' } } as any,
+          prompt: { config: { model: 'gpt-5.2' } } as any,
         });
         const response2 = await provider.callApi('Test 2', {
           vars: {},
-          prompt: { config: { model: 'gpt-4o-mini' } } as any,
+          prompt: { config: { model: 'gpt-5.1-codex' } } as any,
         });
         const response3 = await provider.callApi('Test 3', {
           vars: {},
-          prompt: { config: { model: 'gpt-4' } } as any,
+          prompt: { config: { model: 'gpt-5.1-codex-mini' } } as any,
         });
 
         expect(response1.error).toBeUndefined();
