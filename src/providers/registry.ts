@@ -28,6 +28,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
+import { AzureVideoProvider } from './azure/video';
 import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
@@ -140,42 +141,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new MemoryPoisoningProvider(providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('adaline:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      if (splits.length < 4) {
-        throw new Error(
-          `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
-        );
-      }
-      const providerName = splits[1];
-      const modelType = splits[2];
-      const modelName = splits[3];
-
-      try {
-        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-          './adaline.gateway'
-        );
-        if (modelType === 'embedding' || modelType === 'embeddings') {
-          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-        }
-        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
-          throw new Error(
-            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
-              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
-          );
-        }
-        throw error;
-      }
     },
   },
   {
@@ -327,8 +292,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'video') {
+        return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
+      }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
@@ -976,6 +944,17 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
       return new PortkeyChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
     },
   },
   {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Switch } from '@app/components/ui/switch';
@@ -27,6 +27,28 @@ const SettingItem = ({
 }: SettingItemProps) => {
   const labelId = `setting-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
+  const handleCheckboxChange = useCallback(
+    (val: boolean | 'indeterminate') => {
+      if (!disabled) {
+        onChange(Boolean(val));
+      }
+    },
+    [disabled, onChange],
+  );
+
+  const handleSwitchChange = useCallback(
+    (val: boolean) => {
+      if (!disabled) {
+        onChange(val);
+      }
+    },
+    [disabled, onChange],
+  );
+
+  const handleStopPropagation = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <div
       className={cn(
@@ -47,7 +69,7 @@ const SettingItem = ({
         {component === 'checkbox' ? (
           <Checkbox
             checked={checked}
-            onCheckedChange={(val) => !disabled && onChange(Boolean(val))}
+            onCheckedChange={handleCheckboxChange}
             disabled={disabled}
             aria-labelledby={labelId}
             className="shrink-0"
@@ -55,7 +77,7 @@ const SettingItem = ({
         ) : (
           <Switch
             checked={checked}
-            onCheckedChange={(val) => !disabled && onChange(val)}
+            onCheckedChange={handleSwitchChange}
             disabled={disabled}
             aria-labelledby={labelId}
             className="shrink-0"
@@ -78,7 +100,7 @@ const SettingItem = ({
                   type="button"
                   className="p-0.5 ml-0.5 text-primary/70 hover:text-primary hover:bg-primary/10 rounded"
                   aria-label={`Information about ${label}`}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={handleStopPropagation}
                 >
                   <Info className="size-3.5" />
                 </button>

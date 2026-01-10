@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -22,11 +22,24 @@ const CompactToggle = ({
 }: CompactToggleProps) => {
   const labelId = `compact-toggle-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     if (!disabled) {
       onChange(!checked);
     }
-  };
+  }, [disabled, checked, onChange]);
+
+  const handleCheckboxChange = useCallback(
+    (value: boolean | 'indeterminate') => {
+      if (!disabled) {
+        onChange(value === true);
+      }
+    },
+    [disabled, onChange],
+  );
+
+  const handleStopPropagation = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
 
   return (
     <div
@@ -39,11 +52,11 @@ const CompactToggle = ({
     >
       <Checkbox
         checked={checked}
-        onCheckedChange={(value) => !disabled && onChange(value === true)}
+        onCheckedChange={handleCheckboxChange}
         disabled={disabled}
         className="mr-2"
         aria-labelledby={labelId}
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleStopPropagation}
       />
       <span
         id={labelId}

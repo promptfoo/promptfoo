@@ -22,7 +22,7 @@ export ANTHROPIC_API_KEY=your_anthropic_key_here
 
 ## Prerequisites
 
-- Node.js (v20+)
+- Node.js 20+
 
 ## Getting Started
 

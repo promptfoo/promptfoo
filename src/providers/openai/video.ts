@@ -1,13 +1,18 @@
-import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
-import { getConfigDirectoryPath } from '../../util/config/manage';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import {
+  buildStorageRefUrl,
+  checkVideoCache,
+  createValidator,
+  formatVideoOutput,
+  generateVideoCacheKey,
+  readCacheMapping,
+  storeCacheMapping,
+} from '../video';
 import { OpenAiGenericProvider } from '.';
 
 import type { MediaStorageRef } from '../../storage/types';
@@ -26,13 +31,12 @@ import type {
   OpenAiVideoVariant,
 } from './types';
 
-// Cache mapping constants
-const MEDIA_DIR = 'media';
-const CACHE_DIR = 'video/_cache';
-
 // =============================================================================
 // Constants
 // =============================================================================
+
+/** Provider name for logging */
+const PROVIDER_NAME = 'OpenAI Video';
 
 /**
  * Cost per second of video generation by model
@@ -43,14 +47,14 @@ export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
 };
 
 /**
- * Valid video sizes (aspect ratios)
+ * Valid video sizes (aspect ratios) for OpenAI Sora
  */
-const VALID_VIDEO_SIZES: OpenAiVideoSize[] = ['1280x720', '720x1280'];
+const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = ['1280x720', '720x1280'] as const;
 
 /**
- * Valid video durations in seconds
+ * Valid video durations in seconds for OpenAI Sora
  */
-const VALID_VIDEO_DURATIONS: OpenAiVideoDuration[] = [4, 8, 12];
+const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12] as const;
 
 /**
  * Default configuration values
@@ -70,129 +74,18 @@ const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
 };
 
 // =============================================================================
-// Helper Functions
+// Validation Functions (using shared validator)
 // =============================================================================
-
-/**
- * Get the file path for a cache mapping file.
- * Cache mappings are stored directly on filesystem (not through media storage)
- * to avoid content-based key generation.
- */
-function getCacheMappingPath(cacheKey: string): string {
-  const basePath = path.join(getConfigDirectoryPath(true), MEDIA_DIR);
-  const cacheDir = path.join(basePath, CACHE_DIR);
-  // Ensure directory exists
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-  return path.join(cacheDir, `${cacheKey}.json`);
-}
-
-/**
- * Generate a deterministic content hash from video generation parameters.
- * Used for cache key lookup and deduplication.
- *
- * @param prompt - The video generation prompt
- * @param model - The model name (e.g., 'sora-2')
- * @param size - Video dimensions (e.g., '1280x720')
- * @param seconds - Video duration in seconds
- * @param inputReference - Optional image reference for image-to-video
- * @returns A hex hash string for content addressing
- */
-export function generateVideoCacheKey(
-  prompt: string,
-  model: string,
-  size: string,
-  seconds: number,
-  inputReference?: string,
-): string {
-  const hashInput = JSON.stringify({
-    prompt,
-    model,
-    size,
-    seconds,
-    inputReference: inputReference || null,
-  });
-
-  return crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 12);
-}
-
-/**
- * Check if a cached video exists for the given cache key.
- * Reads the cache mapping from filesystem and verifies the video still exists.
- */
-export async function checkVideoCache(cacheKey: string): Promise<string | null> {
-  const mappingPath = getCacheMappingPath(cacheKey);
-
-  if (!fs.existsSync(mappingPath)) {
-    return null;
-  }
-
-  try {
-    const mappingData = fs.readFileSync(mappingPath, 'utf8');
-    const mapping = JSON.parse(mappingData);
-    // Verify the referenced video file still exists in storage
-    if (mapping.videoKey) {
-      const storage = getMediaStorage();
-      if (await storage.exists(mapping.videoKey)) {
-        return mapping.videoKey;
-      }
-    }
-  } catch (err: unknown) {
-    // Mapping file corrupted, treat as cache miss
-    logger.debug(`[OpenAI Video] Cache mapping read failed: ${err}`);
-  }
-
-  return null;
-}
-
-/**
- * Store cache mapping from request hash to storage keys.
- * Written directly to filesystem to maintain predictable path.
- */
-function storeCacheMapping(
-  cacheKey: string,
-  videoKey: string,
-  thumbnailKey?: string,
-  spritesheetKey?: string,
-): void {
-  const mapping = {
-    videoKey,
-    thumbnailKey,
-    spritesheetKey,
-    createdAt: new Date().toISOString(),
-  };
-
-  const mappingPath = getCacheMappingPath(cacheKey);
-  fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8');
-  logger.debug(`[OpenAI Video] Stored cache mapping at ${mappingPath}`);
-}
 
 /**
  * Validate video size parameter
  */
-export function validateVideoSize(size: string): { valid: boolean; message?: string } {
-  if (!VALID_VIDEO_SIZES.includes(size as OpenAiVideoSize)) {
-    return {
-      valid: false,
-      message: `Invalid video size "${size}". Valid sizes: ${VALID_VIDEO_SIZES.join(', ')}`,
-    };
-  }
-  return { valid: true };
-}
+export const validateVideoSize = createValidator(VALID_VIDEO_SIZES, 'video size');
 
 /**
  * Validate video seconds parameter
  */
-export function validateVideoSeconds(seconds: number): { valid: boolean; message?: string } {
-  if (!VALID_VIDEO_DURATIONS.includes(seconds as OpenAiVideoDuration)) {
-    return {
-      valid: false,
-      message: `Invalid video duration "${seconds}" seconds. Valid durations: ${VALID_VIDEO_DURATIONS.join(', ')} seconds`,
-    };
-  }
-  return { valid: true };
-}
+export const validateVideoSeconds = createValidator(VALID_VIDEO_DURATIONS, 'video duration');
 
 /**
  * Calculate video generation cost based on model and duration
@@ -470,45 +363,37 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
-    const cacheKey = config.remix_video_id
-      ? generateVideoCacheKey(prompt, model, size, seconds)
-      : generateVideoCacheKey(prompt, model, size, seconds, config.input_reference);
+    const cacheKey = generateVideoCacheKey({
+      provider: 'openai',
+      prompt,
+      model,
+      size,
+      seconds,
+      inputReference: config.remix_video_id ? null : config.input_reference,
+    });
 
     // Check for cached video (skip for remix operations)
-    const cachedVideoKey = config.remix_video_id ? null : await checkVideoCache(cacheKey);
+    const cachedVideoKey = config.remix_video_id
+      ? null
+      : await checkVideoCache(cacheKey, PROVIDER_NAME);
     if (cachedVideoKey) {
-      logger.info(`[OpenAI Video] Cache hit for video: ${cacheKey}`);
+      logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
       const storage = getMediaStorage();
 
       // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mappingPath = getCacheMappingPath(cacheKey);
-      let thumbnailKey: string | undefined;
-      let spritesheetKey: string | undefined;
-
-      try {
-        const mappingData = fs.readFileSync(mappingPath, 'utf8');
-        const mapping = JSON.parse(mappingData);
-        thumbnailKey = mapping.thumbnailKey;
-        spritesheetKey = mapping.spritesheetKey;
-      } catch (err: unknown) {
-        // Mapping exists but couldn't be read - just use video
-        logger.debug(`[OpenAI Video] Failed to read cache mapping for thumbnails: ${err}`);
-      }
+      const mapping = readCacheMapping(cacheKey);
+      const thumbnailKey = mapping?.thumbnailKey;
+      const spritesheetKey = mapping?.spritesheetKey;
 
       // Build storage ref URL for video using the actual stored key
-      const videoUrl = `storageRef:${cachedVideoKey}`;
+      const videoUrl = buildStorageRefUrl(cachedVideoKey);
 
       // Check for optional assets using actual stored keys
       const hasThumbnail = thumbnailKey && (await storage.exists(thumbnailKey));
       const hasSpritesheet = spritesheetKey && (await storage.exists(spritesheetKey));
 
-      const sanitizedPrompt = prompt
-        .replace(/\r?\n|\r/g, ' ')
-        .replace(/\[/g, '(')
-        .replace(/\]/g, ')');
-      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-      const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+      const output = formatVideoOutput(prompt, videoUrl);
 
       return {
         output,
@@ -522,8 +407,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
           format: 'mp4',
           size,
           duration: seconds,
-          thumbnail: hasThumbnail ? `storageRef:${thumbnailKey}` : undefined,
-          spritesheet: hasSpritesheet ? `storageRef:${spritesheetKey}` : undefined,
+          thumbnail: hasThumbnail ? buildStorageRefUrl(thumbnailKey!) : undefined,
+          spritesheet: hasSpritesheet ? buildStorageRefUrl(spritesheetKey!) : undefined,
           model,
         },
         metadata: {
@@ -617,20 +502,21 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Store cache mapping for future lookups
-    storeCacheMapping(cacheKey, videoRef.key, thumbnailRef?.key, spritesheetRef?.key);
+    storeCacheMapping(
+      cacheKey,
+      videoRef.key,
+      thumbnailRef?.key,
+      spritesheetRef?.key,
+      PROVIDER_NAME,
+    );
 
     // Build storage ref URLs
-    const videoUrl = `storageRef:${videoRef.key}`;
-    const thumbnailUrl = thumbnailRef ? `storageRef:${thumbnailRef.key}` : undefined;
-    const spritesheetUrl = spritesheetRef ? `storageRef:${spritesheetRef.key}` : undefined;
+    const videoUrl = buildStorageRefUrl(videoRef.key);
+    const thumbnailUrl = thumbnailRef ? buildStorageRefUrl(thumbnailRef.key) : undefined;
+    const spritesheetUrl = spritesheetRef ? buildStorageRefUrl(spritesheetRef.key) : undefined;
 
     // Format output as markdown (similar to image provider)
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+    const output = formatVideoOutput(prompt, videoUrl);
 
     return {
       output,

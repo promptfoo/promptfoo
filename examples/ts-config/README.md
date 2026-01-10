@@ -14,7 +14,7 @@ This example demonstrates TypeScript configuration for promptfoo, including:
 
 ## Prerequisites
 
-- Node.js 20 or later
+- Node.js 20+
 - TypeScript loader (`tsx` recommended)
 
 Install dependencies:

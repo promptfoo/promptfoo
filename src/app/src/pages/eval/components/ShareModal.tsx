@@ -30,6 +30,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const [error, setError] = useState<string | null>(null);
 
   // Reset state when evalId changes to prevent stale data
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setCopied(false);
     setShowNeedsSignup(false);

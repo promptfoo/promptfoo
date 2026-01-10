@@ -24,7 +24,7 @@ import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
-import type { LocalPluginConfig } from '../types';
+import type { Config, LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;
@@ -109,13 +109,27 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
+  // Derive selectedPlugins from config.plugins
+  const selectedPlugins = useMemo(() => {
     return new Set(
       config.plugins
         .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
         .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
-  });
+  }, [config.plugins]);
+
+  // Derive pluginConfig from config.plugins (excluding intent/policy).
+  const pluginConfig = useMemo(() => {
+    return config.plugins.reduce<LocalPluginConfig>((configs, plugin) => {
+      if (typeof plugin === 'object' && plugin.config) {
+        // Filter out intent and policy plugins - they don't use this config
+        if (plugin.id !== 'intent' && plugin.id !== 'policy') {
+          configs[plugin.id] = plugin.config;
+        }
+      }
+      return configs;
+    }, {});
+  }, [config.plugins]);
 
   // Tab state management
   const [activeTab, setActiveTab] = useState<string>('plugins');
@@ -131,45 +145,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     [recordEvent],
   );
 
-  // Track if user has interacted to prevent config updates from overriding user selections
-  const [hasUserInteracted, setHasUserInteracted] = useState(false);
-  const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
-    const initialConfig: LocalPluginConfig = {};
-    config.plugins.forEach((plugin) => {
-      if (typeof plugin === 'object' && plugin.config) {
-        initialConfig[plugin.id] = plugin.config;
-      }
-    });
-    return initialConfig;
-  });
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
   }, []);
 
-  // Sync selectedPlugins from config only on initial load or when user hasn't interacted
-  useEffect(() => {
-    if (!hasUserInteracted) {
-      const configPlugins = new Set(
-        config.plugins
-          .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
-          .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
-      );
-
-      // Only update if the sets are actually different to avoid unnecessary re-renders
-      if (
-        configPlugins.size !== selectedPlugins.size ||
-        !Array.from(configPlugins).every((plugin) => selectedPlugins.has(plugin))
-      ) {
-        setSelectedPlugins(configPlugins);
-      }
-    }
-  }, [config.plugins, hasUserInteracted, selectedPlugins]);
-
-  // Sync selectedPlugins to config after user interaction
-  useEffect(() => {
-    if (hasUserInteracted) {
-      // Get policy and intent plugins from existing config
+  const handlePluginToggle = useCallback(
+    (plugin: Plugin) => {
+      // Preserve policy and intent plugins
       const policyPlugins = config.plugins.filter(
         (p) => typeof p === 'object' && p.id === 'policy',
       );
@@ -177,82 +160,79 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
-      // Convert selected plugins to config format with their configs
-      const regularPlugins = Array.from(selectedPlugins).map((plugin) => {
-        const existingConfig = pluginConfig[plugin];
-        if (existingConfig && Object.keys(existingConfig).length > 0) {
-          return {
-            id: plugin,
-            config: existingConfig,
-          };
+      // Get current regular plugins (excluding policy/intent)
+      const currentRegularPlugins = config.plugins.filter((p) => {
+        const id = typeof p === 'string' ? p : p.id;
+        return id !== 'policy' && id !== 'intent';
+      });
+
+      const isCurrentlySelected = selectedPlugins.has(plugin);
+
+      let newRegularPlugins: Config['plugins'];
+
+      if (isCurrentlySelected) {
+        // Remove the plugin
+        newRegularPlugins = currentRegularPlugins.filter((p) => {
+          const id = typeof p === 'string' ? p : p.id;
+          return id !== plugin;
+        });
+      } else {
+        // Add the plugin
+        addPlugin(plugin); // Add to recently used
+        newRegularPlugins = [...currentRegularPlugins, plugin];
+      }
+
+      // Combine all plugins and update store
+      const allPlugins = [...newRegularPlugins, ...policyPlugins, ...intentPlugins];
+      updatePlugins(allPlugins);
+    },
+    [config.plugins, selectedPlugins, updatePlugins, addPlugin],
+  );
+
+  const setSelectedPlugins = useCallback(
+    (newSelectedPlugins: Set<Plugin>) => {
+      // Preserve policy and intent plugins
+      const policyPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'intent',
+      );
+
+      // Create new plugins array, preserving configs from existing plugins
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
+        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
+        if (existing && typeof existing === 'object' && existing.config) {
+          return existing; // Preserve existing config
         }
         return plugin;
       });
 
-      // Combine all plugins
-      const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
-
-      // updatePlugins handles deduplication by comparing merged output vs current state
-      updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
-    }
-  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
-
-  const handlePluginToggle = useCallback(
-    (plugin: Plugin) => {
-      setHasUserInteracted(true);
-      setSelectedPlugins((prev) => {
-        const newSet = new Set(prev);
-
-        if (plugin === 'policy') {
-          if (newSet.has(plugin)) {
-            newSet.delete(plugin);
-            setPluginConfig((prevConfig) => {
-              const newConfig = { ...prevConfig };
-              delete newConfig[plugin];
-              return newConfig;
-            });
-          } else {
-            newSet.add(plugin);
-          }
-          return newSet;
-        }
-
-        if (newSet.has(plugin)) {
-          newSet.delete(plugin);
-          setPluginConfig((prevConfig) => {
-            const newConfig = { ...prevConfig };
-            delete newConfig[plugin as keyof LocalPluginConfig];
-            return newConfig;
-          });
-        } else {
-          newSet.add(plugin);
-          addPlugin(plugin);
-        }
-        return newSet;
-      });
+      // Combine all plugins and update store
+      const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];
+      updatePlugins(allPlugins);
     },
-    [addPlugin],
+    [config.plugins, updatePlugins],
   );
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
-      setPluginConfig((prevConfig) => {
-        const currentConfig = prevConfig[plugin] || {};
-        const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
-
-        if (!configChanged) {
-          return prevConfig;
+      // Build new plugins array with updated config
+      const newPlugins = config.plugins.map((p) => {
+        const id = typeof p === 'string' ? p : p.id;
+        if (id === plugin) {
+          const existingConfig = typeof p === 'object' ? p.config || {} : {};
+          return {
+            id: plugin,
+            config: { ...existingConfig, ...newConfig },
+          };
         }
-        return {
-          ...prevConfig,
-          [plugin]: {
-            ...currentConfig,
-            ...newConfig,
-          },
-        };
+        return p;
       });
+
+      updatePlugins(newPlugins);
     },
-    [],
+    [config.plugins, updatePlugins],
   );
 
   const isConfigValid = useCallback(() => {
@@ -430,10 +410,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <PluginsTab
                 selectedPlugins={selectedPlugins}
                 handlePluginToggle={handlePluginToggle}
+                setSelectedPlugins={setSelectedPlugins}
                 pluginConfig={pluginConfig}
                 updatePluginConfig={updatePluginConfig}
                 recentlyUsedPlugins={recentlyUsedSnapshot}
-                onUserInteraction={() => setHasUserInteracted(true)}
                 isRemoteGenerationDisabled={isRemoteGenerationDisabled}
               />
             </TabsContent>

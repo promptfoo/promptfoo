@@ -136,7 +136,30 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return await monkeyPatchFetch(finalUrl, finalOptions);
+  // Transient error retry logic (502/503/504 with matching status text)
+  const maxTransientRetries = options.disableTransientRetries ? 0 : 3;
+
+  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+
+    if (
+      !options.disableTransientRetries &&
+      isTransientError(response) &&
+      attempt < maxTransientRetries
+    ) {
+      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      logger.debug(
+        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+      );
+      await sleep(backoffMs);
+      continue;
+    }
+
+    return response;
+  }
+
+  // This should be unreachable, but TypeScript needs it
+  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(
@@ -218,6 +241,28 @@ export async function handleRateLimit(response: Response): Promise<void> {
 }
 
 /**
+ * Check if a response indicates a transient server error that should be retried.
+ * Matches specific status codes with their expected status text to avoid
+ * retrying permanent failures (e.g., some APIs return 502 for auth errors).
+ */
+export function isTransientError(response: Response): boolean {
+  if (!response?.statusText) {
+    return false;
+  }
+  const statusText = response.statusText.toLowerCase();
+  switch (response.status) {
+    case 502:
+      return statusText.includes('bad gateway');
+    case 503:
+      return statusText.includes('service unavailable');
+    case 504:
+      return statusText.includes('gateway timeout');
+    default:
+      return false;
+  }
+}
+
+/**
  * Fetch with automatic retries and rate limit handling
  */
 export type { FetchOptions } from './types';
@@ -236,7 +281,12 @@ export async function fetchWithRetries(
   for (let i = 0; i <= maxRetries; i++) {
     let response;
     try {
-      response = await fetchWithTimeout(url, options, timeout);
+      // Disable transient retries in fetchWithProxy to avoid double-retrying
+      response = await fetchWithTimeout(
+        url,
+        { ...options, disableTransientRetries: true },
+        timeout,
+      );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
