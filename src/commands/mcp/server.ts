@@ -165,12 +165,22 @@ export async function startStdioMcpServer(): Promise<void> {
   // Connect the server to the stdio transport
   await server.connect(transport);
 
-  // Track server start
-  telemetry.record('feature_used', {
-    feature: 'mcp_server_started',
-    transport: 'stdio',
-  });
+  // Return a Promise that only resolves when the server shuts down
+  // This matches the pattern used in startHttpMcpServer
+  return new Promise<void>((resolve) => {
+    // Track server start
+    telemetry.record('feature_used', {
+      feature: 'mcp_server_started',
+      transport: 'stdio',
+    });
 
-  // Don't log to stdout in stdio mode as it pollutes the JSON-RPC protocol
-  // logger.info('Promptfoo MCP stdio server started');
+    const shutdown = () => {
+      resolve();
+    };
+
+    // Register shutdown handlers
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+    transport.onclose = shutdown;
+  });
 }
