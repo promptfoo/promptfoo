@@ -988,7 +988,7 @@ class Evaluator {
       }
     }
 
-    this.evalRecord.addPrompts(prompts);
+    await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =

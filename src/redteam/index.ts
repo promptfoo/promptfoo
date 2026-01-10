@@ -671,7 +671,7 @@ export async function synthesize({
     return true;
   });
 
-  validateStrategies(strategies);
+  await validateStrategies(strategies);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
