@@ -364,11 +364,15 @@ export async function loadTestsFromGlob(
     const pathWithoutFunction: string =
       lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
+    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+    const fileWithoutSheet = testFile.split('#')[0];
     if (
       testFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
-      pathWithoutFunction.endsWith('.py')
+      pathWithoutFunction.endsWith('.py') ||
+      fileWithoutSheet.endsWith('.xlsx') ||
+      fileWithoutSheet.endsWith('.xls')
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {

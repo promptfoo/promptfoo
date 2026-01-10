@@ -1514,6 +1514,154 @@ describe('readTests', () => {
     );
     expect(result).toEqual(pythonTests);
   });
+
+  it('should handle xlsx files in array format', async () => {
+    // read-excel-file returns array of arrays where first row is headers
+    const mockRows = [
+      ['var1', 'var2', '__expected'], // headers
+      ['value1', 'value2', 'expected1'], // data row 1
+      ['value3', 'value4', 'expected2'], // data row 2
+    ];
+
+    // Mock fs module to survive resetModules
+    vi.doMock('fs', () => ({
+      ...vi.importActual('fs'),
+      existsSync: vi.fn().mockReturnValue(true),
+    }));
+
+    // Mock the dynamic import
+    vi.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: vi.fn().mockResolvedValue(mockRows),
+      readSheetNames: vi.fn().mockResolvedValue(['Sheet1']),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx']);
+
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+          description: 'Row #2',
+          options: {},
+          vars: { var1: 'value3', var2: 'value4' },
+        },
+      ]);
+    } finally {
+      vi.doUnmock('read-excel-file/node');
+      vi.doUnmock('fs');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xlsx files with sheet specifier in array format', async () => {
+    const mockRows = [
+      ['name', 'value'], // headers
+      ['test1', 'result1'], // data row
+    ];
+
+    vi.doMock('fs', () => ({
+      ...vi.importActual('fs'),
+      existsSync: vi.fn().mockReturnValue(true),
+    }));
+
+    vi.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: vi.fn().mockResolvedValue(mockRows),
+      readSheetNames: vi.fn().mockResolvedValue(['Sheet1', 'DataSheet']),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx#DataSheet']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
+    } finally {
+      vi.doUnmock('read-excel-file/node');
+      vi.doUnmock('fs');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xls files in array format', async () => {
+    const mockRows = [
+      ['col1', 'col2'],
+      ['data1', 'data2'],
+    ];
+
+    vi.doMock('fs', () => ({
+      ...vi.importActual('fs'),
+      existsSync: vi.fn().mockReturnValue(true),
+    }));
+
+    vi.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: vi.fn().mockResolvedValue(mockRows),
+      readSheetNames: vi.fn().mockResolvedValue(['Sheet1']),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['legacy.xls']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ col1: 'data1', col2: 'data2' });
+    } finally {
+      vi.doUnmock('read-excel-file/node');
+      vi.doUnmock('fs');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle file:// prefix with xlsx files in array format', async () => {
+    const mockRows = [
+      ['input', 'expected'],
+      ['hello', 'world'],
+    ];
+
+    vi.doMock('fs', () => ({
+      ...vi.importActual('fs'),
+      existsSync: vi.fn().mockReturnValue(true),
+    }));
+
+    vi.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: vi.fn().mockResolvedValue(mockRows),
+      readSheetNames: vi.fn().mockResolvedValue(['Sheet1']),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['file://test.xlsx']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
+    } finally {
+      vi.doUnmock('read-excel-file/node');
+      vi.doUnmock('fs');
+      vi.resetModules();
+    }
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
