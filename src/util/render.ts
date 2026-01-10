@@ -2,8 +2,8 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
-import type { EnvOverrides } from '../types/env';
 import type { VarValue } from '../types';
+import type { EnvOverrides } from '../types/env';
 
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.

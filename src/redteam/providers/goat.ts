@@ -29,7 +29,13 @@ import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult, VarValue } from '../../types/index';
+import type {
+  Assertion,
+  AssertionSet,
+  AtomicTestCase,
+  GradingResult,
+  VarValue,
+} from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,

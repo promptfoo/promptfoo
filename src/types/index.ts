@@ -7,6 +7,7 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions'
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 export { ProvidersSchema };
+
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
@@ -26,7 +27,9 @@ import type {
   ProviderResponse,
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+
 export type { VarValue } from './shared';
+
 import type { TraceData } from './tracing';
 
 export * from '../redteam/types';
@@ -699,8 +702,13 @@ function isValidVarValue(value: unknown): boolean {
 }
 
 // VarsSchema uses z.custom to match the Vars type with runtime validation
+// Enforces plain objects only (no arrays, Maps, Dates, etc.)
 export const VarsSchema = z.custom<Vars>((data) => {
-  if (typeof data !== 'object' || data === null) {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return false;
+  }
+  // Ensure it's a plain object (not Map, Date, Set, etc.)
+  if (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null) {
     return false;
   }
   return Object.values(data as Record<string, unknown>).every(isValidVarValue);
@@ -736,7 +744,7 @@ export const TestCaseSchema = z.object({
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  providerOutput: z.union([z.string(), z.custom<object>()]).optional(),
+  providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),

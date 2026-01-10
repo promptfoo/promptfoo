@@ -764,7 +764,7 @@ describe('TestSuiteSchema', () => {
   describe('extensions field', () => {
     it('should allow null extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
         prompts: [{ raw: 'prompt1', label: 'test' }],
         extensions: null,
       };
@@ -773,7 +773,7 @@ describe('TestSuiteSchema', () => {
 
     it('should allow undefined extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
         prompts: [{ raw: 'prompt1', label: 'test' }],
       };
       expect(() => TestSuiteSchema.parse(suite)).not.toThrow();

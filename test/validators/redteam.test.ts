@@ -894,12 +894,14 @@ describe('Error message quality', () => {
       },
       {
         config: { strategies: ['file://strategy.json'] },
-        expectedError: /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
         description: 'wrong file extension for strategy',
       },
       {
         config: { strategies: ['invalid-strategy-name'] },
-        expectedError: /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
         description: 'invalid strategy name',
       },
       {

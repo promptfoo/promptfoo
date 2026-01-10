@@ -316,18 +316,18 @@ export const RedteamConfigSchema = z.object({
 ### Pattern 4: Custom Validation with superRefine
 
 ```typescript
-// src/validators/redteam.ts
+// src/validators/redteam.ts - Zod v4 syntax
 z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
   if (!pluginOptions.includes(val)) {
     ctx.addIssue({
-      code: z.ZodIssueCode.invalid_enum_value,
-      options: pluginOptions,
-      received: val,
+      code: 'custom',  // Use 'custom' instead of deprecated z.ZodIssueCode.invalid_enum_value
       message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')}`,
     });
   }
 })
 ```
+
+**Note**: In Zod v4, `z.ZodIssueCode.invalid_enum_value` is deprecated. Use `'custom'` code instead.
 
 **Used in**: `src/validators/redteam.ts` (strategies, plugins)
 

@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 
-import z from 'zod';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -99,7 +98,7 @@ abstract class SageMakerGenericProvider {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
       logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${fromError(error).message}`,
+        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
       );
     }
 

@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doGenerateRedteam } from '../../../redteam/commands/generate';
@@ -218,7 +217,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             'redteam_generate',
             false,
             undefined,
-            `Options validation error: ${fromError(optionsParse.error).message}`,
+            `Options validation error: ${z.prettifyError(optionsParse.error)}`,
           );
         }
 

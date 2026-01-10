@@ -282,8 +282,7 @@
     "undici": "^7.16.0",
     "winston": "^3.19.0",
     "ws": "^8.18.3",
-    "zod": "^4.3.5",
-    "zod-validation-error": "^5.0.0"
+    "zod": "^4.3.5"
   },
   "madge": {
     "detectiveOptions": {

@@ -2,8 +2,6 @@ import { z } from 'zod';
 import { InputsSchema } from '../redteam/types';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
-import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema } from './shared';
 
 import type {
   CallApiFunction,
@@ -11,7 +9,6 @@ import type {
   ProviderEmbeddingResponse,
   ProviderId,
   ProviderLabel,
-  ProviderResponse,
 } from '../types/providers';
 
 export const ProviderOptionsSchema = z.object({
@@ -25,28 +22,20 @@ export const ProviderOptionsSchema = z.object({
   inputs: InputsSchema.optional(),
 });
 
-const CallApiContextParamsSchema = z.object({
-  fetchWithCache: z.optional(z.any()),
-  filters: NunjucksFilterMapSchema.optional(),
-  getCache: z.optional(z.any()),
-  logger: z.optional(z.any()),
-  originalProvider: z.optional(z.any()),
-  prompt: PromptSchema,
-  vars: z.record(z.string(), z.union([z.string(), z.custom<object>()])),
-});
-
-const CallApiOptionsParamsSchema = z.object({
-  includeLogProbs: z.optional(z.boolean()),
-});
-
-const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>();
+const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>(
+  (v) => typeof v === 'function',
+);
 
 export const ApiProviderSchema = z.object({
-  id: z.custom<() => string>(),
-  callApi: z.custom<CallApiFunction>(),
-  callEmbeddingApi: z.custom<(prompt: string) => Promise<ProviderEmbeddingResponse>>().optional(),
+  id: z.custom<() => string>((v) => typeof v === 'function'),
+  callApi: z.custom<CallApiFunction>((v) => typeof v === 'function'),
+  callEmbeddingApi: z
+    .custom<(prompt: string) => Promise<ProviderEmbeddingResponse>>((v) => typeof v === 'function')
+    .optional(),
   callClassificationApi: z
-    .custom<(prompt: string) => Promise<ProviderClassificationResponse>>()
+    .custom<(prompt: string) => Promise<ProviderClassificationResponse>>(
+      (v) => typeof v === 'function',
+    )
     .optional(),
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),

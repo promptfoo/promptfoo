@@ -50,9 +50,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(
-  variables: Record<string, VarValue>,
-): Record<string, VarValue> {
+export function resolveVariables(variables: Record<string, VarValue>): Record<string, VarValue> {
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 

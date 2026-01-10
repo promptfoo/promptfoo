@@ -1,5 +1,6 @@
 import { getEnvString } from '../envars';
 import type Langfuse from 'langfuse';
+
 import type { VarValue } from '../types';
 
 const langfuseParams = {
