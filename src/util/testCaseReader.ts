@@ -365,7 +365,7 @@ export async function loadTestsFromGlob(
     if (
       testFile.endsWith('.csv') ||
       testFile.endsWith('.xlsx') ||
-      testFile.endsWith('.xls') || 
+      testFile.endsWith('.xls') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py')
