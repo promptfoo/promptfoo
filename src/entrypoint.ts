@@ -39,7 +39,9 @@ if (!isBun && !isDeno) {
   }
 }
 
-// Update argv so isMainModule() in main.ts correctly detects CLI execution
+// Update argv[1] so isMainModule() in main.ts correctly detects CLI execution.
+// Trade-off: This permanently changes argv[1] for the process lifetime.
+// Any code reading argv[1] will see the synthetic main.js path, not entrypoint.js.
 process.argv[1] = fileURLToPath(new URL('./main.js', import.meta.url));
 await import('./main.js');
 
