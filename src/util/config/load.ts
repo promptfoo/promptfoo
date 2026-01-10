@@ -180,7 +180,16 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       providers: ProvidersSchema.optional(),
       targets: ProvidersSchema.optional(),
       prompts: TestSuiteConfigSchema.shape.prompts.optional(),
-    });
+    }).refine(
+      (data) => {
+        const hasTargets = Boolean(data.targets);
+        const hasProviders = Boolean(data.providers);
+        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+      },
+      {
+        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      },
+    );
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(

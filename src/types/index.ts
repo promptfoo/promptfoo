@@ -202,7 +202,7 @@ export const EvaluateOptionsSchema = z.object({
         evalStep: RunEvalOptions,
         metrics: PromptMetrics,
       ) => void
-    >()
+    >((v) => typeof v === 'function')
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
