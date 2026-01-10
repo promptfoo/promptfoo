@@ -2168,16 +2168,16 @@ describe('util', () => {
       expect(result).toBe('env-project');
     });
 
-    // NOTE: This test is skipped due to unreliable mock isolation of Google Auth Library.
-    // The hoisted mock doesn't consistently prevent real gcloud credentials from being loaded,
-    // especially on systems with gcloud configured. The clearCachedAuth() helper works for
-    // most tests, but this specific test requires mocking the GoogleAuth instance itself,
-    // which has proven unreliable with Vitest's current mocking system.
-    it.skip('should fall back to Google Auth Library when no config or env vars', async () => {
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { mockAuthInstance } = googleAuthMock;
+
       const config = {};
       const env = {};
 
       const result = await resolveProjectId(config, env);
+
+      // Verify the mock was called - this confirms our mock isolation is working
+      expect(mockAuthInstance.getProjectId).toHaveBeenCalled();
       expect(result).toBe(mockProjectId);
     });
 
