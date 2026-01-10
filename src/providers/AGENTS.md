@@ -33,7 +33,7 @@ See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 ## Common Patterns
 
-**OpenAI-compatible providers** extend `OpenAiChatCompletionProvider`. See `src/providers/openrouter.ts` for example.
+**OpenAI-compatible providers** extend `OpenAiChatCompletionProvider`. See `src/providers/quiverai.ts` for a minimal example or `src/providers/openrouter.ts` for a more complex one.
 
 **Config priority:** Explicit options > Environment variables > Provider defaults
 
@@ -85,9 +85,28 @@ Every provider needs tests in `test/providers/`:
 
 ## Adding a Provider
 
+**All seven items are required** before a provider is complete:
+
 1. Implement `ApiProvider` interface
-2. Add tests in `test/providers/`
-3. Add docs in `site/docs/providers/`
-4. Add example in `examples/`
+2. Add env vars to `src/types/env.ts` (`ProviderEnvOverridesSchema`)
+3. Add env vars to `src/envars.ts` (if documenting in CLI help)
+4. Add tests in `test/providers/`
+5. Add docs in `site/docs/providers/<provider>.md`
+6. Add entry to `site/docs/providers/index.md` table (alphabetical order)
+7. Add example in `examples/<provider>/`
+
+After updating env schema, regenerate JSON schema: `npm run jsonSchema:generate`
+
+**Verify completeness:**
+
+```bash
+# Check all pieces exist
+ls src/providers/myprovider.ts
+grep -q "MYPROVIDER_API_KEY" src/types/env.ts && echo "env.ts updated"
+ls test/providers/myprovider.test.ts
+ls site/docs/providers/myprovider.md
+grep -q "myprovider" site/docs/providers/index.md && echo "index.md updated"
+ls examples/myprovider/promptfooconfig.yaml
+```
 
 **Reference existing providers** - 50+ implementations to learn from.

@@ -17,10 +17,38 @@ import { setupEnv } from '../../src/util/index';
 vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
+vi.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn().mockReturnValue(false),
+  },
+}));
 vi.mock('../../src/migrate');
+vi.mock('../../src/models/eval', () => {
+  const MockEval = function (this: any) {
+    this.id = 'test-eval-id';
+    this.prompts = [];
+    this.clearResults = vi.fn();
+    this.shared = false;
+    this.getTable = vi.fn().mockResolvedValue({ body: [] });
+  };
+  MockEval.create = vi.fn().mockResolvedValue({
+    id: 'test-eval-id',
+    prompts: [],
+    clearResults: vi.fn(),
+    shared: false,
+    getTable: vi.fn().mockResolvedValue({ body: [] }),
+  });
+  MockEval.latest = vi.fn().mockResolvedValue(null);
+  MockEval.findById = vi.fn().mockResolvedValue(null);
+  return { default: MockEval };
+});
 vi.mock('../../src/providers');
 vi.mock('../../src/share');
 vi.mock('../../src/table');
+vi.mock('../../src/util/cloud', () => ({
+  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  getOrgContext: vi.fn().mockResolvedValue(null),
+}));
 vi.mock('../../src/util', async () => {
   const actual = await vi.importActual('../../src/util');
   return {
