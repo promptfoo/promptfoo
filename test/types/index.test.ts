@@ -359,7 +359,7 @@ describe('CommandLineOptionsSchema', () => {
       filterErrorsOnly: true,
     };
     expect(() => CommandLineOptionsSchema.parse(options)).toThrow(
-      'Expected string, received boolean',
+      'Invalid input: expected string, received boolean',
     );
   });
 
@@ -674,7 +674,7 @@ describe('TestSuiteConfigSchema', () => {
           return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
         },
         {
-          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+          error: "Exactly one of 'targets' or 'providers' must be provided, but not both",
         },
       );
 
@@ -764,7 +764,7 @@ describe('TestSuiteSchema', () => {
   describe('extensions field', () => {
     it('should allow null extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
         prompts: [{ raw: 'prompt1', label: 'test' }],
         extensions: null,
       };
@@ -773,7 +773,7 @@ describe('TestSuiteSchema', () => {
 
     it('should allow undefined extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
         prompts: [{ raw: 'prompt1', label: 'test' }],
       };
       expect(() => TestSuiteSchema.parse(suite)).not.toThrow();
@@ -859,7 +859,7 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(invalidConfig);
       expect(result.success).toBe(false);
-      expect(result.error!.errors[0].message).toContain(
+      expect(result.error!.issues[0].message).toContain(
         'defaultTest string must start with file://',
       );
     });

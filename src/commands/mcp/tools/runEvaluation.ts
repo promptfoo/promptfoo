@@ -104,9 +104,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe('Number of times to repeat the evaluation (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
-      cache: z.boolean().optional().default(true).describe('Enable caching of results'),
-      write: z.boolean().optional().default(false).describe('Write results to database'),
-      share: z.boolean().optional().default(false).describe('Create shareable URL for results'),
+      cache: z.boolean().optional().prefault(true).describe('Enable caching of results'),
+      write: z.boolean().optional().prefault(false).describe('Write results to database'),
+      share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
       resultLimit: z
         .number()
         .min(1)

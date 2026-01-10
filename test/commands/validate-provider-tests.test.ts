@@ -204,8 +204,8 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo' },
-          { id: () => 'openai:gpt-4', label: 'openai' },
+          { id: () => 'echo', label: 'echo', callApi: () => Promise.resolve({}) },
+          { id: () => 'openai:gpt-4', label: 'openai', callApi: () => Promise.resolve({}) },
         ],
         tests: [],
       };

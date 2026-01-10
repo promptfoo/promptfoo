@@ -40,6 +40,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
@@ -284,7 +285,7 @@ export class CustomProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -759,7 +760,7 @@ export class CustomProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     _roundNum: number,

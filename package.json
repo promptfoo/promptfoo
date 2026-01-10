@@ -161,8 +161,7 @@
     "tsdown": "^0.18.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14",
-    "winston-transport": "^4.9.0",
-    "zod-to-json-schema": "^3.25.0"
+    "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.77",
@@ -282,8 +281,7 @@
     "undici": "^7.16.0",
     "winston": "^3.19.0",
     "ws": "^8.18.3",
-    "zod": "^3.25.76",
-    "zod-validation-error": "^3.5.4"
+    "zod": "^4.3.5"
   },
   "madge": {
     "detectiveOptions": {

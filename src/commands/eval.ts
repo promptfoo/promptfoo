@@ -6,7 +6,6 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
@@ -437,12 +436,11 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
 
-        ${validationError.toString()}
+        ${z.prettifyError(testSuiteSchema.error)}
 
       Please review your promptfooconfig.yaml configuration.`),
       );
@@ -967,10 +965,9 @@ export function evalCommand(
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
       } catch (err) {
-        const validationError = fromError(err);
         logger.error(dedent`
         Invalid command options:
-        ${validationError.toString()}
+        ${err instanceof z.ZodError ? z.prettifyError(err) : err}
         `);
         process.exitCode = 1;
         return;

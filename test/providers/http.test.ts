@@ -304,7 +304,7 @@ describe('HttpProvider', () => {
       new HttpProvider(mockUrl, {
         config: invalidConfig as any,
       });
-    }).toThrow(/Expected object, received string/);
+    }).toThrow(/expected object, received string/i);
   });
 
   it('should return provider id and string representation', () => {
@@ -2624,7 +2624,7 @@ describe('constructor validation', () => {
           headers: { 'Content-Type': 123 }, // Invalid header type
         },
       });
-    }).toThrow('Expected string, received number');
+    }).toThrow(/expected string, received number/i);
   });
 
   it('should require body or GET method', () => {

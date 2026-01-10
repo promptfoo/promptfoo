@@ -40,26 +40,26 @@ const TestCaseGenerationSchema = z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
     }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.optional().default({}),
+    config: PluginConfigSchema.optional().prefault({}),
   }),
   strategy: z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
     }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().default({}),
+    config: StrategyConfigSchema.optional().prefault({}),
   }),
   config: z.object({
     applicationDefinition: z.object({
       purpose: z.string().nullable(),
     }),
   }),
-  turn: z.number().int().min(0).optional().default(0),
-  maxTurns: z.number().int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().default([]),
+  turn: z.int().min(0).optional().prefault(0),
+  maxTurns: z.int().min(1).optional(),
+  history: z.array(ConversationMessageSchema).optional().prefault([]),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
   // Batch generation: number of test cases to generate (1-10, default 1)
-  count: z.number().int().min(1).max(10).optional().default(1),
+  count: z.int().min(1).max(10).optional().prefault(1),
 });
 
 /**

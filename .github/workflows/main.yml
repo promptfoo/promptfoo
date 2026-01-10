@@ -398,7 +398,7 @@ jobs:
   smoke-tests:
     name: Run Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5

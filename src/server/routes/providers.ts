@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
 import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -17,7 +16,6 @@ import { ProviderOptionsSchema } from '../../validators/providers';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
-import type { ZodError } from 'zod';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
@@ -107,7 +105,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   try {
     payload = TestPayloadSchema.parse(req.body);
   } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+    res.status(400).json({ error: z.prettifyError(e as z.ZodError) });
     return;
   }
 
@@ -153,7 +151,7 @@ providersRouter.post(
     try {
       providerOptions = ProviderOptionsSchema.parse(body);
     } catch (e) {
-      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      res.status(400).json({ error: z.prettifyError(e as z.ZodError) });
       return;
     }
     invariant(providerOptions.id, 'Provider ID (`id`) is required');
@@ -281,7 +279,7 @@ providersRouter.post(
       if (error instanceof z.ZodError) {
         res.status(400).json({
           success: false,
-          error: fromZodError(error).toString(),
+          error: z.prettifyError(error),
         });
         return;
       }
@@ -345,7 +343,7 @@ providersRouter.post(
       if (error instanceof z.ZodError) {
         res.status(400).json({
           success: false,
-          error: fromZodError(error).toString(),
+          error: z.prettifyError(error),
         });
         return;
       }

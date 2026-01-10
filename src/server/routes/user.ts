@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
@@ -24,7 +23,7 @@ userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => 
     res.json(ApiSchemas.User.Get.Response.parse({ email: email || null }));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logger.error(`Error getting email: ${fromError(error)}`);
+      logger.error(`Error getting email: ${z.prettifyError(error)}`);
     } else {
       logger.error(`Error getting email: ${error}`);
     }
@@ -38,7 +37,7 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
     res.json(ApiSchemas.User.GetId.Response.parse({ id }));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logger.error(`Error getting user ID: ${fromError(error)}`);
+      logger.error(`Error getting user ID: ${z.prettifyError(error)}`);
     } else {
       logger.error(`Error getting user ID: ${error}`);
     }
@@ -67,7 +66,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
     } else {
       res.status(500).json({ error: String(error) });
     }
@@ -101,7 +100,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
     } else {
       res.status(500).json({ error: 'Failed to check email status' });
     }
@@ -114,7 +113,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     const { apiKey, apiHost } = z
       .object({
         apiKey: z.string().min(1, 'API key is required').max(512, 'API key too long'),
-        apiHost: z.string().url().optional(),
+        apiHost: z.url().optional(),
       })
       .parse(req.body);
 
@@ -160,7 +159,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
     } else {
       // Don't expose internal error details to client
       res.status(401).json({ error: 'Invalid API key or authentication failed' });

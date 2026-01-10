@@ -58,8 +58,9 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
+  VarValue,
 } from '../../types/index';
-import type { BaseRedteamMetadata } from '../types';
+import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -470,7 +471,7 @@ async function runRedteamConversation({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Record<string, string>;
@@ -604,7 +605,7 @@ async function runRedteamConversation({
         }
 
         // Build updated vars - handle multi-input mode
-        const updatedVars: Record<string, string | object> = {
+        const updatedVars: Record<string, VarValue> = {
           ...iterationVars,
           [injectVar]: finalInjectVar,
         };
@@ -917,7 +918,7 @@ async function runRedteamConversation({
   }
 
   // Build final vars - handle multi-input mode
-  const finalUpdatedVars: Record<string, string | object> = {
+  const finalUpdatedVars: Record<string, VarValue> = {
     ...vars,
     [injectVar]: bestPrompt,
   };
@@ -1003,7 +1004,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
@@ -1054,8 +1055,16 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         inputs: this.inputs,
       });
     } else {
+      invariant(
+        this.config.redteamProvider === undefined ||
+          typeof this.config.redteamProvider === 'string' ||
+          (typeof this.config.redteamProvider === 'object' &&
+            this.config.redteamProvider !== null &&
+            !Array.isArray(this.config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
       redteamProvider = await redteamProviderManager.getProvider({
-        provider: this.config.redteamProvider,
+        provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,
       });
       gradingProvider = redteamProvider; // Default to using same provider

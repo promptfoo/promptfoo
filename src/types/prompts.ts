@@ -1,3 +1,5 @@
+import type { VarValue } from './shared';
+
 // Declared to avoid circular dependency with providers.ts
 declare interface ApiProvider {
   id: () => string;
@@ -13,7 +15,7 @@ export interface PromptConfig {
 }
 
 export interface PromptFunctionContext {
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   config: Record<string, any>;
   provider: {
     id: string;
