@@ -9,7 +9,7 @@ description: Red team MCP implementations by testing function exploits and tool 
 
 The Model Context Protocol (MCP) Plugin tests whether agentic systems using MCP are vulnerable to function call exploits, system prompt leakage, unauthorized tool discovery, or other MCP-specific attacks.
 
-This plugin maps to multiple threat vectors from the [OWASP Agentic AI Top 10 Threats](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/), particularly focusing on Tool Manipulation, System Prompt Extraction, and Privilege Escalation.
+This plugin aligns most strongly with [ASI02: Tool Misuse and Exploitation](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/), including tool poisoning via MCP tool descriptors, schemas, metadata, or routing information. It also relates to [ASI04: Agentic Supply Chain Vulnerabilities](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) when MCP servers/registries or tool descriptors are malicious or compromised. For multi-agent deployments, it additionally maps to ASI07 (Insecure Inter-Agent Communication) and [T16: Insecure Inter-Agent Protocol Abuse](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/), which covers protocol-level abuse of systems like MCP.
 
 ## Purpose
 

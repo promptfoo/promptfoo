@@ -7,7 +7,7 @@ description: Red team server-side request forgery (SSRF) vulnerabilities by test
 
 The SSRF (Server-Side Request Forgery) red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to make the server-side application fetch resources from unexpected or unauthorized destinations.
 
-This plugin helps identify potential security breaches where an attacker might exploit the system to access internal resources or exfiltrate data. It is based on the [OWASP API Top 10](https://owasp.org/www-project-api-security/) (API7).
+This plugin helps identify potential security breaches where an attacker might exploit the system to access internal resources or exfiltrate data. It is based on [OWASP API7:2023 - Server Side Request Forgery](https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/).
 
 ## Purpose
 
