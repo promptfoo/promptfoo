@@ -38,7 +38,7 @@
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/src/main.js",
+    "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
