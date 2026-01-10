@@ -685,8 +685,26 @@ const MetadataSchema = z.record(z.string(), z.any());
 // Vars represents template variables - allowing primitives, arrays, and objects
 export type Vars = Record<string, VarValue>;
 
-// VarsSchema uses z.custom to match the Vars type while allowing runtime validation flexibility
-export const VarsSchema = z.custom<Vars>();
+// Helper to check if a value is a valid VarValue (string, number, boolean, object, or array)
+// Rejects null, undefined, symbols, and functions
+function isValidVarValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const type = typeof value;
+  if (type === 'symbol' || type === 'function') {
+    return false;
+  }
+  return type === 'string' || type === 'number' || type === 'boolean' || type === 'object';
+}
+
+// VarsSchema uses z.custom to match the Vars type with runtime validation
+export const VarsSchema = z.custom<Vars>((data) => {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+  return Object.values(data as Record<string, unknown>).every(isValidVarValue);
+});
 
 export type ScoringFunction = (
   namedScores: Record<string, number>,
