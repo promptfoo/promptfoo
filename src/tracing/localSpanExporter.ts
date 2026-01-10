@@ -1,9 +1,8 @@
-import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
-
 import logger from '../logger';
 import { getTraceStore, type SpanData } from './store';
+import type { ExportResult } from '@opentelemetry/core';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 /**
  * A span exporter that writes spans to the local TraceStore (SQLite).

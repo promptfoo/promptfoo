@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -176,6 +176,14 @@ describe('CrescendoProvider', () => {
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    // Set up default renderPrompt mock to return a valid prompt string
+    vi.mocked(evaluatorHelpers.renderPrompt).mockReset();
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (prompt) => {
+      // Return the raw prompt as a simple string by default
+      const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
+      return rawPrompt;
+    });
   });
 
   afterEach(() => {

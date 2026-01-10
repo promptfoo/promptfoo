@@ -1,28 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
-
-vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:chat:${modelName}`,
-      };
-    }),
-
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:embedding:${modelName}`,
-      };
-    }),
-  };
-});
 
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
@@ -90,29 +72,6 @@ describe('Provider Registry', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-    });
-
-    it('should handle adaline provider paths correctly', async () => {
-      const factory = providerMap.find((f) => f.test('adaline:openai:chat:gpt-4'));
-      expect(factory).toBeDefined();
-
-      const chatProvider = await factory!.create(
-        'adaline:openai:chat:gpt-4',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(chatProvider.id()).toBe('adaline:openai:chat:gpt-4');
-
-      const embeddingProvider = await factory!.create(
-        'adaline:openai:embedding:text-embedding-3-large',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-
-      await expect(
-        factory!.create('adaline:invalid', mockProviderOptions, mockContext),
-      ).rejects.toThrow('Invalid adaline provider path');
     });
 
     it('should handle echo provider correctly', async () => {

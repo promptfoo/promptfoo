@@ -1,5 +1,3 @@
-import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
 import { STRATEGY_PRESETS } from './types';
 
@@ -13,19 +11,10 @@ interface PresetSelectorProps {
 
 export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSelectorProps) {
   return (
-    <Box sx={{ mb: 4 }}>
-      <Grid
-        container
-        spacing={2}
-        sx={{
-          justifyContent: {
-            xs: 'center',
-            sm: 'flex-start',
-          },
-        }}
-      >
+    <div className="mb-8">
+      <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
         {presets.map((preset) => (
-          <Box key={preset.name}>
+          <div key={preset.name} className="w-full min-w-[280px] max-w-[280px] sm:w-auto">
             <PresetCard
               name={preset.name}
               description={preset.description}
@@ -37,27 +26,17 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
               }
               onClick={() => onSelect(preset)}
             />
-          </Box>
+          </div>
         ))}
-        <Grid
-          sx={{
-            minWidth: { xs: '280px', sm: '280px' },
-            maxWidth: { xs: '100%', sm: '280px' },
-          }}
-          size={{
-            xs: 12,
-            sm: 6,
-            md: 3,
-          }}
-        >
+        <div className="w-full min-w-[280px] max-w-[280px] sm:w-auto">
           <PresetCard
             name="Custom"
             description="Configure your own set of strategies"
             isSelected={selectedPreset === 'Custom'}
             onClick={() => onSelect({ name: 'Custom' })}
           />
-        </Grid>
-      </Grid>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

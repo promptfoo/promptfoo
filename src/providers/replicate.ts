@@ -1,13 +1,14 @@
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -17,7 +18,6 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -145,7 +145,7 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 

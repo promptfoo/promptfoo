@@ -6,16 +6,10 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  withGenAISpan,
   type GenAISpanContext,
   type GenAISpanResult,
+  withGenAISpan,
 } from '../../tracing/genaiTracer';
-import type { EnvOverrides } from '../../types/env';
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
@@ -24,8 +18,16 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from './';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import type OpenAI from 'openai';
+
+import type { EnvOverrides } from '../../types/env';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -411,27 +413,57 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
-    let data, status, statusText;
+    type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
+      choices: Array<
+        OpenAI.ChatCompletion.Choice & {
+          message: OpenAI.ChatCompletion.Choice['message'] & {
+            reasoning?: string;
+            reasoning_content?: string;
+            audio?: {
+              id: string;
+              expires_at: number;
+              data: string;
+              transcript: string;
+              format?: string;
+            };
+          };
+        }
+      >;
+      usage?: OpenAI.ChatCompletion['usage'] & {
+        audio_prompt_tokens?: number;
+        audio_completion_tokens?: number;
+      };
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+
+    let data: OpenAIChatCompletionResponse;
+    let status: number;
+    let statusText: string;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
-        `${this.getApiUrl()}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
+        await fetchWithCache<OpenAIChatCompletionResponse>(
+          `${this.getApiUrl()}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
+          REQUEST_TIMEOUT_MS,
+          'json',
+          context?.bustCache ?? context?.debug,
+          this.config.maxRetries,
+        ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
@@ -456,7 +488,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -497,7 +529,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
 
       let reasoning = '';
-      let output = '';
+      let output: any = '';
       if (message.reasoning) {
         reasoning = message.reasoning;
         output = message.content;
@@ -534,7 +566,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
 
       // Handle function tool callbacks
-      const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
+      const functionCalls: any = message.function_call
+        ? [message.function_call]
+        : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
@@ -696,7 +730,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         guardrails: { flagged: contentFiltered },
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };

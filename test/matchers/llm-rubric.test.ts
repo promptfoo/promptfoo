@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import path from 'path';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';

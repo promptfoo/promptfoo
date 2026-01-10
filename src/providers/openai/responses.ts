@@ -1,21 +1,32 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { ResponsesProcessor } from '../responses/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
-import { ResponsesProcessor } from '../responses/index';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+
+// OpenAI SDK has APIError class for exceptions, but not a type for error responses
+// in the JSON body. This interface represents the structure when the API returns
+// an error object in the response body (not as an exception).
+interface OpenAIErrorResponse {
+  error: {
+    message: string;
+    type?: string;
+    code?: string;
+  };
+}
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
@@ -321,26 +332,56 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
-    let data, status, statusText;
+    // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
+    // This interface matches the actual response structure from that endpoint.
+    interface OpenAIResponsesResponse {
+      output?: Array<{
+        content?: Array<{
+          type: string;
+          text?: string;
+          thinking?: { reasoning_text?: string };
+          refusal?: string;
+        }>;
+        tool_calls?: Array<{
+          id: string;
+          type: string;
+          function: { name: string; arguments: string };
+        }>;
+      }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+      };
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    }
+
+    let data: OpenAIResponsesResponse;
+    let status: number;
+    let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
-        `${this.getApiUrl()}/responses`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+      ({ data, cached, status, statusText, deleteFromCache } =
+        await fetchWithCache<OpenAIResponsesResponse>(
+          `${this.getApiUrl()}/responses`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        timeout,
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
+          timeout,
+          'json',
+          context?.bustCache ?? context?.debug,
+          this.config.maxRetries,
+        ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -362,16 +403,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    if (data.error) {
-      await data.deleteFromCache?.();
+    if (data.error?.message) {
+      await deleteFromCache?.();
       return {
-        error: formatOpenAiError(data),
+        error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 

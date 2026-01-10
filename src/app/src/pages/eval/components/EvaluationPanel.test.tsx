@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { EvaluationPanel } from './EvaluationPanel';
-
 import type { GradingResult } from '@promptfoo/types';
 
 describe('EvaluationPanel', () => {
@@ -24,14 +23,15 @@ describe('EvaluationPanel', () => {
       },
     ];
 
-    render(<EvaluationPanel gradingResults={gradingResults} />);
+    const { container } = render(<EvaluationPanel gradingResults={gradingResults} />);
 
     expect(screen.getByText('Pass')).toBeInTheDocument();
     expect(screen.getByText('Score')).toBeInTheDocument();
     expect(screen.getByText('Type')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
     expect(screen.getByText('Reason')).toBeInTheDocument();
-    expect(screen.getByText('✅')).toBeInTheDocument();
+    // CircleCheck icon is an SVG with emerald color indicating pass
+    expect(container.querySelector('svg.text-emerald-600')).toBeInTheDocument();
     expect(screen.getByText('1.00')).toBeInTheDocument();
     expect(screen.getByText('Test passed')).toBeInTheDocument();
   });

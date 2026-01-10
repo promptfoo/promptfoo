@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -9,18 +8,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -35,7 +22,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -45,12 +32,26 @@ import {
   buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types/index';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -91,6 +92,7 @@ interface IterativeMetadata {
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[]; // All session IDs from iterations
   traceSnapshots?: Record<string, unknown>[];
@@ -110,6 +112,7 @@ export async function runRedteamConversation({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -124,6 +127,7 @@ export async function runRedteamConversation({
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
+  inputs?: Record<string, string>;
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -197,6 +201,7 @@ export async function runRedteamConversation({
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
     metadata?: Record<string, any>;
   }[] = [];
 
@@ -287,6 +292,12 @@ export async function runRedteamConversation({
       continue;
     }
 
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const extractedPrompt = extractPromptFromTags(newInjectVar);
+    if (extractedPrompt) {
+      newInjectVar = extractedPrompt;
+    }
+
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
 
@@ -328,24 +339,37 @@ export async function runRedteamConversation({
       });
     }
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, string | object> = {
+      ...iterationVars,
+      [injectVar]: finalInjectVar,
+      ...(currentInputVars || {}),
+    };
+
     targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: finalInjectVar,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    // Externalize blobs before they hit history/prompts
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
@@ -624,6 +648,8 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
       metadata: {
         sessionId,
       },
@@ -662,11 +688,13 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  readonly inputs?: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
@@ -687,6 +715,8 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
       });
     } else {
       this.redteamProvider = config.redteamProvider;
@@ -731,6 +761,7 @@ class RedteamIterativeProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

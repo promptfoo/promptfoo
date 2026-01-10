@@ -1,17 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BatchProcessor,
   EvaluationCache,
   paginate,
   streamProcess,
-  BatchProcessor,
 } from '../../../../src/commands/mcp/lib/performance';
+
+import type { EvalSummary } from '../../../../src/types';
 
 describe('MCP Performance', () => {
   describe('EvaluationCache', () => {
+    const createMockEvalSummary = (id: string): EvalSummary => ({
+      evalId: id,
+      datasetId: null,
+      createdAt: Date.now(),
+      description: `Test evaluation ${id}`,
+      numTests: 10,
+      isRedteam: false,
+      passRate: 0.9,
+      label: `Eval ${id}`,
+      providers: [{ id: 'provider1', label: 'Provider 1' }],
+    });
+
     it('should store and retrieve values', () => {
       const cache = new EvaluationCache();
-      cache.set('key1', { data: 'value1' });
-      expect(cache.get('key1')).toEqual({ data: 'value1' });
+      const mockEvalSummaries = [createMockEvalSummary('eval1')];
+      cache.set('key1', mockEvalSummaries);
+      expect(cache.get('key1')).toEqual(mockEvalSummaries);
     });
 
     it('should return undefined for missing keys', () => {
@@ -21,15 +36,18 @@ describe('MCP Performance', () => {
 
     it('should check if key exists', () => {
       const cache = new EvaluationCache();
-      cache.set('exists', 'value');
+      const mockEvalSummaries = [createMockEvalSummary('eval1')];
+      cache.set('exists', mockEvalSummaries);
       expect(cache.has('exists')).toBe(true);
       expect(cache.has('missing')).toBe(false);
     });
 
     it('should clear all entries', () => {
       const cache = new EvaluationCache();
-      cache.set('key1', 'value1');
-      cache.set('key2', 'value2');
+      const mockEvalSummaries1 = [createMockEvalSummary('eval1')];
+      const mockEvalSummaries2 = [createMockEvalSummary('eval2')];
+      cache.set('key1', mockEvalSummaries1);
+      cache.set('key2', mockEvalSummaries2);
       cache.clear();
       expect(cache.has('key1')).toBe(false);
       expect(cache.has('key2')).toBe(false);
@@ -37,7 +55,8 @@ describe('MCP Performance', () => {
 
     it('should return stats', () => {
       const cache = new EvaluationCache();
-      cache.set('key1', 'value1');
+      const mockEvalSummaries = [createMockEvalSummary('eval1')];
+      cache.set('key1', mockEvalSummaries);
       const stats = cache.getStats();
       expect(stats.size).toBe(1);
     });

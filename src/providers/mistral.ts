@@ -1,10 +1,11 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -12,7 +13,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -319,6 +319,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
           logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
           return {
             ...cachedResult,
+            cached: true,
             tokenUsage: {
               ...cachedResult.tokenUsage,
               cached: cachedResult.tokenUsage?.total,

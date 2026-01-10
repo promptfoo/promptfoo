@@ -1,5 +1,6 @@
-import type { TestCase } from '../../../types/index';
 import data from './data';
+
+import type { TestCase } from '../../../types/index';
 
 export async function addInjections(
   testCases: TestCase[],

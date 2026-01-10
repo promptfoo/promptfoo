@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
-import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
+import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 

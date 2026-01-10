@@ -7,6 +7,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { transform } from '../util/transform';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -16,7 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 
 /**
@@ -737,7 +737,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             parsedResult.metadata.originalPrompt = prompt;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
@@ -936,7 +936,7 @@ export class SageMakerEmbeddingProvider
             parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails

@@ -3,12 +3,12 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
-  withGenAISpan,
   type GenAISpanContext,
   type GenAISpanResult,
+  withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
@@ -271,6 +271,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            cached: true,
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.

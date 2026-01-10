@@ -4,20 +4,20 @@
  * Main entry point for the promptfoo code-scan GitHub Action
  */
 
+import * as fs from 'fs';
+
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import * as fs from 'fs';
-import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
 import { prepareComments } from '../../src/codeScan/util/github';
 import {
-  type Comment,
-  type ScanResponse,
   CodeScanSeverity,
   FileChangeStatus,
   formatSeverity,
+  type ScanResponse,
 } from '../../src/types/codeScan';
+import { generateConfigFile } from './config';
+import { getGitHubContext, getPRFiles } from './github';
 
 async function run(): Promise<void> {
   try {
@@ -52,7 +52,7 @@ async function run(): Promise<void> {
     core.info('🔍 Starting Promptfoo Code Scan...');
 
     // Validate we're in a PR context
-    const context = getGitHubContext();
+    const context = await getGitHubContext(githubToken);
     core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
     // Check if this is a setup PR (workflow file addition) - detect early to skip CLI installation
@@ -81,10 +81,12 @@ async function run(): Promise<void> {
       // Set as environment variable for CLI to use
       process.env.GITHUB_OIDC_TOKEN = oidcToken;
     } catch (error) {
-      core.warning(
-        `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
+      // OIDC tokens are not available for fork PRs (GitHub security restriction)
+      // For fork PRs, the server will use PR-based authentication instead
+      core.info(
+        `OIDC token not available: ${error instanceof Error ? error.message : String(error)}`,
       );
-      core.warning('Comment posting to PRs will not work without OIDC token');
+      core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
     }
 
     // Generate config file if not provided
@@ -117,6 +119,8 @@ async function run(): Promise<void> {
       ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath!,
+      '--base',
+      baseBranch, // Use actual PR base branch (supports stacked PRs)
       '--compare',
       'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
       '--json', // JSON output for parsing

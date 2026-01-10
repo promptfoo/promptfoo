@@ -1,8 +1,10 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
-import type { Event } from '../../data/events';
 import { formatEventDate, formatEventLocation } from '../../data/events';
 import styles from './EventCard.module.css';
+
+import type { Event } from '../../data/events';
 
 interface EventCardProps {
   event: Event;
@@ -23,12 +25,6 @@ export default function EventCard({ event }: EventCardProps): React.ReactElement
             <span className={styles.placeholderIcon}>
               {event.type === 'conference' ? '🎪' : event.type === 'party' ? '🎉' : '📅'}
             </span>
-          </div>
-        )}
-        {event.id === 'bsides-sf-2026' && (
-          <div className={styles.imageOverlay}>
-            <span className={styles.overlayTitle}>BSidesSF 2026</span>
-            <span className={styles.overlayMeta}>March 21-22, 2026 · San Francisco</span>
           </div>
         )}
         <span className={`${styles.badge} ${styles[event.status]}`}>

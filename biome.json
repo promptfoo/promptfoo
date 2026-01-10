@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.9/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -21,9 +21,9 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/adaline-gateway/**/prompt.json",
       "!!examples/multiple-turn-conversation/prompt.json",
-      "!!examples/openai-chat-history/prompt.json"
+      "!!examples/openai-chat-history/prompt.json",
+      "!!test/fixtures/rubric-json-template/**/*.json"
     ]
   },
   "formatter": {
@@ -101,7 +101,7 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useExhaustiveDependencies": "off",
+        "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
         "useJsxKeyInIterable": "error"
       },
@@ -142,7 +142,7 @@
         }
       },
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "error",
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
@@ -193,7 +193,6 @@
   "overrides": [
     {
       "includes": [
-        "examples/adaline-gateway/**/prompt.json",
         "examples/multiple-turn-conversation/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
@@ -243,6 +242,9 @@
           },
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
@@ -267,6 +269,25 @@
       }
     },
     {
+      "includes": [
+        "src/app/src/pages/eval/components/**/*",
+        "src/app/src/pages/redteam/setup/components/**/*",
+        "src/providers/**/*",
+        "src/redteam/**/*",
+        "src/util/**/*",
+        "src/commands/**/*",
+        "src/types/**/*",
+        "src/tracing/**/*"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
@@ -279,17 +300,11 @@
           "style": {
             "noRestrictedGlobals": "off",
             "useBlockStatements": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
-      }
-    },
-    {
-      "includes": ["test/fixtures/rubric-json-template/**/*.json"],
-      "linter": {
-        "enabled": false
-      },
-      "formatter": {
-        "enabled": false
       }
     }
   ]

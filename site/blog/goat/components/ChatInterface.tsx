@@ -1,8 +1,9 @@
-import { Send, Loader } from 'lucide-react';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import confetti from 'canvas-confetti';
-import { API_BASE_URL } from './constants';
+import { Loader, Send } from 'lucide-react';
 import styles from './ChatInterface.module.css';
+import { API_BASE_URL } from './constants';
 
 // Type declarations
 interface Message {
@@ -490,6 +491,7 @@ export default function ChatInterface() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages is a trigger dependency - scrollToBottom is stable
   useEffect(() => {
     scrollToBottom();
   }, [messages]);

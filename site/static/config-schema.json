@@ -386,6 +386,16 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "inputs": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "propertyNames": {
+                            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                          }
                         }
                       },
                       "additionalProperties": false
@@ -524,7 +534,10 @@
                               "delay": {
                                 "type": "number"
                               },
-                              "config": {}
+                              "config": {},
+                              "inputs": {
+                                "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties/properties/inputs"
+                              }
                             },
                             "additionalProperties": false
                           }
@@ -1341,22 +1354,16 @@
                           "off-topic",
                           "overreliance",
                           "owasp:agentic",
-                          "owasp:agentic:redteam",
-                          "owasp:agentic:t01",
-                          "owasp:agentic:t02",
-                          "owasp:agentic:t03",
-                          "owasp:agentic:t04",
-                          "owasp:agentic:t05",
-                          "owasp:agentic:t06",
-                          "owasp:agentic:t07",
-                          "owasp:agentic:t08",
-                          "owasp:agentic:t09",
-                          "owasp:agentic:t10",
-                          "owasp:agentic:t11",
-                          "owasp:agentic:t12",
-                          "owasp:agentic:t13",
-                          "owasp:agentic:t14",
-                          "owasp:agentic:t15",
+                          "owasp:agentic:asi01",
+                          "owasp:agentic:asi02",
+                          "owasp:agentic:asi03",
+                          "owasp:agentic:asi04",
+                          "owasp:agentic:asi05",
+                          "owasp:agentic:asi06",
+                          "owasp:agentic:asi07",
+                          "owasp:agentic:asi08",
+                          "owasp:agentic:asi09",
+                          "owasp:agentic:asi10",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1585,22 +1592,16 @@
                               "off-topic",
                               "overreliance",
                               "owasp:agentic",
-                              "owasp:agentic:redteam",
-                              "owasp:agentic:t01",
-                              "owasp:agentic:t02",
-                              "owasp:agentic:t03",
-                              "owasp:agentic:t04",
-                              "owasp:agentic:t05",
-                              "owasp:agentic:t06",
-                              "owasp:agentic:t07",
-                              "owasp:agentic:t08",
-                              "owasp:agentic:t09",
-                              "owasp:agentic:t10",
-                              "owasp:agentic:t11",
-                              "owasp:agentic:t12",
-                              "owasp:agentic:t13",
-                              "owasp:agentic:t14",
-                              "owasp:agentic:t15",
+                              "owasp:agentic:asi01",
+                              "owasp:agentic:asi02",
+                              "owasp:agentic:asi03",
+                              "owasp:agentic:asi04",
+                              "owasp:agentic:asi05",
+                              "owasp:agentic:asi06",
+                              "owasp:agentic:asi07",
+                              "owasp:agentic:asi08",
+                              "owasp:agentic:asi09",
+                              "owasp:agentic:asi10",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -1735,7 +1736,6 @@
                           "prompt-injection",
                           "retry",
                           "rot13",
-                          "simba",
                           "video"
                         ]
                       },
@@ -1764,7 +1764,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1963,6 +1963,9 @@
             },
             "isRedteam": {
               "type": "boolean"
+            },
+            "silent": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -2059,6 +2062,9 @@
             "filterFailing": {
               "type": "string"
             },
+            "filterFailingOnly": {
+              "type": "string"
+            },
             "filterFirstN": {
               "type": "integer",
               "exclusiveMinimum": 0
@@ -2109,6 +2115,12 @@
                   }
                 }
               ]
+            },
+            "extension": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false

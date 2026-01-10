@@ -1,13 +1,13 @@
 import {
-  trace,
+  type Attributes,
   context,
   propagation,
-  SpanKind,
-  SpanStatusCode,
   ROOT_CONTEXT,
   type Span,
+  SpanKind,
+  SpanStatusCode,
   type Tracer,
-  type Attributes,
+  trace,
 } from '@opentelemetry/api';
 
 import type { TokenUsage } from '../types/shared';

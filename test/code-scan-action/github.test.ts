@@ -2,9 +2,9 @@
  * GitHub API Client Tests
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
 // Mock @actions/core
@@ -82,8 +82,8 @@ describe('GitHub API Client', () => {
   });
 
   describe('getGitHubContext', () => {
-    it('should extract context from github.context', () => {
-      const context = getGitHubContext();
+    it('should extract context from github.context', async () => {
+      const context = await getGitHubContext('test-token');
 
       expect(context).toEqual({
         owner: 'test-owner',
@@ -93,12 +93,12 @@ describe('GitHub API Client', () => {
       });
     });
 
-    it('should throw error when not in PR context', () => {
+    it('should throw error when not in PR context', async () => {
       const originalPayload = github.context.payload;
       github.context.payload = {};
 
-      expect(() => getGitHubContext()).toThrow(
-        'This action can only be run on pull_request events',
+      await expect(getGitHubContext('test-token')).rejects.toThrow(
+        'This action requires a pull_request event or workflow_dispatch with pr_number input',
       );
 
       github.context.payload = originalPayload;

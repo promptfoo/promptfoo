@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
-import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from '../base';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
-import { isValidPolicyObject, makeInlinePolicyId } from './utils';
+import { isValidPolicyObject, makeInlinePolicyIdSync } from './utils';
 
 import type {
   ApiProvider,
@@ -50,7 +50,7 @@ export class PolicyPlugin extends RedteamPluginBase {
       this.name = config.policy.name;
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
-      this.policyId = makeInlinePolicyId(this.policy); // Generate a unique ID for the inline policy
+      this.policyId = makeInlinePolicyIdSync(this.policy); // Generate a unique ID for the inline policy
     }
     // Edge case: this state should not be reached b/c `createPluginFactory` validates the config
     // prior to instantiating the plugin. This state is reached within Promptfoo Cloud, so display an

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
@@ -133,7 +134,7 @@ export default function BSidesSF2026(): React.ReactElement {
             <div className={styles.heroMeta}>
               <span className={styles.heroDate}>March 21-22, 2026</span>
               <span className={styles.heroDivider}>•</span>
-              <span className={styles.heroVenue}>City View at Metreon</span>
+              <span className={styles.heroVenue}>San Francisco</span>
             </div>
           </div>
         </section>
@@ -142,8 +143,8 @@ export default function BSidesSF2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              The grassroots security conference that brings hackers together during RSA week. Join
-              us for AI security workshops and community connections.
+              Meet our AI red teaming team and see live demos of how Promptfoo secures AI
+              applications—from pre-deployment testing to production monitoring.
             </p>
 
             <CountdownTimer />
@@ -175,20 +176,19 @@ export default function BSidesSF2026(): React.ReactElement {
                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                <span>City View at Metreon, SF</span>
+                <span>San Francisco, CA</span>
               </div>
             </div>
             <div className={styles.heroCtas}>
+              <p className={styles.ctaBlurb}>Book a time to talk to us</p>
               <a
-                href="#highlights"
+                href="https://cal.com/team/promptfoo/intro2"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={styles.primaryCta}
-                onClick={(e) => handleSmoothScroll(e, '#highlights')}
               >
-                What to Expect
+                Schedule a Meeting
               </a>
-              <Link to="/contact" className={styles.secondaryCta}>
-                Get in Touch
-              </Link>
             </div>
           </div>
         </section>
@@ -203,72 +203,27 @@ export default function BSidesSF2026(): React.ReactElement {
 
             <div className={styles.highlightsGrid}>
               <div className={styles.highlightCard}>
-                <div className={styles.cardIcon}>🤝</div>
-                <h3>Community Connections</h3>
-                <p>
-                  Meet security researchers, bug bounty hunters, and AI enthusiasts who are pushing
-                  the boundaries of what's possible.
-                </p>
-              </div>
-              <div className={styles.highlightCard}>
                 <div className={styles.cardIcon}>🎯</div>
                 <h3>AI Red Teaming</h3>
                 <p>
                   Compare notes on LLM attack vectors, jailbreak techniques, and integrating
-                  automated red teaming into your security workflow.
+                  automated red teaming into your workflow.
                 </p>
               </div>
               <div className={styles.highlightCard}>
-                <div className={styles.cardIcon}>🎤</div>
-                <h3>Lightning Talks</h3>
+                <div className={styles.cardIcon}>🤝</div>
+                <h3>Connect with AI Experts</h3>
                 <p>
-                  Quick-fire presentations on the latest AI security research, tools, and techniques
-                  from community members.
+                  Meet AI security professionals working on evals, guardrails, and MCP
+                  security—learn how they're protecting AI applications in production.
                 </p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Why BSides Section */}
-        <section className={styles.whySection}>
-          <div className={styles.container}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>The BSides Spirit</h2>
-              <p className={styles.sectionSubtitle}>Where the security community comes together</p>
-            </div>
-
-            <div className={styles.whyGrid}>
-              <div className={styles.whyItem}>
-                <div className={styles.whyNumber}>01</div>
-                <h3>Grassroots Energy</h3>
+              <div className={styles.highlightCard}>
+                <div className={styles.cardIcon}>🎬</div>
+                <h3>See it in Action</h3>
                 <p>
-                  Community-organized, volunteer-run, and focused on sharing knowledge over selling
-                  products. This is the real hacker conference experience.
-                </p>
-              </div>
-              <div className={styles.whyItem}>
-                <div className={styles.whyNumber}>02</div>
-                <h3>Diverse Voices</h3>
-                <p>
-                  From first-time speakers to industry veterans, BSides amplifies voices you won't
-                  hear at bigger corporate conferences.
-                </p>
-              </div>
-              <div className={styles.whyItem}>
-                <div className={styles.whyNumber}>03</div>
-                <h3>Open Source Culture</h3>
-                <p>
-                  A community that values transparency, collaboration, and giving back. Right at
-                  home for an open-source security company like Promptfoo.
-                </p>
-              </div>
-              <div className={styles.whyItem}>
-                <div className={styles.whyNumber}>04</div>
-                <h3>Hallway Track</h3>
-                <p>
-                  The best conversations happen between sessions. BSides creates the space for
-                  genuine discussions about security challenges.
+                  Quick-fire demos on the latest AI security research, tools, and techniques from
+                  the AI security and red teaming experts.
                 </p>
               </div>
             </div>
@@ -278,19 +233,34 @@ export default function BSidesSF2026(): React.ReactElement {
         {/* CTA Section */}
         <section className={styles.ctaSection}>
           <div className={styles.container}>
-            <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Save the Date</h2>
-              <p className={styles.ctaText}>
-                BSides SF 2026 happens just before RSA Conference. Join us for the community warmup
-                before the big show.
-              </p>
-              <div className={styles.ctaButtons}>
-                <Link to="/contact" className={styles.primaryCta}>
-                  Stay Updated
-                </Link>
-                <Link to="/events/rsa-2026" className={styles.secondaryCta}>
-                  RSA 2026 Details
-                </Link>
+            <div className={styles.ctaGrid}>
+              <div className={styles.ctaCard}>
+                <h3 className={styles.ctaCardTitle}>Attending BSides SF?</h3>
+                <p className={styles.ctaCardText}>
+                  Book a time to meet with our AI security and red teaming experts at the event.
+                </p>
+                <a
+                  href="https://cal.com/team/promptfoo/intro2"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.primaryCta}
+                >
+                  Schedule a Meeting
+                </a>
+              </div>
+              <div className={styles.ctaCard}>
+                <h3 className={styles.ctaCardTitle}>Can't make it?</h3>
+                <p className={styles.ctaCardText}>
+                  Join our Discord community to connect with our team and our community.
+                </p>
+                <a
+                  href="https://discord.com/invite/promptfoo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.secondaryCta}
+                >
+                  Join our Discord
+                </a>
               </div>
             </div>
           </div>

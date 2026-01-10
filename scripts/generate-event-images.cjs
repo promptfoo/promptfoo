@@ -173,7 +173,7 @@ RED PANDA CHARACTER:
 
 COMPOSITION:
 - Red panda on left pointing at a "SAVE THE DATE" sign/calendar in center-right
-- The sign shows "April 27-30, 2026" and "San Francisco"
+- The sign shows "March 23-26, 2026" and "San Francisco"
 - 2-3 excited colleagues as solid darker blue silhouettes
 - Shield icons with checkmarks floating
 - Everything on the BLUE background - no white areas
@@ -190,7 +190,7 @@ The image should feature:
 - The red panda should be inviting viewers to join, looking welcoming and excited
 - Golden Gate Bridge with futuristic overlay, SF fog with neon accents
 - Forward-looking community elements: save the date energy, excitement for upcoming event
-- Text overlay area should be considered (space for "BSides SF 2026" and "April 25-26, 2026 • San Francisco, CA")
+- Text overlay area should be considered (space for "BSides SF 2026" and "March 21-22, 2026 • San Francisco, CA")
 - Color palette: BSides orange (#F97316), neon purple (#8B5CF6), electric accents
 - Exciting, community anticipation, grassroots energy for upcoming event
 - Warm SF community vibes with futuristic accents
@@ -378,7 +378,7 @@ async function processEvent(event) {
       // Remove PNG after successful conversion
       fs.unlinkSync(pngPath);
       console.log(`[${event.filename}] Cleaned up PNG`);
-    } catch (convertError) {
+    } catch (_convertError) {
       // Try ImageMagick as fallback
       try {
         execSync(`convert "${pngPath}" -quality 85 "${jpgPath}"`, { stdio: 'pipe' });

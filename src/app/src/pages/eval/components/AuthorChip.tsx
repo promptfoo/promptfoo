@@ -1,16 +1,11 @@
-import React, { type KeyboardEvent, useEffect, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
-import EditIcon from '@mui/icons-material/Edit';
-import EmailIcon from '@mui/icons-material/Email';
-import InfoIcon from '@mui/icons-material/Info';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Popover from '@mui/material/Popover';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Chip } from '@app/components/ui/chip';
+import { Input } from '@app/components/ui/input';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useToast } from '@app/hooks/useToast';
+import { Check, Pencil, X } from 'lucide-react';
 
 interface AuthorChipProps {
   author: string | null;
@@ -25,25 +20,29 @@ export const AuthorChip = ({
   currentUserEmail,
   editable,
 }: AuthorChipProps) => {
+  const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [email, setEmail] = useState(author || '');
-  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
-    if (!author && currentUserEmail) {
-      setEmail(currentUserEmail);
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
-  }, [author, currentUserEmail]);
+  }, [isEditing]);
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    setEmail(author || currentUserEmail || '');
-    setError(null);
+  const handleStartEdit = () => {
+    if (editable) {
+      setEmail(author || currentUserEmail || '');
+      setIsEditing(true);
+    }
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
+  const handleCancel = () => {
+    setEmail(author || '');
+    setIsEditing(false);
   };
 
   const handleSave = async () => {
@@ -51,101 +50,83 @@ export const AuthorChip = ({
       return;
     }
     setIsLoading(true);
-    setError(null);
     try {
       await onEditAuthor(email || '');
-      handleClose();
+      setIsEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      const message = err instanceof Error ? err.message : 'Failed to save';
+      showToast(message, 'error');
+      setEmail(author || '');
+      setIsEditing(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       handleSave();
+    } else if (event.key === 'Escape') {
+      handleCancel();
     }
   };
 
-  const open = Boolean(anchorEl);
-  const id = open ? 'author-popover' : undefined;
+  if (isEditing) {
+    return (
+      <div className="flex items-center h-8 border border-input rounded-md bg-white dark:bg-zinc-900 overflow-hidden">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground pl-3 shrink-0">
+          AUTHOR
+        </span>
+        <Input
+          ref={inputRef}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={isLoading}
+          className="h-auto py-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-xs min-w-[150px]"
+          placeholder="email@example.com"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isLoading}
+          className="p-1.5 hover:bg-muted/50 transition-colors text-emerald-600 dark:text-emerald-400"
+          aria-label="Save"
+        >
+          {isLoading ? <Spinner className="size-3.5" /> : <Check className="size-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={isLoading}
+          className="p-1.5 pr-2 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-destructive"
+          aria-label="Cancel"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <Tooltip
-        title={editable ? (author ? 'Click to edit author' : 'Click to set author') : 'Author'}
-      >
-        <Box
-          display="flex"
-          alignItems="center"
-          onClick={editable ? handleClick : undefined}
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            px: 1,
-            py: 0.5,
-            '&:hover': {
-              bgcolor: 'action.hover',
-            },
-            minHeight: 40,
-            cursor: editable ? 'pointer' : 'default',
-          }}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Chip
+          label="AUTHOR"
+          onClick={handleStartEdit}
+          disabled={!editable}
+          interactive={editable}
+          trailingIcon={
+            editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined
+          }
         >
-          <EmailIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-          <Typography variant="body2" sx={{ mr: 1 }}>
-            <strong>Author:</strong> {author || 'Unknown'}
-          </Typography>
-          {editable && (
-            <IconButton size="small" sx={{ ml: 'auto' }} disabled={isLoading}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-      </Tooltip>
-      <Popover
-        id={id}
-        open={open}
-        anchorEl={anchorEl}
-        onClose={handleClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'left',
-        }}
-      >
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-          <Box sx={{ display: 'flex', alignItems: 'flex-end', mb: 2 }}>
-            <TextField
-              label="Author Email"
-              variant="standard"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyPress={handleKeyPress}
-              error={!!error}
-              helperText={error}
-              disabled={isLoading}
-              sx={{ flexGrow: 1, mr: 2 }}
-            />
-            <Button onClick={handleSave} disabled={isLoading || !email}>
-              {isLoading ? <CircularProgress size={24} /> : 'Save'}
-            </Button>
-          </Box>
-          {!currentUserEmail && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
-              <Typography variant="caption">
-                {`Setting an email address will also set the default author for future evals.
-                It is changeable with \`promptfoo config set email <your-email@example.com>\``}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      </Popover>
-    </>
+          {author || 'Unknown'}
+        </Chip>
+      </TooltipTrigger>
+      <TooltipContent>
+        {editable ? (author ? 'Click to edit author' : 'Click to set author') : 'Author'}
+      </TooltipContent>
+    </Tooltip>
   );
 };

@@ -1,10 +1,9 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
+
 import type { ScanOptions } from '../ModelAudit.types';
 
-const theme = createTheme();
 describe('AdvancedOptionsDialog', () => {
   const mockOnClose = vi.fn();
   const mockOnOptionsChange = vi.fn();
@@ -22,14 +21,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('renders correctly when open', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     expect(screen.getByText('Advanced Scan Options')).toBeInTheDocument();
     expect(screen.getByLabelText('Add pattern')).toBeInTheDocument();
@@ -45,14 +42,12 @@ describe('AdvancedOptionsDialog', () => {
       strict: true,
     };
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={initialOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={initialOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     expect(screen.getByText('test-pattern')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1200')).toBeInTheDocument();
@@ -62,14 +57,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('adds a blacklist pattern', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     const input = screen.getByLabelText('Add pattern');
     fireEvent.change(input, { target: { value: 'new-pattern' } });
@@ -81,38 +74,29 @@ describe('AdvancedOptionsDialog', () => {
   it('removes a blacklist pattern', () => {
     const initialOptions = { ...defaultScanOptions, blacklist: ['pattern1', 'pattern2'] };
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={initialOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={initialOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     expect(screen.getByText('pattern1')).toBeInTheDocument();
-    // Find the Chip component containing 'pattern1' and trigger its delete
-    const pattern1Text = screen.getByText('pattern1');
-    const chipContainer = pattern1Text.closest('[role="button"]');
-    // Look for the delete icon within the chip (MUI uses a cancel/close icon)
-    const deleteIcon = chipContainer?.querySelector('svg');
-    if (deleteIcon) {
-      fireEvent.click(deleteIcon);
-    }
+    // Find the delete button for pattern1 using the aria-label
+    const deleteButton = screen.getByRole('button', { name: 'Remove pattern1' });
+    fireEvent.click(deleteButton);
     expect(screen.queryByText('pattern1')).not.toBeInTheDocument();
     expect(screen.getByText('pattern2')).toBeInTheDocument();
   });
 
   it('updates timeout value', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     const timeoutInput = screen.getByDisplayValue('3600');
     fireEvent.change(timeoutInput, { target: { value: '1800' } });
@@ -121,14 +105,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('updates maxSize value', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     const maxSizeInput = screen.getByPlaceholderText('e.g., 1GB, 500MB');
     fireEvent.change(maxSizeInput, { target: { value: '1GB' } });
@@ -137,14 +119,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('toggles strict mode', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     const strictModeSwitch = screen.getByRole('switch', { name: /Strict Mode/ });
     expect(strictModeSwitch).not.toBeChecked();
@@ -154,14 +134,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('calls onOptionsChange and onClose when Save Options is clicked', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Save Options' }));
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
@@ -177,14 +155,12 @@ describe('AdvancedOptionsDialog', () => {
 
   it('calls onClose but not onOptionsChange when Cancel is clicked', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={mockOnClose}
-          scanOptions={defaultScanOptions}
-          onOptionsChange={mockOnOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -196,14 +172,12 @@ describe('AdvancedOptionsDialog', () => {
     const user = (await import('@testing-library/user-event')).default.setup();
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={{ blacklist: [], timeout: 120 }}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ blacklist: [], timeout: 120 }}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const timeoutInput = screen.getByRole('spinbutton');
@@ -230,14 +204,12 @@ describe('AdvancedOptionsDialog', () => {
     const user = (await import('@testing-library/user-event')).default.setup();
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={{ blacklist: [], timeout: 120 }}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ blacklist: [], timeout: 120 }}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const timeoutInput = screen.getByRole('spinbutton');
@@ -258,14 +230,12 @@ describe('AdvancedOptionsDialog', () => {
     const invalidSize = 'ABC';
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={{ blacklist: [], timeout: 0 }}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ blacklist: [], timeout: 0 }}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const input = screen.getByPlaceholderText('e.g., 1GB, 500MB');
@@ -287,14 +257,12 @@ describe('AdvancedOptionsDialog', () => {
     const user = (await import('@testing-library/user-event')).default.setup();
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={{ blacklist: [], timeout: 3600 }}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ blacklist: [], timeout: 3600 }}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const timeoutInput = screen.getByRole('spinbutton');
@@ -322,14 +290,12 @@ describe('AdvancedOptionsDialog', () => {
     };
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={initialScanOptions}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={initialScanOptions}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const blacklistInput = screen.getByLabelText('Add pattern');
@@ -353,14 +319,12 @@ describe('AdvancedOptionsDialog', () => {
     };
 
     render(
-      <ThemeProvider theme={theme}>
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={onClose}
-          scanOptions={initialScanOptions}
-          onOptionsChange={onOptionsChange}
-        />
-      </ThemeProvider>,
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={onClose}
+        scanOptions={initialScanOptions}
+        onOptionsChange={onOptionsChange}
+      />,
     );
 
     const timeoutInput = screen.getByRole('spinbutton');

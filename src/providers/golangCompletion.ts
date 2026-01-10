@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+
 import { getCache, isCacheEnabled } from '../cache';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
@@ -84,7 +85,7 @@ export class GolangProvider implements ApiProvider {
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      return JSON.parse(cachedResult);
+      return { ...JSON.parse(cachedResult), cached: true };
     } else {
       if (context) {
         // These are not useful in Golang

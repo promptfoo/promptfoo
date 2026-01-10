@@ -1,9 +1,9 @@
 import { execFile } from 'child_process';
-import { readFile, stat as fsStat } from 'fs/promises';
+import { stat as fsStat, readFile } from 'fs/promises';
 
-import logger from '../../logger';
-import { parseScriptParts, getFileHashes } from '../../providers/scriptCompletion';
 import { getCache, isCacheEnabled } from '../../cache';
+import logger from '../../logger';
+import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
@@ -27,7 +27,10 @@ export const executablePromptFunction = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: {
+      basePath?: string;
+      timeout?: number;
+    };
   },
 ): Promise<string> => {
   invariant(context.provider?.id, 'provider.id is required');
