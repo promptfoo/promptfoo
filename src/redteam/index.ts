@@ -782,9 +782,9 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) => {
-      expandedPlugins.push({ id: p, numTests: plugin.numTests });
-    });
+    mapping.plugins.forEach((p: string) =>
+      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
+    );
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 
