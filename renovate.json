@@ -2,6 +2,7 @@
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
+  "rangeStrategy": "bump",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
