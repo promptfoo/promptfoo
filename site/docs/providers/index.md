@@ -43,7 +43,6 @@ providers:
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                   | `azureopenai:gpt-4o-custom-deployment-name`                                     |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models              | `cerebras:llama-4-scout-17b-16e-instruct`                                       |
-| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers                     | Compatible with OpenAI syntax                                                   |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                   | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                    |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                                | `cloudera:llama-2-13b-chat`                                                     |
 | [CometAPI](./cometapi.md)                           | 500+ AI models from multiple providers via unified API       | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                         |
