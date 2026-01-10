@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -121,6 +122,93 @@ export function sanitizeConfig(obj: any, depth = 0, parentKey = ''): any {
 }
 
 /**
+ * Renders a YAML-like config display with syntax highlighting.
+ * Keys are muted, values are emphasized, with proper indentation preserved.
+ */
+function StyledConfigContent({
+  displayId,
+  configYaml,
+}: {
+  displayId: string | null;
+  configYaml: string | null;
+}): ReactNode {
+  const lines: ReactNode[] = [];
+
+  // Add id line if present
+  if (displayId) {
+    lines.push(
+      <div key="id" className="flex">
+        <span className="text-slate-500 dark:text-slate-500">id: </span>
+        <span className="text-slate-700 dark:text-slate-300">{displayId}</span>
+      </div>,
+    );
+  }
+
+  // Parse and style YAML lines
+  if (configYaml) {
+    const yamlLines = configYaml.split('\n');
+    yamlLines.forEach((line, index) => {
+      if (!line.trim()) {
+        return;
+      }
+
+      // Find the colon that separates key from value
+      const colonIndex = line.indexOf(':');
+      if (colonIndex === -1) {
+        // No colon - just render as-is (shouldn't happen in valid YAML)
+        lines.push(
+          <div key={index} className="text-slate-700 dark:text-slate-300">
+            {line}
+          </div>,
+        );
+        return;
+      }
+
+      // Extract indentation, key, and value
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1] : '';
+      const keyPart = line.slice(indent.length, colonIndex);
+      const valuePart = line.slice(colonIndex + 1);
+
+      // Style based on value type
+      let valueElement: ReactNode;
+      const trimmedValue = valuePart.trim();
+
+      if (trimmedValue === '' || trimmedValue === '|' || trimmedValue === '>') {
+        // Empty value or YAML block indicator - just show colon
+        valueElement = null;
+      } else if (trimmedValue === 'true' || trimmedValue === 'false') {
+        // Boolean
+        valueElement = <span className="text-amber-600 dark:text-amber-400">{valuePart}</span>;
+      } else if (trimmedValue === '[REDACTED]') {
+        // Redacted secret
+        valueElement = (
+          <span className="text-red-500/70 dark:text-red-400/70 italic">{valuePart}</span>
+        );
+      } else if (/^-?\d+\.?\d*$/.test(trimmedValue)) {
+        // Number
+        valueElement = <span className="text-emerald-600 dark:text-emerald-400">{valuePart}</span>;
+      } else {
+        // String or other
+        valueElement = <span className="text-slate-700 dark:text-slate-300">{valuePart}</span>;
+      }
+
+      lines.push(
+        <div key={index} className="flex">
+          <span className="text-slate-500 dark:text-slate-500 whitespace-pre">
+            {indent}
+            {keyPart}:
+          </span>
+          {valueElement}
+        </div>,
+      );
+    });
+  }
+
+  return <>{lines}</>;
+}
+
+/**
  * Displays provider name with full config available on hover.
  * Minimal design: just the name, details in tooltip.
  */
@@ -156,8 +244,8 @@ export function ProviderDisplay({
     providerConfig.id !== displayedText;
   const displayId = showId ? providerConfig.id : null;
 
-  // Tooltip: show id (if label used) + sanitized config
-  const tooltipContent = useMemo(() => {
+  // Tooltip: show id (if label used) + sanitized config as YAML
+  const tooltipData = useMemo(() => {
     if (!providerConfig) {
       return null;
     }
@@ -177,26 +265,25 @@ export function ProviderDisplay({
       // Sanitize the config (redact secrets)
       const sanitizedConfig = sanitizeConfig(restConfig);
 
-      // Build tooltip parts
-      const parts: string[] = [];
-
-      // Show id first if label is being used
-      if (displayId) {
-        parts.push(`id: ${displayId}`);
-      }
-
-      // Show sanitized config
+      // Generate YAML for config
+      let configYaml: string | null = null;
       if (sanitizedConfig && Object.keys(sanitizedConfig).length > 0) {
-        const configYaml = yaml.dump(sanitizedConfig, {
-          indent: 2,
-          lineWidth: 80,
-          noRefs: true,
-          sortKeys: true,
-        });
-        parts.push(configYaml.trim());
+        configYaml = yaml
+          .dump(sanitizedConfig, {
+            indent: 2,
+            lineWidth: 80,
+            noRefs: true,
+            sortKeys: true,
+          })
+          .trim();
       }
 
-      return parts.length > 0 ? parts.join('\n') : null;
+      // Return null if nothing to show
+      if (!displayId && !configYaml) {
+        return null;
+      }
+
+      return { displayId, configYaml };
     } catch {
       return null;
     }
@@ -217,7 +304,7 @@ export function ProviderDisplay({
   );
 
   // Only wrap in Tooltip if there's content to display
-  if (!tooltipContent) {
+  if (!tooltipData) {
     return <span className="cursor-default">{providerLabel}</span>;
   }
 
@@ -229,23 +316,27 @@ export function ProviderDisplay({
       <TooltipContent
         side="bottom"
         align="start"
+        sideOffset={6}
         className={cn(
-          'max-w-[400px] p-3',
-          'bg-gray-100 dark:bg-gray-900',
-          'text-gray-900 dark:text-gray-100',
-          'border border-border',
+          'max-w-[420px] p-0 overflow-hidden',
+          'bg-white dark:bg-zinc-900',
+          'rounded-lg shadow-lg',
+          'border border-gray-200/80 dark:border-zinc-700/80',
         )}
       >
-        <pre
+        <div
           className={cn(
-            'm-0 text-[11px] leading-relaxed',
-            'max-h-[300px] overflow-auto',
-            'whitespace-pre-wrap break-words',
+            'px-3 py-2.5',
+            'text-xs leading-relaxed',
+            'max-h-[320px] overflow-auto',
             'font-mono',
           )}
         >
-          {tooltipContent}
-        </pre>
+          <StyledConfigContent
+            displayId={tooltipData.displayId}
+            configYaml={tooltipData.configYaml}
+          />
+        </div>
       </TooltipContent>
     </Tooltip>
   );
