@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
-import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
@@ -285,7 +284,6 @@ try {
 }
 
 if (isMain) {
-  checkNodeVersion();
   let mainError: unknown;
   try {
     await main();
