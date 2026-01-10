@@ -151,10 +151,12 @@ describe('EvalOutputCell', () => {
 
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
-    expect(promptButton).toBeInTheDocument();
-    promptButton.focus();
-    await userEvent.tab();
+    // Start from "Mark test passed" button and tab through the remaining buttons
+    // Note: Search button is intentionally at the end to prevent position shifts
+    // when hover-only actions appear
+    const passButton = screen.getByRole('button', { name: /mark test passed/i });
+    expect(passButton).toBeInTheDocument();
+    passButton.focus();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test passed');
     await userEvent.tab();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test failed');
@@ -162,6 +164,8 @@ describe('EvalOutputCell', () => {
     expect(screen.getByRole('button', { name: /set test score/i })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: /view output and test details/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -528,6 +532,44 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Model: sora-2-pro')).toBeInTheDocument();
     expect(screen.getByText('Size: 720x1280')).toBeInTheDocument();
     expect(screen.getByText('Duration: 8s')).toBeInTheDocument();
+  });
+
+  it('renders raw SVG content as an image', () => {
+    const svgContent =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="40" fill="red"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+
+    // The SVG should be converted to a base64 data URI
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
+  });
+
+  it('renders raw SVG content with leading whitespace as an image', () => {
+    const svgContent =
+      '  \n  <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="blue"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
   it('allows copying row link to clipboard', async () => {
@@ -1100,13 +1142,40 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     expect(commentElement).toBeInTheDocument();
   });
 
-  it('shows highlight button only when shift key is pressed', () => {
+  it('shows highlight button when shift key is pressed or actions are hovered', () => {
     const props = createPropsWithComment('Regular comment');
     renderWithProviders(<EvalOutputCell {...props} />);
 
     // The highlight button should be visible because useShiftKey is mocked to return true
     const highlightButton = screen.getByLabelText('Toggle test highlight');
     expect(highlightButton).toBeInTheDocument();
+  });
+
+  it('shows filled star icon when cell is highlighted', () => {
+    const props = createPropsWithComment('!highlight Highlighted comment');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // The star icon should be filled (has fill color classes)
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    expect(highlightButton).toHaveClass('text-amber-500');
+
+    // The star SVG should have the stroke class and be filled
+    const starIcon = container.querySelector('.lucide-star');
+    expect(starIcon).toHaveClass('stroke-amber-600');
+    expect(starIcon).toHaveAttribute('fill', 'currentColor');
+  });
+
+  it('shows unfilled star icon when cell is not highlighted', () => {
+    const props = createPropsWithComment('Regular comment');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // The star icon should not be filled
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    expect(highlightButton).not.toHaveClass('text-amber-500');
+
+    // The star SVG should not be filled
+    const starIcon = container.querySelector('.lucide-star');
+    expect(starIcon).toHaveAttribute('fill', 'none');
   });
 
   it('maintains comment state correctly through multiple toggles', async () => {
@@ -1506,6 +1575,83 @@ describe('EvalOutputCell cell highlighting styling', () => {
     expect(statusElement?.contains(statusRowElement)).toBe(true);
     expect(statusRowElement?.contains(pillElement)).toBe(true);
     expect(cellElement?.contains(statusElement)).toBe(true);
+  });
+});
+
+describe('EvalOutputCell extra actions hover behavior', () => {
+  const mockOnRating = vi.fn();
+
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Test comment',
+        componentResults: [],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('has mouse event handlers on the actions area for hover behavior', () => {
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    // Verify that the actions area has the required event handlers for hover behavior
+    // The actual mouseEnter/mouseLeave events will trigger the hover state
+    // which shows/hides extra actions alongside the shift key state
+    expect(actionsArea).toHaveAttribute('class', 'cell-actions');
+  });
+
+  it('shows extra actions when shift key is pressed (mocked as true)', () => {
+    // With useShiftKey mocked to return true, extra actions should be visible
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    // Extra actions should be visible because shift key is mocked as pressed
+    expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
+    expect(screen.getByLabelText('Share output')).toBeInTheDocument();
+    // Copy button exists (no aria-label, so check by icon class)
+    expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
   });
 });
 

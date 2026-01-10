@@ -56,10 +56,10 @@ describe('FilterChips', () => {
     return render(<TooltipProvider>{ui}</TooltipProvider>);
   };
 
-  it('renders the "Filter by metric" label', () => {
+  it('renders the "Filter by metric:" label', () => {
     renderWithTooltip(<FilterChips />);
 
-    expect(screen.getByText('Filter by metric')).toBeInTheDocument();
+    expect(screen.getByText('Filter by metric:')).toBeInTheDocument();
   });
 
   it('renders metric chips for redteam evals', () => {

@@ -16,6 +16,7 @@ table.results-table,
 .divTable {
   min-width: 100%;
   background-color: #fff;
+  table-layout: fixed;
 }
 
 [data-theme='dark'] table.results-table,
@@ -504,7 +505,7 @@ table.results-table,
 
 .results-table-sticky {
   position: sticky;
-  top: 3.5rem; /* Account for navigation height (h-14) */
+  top: var(--nav-height); /* Navigation height defined in index.css */
   z-index: 10;
   transition: transform 0.2s ease-out;
   background: #fff;

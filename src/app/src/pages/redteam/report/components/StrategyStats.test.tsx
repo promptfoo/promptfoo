@@ -5,24 +5,15 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyStats from './StrategyStats';
 import type { PolicyObject, RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import type { EvaluateResult } from '@promptfoo/types';
+
+import type { TestWithMetadata } from './shared';
 
 // No MUI theme mock needed - component uses Tailwind CSS
 
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
   useCustomPoliciesMap: vi.fn(),
 }));
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
 
 describe('StrategyStats', () => {
   let strategyStats: Record<string, { pass: number; total: number; failCount: number }>;
