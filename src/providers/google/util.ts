@@ -869,7 +869,7 @@ export function validateFunctionCall(
         .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
         .map((obj) => obj.functionCall);
     } else {
-      throw new Error();
+      throw new Error('Unrecognized function call format');
     }
   } catch {
     throw new Error(

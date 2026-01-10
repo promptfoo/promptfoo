@@ -48,8 +48,8 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
-vi.mock('react-router-dom', () => ({
-  ...vi.importActual('react-router-dom'),
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual('react-router-dom')),
   useNavigate: vi.fn(() => vi.fn()),
 }));
 

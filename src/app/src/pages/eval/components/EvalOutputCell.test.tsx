@@ -151,10 +151,12 @@ describe('EvalOutputCell', () => {
 
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
-    expect(promptButton).toBeInTheDocument();
-    promptButton.focus();
-    await userEvent.tab();
+    // Start from "Mark test passed" button and tab through the remaining buttons
+    // Note: Search button is intentionally at the end to prevent position shifts
+    // when hover-only actions appear
+    const passButton = screen.getByRole('button', { name: /mark test passed/i });
+    expect(passButton).toBeInTheDocument();
+    passButton.focus();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test passed');
     await userEvent.tab();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test failed');
@@ -162,6 +164,8 @@ describe('EvalOutputCell', () => {
     expect(screen.getByRole('button', { name: /set test score/i })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: /view output and test details/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -528,6 +532,44 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Model: sora-2-pro')).toBeInTheDocument();
     expect(screen.getByText('Size: 720x1280')).toBeInTheDocument();
     expect(screen.getByText('Duration: 8s')).toBeInTheDocument();
+  });
+
+  it('renders raw SVG content as an image', () => {
+    const svgContent =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="40" fill="red"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+
+    // The SVG should be converted to a base64 data URI
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
+  });
+
+  it('renders raw SVG content with leading whitespace as an image', () => {
+    const svgContent =
+      '  \n  <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="blue"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
   it('allows copying row link to clipboard', async () => {

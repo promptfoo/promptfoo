@@ -665,8 +665,10 @@ describe('GoogleLiveProvider', () => {
       json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
 
-    // Clear any call history from previous tests to ensure accurate count
-    mockFetchWithProxy.mockClear();
+    // Record call count before API call to handle async pollution from other tests
+    // Using difference-based counting instead of mockClear() to avoid race conditions
+    // with setImmediate callbacks from previous tests
+    const callCountBefore = mockFetchWithProxy.mock.calls.length;
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
@@ -686,16 +688,18 @@ describe('GoogleLiveProvider', () => {
       metadata: {},
     });
 
-    // Check the specific calls made to the stateful API
-    // Note: Function call order may vary due to async processing, but all calls should be made
-    const getCallUrls = mockFetchWithProxy.mock.calls.map((call) => call[0]) as string[];
+    // Check the specific calls made to the stateful API during this test
+    // Using slice to only check calls made during this test, avoiding pollution from
+    // async callbacks of previous tests that may complete during this test
+    const testCalls = mockFetchWithProxy.mock.calls.slice(callCountBefore);
+    const getCallUrls = testCalls.map((call) => call[0]) as string[];
 
     // Verify minimum number of calls (5 function calls + 1 get_state)
     // Note: Due to async timing variations (especially on Node 24.x), there may be extra calls
     expect(getCallUrls.length).toBeGreaterThanOrEqual(6);
 
-    // Verify get_state was called (happens in finalizeResponse)
-    expect(getCallUrls).toContain('http://127.0.0.1:5000/get_state');
+    // Verify get_state was called last (this is deterministic - happens in finalizeResponse)
+    expect(getCallUrls[getCallUrls.length - 1]).toBe('http://127.0.0.1:5000/get_state');
 
     // Verify all expected function calls were made (filter to just function call URLs)
     const functionCallUrls = getCallUrls.filter((url) => url !== 'http://127.0.0.1:5000/get_state');
