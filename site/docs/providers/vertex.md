@@ -317,7 +317,7 @@ API key and OAuth configurations are mutually exclusive. Choose one authenticati
 - **API key**: For express mode (simplified authentication)
 - **OAuth/ADC**: With `projectId`/`region` for full Vertex AI features
 
-If you need both (rare), set `strictMutualExclusivity: false` to allow it with a warning.
+By default, setting both will emit a warning. Set `strictMutualExclusivity: true` to enforce this as an error (matches Google SDK behavior).
 :::
 
 #### Advanced Auth Options

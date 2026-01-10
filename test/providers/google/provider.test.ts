@@ -159,8 +159,6 @@ describe('GoogleProvider', () => {
           vertexai: false,
           projectId: 'my-project',
           apiKey: 'test-key',
-          // Disable mutual exclusivity check for this edge case test
-          strictMutualExclusivity: false,
         },
       });
 

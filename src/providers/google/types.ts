@@ -369,14 +369,14 @@ export interface GoogleProviderConfig extends CompletionOptions {
   /**
    * Control mutual exclusivity validation behavior.
    *
-   * When true (default): Throws an error if both apiKey AND projectId/region
+   * When true: Throws an error if both apiKey AND projectId/region
    * are explicitly set. This aligns with Google's official SDK behavior.
    *
-   * When false: Only warns about conflicts for backward compatibility.
+   * When false (default): Only warns about conflicts for backward compatibility.
    *
    * Note: This only applies to explicit config values, not environment variables.
    *
-   * @default true (SDK aligned)
+   * @default false
    */
   strictMutualExclusivity?: boolean;
 }

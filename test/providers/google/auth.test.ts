@@ -360,20 +360,30 @@ describe('GoogleAuthManager', () => {
     });
 
     describe('mutual exclusivity (strictMutualExclusivity)', () => {
-      it('should throw error by default when both apiKey and projectId are set', () => {
+      it('should warn by default when both apiKey and projectId are set', () => {
         vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
+        // Should not throw by default (permissive mode)
         expect(() => {
           GoogleAuthManager.validateAndWarn({ apiKey: 'key', projectId: 'project' });
-        }).toThrow('Project/location and API key are mutually exclusive');
+        }).not.toThrow();
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Project/location and API key are mutually exclusive'),
+        );
       });
 
-      it('should throw error by default when both apiKey and region are set', () => {
+      it('should warn by default when both apiKey and region are set', () => {
         vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
+        // Should not throw by default (permissive mode)
         expect(() => {
           GoogleAuthManager.validateAndWarn({ apiKey: 'key', region: 'us-central1' });
-        }).toThrow('Project/location and API key are mutually exclusive');
+        }).not.toThrow();
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Project/location and API key are mutually exclusive'),
+        );
       });
 
       it('should throw error when strictMutualExclusivity is true', () => {

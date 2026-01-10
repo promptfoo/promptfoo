@@ -41,9 +41,9 @@ export interface GoogleAuthConfig {
   scopes?: string | string[];
   /**
    * Control mutual exclusivity validation behavior.
-   * When true (default): Throws an error if both apiKey AND projectId/region are explicitly set.
-   * When false: Only warns about conflicts for backward compatibility.
-   * @default true
+   * When true: Throws an error if both apiKey AND projectId/region are explicitly set.
+   * When false (default): Only warns about conflicts for backward compatibility.
+   * @default false
    */
   strictMutualExclusivity?: boolean;
 }
@@ -167,8 +167,8 @@ export class GoogleAuthManager {
   static validateAndWarn(config: GoogleAuthConfig, env?: EnvOverrides): void {
     const { apiKey, credentials, projectId, region, vertexai, strictMutualExclusivity } = config;
 
-    // Default to strict mode (SDK aligned)
-    const isStrict = strictMutualExclusivity !== false;
+    // Default to permissive mode (backward compatible)
+    const isStrict = strictMutualExclusivity === true;
 
     // Check for Python SDK environment variables
     const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
@@ -183,7 +183,7 @@ export class GoogleAuthManager {
       if (isStrict) {
         throw new Error(message);
       } else {
-        logger.warn(message + ' Set strictMutualExclusivity: true to enforce this as an error.');
+        logger.warn(message);
       }
     }
 
