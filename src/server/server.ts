@@ -323,11 +323,10 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(() => {
-    // Try to get the specific eval that was updated from the signal file
-    const signalEvalId = readSignalEvalId();
-    const evalPromise = signalEvalId ? Eval.findById(signalEvalId) : Eval.latest();
-
-    void evalPromise.then(async (updatedEval) => {
+    const handleSignalUpdate = async () => {
+      // Try to get the specific eval that was updated from the signal file
+      const signalEvalId = readSignalEvalId();
+      const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
       const results = await updatedEval?.getResultsCount();
 
       if (results && results > 0) {
@@ -337,7 +336,9 @@ export async function startServer(
         io.emit('update', updatedEval);
         allPrompts = null;
       }
-    });
+    };
+
+    void handleSignalUpdate();
   });
 
   io.on('connection', async (socket) => {
