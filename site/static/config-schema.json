@@ -21,7 +21,6 @@
             {
               "type": "string"
             },
-            {},
             {
               "type": "array",
               "items": {
@@ -29,7 +28,6 @@
                   {
                     "type": "string"
                   },
-                  {},
                   {
                     "type": "object",
                     "propertyNames": {
@@ -1398,8 +1396,7 @@
                                           {
                                             "type": "string",
                                             "enum": ["select-best", "human", "max-score"]
-                                          },
-                                          {}
+                                          }
                                         ]
                                       },
                                       "value": {},
@@ -1586,8 +1583,7 @@
                                     {
                                       "type": "string",
                                       "enum": ["select-best", "human", "max-score"]
-                                    },
-                                    {}
+                                    }
                                   ]
                                 },
                                 "value": {},
@@ -1623,13 +1619,8 @@
                         }
                       },
                       "assertScoringFunction": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
-                          },
-                          {}
-                        ]
+                        "type": "string",
+                        "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
                       },
                       "options": {
                         "allOf": [
@@ -1700,19 +1691,13 @@
                                   {
                                     "type": "string"
                                   },
-                                  {},
                                   {
                                     "type": "object",
                                     "propertyNames": {
                                       "type": "string"
                                     },
                                     "additionalProperties": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {}
-                                      ]
+                                      "type": "string"
                                     }
                                   }
                                 ]
@@ -1827,8 +1812,7 @@
                                 "type": "string"
                               },
                               "additionalProperties": {}
-                            },
-                            {}
+                            }
                           ]
                         }
                       }
@@ -1883,8 +1867,7 @@
                           "type": "string"
                         },
                         "additionalProperties": {}
-                      },
-                      {}
+                      }
                     ]
                   }
                 }
@@ -2473,8 +2456,7 @@
                                             {
                                               "type": "string",
                                               "enum": ["select-best", "human", "max-score"]
-                                            },
-                                            {}
+                                            }
                                           ]
                                         },
                                         "value": {},
@@ -2661,8 +2643,7 @@
                                       {
                                         "type": "string",
                                         "enum": ["select-best", "human", "max-score"]
-                                      },
-                                      {}
+                                      }
                                     ]
                                   },
                                   "value": {},
@@ -2698,13 +2679,8 @@
                           }
                         },
                         "assertScoringFunction": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
-                            },
-                            {}
-                          ]
+                          "type": "string",
+                          "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
                         },
                         "options": {
                           "allOf": [
@@ -2775,19 +2751,13 @@
                                     {
                                       "type": "string"
                                     },
-                                    {},
                                     {
                                       "type": "object",
                                       "propertyNames": {
                                         "type": "string"
                                       },
                                       "additionalProperties": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {}
-                                        ]
+                                        "type": "string"
                                       }
                                     }
                                   ]
@@ -3425,8 +3395,7 @@
                                             {
                                               "type": "string",
                                               "enum": ["select-best", "human", "max-score"]
-                                            },
-                                            {}
+                                            }
                                           ]
                                         },
                                         "value": {},
@@ -3613,8 +3582,7 @@
                                       {
                                         "type": "string",
                                         "enum": ["select-best", "human", "max-score"]
-                                      },
-                                      {}
+                                      }
                                     ]
                                   },
                                   "value": {},
@@ -3650,13 +3618,8 @@
                           }
                         },
                         "assertScoringFunction": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
-                            },
-                            {}
-                          ]
+                          "type": "string",
+                          "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
                         },
                         "options": {
                           "allOf": [
@@ -3727,19 +3690,13 @@
                                     {
                                       "type": "string"
                                     },
-                                    {},
                                     {
                                       "type": "object",
                                       "propertyNames": {
                                         "type": "string"
                                       },
                                       "additionalProperties": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {}
-                                        ]
+                                        "type": "string"
                                       }
                                     }
                                   ]
@@ -4384,8 +4341,7 @@
                                     {
                                       "type": "string",
                                       "enum": ["select-best", "human", "max-score"]
-                                    },
-                                    {}
+                                    }
                                   ]
                                 },
                                 "value": {},
@@ -4572,8 +4528,7 @@
                               {
                                 "type": "string",
                                 "enum": ["select-best", "human", "max-score"]
-                              },
-                              {}
+                              }
                             ]
                           },
                           "value": {},
@@ -4609,13 +4564,8 @@
                   }
                 },
                 "assertScoringFunction": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
-                    },
-                    {}
-                  ]
+                  "type": "string",
+                  "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
                 },
                 "options": {
                   "allOf": [
@@ -4686,19 +4636,13 @@
                             {
                               "type": "string"
                             },
-                            {},
                             {
                               "type": "object",
                               "propertyNames": {
                                 "type": "string"
                               },
                               "additionalProperties": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {}
-                                ]
+                                "type": "string"
                               }
                             }
                           ]
@@ -5171,12 +5115,7 @@
                 "type": "string"
               },
               "value": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {}
-                ]
+                "type": "string"
               }
             },
             "required": ["name", "value"],
@@ -6332,12 +6271,16 @@
             },
             "tracing": {
               "description": "Tracing defaults applied to all strategies unless overridden",
-              "$ref": "#/$defs/__schema0"
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
             }
           },
           "required": ["plugins", "strategies"],
           "additionalProperties": false,
-          "$defs": {
+          "definitions": {
             "__schema0": {
               "type": "object",
               "properties": {
@@ -6388,7 +6331,11 @@
                     "type": "string"
                   },
                   "additionalProperties": {
-                    "$ref": "#/$defs/__schema0"
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/__schema0"
+                      }
+                    ]
                   }
                 }
               },
@@ -6698,7 +6645,6 @@
             {
               "type": "string"
             },
-            {},
             {
               "type": "array",
               "items": {
@@ -6706,7 +6652,6 @@
                   {
                     "type": "string"
                   },
-                  {},
                   {
                     "type": "object",
                     "propertyNames": {
