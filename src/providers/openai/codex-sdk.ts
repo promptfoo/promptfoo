@@ -546,8 +546,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               logger.warn('Codex item.started event missing item', { event });
               break;
             }
-            // Generate fallback ID if missing (some SDK versions may not provide IDs)
-            const itemId = item.id ? String(item.id) : crypto.randomUUID();
+            // Skip items without IDs - we can't correlate them with item.completed
+            // They'll be handled retroactively when item.completed arrives
+            if (!item.id) {
+              logger.debug('Codex item.started without id, will create span at completion', {
+                type: item.type,
+              });
+              break;
+            }
+            // Coerce id to string for consistent Map keys
+            const itemId = String(item.id);
             // Create a child span for this item
             const spanName = this.getSpanNameForItem(item);
             const span = tracer.startSpan(spanName, {
@@ -570,7 +578,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               logger.warn('Codex item.completed event missing item', { event });
               break;
             }
-            // Generate fallback ID if missing (some SDK versions may not provide IDs)
+            // Use item.id for correlation with item.started, or generate fallback for tracing
+            // Items without IDs get retroactive spans (item.started skips them)
             const itemId = item.id ? String(item.id) : crypto.randomUUID();
             items.push(item);
 
@@ -1052,6 +1061,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Use local instance for deep_tracing, otherwise shared cached instance
     const activeInstance = useLocalInstance ? localInstance : this.codexInstance;
 
+    // Guard against undefined instance (shouldn't happen, but defensive coding)
+    if (!activeInstance) {
+      throw new Error('Failed to create Codex instance - SDK module may have failed to load');
+    }
+
     // Get or create thread (pass instance to avoid using stale this.codexInstance)
     const cacheKey = this.generateCacheKey(config, prompt);
     const thread = await this.getOrCreateThread(config, cacheKey, activeInstance);
@@ -1107,17 +1121,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         raw,
         sessionId: thread.id || 'unknown',
       };
-    } catch (error: any) {
-      const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
+    } catch (error: unknown) {
+      const isAbort =
+        (error instanceof Error && error.name === 'AbortError') ||
+        callOptions?.abortSignal?.aborted;
 
       if (isAbort) {
         logger.warn('OpenAI Codex SDK call aborted');
         return { error: 'OpenAI Codex SDK call aborted' };
       }
 
-      logger.error('Error calling OpenAI Codex SDK', { error: error.message });
+      // Safely extract error message - error may not be an Error object
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
       return {
-        error: `Error calling OpenAI Codex SDK: ${error.message}`,
+        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
       };
     } finally {
       // Clean up ephemeral threads (only for non-deep-tracing mode)
