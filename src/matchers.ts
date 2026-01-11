@@ -35,6 +35,7 @@ import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { EvalOrchestrator } from './util/orchestration';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -100,6 +101,9 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
+ *
+ * Uses the EvalOrchestrator for per-endpoint concurrency control, ensuring
+ * grading/assertion API calls are throttled appropriately alongside test execution.
  */
 export function callProviderWithContext(
   provider: ApiProvider,
@@ -108,14 +112,17 @@ export function callProviderWithContext(
   vars: Record<string, string | object>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
-  return provider.callApi(prompt, {
-    ...context,
-    prompt: {
-      raw: prompt,
-      label,
-    },
-    vars,
-  });
+  // Use orchestrator for per-endpoint concurrency control on grading calls
+  return EvalOrchestrator.getInstance().execute(provider.id(), async () =>
+    provider.callApi(prompt, {
+      ...context,
+      prompt: {
+        raw: prompt,
+        label,
+      },
+      vars,
+    }),
+  );
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {

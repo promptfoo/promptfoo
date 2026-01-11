@@ -52,6 +52,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { EvalOrchestrator } from './util/orchestration';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -417,10 +418,13 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
+      // Use orchestrator for per-endpoint concurrency control
+      response = await EvalOrchestrator.getInstance().execute(activeProvider.id(), async () =>
+        activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        ),
       );
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
@@ -2165,9 +2169,14 @@ class Evaluator {
       initializeOtel(otelConfig);
     }
 
+    // Initialize the evaluation orchestrator for per-endpoint concurrency control
+    const orchestrator = EvalOrchestrator.getInstance();
+    orchestrator.initialize();
+
     try {
       return await this._runEvaluation();
     } finally {
+      orchestrator.cleanup();
       // Flush and shutdown OTEL SDK
       if (tracingEnabled) {
         logger.debug('[Evaluator] Flushing OTEL spans...');
