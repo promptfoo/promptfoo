@@ -467,7 +467,28 @@ providers:
           additionalProperties: false
 ```
 
-Load schemas from files with `schema: file://path/to/schema.json`.
+You can also load the entire `output_format` from an external file:
+
+```yaml
+config:
+  output_format: file://./schemas/analysis-format.json
+```
+
+Nested file references are supported for the schema:
+
+```json title="analysis-format.json"
+{
+  "type": "json_schema",
+  "schema": "file://./schemas/analysis-schema.json"
+}
+```
+
+Variable rendering is supported in file paths:
+
+```yaml
+config:
+  output_format: file://./schemas/{{ schema_name }}.json
+```
 
 #### Strict Tool Use
 

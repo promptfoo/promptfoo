@@ -8,6 +8,12 @@ import type { ApiProvider } from '../types/index';
  */
 export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 
+/**
+ * Extended timeout for long-running models (deep research, gpt-5-pro, etc.) in milliseconds.
+ * These models can take significantly longer to respond due to their complex reasoning.
+ */
+export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
+
 interface ModelCost {
   input: number;
   output: number;

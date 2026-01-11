@@ -432,6 +432,15 @@ providers:
             additionalProperties: false
 ```
 
+You can also load schemas from external files:
+
+```yaml
+config:
+  response_format: file://./schemas/analysis-schema.json
+```
+
+Nested file references and variable rendering are supported (see [OpenAI documentation](/docs/providers/openai#external-file-references) for details).
+
 ### Vision Support
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:

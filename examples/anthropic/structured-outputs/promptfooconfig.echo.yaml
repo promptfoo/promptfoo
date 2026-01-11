@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test file to verify external file loading with echo provider (no API key needed)
+description: External output_format file loading test (echo)
+
+prompts:
+  - 'Extract customer info from: {{email}}'
+
+providers:
+  # Echo provider to test that file loading works
+  - id: echo
+    label: echo-external-file
+    config:
+      output_format: file://output_format.json
+
+  - id: echo
+    label: echo-nested-file
+    config:
+      output_format: file://nested_format.json
+
+tests:
+  - vars:
+      email: 'Email from Sarah Johnson about enterprise upgrade'
+    assert:
+      - type: contains
+        value: 'Sarah'
