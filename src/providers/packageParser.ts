@@ -1,9 +1,6 @@
 import path from 'path';
 
-import chalk from 'chalk';
-import dedent from 'dedent';
 import { importModule, resolvePackageEntryPoint } from '../esm';
-import logger from '../logger';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 
@@ -39,10 +36,10 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     const entity = getValue(module, entityName ?? 'default');
 
     if (!entity) {
-      logger.error(dedent`
-        Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
-      `);
-      process.exit(1);
+      throw new Error(
+        `Could not find entity: ${entityName} in module: ${filePath}. ` +
+          `Make sure the entity is exported from the package.`,
+      );
     }
 
     return entity;
