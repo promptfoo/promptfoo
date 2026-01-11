@@ -188,16 +188,19 @@ export function ProviderDisplay({
       // Filter the config (remove non-useful fields like callApi, transform, env)
       const filteredConfig = filterConfigForDisplay(restConfig);
 
-      // Generate YAML for config
+      // Generate YAML for config - wrap in config: to match actual YAML structure
       let configYaml: string | null = null;
       if (filteredConfig && Object.keys(filteredConfig).length > 0) {
         configYaml = yaml
-          .dump(filteredConfig, {
-            indent: 2,
-            lineWidth: 80,
-            noRefs: true,
-            sortKeys: true,
-          })
+          .dump(
+            { config: filteredConfig },
+            {
+              indent: 2,
+              lineWidth: 80,
+              noRefs: true,
+              sortKeys: true,
+            },
+          )
           .trim();
       }
 

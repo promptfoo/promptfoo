@@ -262,6 +262,8 @@ describe('ProviderDisplay', () => {
       // Wait for Radix tooltip to appear
       await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
       const tooltip = document.querySelector('[role="tooltip"]');
+      // Config should be wrapped in config: to match YAML structure
+      expect(tooltip?.textContent).toContain('config:');
       expect(tooltip?.textContent).toContain('temperature');
       expect(tooltip?.textContent).toContain('0.7');
     });
