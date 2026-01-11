@@ -762,7 +762,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Check cache first
     const cache = await getCache();
-    const cacheKey = `openai:stream:${JSON.stringify(body)}`;
+    // Include provider ID and API URL in cache key to prevent collisions between
+    // different providers (e.g., OpenAI vs QuiverAI) with the same request body
+    const cacheKey = `openai:stream:${this.id()}:${this.getApiUrl()}:${JSON.stringify(body)}`;
 
     if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
@@ -770,6 +772,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logger.debug(`Returning cached streaming response for ${this.modelName}`);
         try {
           const parsed = JSON.parse(cachedResponse);
+          // Update tokenUsage.cached to reflect that all tokens came from cache
+          if (parsed.tokenUsage) {
+            parsed.tokenUsage.cached = parsed.tokenUsage.total || 0;
+          }
           return { ...parsed, cached: true };
         } catch {
           logger.warn('Failed to parse cached streaming response');
@@ -821,7 +827,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       let content = '';
       let finishReason: string | null = null;
       let usage:
-        | { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+        | {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+            audio_prompt_tokens?: number;
+            audio_completion_tokens?: number;
+          }
         | undefined;
       let functionCall: { name: string; arguments: string } | null = null;
       const toolCalls: Array<{
@@ -966,6 +978,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           config,
           usage?.prompt_tokens,
           usage?.completion_tokens,
+          usage?.audio_prompt_tokens,
+          usage?.audio_completion_tokens,
         ),
         guardrails: { flagged: contentFiltered },
       };

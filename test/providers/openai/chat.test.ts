@@ -79,6 +79,7 @@ describe('OpenAI Provider', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     enableCache();
     if (originalOpenAiApiKey) {
       process.env.OPENAI_API_KEY = originalOpenAiApiKey;
@@ -2661,6 +2662,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(result.output).toBe('Cached response');
       expect(result.cached).toBe(true);
+      // tokenUsage.cached should equal total to indicate all tokens came from cache
+      expect(result.tokenUsage?.cached).toBe(15);
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 

@@ -19,10 +19,10 @@ export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
     super(modelName, {
       ...providerOptions,
       config: {
+        ...config,
         // Enable streaming by default to prevent 504 gateway timeouts
         // Users can override by explicitly setting stream: false
         stream: config.stream ?? true,
-        ...config,
         apiBaseUrl: config.apiBaseUrl || QUIVERAI_API_BASE_URL,
         apiKeyEnvar: 'QUIVERAI_API_KEY',
       },
