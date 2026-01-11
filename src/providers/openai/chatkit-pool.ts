@@ -92,7 +92,6 @@ export class ChatKitBrowserPool {
     // Note: SIGINT/SIGTERM handlers intentionally omitted.
     // Cleanup happens via 'exit' handler above. Direct process.exit() calls
     // bypass shutdownGracefully() in main.ts, causing WAL corruption issues.
-    // See: docs/plans/sigint-graceful-shutdown.md
   }
 
   /**
