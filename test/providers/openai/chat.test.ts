@@ -2579,5 +2579,183 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         ],
       });
     });
+
+    it('should skip invalid JSON chunks in SSE stream', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: {invalid json chunk}\n\n',
+        'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      // Should skip the invalid chunk and concatenate valid content
+      expect(result.output).toBe('Hello world');
+    });
+
+    it('should handle invalid JSON output with response_format json_schema', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"not valid json {"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          stream: true,
+          response_format: { type: 'json_schema' },
+        },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      // Should return raw string when JSON parsing fails
+      expect(result.output).toBe('not valid json {');
+    });
+
+    it('should handle timeout errors during streaming', async () => {
+      const timeoutError = new Error('Request timed out');
+      timeoutError.name = 'TimeoutError';
+      mockFetchWithProxy.mockRejectedValue(timeoutError);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toContain('timed out');
+    });
+
+    it('should return cached streaming response when available', async () => {
+      const cachedResponse = {
+        output: 'Cached response',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, cached: 0 },
+      };
+
+      // Enable cache for this test
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockResolvedValue(mockCache as any);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Cached response');
+      expect(result.cached).toBe(true);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should handle corrupted cache data gracefully', async () => {
+      // Enable cache but return corrupted data
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue('not valid json {{{'),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockResolvedValue(mockCache as any);
+
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Fresh response"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      // Should fall through to make a fresh API call
+      expect(result.output).toBe('Fresh response');
+      expect(mockFetchWithProxy).toHaveBeenCalled();
+    });
+
+    it('should cache successful streaming responses', async () => {
+      // Enable cache for this test
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockResolvedValue(mockCache as any);
+
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Response to cache"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Response to cache');
+      expect(mockCache.set).toHaveBeenCalledTimes(1);
+      expect(mockCache.set).toHaveBeenCalledWith(
+        expect.stringContaining('openai:stream:'),
+        expect.stringContaining('Response to cache'),
+      );
+    });
+
+    it('should not cache content-filtered responses', async () => {
+      // Enable cache for this test
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockResolvedValue(mockCache as any);
+
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Filtered"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"content_filter"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Filtered');
+      expect(result.guardrails).toEqual({ flagged: true });
+      // Should NOT cache content-filtered responses
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
   });
 });
