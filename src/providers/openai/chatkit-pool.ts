@@ -89,14 +89,9 @@ export class ChatKitBrowserPool {
     });
 
     process.on('exit', cleanup);
-    process.on('SIGINT', () => {
-      cleanup();
-      process.exit(130);
-    });
-    process.on('SIGTERM', () => {
-      cleanup();
-      process.exit(143);
-    });
+    // Note: SIGINT/SIGTERM handlers intentionally omitted.
+    // Cleanup happens via 'exit' handler above. Direct process.exit() calls
+    // bypass shutdownGracefully() in main.ts, causing WAL corruption issues.
   }
 
   /**
