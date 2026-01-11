@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+
 import type { ApiProvider, TestSuite } from '../src/types';
-import { updateSignalFile } from '../src/database/signal';
 
 // Only mock what we need to verify
 vi.mock('../src/database/signal', () => ({
@@ -250,5 +251,4 @@ describe('evaluate SIGINT/abort handling', () => {
     // Signal file should be updated for resume capability
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
   });
-
 });
