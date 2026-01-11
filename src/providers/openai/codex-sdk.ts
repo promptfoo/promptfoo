@@ -534,19 +534,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               logger.warn('Codex item.started event missing item or item.id', { event });
               break;
             }
+            // Coerce id to string for consistent Map keys
+            const itemId = String(item.id);
             // Create a child span for this item
             const spanName = this.getSpanNameForItem(item);
             const span = tracer.startSpan(spanName, {
               kind: SpanKind.INTERNAL,
               attributes: {
-                'codex.item.id': item.id,
+                'codex.item.id': itemId,
                 'codex.item.type': item.type,
                 ...this.getAttributesForItem(item),
               },
             });
-            activeSpans.set(item.id, span);
-            itemStartTimes.set(item.id, eventTime);
-            logger.debug('Codex item started', { itemId: item.id, type: item.type });
+            activeSpans.set(itemId, span);
+            itemStartTimes.set(itemId, eventTime);
+            logger.debug('Codex item started', { itemId, type: item.type });
             break;
           }
           case 'item.completed': {
@@ -556,21 +558,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               logger.warn('Codex item.completed event missing item or item.id', { event });
               break;
             }
+            // Coerce id to string for consistent Map keys
+            const itemId = String(item.id);
             items.push(item);
 
             // Collect reasoning text for summary
-            if (item.type === 'reasoning' && item.text) {
+            if (item.type === 'reasoning' && typeof item.text === 'string') {
               reasoningTexts.push(item.text);
             }
 
             // Collect agent messages for conversation history
-            if (item.type === 'agent_message' && item.text) {
+            if (item.type === 'agent_message' && typeof item.text === 'string') {
               conversationMessages.push({ role: 'assistant', content: item.text });
             }
 
             // Get or create span for this item
             // Some item types (like reasoning) may only emit item.completed without item.started
-            let span = activeSpans.get(item.id);
+            let span = activeSpans.get(itemId);
             const hadStartEvent = span !== undefined;
 
             if (!span) {
@@ -581,7 +585,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
                 kind: SpanKind.INTERNAL,
                 startTime: lastEventTime,
                 attributes: {
-                  'codex.item.id': item.id,
+                  'codex.item.id': itemId,
                   'codex.item.type': item.type,
                   'codex.timing.estimated': true, // Mark that timing is estimated
                   ...this.getAttributesForItem(item),
@@ -596,23 +600,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             }
 
             // Calculate and record duration
-            const startTime = itemStartTimes.get(item.id) || lastEventTime;
+            const startTime = itemStartTimes.get(itemId) || lastEventTime;
             const durationMs = eventTime - startTime;
             span.setAttribute('codex.duration_ms', durationMs);
             span.setAttribute('codex.had_start_event', hadStartEvent);
 
             // Add span events for rich content types
-            if (item.type === 'reasoning' && item.text) {
+            if (item.type === 'reasoning' && typeof item.text === 'string') {
               span.addEvent('reasoning', {
                 'codex.reasoning.text': item.text,
               });
             }
-            if (item.type === 'agent_message' && item.text) {
+            if (item.type === 'agent_message' && typeof item.text === 'string') {
               span.addEvent('message', {
                 'codex.message.text': item.text,
               });
             }
-            if (item.type === 'command_execution' && item.aggregated_output) {
+            if (item.type === 'command_execution' && typeof item.aggregated_output === 'string') {
               span.addEvent('output', {
                 'codex.command.output': item.aggregated_output,
               });
@@ -622,16 +626,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             if (item.status === 'failed' || item.type === 'error') {
               span.setStatus({
                 code: SpanStatusCode.ERROR,
-                message: item.message || item.error?.message || 'Item failed',
+                message:
+                  (typeof item.message === 'string' ? item.message : null) ||
+                  (typeof item.error?.message === 'string' ? item.error.message : null) ||
+                  'Item failed',
               });
             } else {
               span.setStatus({ code: SpanStatusCode.OK });
             }
 
             span.end();
-            activeSpans.delete(item.id);
-            itemStartTimes.delete(item.id);
-            logger.debug('Codex item completed', { itemId: item.id, type: item.type, durationMs });
+            activeSpans.delete(itemId);
+            itemStartTimes.delete(itemId);
+            logger.debug('Codex item completed', { itemId, type: item.type, durationMs });
             break;
           }
           case 'turn.completed':
@@ -711,20 +718,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     switch (item.type) {
       case 'command_execution':
-        if (item.command) {
+        if (typeof item.command === 'string') {
           attrs['codex.command'] = item.command;
         }
         break;
       case 'mcp_tool_call':
-        if (item.server) {
+        if (typeof item.server === 'string') {
           attrs['codex.mcp.server'] = item.server;
         }
-        if (item.tool) {
+        if (typeof item.tool === 'string') {
           attrs['codex.mcp.tool'] = item.tool;
         }
         break;
       case 'web_search':
-        if (item.query) {
+        if (typeof item.query === 'string') {
           attrs['codex.search.query'] = item.query;
         }
         break;
@@ -741,45 +748,48 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     switch (item.type) {
       case 'command_execution':
-        if (item.exit_code !== undefined) {
+        if (typeof item.exit_code === 'number') {
           attrs['codex.exit_code'] = item.exit_code;
         }
-        if (item.status) {
+        if (typeof item.status === 'string') {
           attrs['codex.status'] = item.status;
         }
-        if (item.aggregated_output) {
+        if (typeof item.aggregated_output === 'string') {
           attrs['codex.output'] = item.aggregated_output;
         }
         break;
       case 'file_change':
-        if (item.status) {
+        if (typeof item.status === 'string') {
           attrs['codex.status'] = item.status;
         }
-        if (item.changes?.length) {
+        if (Array.isArray(item.changes) && item.changes.length) {
           attrs['codex.files_changed'] = item.changes.length;
-          attrs['codex.files'] = item.changes.map((c: any) => c.path).join(', ');
+          attrs['codex.files'] = item.changes
+            .map((c: any) => (typeof c?.path === 'string' ? c.path : ''))
+            .filter(Boolean)
+            .join(', ');
         }
         break;
       case 'mcp_tool_call':
-        if (item.status) {
+        if (typeof item.status === 'string') {
           attrs['codex.status'] = item.status;
         }
-        if (item.error?.message) {
+        if (typeof item.error?.message === 'string') {
           attrs['codex.error'] = item.error.message;
         }
         break;
       case 'agent_message':
-        if (item.text) {
+        if (typeof item.text === 'string') {
           attrs['codex.message'] = item.text;
         }
         break;
       case 'reasoning':
-        if (item.text) {
+        if (typeof item.text === 'string') {
           attrs['codex.reasoning'] = item.text;
         }
         break;
       case 'error':
-        if (item.message) {
+        if (typeof item.message === 'string') {
           attrs['codex.error'] = item.message;
         }
         break;
@@ -854,8 +864,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       result.responseModel = modelName;
 
       if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+        try {
+          result.responseBody =
+            typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+        } catch {
+          result.responseBody = '[unable to serialize output]';
+        }
       }
 
       // Extract reasoning summary from raw response if available
