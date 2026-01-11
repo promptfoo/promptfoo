@@ -14,7 +14,7 @@ import type {
  * Type representing the table page result from eval.getTablePage().
  * This differs from EvaluateTable in that it uses Prompt[] instead of CompletedPrompt[].
  */
-type TablePageResult = {
+export type TablePageResult = {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 };
@@ -252,7 +252,7 @@ export function evalTableToJson(table: {
  * @param comparisonData - Array of comparison eval data (eval ID and table)
  * @returns Merged table with all prompts and outputs combined
  */
-function mergeComparisonTables(
+export function mergeComparisonTables(
   mainEvalId: string,
   mainTable: TablePageResult,
   comparisonData: Array<{ evalId: string; table: TablePageResult }>,
@@ -418,7 +418,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
           pass: boolean;
           score?: number;
           namedScores?: Record<string, number>;
-          failureReason?: string;
+          failureReason?: ResultFailureReason;
           gradingResult?: { reason?: string; comment?: string } | null;
           metadata?: Record<string, unknown>;
         }>;

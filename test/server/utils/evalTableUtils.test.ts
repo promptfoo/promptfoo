@@ -1048,7 +1048,10 @@ describe('evalTableUtils', () => {
 
       const result = evalTableToJson(tableWithMetadata);
       expect(result).toBe(tableWithMetadata);
-      expect(result.body[0].outputs[0].metadata).toEqual({
+      expect(
+        (result as { body: Array<{ outputs: Array<{ metadata: unknown }> }> }).body[0].outputs[0]
+          .metadata,
+      ).toEqual({
         custom: 'data',
         nested: { value: 123 },
       });
