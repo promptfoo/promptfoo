@@ -12,7 +12,6 @@ import {
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
-  sanitizeBody,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 
@@ -587,23 +586,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             span.setAttribute('codex.duration_ms', durationMs);
             span.setAttribute('codex.had_start_event', hadStartEvent);
 
-            // Add span events for rich content types (sanitized to prevent secret leakage)
+            // Add span events for rich content types
             if (item.type === 'reasoning' && item.text) {
               span.addEvent('reasoning', {
-                'codex.reasoning.text': this.sanitizeText(item.text, 4096),
-                'codex.reasoning.full_length': item.text.length,
+                'codex.reasoning.text': item.text,
               });
             }
             if (item.type === 'agent_message' && item.text) {
               span.addEvent('message', {
-                'codex.message.text': this.sanitizeText(item.text, 4096),
-                'codex.message.full_length': item.text.length,
+                'codex.message.text': item.text,
               });
             }
             if (item.type === 'command_execution' && item.aggregated_output) {
               span.addEvent('output', {
-                'codex.command.output': this.sanitizeText(item.aggregated_output, 4096),
-                'codex.command.output_length': item.aggregated_output.length,
+                'codex.command.output': item.aggregated_output,
               });
             }
 
@@ -685,36 +681,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   /**
-   * Sanitize and truncate text content for span attributes.
-   * Prevents secret leakage and controls attribute size.
-   */
-  private sanitizeText(text: string, maxLength: number = 1000): string {
-    const sanitized = sanitizeBody(text);
-    if (sanitized.length <= maxLength) {
-      return sanitized;
-    }
-    return sanitized.slice(0, maxLength - 15) + '... [truncated]';
-  }
-
-  /**
-   * Sanitize a file path to remove PII (usernames from home directories).
-   * Converts absolute paths like /Users/john.doe/projects/foo/bar.ts to ~/projects/foo/bar.ts
-   */
-  private sanitizePath(filePath: string): string {
-    // Patterns for home directories on various systems
-    // macOS: /Users/username/
-    // Linux: /home/username/
-    // Windows: C:\Users\username\
-    const homePatterns = [/^\/Users\/[^/]+\//, /^\/home\/[^/]+\//, /^[A-Z]:\\Users\\[^\\]+\\/i];
-
-    let sanitized = filePath;
-    for (const pattern of homePatterns) {
-      sanitized = sanitized.replace(pattern, '~/');
-    }
-    return sanitized;
-  }
-
-  /**
    * Get attributes for a Codex item at start
    */
   private getAttributesForItem(item: any): Record<string, string | number | boolean> {
@@ -722,13 +688,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     switch (item.type) {
       case 'command_execution':
-        // Sanitize commands as they may contain credentials (API keys in curl, env vars, etc.)
         if (item.command) {
-          attrs['codex.command'] = this.sanitizeText(item.command, 2000);
+          attrs['codex.command'] = item.command;
         }
         break;
       case 'mcp_tool_call':
-        // Server and tool names are safe identifiers, no sanitization needed
         if (item.server) {
           attrs['codex.mcp.server'] = item.server;
         }
@@ -737,9 +701,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         break;
       case 'web_search':
-        // Sanitize search queries as they may contain sensitive information
         if (item.query) {
-          attrs['codex.search.query'] = this.sanitizeText(item.query, 500);
+          attrs['codex.search.query'] = item.query;
         }
         break;
     }
@@ -761,9 +724,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         if (item.status) {
           attrs['codex.status'] = item.status;
         }
-        // Sanitize and truncate output to prevent secret leakage
         if (item.aggregated_output) {
-          attrs['codex.output'] = this.sanitizeText(item.aggregated_output, 1000);
+          attrs['codex.output'] = item.aggregated_output;
         }
         break;
       case 'file_change':
@@ -772,9 +734,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         if (item.changes?.length) {
           attrs['codex.files_changed'] = item.changes.length;
-          // Sanitize paths to remove usernames/PII and truncate total length
-          const sanitizedPaths = item.changes.map((c: any) => this.sanitizePath(c.path));
-          attrs['codex.files'] = sanitizedPaths.join(', ').slice(0, 500);
+          attrs['codex.files'] = item.changes.map((c: any) => c.path).join(', ');
         }
         break;
       case 'mcp_tool_call':
@@ -782,24 +742,22 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.status'] = item.status;
         }
         if (item.error?.message) {
-          attrs['codex.error'] = this.sanitizeText(item.error.message, 500);
+          attrs['codex.error'] = item.error.message;
         }
         break;
       case 'agent_message':
-        // Sanitize and truncate message
         if (item.text) {
-          attrs['codex.message'] = this.sanitizeText(item.text, 500);
+          attrs['codex.message'] = item.text;
         }
         break;
       case 'reasoning':
-        // Sanitize and truncate reasoning
         if (item.text) {
-          attrs['codex.reasoning'] = this.sanitizeText(item.text, 500);
+          attrs['codex.reasoning'] = item.text;
         }
         break;
       case 'error':
         if (item.message) {
-          attrs['codex.error'] = this.sanitizeText(item.message, 500);
+          attrs['codex.error'] = item.message;
         }
         break;
     }
