@@ -1,17 +1,7 @@
 import fs from 'fs';
 
 import { Command } from 'commander';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  Mocked,
-  MockedFunction,
-  MockInstance,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mocked, MockedFunction, vi } from 'vitest';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -108,7 +98,6 @@ function createDirent(name: string, isFile: boolean = true): any {
 
 describe('exportCommand', () => {
   let program: Command;
-  let mockExit: MockInstance;
   let mockEval: any;
   const mockFs = fs as Mocked<typeof fs>;
   const mockGetConfigDirectoryPath = getConfigDirectoryPath as MockedFunction<
@@ -117,9 +106,7 @@ describe('exportCommand', () => {
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    process.exitCode = undefined;
     mockEval = {
       id: 'test-id',
       createdAt: '2025-07-01T00:00:00.000Z',
@@ -145,7 +132,7 @@ describe('exportCommand', () => {
 
     expect(Eval.latest).toHaveBeenCalledWith();
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
-    expect(mockExit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('should export eval record by id', async () => {
@@ -165,7 +152,7 @@ describe('exportCommand', () => {
 
     expect(Eval.findById).toHaveBeenCalledWith('test-id');
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
-    expect(mockExit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('should log JSON data when no output specified', async () => {
@@ -201,7 +188,7 @@ describe('exportCommand', () => {
 
     await program.parseAsync(['node', 'test', 'export', 'eval', 'non-existent-id']);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('should handle export errors', async () => {
@@ -211,7 +198,7 @@ describe('exportCommand', () => {
 
     await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   describe('logs export', () => {
@@ -234,7 +221,7 @@ describe('exportCommand', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'No log directory found. Logs have not been created yet.',
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle no log files found', async () => {
@@ -246,7 +233,7 @@ describe('exportCommand', () => {
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
       expect(logger.error).toHaveBeenCalledWith('No log files found in the logs directory.');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle invalid count parameter', async () => {
@@ -259,7 +246,7 @@ describe('exportCommand', () => {
       await program.parseAsync(['node', 'test', 'export', 'logs', '--count', 'invalid']);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle zero count parameter', async () => {
@@ -272,7 +259,7 @@ describe('exportCommand', () => {
       await program.parseAsync(['node', 'test', 'export', 'logs', '--count', '0']);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
   });
 });
