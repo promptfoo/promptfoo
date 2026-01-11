@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test file to verify external file loading with echo provider (no API key needed)
+description: External response format file loading test (echo)
+
+prompts:
+  - 'Extract information about the event: {{event}}'
+
+providers:
+  # Echo provider to test that file loading works
+  - id: echo
+    label: echo-external-file
+    config:
+      response_format: file://response_format.json
+
+  - id: echo
+    label: echo-nested-file
+    config:
+      response_format: file://nested_response_format.json
+
+tests:
+  - vars:
+      event: 'Alice and Bob are attending a conference'
+    assert:
+      - type: contains
+        value: 'Alice'
