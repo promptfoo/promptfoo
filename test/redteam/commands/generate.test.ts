@@ -12,6 +12,7 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
+import { PartialGenerationError } from '../../../src/redteam/shared';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -238,6 +239,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -297,6 +299,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -364,6 +367,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -421,6 +425,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -489,6 +494,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -558,6 +564,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -615,6 +622,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -676,6 +684,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -717,6 +726,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -745,6 +755,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -763,6 +774,65 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should throw PartialGenerationError when plugins fail to generate tests', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    await expect(doGenerateRedteam(options)).rejects.toThrow(PartialGenerationError);
+  });
+
+  it('should include plugin details in PartialGenerationError message', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [{ pluginId: 'pii', requested: 5 }],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    try {
+      await doGenerateRedteam(options);
+      expect.fail('Expected PartialGenerationError to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PartialGenerationError);
+      expect((error as PartialGenerationError).message).toContain('pii');
+      expect((error as PartialGenerationError).message).toContain('0/5 tests');
+      expect((error as PartialGenerationError).failedPlugins).toHaveLength(1);
+    }
   });
 
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
@@ -804,6 +874,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Generated purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -846,6 +917,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -890,6 +962,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -939,6 +1012,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -983,6 +1057,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1024,6 +1099,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1081,6 +1157,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1125,6 +1202,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1231,6 +1309,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1274,6 +1353,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       vi.mocked(fs.existsSync).mockImplementation(function () {
@@ -1531,6 +1611,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1599,6 +1680,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1669,6 +1751,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1738,6 +1821,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Single purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1793,6 +1877,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1861,6 +1946,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1949,6 +2035,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2007,6 +2094,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2063,6 +2151,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2149,6 +2238,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2201,6 +2291,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2364,6 +2455,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2414,6 +2506,7 @@ describe('target ID extraction for retry strategy', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
   });
 

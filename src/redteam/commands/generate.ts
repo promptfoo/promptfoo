@@ -45,6 +45,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { PartialGenerationError } from '../shared';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -452,6 +453,9 @@ export async function doGenerateRedteam(
     // Multi-context mode: generate tests for each context
     logger.info(`Generating tests for ${contexts.length} contexts...`);
 
+    // Collect failed plugins across all contexts
+    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+
     for (const context of contexts) {
       logger.info(`  Generating tests for context: ${context.id}`);
 
@@ -470,6 +474,11 @@ export async function doGenerateRedteam(
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: augmentedTestGenerationInstructions,
       } as SynthesizeOptions);
+
+      // Collect failed plugins from this context
+      if (contextResult.failedPlugins.length > 0) {
+        allFailedPlugins.push(...contextResult.failedPlugins);
+      }
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
@@ -498,6 +507,11 @@ export async function doGenerateRedteam(
       }
     }
 
+    // Check for failed plugins across all contexts
+    if (allFailedPlugins.length > 0) {
+      throw new PartialGenerationError(allFailedPlugins);
+    }
+
     // Use first context's purpose for backward compatibility in output
     purpose = contexts[0].purpose;
     logger.info(
@@ -518,6 +532,11 @@ export async function doGenerateRedteam(
       showProgressBar: options.progressBar !== false,
       testGenerationInstructions: augmentedTestGenerationInstructions,
     } as SynthesizeOptions);
+
+    // Check for failed plugins before proceeding
+    if (result.failedPlugins.length > 0) {
+      throw new PartialGenerationError(result.failedPlugins);
+    }
 
     redteamTests = result.testCases;
     purpose = result.purpose;
