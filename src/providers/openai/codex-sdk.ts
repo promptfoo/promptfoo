@@ -952,7 +952,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Wrap the API call in a GenAI span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      async (span) => {
+        const result = await this.callApiInternal(prompt, context, callOptions, config);
+        // Set error status on span when response contains an error
+        // (withGenAISpan only catches exceptions, not error responses)
+        if (result.error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: typeof result.error === 'string' ? result.error : 'Provider returned error',
+          });
+        }
+        return result;
+      },
       resultExtractor,
     );
   }
