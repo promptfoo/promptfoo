@@ -97,7 +97,11 @@ export class GoogleImageProvider implements ApiProvider {
 
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
-      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     if (projectId) {
       // Use Vertex AI if project ID is available
@@ -115,7 +119,7 @@ export class GoogleImageProvider implements ApiProvider {
       error:
         'Imagen models require either:\n' +
         '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
