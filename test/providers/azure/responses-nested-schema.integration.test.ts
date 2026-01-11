@@ -9,6 +9,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 
@@ -37,7 +38,10 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       required: ['event_name', 'date', 'location'],
       additionalProperties: false,
     };
-    fs.writeFileSync(path.join(tempDir, 'event-schema.json'), JSON.stringify(nestedSchema, null, 2));
+    fs.writeFileSync(
+      path.join(tempDir, 'event-schema.json'),
+      JSON.stringify(nestedSchema, null, 2),
+    );
 
     // Create the response_format file with nested file reference
     const responseFormat = {
