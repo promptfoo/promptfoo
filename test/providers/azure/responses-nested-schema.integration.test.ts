@@ -132,8 +132,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
 
     // Verify the API was called with the correct format structure
     expect(mockFetchWithCache).toHaveBeenCalled();
-    const callArgs = mockFetchWithCache.mock.calls[0];
-    const requestBody = JSON.parse(callArgs[1].body as string);
+    const callArgs = mockFetchWithCache.mock.calls[0]!;
+    const requestBody = JSON.parse(callArgs[1]!.body as string);
 
     // The nested schema should be fully loaded (not a string file reference)
     expect(requestBody.text.format.type).toBe('json_schema');
@@ -163,8 +163,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
 
     expect(result.error).toBeUndefined();
 
-    const callArgs = mockFetchWithCache.mock.calls[0];
-    const requestBody = JSON.parse(callArgs[1].body as string);
+    const callArgs = mockFetchWithCache.mock.calls[0]!;
+    const requestBody = JSON.parse(callArgs[1]!.body as string);
 
     expect(requestBody.text.format.type).toBe('json_schema');
     expect(requestBody.text.format.name).toBe('flat_schema');
@@ -179,6 +179,7 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
   it('should handle inline response_format without file loading', async () => {
     const provider = new AzureResponsesProvider('gpt-4.1-test', {
       config: {
+        // Using shorthand format (name/schema at top level) which the runtime code normalizes
         response_format: {
           type: 'json_schema',
           name: 'inline_test',
@@ -187,7 +188,7 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
             properties: { result: { type: 'string' } },
             additionalProperties: false,
           },
-        },
+        } as any,
       },
     });
 
@@ -195,8 +196,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
 
     expect(result.error).toBeUndefined();
 
-    const callArgs = mockFetchWithCache.mock.calls[0];
-    const requestBody = JSON.parse(callArgs[1].body as string);
+    const callArgs = mockFetchWithCache.mock.calls[0]!;
+    const requestBody = JSON.parse(callArgs[1]!.body as string);
 
     expect(requestBody.text.format.name).toBe('inline_test');
     expect(requestBody.text.format.schema).toEqual({
