@@ -625,8 +625,14 @@ describe('OpenAICodexSDKProvider', () => {
     describe('streaming', () => {
       it('should handle streaming events', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 2' } };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-2', type: 'agent_message', text: 'Part 2' },
+          };
           yield {
             type: 'turn.completed',
             usage: { input_tokens: 10, cached_input_tokens: 5, output_tokens: 20 },
@@ -652,7 +658,10 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should abort streaming on signal', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
+          };
           // Abort will happen here
         };
 

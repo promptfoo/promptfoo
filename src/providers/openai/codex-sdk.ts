@@ -359,10 +359,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
-    // Only enabled when config.deep_tracing is true AND we have a trace context
     // Without deep_tracing, we still capture spans at the provider level but don't
     // inject OTEL vars into CLI (which would cause export errors if no collector)
-    if (traceparent && config.deep_tracing) {
+    if (config.deep_tracing) {
       // Standard OTEL environment variables - use defaults only if not already set
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
         sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
@@ -376,10 +375,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (!sortedEnv.OTEL_TRACES_EXPORTER) {
         sortedEnv.OTEL_TRACES_EXPORTER = 'otlp';
       }
-      // W3C Trace Context - always set to current trace for proper parent-child linking
-      sortedEnv.TRACEPARENT = traceparent;
+      // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
+      if (traceparent) {
+        sortedEnv.TRACEPARENT = traceparent;
+      }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
-        traceparent,
+        traceparent: traceparent || '(none - CLI will start own trace)',
         endpoint: sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT,
         userConfigured: {
           endpoint: !!env.OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -387,6 +388,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           serviceName: !!env.OTEL_SERVICE_NAME,
         },
       });
+    } else {
+      // When deep_tracing is disabled, remove any inherited TRACEPARENT
+      // to prevent accidental trace linking from parent processes
+      delete sortedEnv.TRACEPARENT;
     }
 
     return sortedEnv;
@@ -523,8 +528,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
         switch (event.type) {
           case 'item.started': {
-            // Create a child span for this item
+            // Guard against malformed events
             const item = event.item;
+            if (!item?.id) {
+              logger.warn('Codex item.started event missing item or item.id', { event });
+              break;
+            }
+            // Create a child span for this item
             const spanName = this.getSpanNameForItem(item);
             const span = tracer.startSpan(spanName, {
               kind: SpanKind.INTERNAL,
@@ -540,7 +550,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             break;
           }
           case 'item.completed': {
+            // Guard against malformed events
             const item = event.item;
+            if (!item?.id) {
+              logger.warn('Codex item.completed event missing item or item.id', { event });
+              break;
+            }
             items.push(item);
 
             // Collect reasoning text for summary
@@ -659,18 +674,26 @@ export class OpenAICodexSDKProvider implements ApiProvider {
    */
   private getSpanNameForItem(item: any): string {
     switch (item.type) {
-      case 'command_execution':
-        return `exec ${item.command?.split(' ')[0] || 'command'}`;
+      case 'command_execution': {
+        const cmd =
+          typeof item.command === 'string' ? item.command.split(' ')[0] || 'command' : 'command';
+        return `exec ${cmd}`;
+      }
       case 'file_change':
         return `file ${item.changes?.[0]?.kind || 'change'}`;
-      case 'mcp_tool_call':
-        return `mcp ${item.server}/${item.tool}`;
+      case 'mcp_tool_call': {
+        const server = typeof item.server === 'string' ? item.server : 'unknown';
+        const tool = typeof item.tool === 'string' ? item.tool : 'unknown';
+        return `mcp ${server}/${tool}`;
+      }
       case 'agent_message':
         return 'agent response';
       case 'reasoning':
         return 'reasoning';
-      case 'web_search':
-        return `search "${item.query?.slice(0, 30) || ''}"`;
+      case 'web_search': {
+        const query = typeof item.query === 'string' ? item.query.slice(0, 30) : '';
+        return `search "${query}"`;
+      }
       case 'todo_list':
         return 'todo update';
       case 'error':
