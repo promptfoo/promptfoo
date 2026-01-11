@@ -229,7 +229,17 @@ export async function withGenAISpan<T>(
         setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
 
-      span.setStatus({ code: SpanStatusCode.OK });
+      // Check if response contains an error (ProviderResponse pattern)
+      // Many providers return { error: "..." } instead of throwing
+      const valueAsRecord = value as Record<string, unknown>;
+      if (valueAsRecord && typeof valueAsRecord.error === 'string' && valueAsRecord.error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: valueAsRecord.error,
+        });
+      } else {
+        span.setStatus({ code: SpanStatusCode.OK });
+      }
       return value;
     } catch (error) {
       span.setStatus({
