@@ -480,8 +480,8 @@ providers:
     config:
       # Authentication options
       credentials: 'file://service-account.json' # Optional: Use specific service account
-      projectId: ${GOOGLE_CLOUD_PROJECT}
-      region: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: '{{ env.GOOGLE_CLOUD_LOCATION | default("us-central1") }}'
 
       generationConfig:
         temperature: 0.2
@@ -983,11 +983,11 @@ Enable Model Armor by specifying template paths in your provider config:
 providers:
   - id: vertex:gemini-2.5-flash
     config:
-      projectId: ${GOOGLE_CLOUD_PROJECT}
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
       region: us-central1
       modelArmor:
-        promptTemplate: projects/${GOOGLE_CLOUD_PROJECT}/locations/us-central1/templates/basic-safety
-        responseTemplate: projects/${GOOGLE_CLOUD_PROJECT}/locations/us-central1/templates/basic-safety
+        promptTemplate: 'projects/{{ env.GOOGLE_CLOUD_PROJECT }}/locations/us-central1/templates/basic-safety'
+        responseTemplate: 'projects/{{ env.GOOGLE_CLOUD_PROJECT }}/locations/us-central1/templates/basic-safety'
 ```
 
 | Option                        | Description                                 |
