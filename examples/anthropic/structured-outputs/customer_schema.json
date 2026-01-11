@@ -20,10 +20,6 @@
       "type": "boolean"
     }
   },
-  "required": [
-    "customer_name",
-    "customer_email",
-    "demo_requested"
-  ],
+  "required": ["customer_name", "customer_email", "demo_requested"],
   "additionalProperties": false
 }
