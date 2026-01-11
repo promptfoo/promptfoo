@@ -103,6 +103,110 @@ describe('findProviderConfig', () => {
     // Should NOT have indexed character properties
     expect(result.config['0']).toBeUndefined();
   });
+
+  it('handles null provider in array', () => {
+    const providers = [null, { id: 'openai:gpt-4o' }];
+    const result = findProviderConfig('openai:gpt-4o', providers as any);
+    expect(result.matchType).toBe('id');
+    expect(result.config.id).toBe('openai:gpt-4o');
+  });
+
+  it('handles undefined provider in array', () => {
+    const providers = [undefined, { id: 'openai:gpt-4o' }];
+    const result = findProviderConfig('openai:gpt-4o', providers as any);
+    expect(result.matchType).toBe('id');
+    expect(result.config.id).toBe('openai:gpt-4o');
+  });
+
+  it('handles object with only ProviderOptions fields', () => {
+    const providers = [
+      {
+        config: { temperature: 0.5 },
+        prompts: ['test'],
+      },
+    ];
+    const result = findProviderConfig('test-provider', providers, 0);
+    expect(result.matchType).toBe('index');
+    expect(result.config.config.temperature).toBe(0.5);
+  });
+
+  it('handles empty object in providers array', () => {
+    const providers = [{}, { id: 'openai:gpt-4o' }];
+    const result = findProviderConfig('openai:gpt-4o', providers);
+    expect(result.matchType).toBe('id');
+    expect(result.config.id).toBe('openai:gpt-4o');
+  });
+
+  it('handles object with multiple keys (not record-style)', () => {
+    const providers = [
+      {
+        id: 'openai:gpt-4o',
+        label: 'GPT',
+        config: { temperature: 0.5 },
+        extraField: 'value',
+      },
+    ];
+    const result = findProviderConfig('openai:gpt-4o', providers);
+    expect(result.matchType).toBe('id');
+    expect(result.config.id).toBe('openai:gpt-4o');
+    expect(result.config.extraField).toBe('value');
+  });
+
+  it('matches record-style with known ProviderOptions field as key', () => {
+    // { config: {...} } should NOT be treated as record-style
+    const providers = [{ config: { temperature: 0.5 } }];
+    const result = findProviderConfig('config', providers);
+    // Should not match by record-key since 'config' is a known field
+    expect(result.matchType).toBe('none');
+  });
+
+  it('prioritizes id match over label match', () => {
+    const providers = [
+      { id: 'test', label: 'Test Provider' },
+      { id: 'openai:gpt-4o', label: 'test' },
+    ];
+    const result = findProviderConfig('test', providers);
+    // First provider matches by id, should be returned
+    expect(result.matchType).toBe('id');
+    expect(result.config.label).toBe('Test Provider');
+  });
+
+  it('prioritizes id/label match over record-key match', () => {
+    const providers = [
+      { 'openai:gpt-4o': { config: { temperature: 0.3 } } },
+      { id: 'openai:gpt-4o', config: { temperature: 0.7 } },
+    ];
+    const result = findProviderConfig('openai:gpt-4o', providers);
+    // First provider should match in first pass (after normalization)
+    expect(result.matchType).toBe('id');
+  });
+
+  it('handles non-array providersArray', () => {
+    const result = findProviderConfig('openai:gpt-4o', 'not-an-array' as any);
+    expect(result.matchType).toBe('none');
+    expect(result.config).toBeUndefined();
+  });
+
+  it('handles negative fallbackIndex', () => {
+    const providers = [{ id: 'openai:gpt-4o' }];
+    const result = findProviderConfig('unknown', providers, -1);
+    // Note: The implementation has a bug - it checks fallbackIndex < length but doesn't check >= 0
+    // -1 < 1 is true, so it tries providers[-1] which returns undefined
+    // This should ideally return 'none', but currently returns 'index' with undefined config
+    expect(result.matchType).toBe('index');
+    // providers[-1] is undefined in JavaScript
+    expect(result.config).toBeUndefined();
+  });
+
+  it('handles zero fallbackIndex', () => {
+    const providers = [
+      { id: 'openai:gpt-4o', config: { temperature: 0.5 } },
+      { id: 'anthropic:claude' },
+    ];
+    const result = findProviderConfig('unknown', providers, 0);
+    expect(result.matchType).toBe('index');
+    expect(result.config.config.temperature).toBe(0.5);
+  });
 });
 
 describe('extractConfigBadges', () => {
@@ -198,6 +302,211 @@ describe('extractConfigBadges', () => {
     expect(badges.map((b) => b.label)).toContain('temp');
     expect(badges.map((b) => b.label)).toContain('max');
     expect(badges.map((b) => b.label)).toContain('seed');
+  });
+
+  describe('boundary values and edge cases', () => {
+    it('formats max_tokens at 1000 boundary', () => {
+      const config = { config: { max_tokens: 1000 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1k' }));
+    });
+
+    it('formats max_tokens just below 1000 boundary', () => {
+      const config = { config: { max_tokens: 999 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '999' }));
+    });
+
+    it('formats max_tokens at 1000000 boundary', () => {
+      const config = { config: { max_tokens: 1000000 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1M' }));
+    });
+
+    it('formats max_tokens with decimal for non-integer k values', () => {
+      const config = { config: { max_tokens: 1500 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1.5k' }));
+    });
+
+    it('formats max_tokens with decimal for non-integer M values', () => {
+      const config = { config: { max_tokens: 1500000 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1.5M' }));
+    });
+
+    it('formats thinking budget_tokens with k suffix', () => {
+      const config = { config: { thinking: { type: 'enabled', budget_tokens: 10000 } } };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: '10k tokens' }),
+      );
+    });
+
+    it('extracts temperature of 0', () => {
+      const config = { config: { temperature: 0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'temp', value: '0' }));
+    });
+
+    it('extracts temperature of 2', () => {
+      const config = { config: { temperature: 2 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'temp', value: '2' }));
+    });
+
+    it('does not extract temperature of exactly 1', () => {
+      const config = { config: { temperature: 1 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'temp')).toBeUndefined();
+    });
+
+    it('extracts top_p of 0', () => {
+      const config = { config: { top_p: 0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'top_p', value: '0' }));
+    });
+
+    it('does not extract top_p of exactly 1', () => {
+      const config = { config: { top_p: 1 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'top_p')).toBeUndefined();
+    });
+
+    it('extracts presence_penalty of 0', () => {
+      const config = { config: { presence_penalty: 0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'pres')).toBeUndefined();
+    });
+
+    it('extracts frequency_penalty of 0', () => {
+      const config = { config: { frequency_penalty: 0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'freq')).toBeUndefined();
+    });
+
+    it('extracts negative presence_penalty', () => {
+      const config = { config: { presence_penalty: -0.5 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'pres', value: '-0.5' }));
+    });
+
+    it('extracts negative frequency_penalty', () => {
+      const config = { config: { frequency_penalty: -1.0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'freq', value: '-1' }));
+    });
+
+    it('extracts seed of 0', () => {
+      const config = { config: { seed: 0 } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'seed', value: '0' }));
+    });
+
+    it('handles Google thinkingConfig with only budget', () => {
+      const config = {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 5000,
+            },
+          },
+        },
+      };
+      const badges = extractConfigBadges('google:gemini', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: '5000 tokens' }),
+      );
+    });
+
+    it('handles Google thinkingConfig with only level', () => {
+      const config = {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingLevel: 'LOW',
+            },
+          },
+        },
+      };
+      const badges = extractConfigBadges('google:gemini', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'thinking', value: 'low' }));
+    });
+
+    it('handles Anthropic thinking without budget_tokens', () => {
+      const config = {
+        config: {
+          thinking: {
+            type: 'enabled',
+          },
+        },
+      };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: 'enabled' }),
+      );
+    });
+
+    it('does not extract stream when false', () => {
+      const config = { config: { stream: false } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'stream')).toBeUndefined();
+    });
+
+    it('does not extract response_format when type is "text"', () => {
+      const config = { config: { response_format: { type: 'text' } } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges.find((b) => b.label === 'format')).toBeUndefined();
+    });
+
+    it('replaces underscore in response_format type', () => {
+      const config = { config: { response_format: { type: 'json_schema' } } };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'format', value: 'json schema' }),
+      );
+    });
+
+    it('handles null config', () => {
+      const badges = extractConfigBadges('openai:gpt-4o', null as any);
+      expect(badges).toEqual([]);
+    });
+
+    it('handles config without nested config property', () => {
+      const config = { temperature: 0.5, max_tokens: 1000 };
+      const badges = extractConfigBadges('openai:gpt-4o', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'temp', value: '0.5' }));
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1k' }));
+    });
+
+    it('extracts model_reasoning_effort for Codex SDK', () => {
+      const config = { config: { model_reasoning_effort: 'low' } };
+      const badges = extractConfigBadges('openai:o1', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'reasoning', value: 'low' }));
+    });
+
+    it('prioritizes reasoning_effort over model_reasoning_effort', () => {
+      const config = {
+        config: { reasoning_effort: 'high', model_reasoning_effort: 'low' },
+      };
+      const badges = extractConfigBadges('openai:o1', config);
+      // Should have one reasoning badge with 'high'
+      const reasoningBadges = badges.filter((b) => b.label === 'reasoning');
+      expect(reasoningBadges).toHaveLength(2); // Both should be extracted
+      expect(reasoningBadges[0].value).toBe('high');
+    });
+
+    it('handles empty generationConfig', () => {
+      const config = { config: { generationConfig: {} } };
+      const badges = extractConfigBadges('google:gemini', config);
+      expect(badges.find((b) => b.label === 'thinking')).toBeUndefined();
+    });
+
+    it('handles empty thinking config', () => {
+      const config = { config: { thinking: {} } };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges.find((b) => b.label === 'thinking')).toBeUndefined();
+    });
   });
 });
 

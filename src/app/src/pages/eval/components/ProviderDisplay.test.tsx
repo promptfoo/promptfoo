@@ -179,6 +179,130 @@ describe('filterConfigForDisplay', () => {
       expect(result.headers.Authorization).toBe('Bearer token');
       expect(result.headers['Content-Type']).toBe('application/json');
     });
+
+    it('returns undefined for empty array', () => {
+      expect(filterConfigForDisplay([])).toBeUndefined();
+    });
+
+    it('filters out array items that become undefined', () => {
+      const config = {
+        items: [{ callApi: () => {} }, { transform: 'test' }, { temperature: 0.5 }],
+      };
+      const result = filterConfigForDisplay(config);
+      // First two items are only excluded fields, so array should only have third item
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].temperature).toBe(0.5);
+    });
+
+    it('returns undefined when all array items are filtered out', () => {
+      const config = {
+        excluded: [{ callApi: () => {} }, { transform: 'test' }],
+      };
+      const result = filterConfigForDisplay(config);
+      expect(result).toBeUndefined();
+    });
+
+    it('handles object containing only excluded fields', () => {
+      const config = {
+        callApi: () => {},
+        transform: 'test',
+        env: { VAR: 'val' },
+      };
+      const result = filterConfigForDisplay(config);
+      expect(result).toBeUndefined();
+    });
+
+    it('handles nested object with all excluded fields', () => {
+      const config = {
+        outer: {
+          callApi: () => {},
+          env: {},
+        },
+        temperature: 0.5,
+      };
+      const result = filterConfigForDisplay(config);
+      // outer becomes undefined after filtering, only temperature remains
+      expect(result.outer).toBeUndefined();
+      expect(result.temperature).toBe(0.5);
+    });
+
+    it('handles zero as valid numeric value', () => {
+      const config = { temperature: 0, presence_penalty: 0 };
+      const result = filterConfigForDisplay(config);
+      expect(result.temperature).toBe(0);
+      expect(result.presence_penalty).toBe(0);
+    });
+
+    it('handles false as valid boolean value', () => {
+      const config = { stream: false, echo: false };
+      const result = filterConfigForDisplay(config);
+      expect(result.stream).toBe(false);
+      expect(result.echo).toBe(false);
+    });
+
+    it('handles empty string as valid value', () => {
+      const config = { apiKey: '', model: '' };
+      const result = filterConfigForDisplay(config);
+      expect(result.apiKey).toBe('');
+      expect(result.model).toBe('');
+    });
+
+    it('handles array with mixed primitive types', () => {
+      const config = {
+        mixed: [1, 'string', true, null, 0, false, ''],
+      };
+      const result = filterConfigForDisplay(config);
+      // null becomes undefined and is filtered out
+      expect(result.mixed).toEqual([1, 'string', true, 0, false, '']);
+    });
+
+    it('preserves complex nested structures with mixed types', () => {
+      const config = {
+        reasoning: {
+          enabled: true,
+          budget: 10000,
+          fallback: {
+            model: 'gpt-4',
+            temperature: 0.5,
+          },
+        },
+        tools: ['function1', 'function2'],
+      };
+      const result = filterConfigForDisplay(config);
+      expect(result.reasoning.enabled).toBe(true);
+      expect(result.reasoning.budget).toBe(10000);
+      expect(result.reasoning.fallback.model).toBe('gpt-4');
+      expect(result.tools).toEqual(['function1', 'function2']);
+    });
+
+    it('handles object at exact recursion depth limit', () => {
+      // Create object at exactly depth 10
+      let obj: any = { value: 'deepest' };
+      for (let i = 0; i < 9; i++) {
+        obj = { nested: obj };
+      }
+      const result = filterConfigForDisplay(obj);
+      // Should still process at depth 10
+      expect(result).toBeDefined();
+      let current = result;
+      for (let i = 0; i < 9; i++) {
+        expect(current.nested).toBeDefined();
+        current = current.nested;
+      }
+      expect(current.value).toBe('deepest');
+    });
+
+    it('returns undefined for object beyond recursion depth limit', () => {
+      // Create object beyond depth 10 - the function stops at depth 10 and returns undefined
+      let obj: any = { value: 'too deep' };
+      for (let i = 0; i < 11; i++) {
+        obj = { nested: obj };
+      }
+      const result = filterConfigForDisplay(obj);
+      // When starting at depth 0, a 12-level nested object exceeds depth limit
+      // The entire object becomes undefined because the depth check happens at entry
+      expect(result).toBeUndefined();
+    });
   });
 });
 
@@ -459,6 +583,160 @@ describe('ProviderDisplay', () => {
       // Should show prefix:name format, not as a label
       expect(screen.getByText('openai:')).toBeInTheDocument();
       expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    });
+
+    it('displays config with stringified boolean values in tooltip', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { stream: true, logprobs: false },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('true');
+      expect(tooltip?.textContent).toContain('false');
+    });
+
+    it('displays config with numeric values including decimals', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { temperature: 0.7, top_p: 0.95, max_tokens: 1000 },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('0.7');
+      expect(tooltip?.textContent).toContain('0.95');
+      expect(tooltip?.textContent).toContain('1000');
+    });
+
+    it('displays config with negative numbers', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { presence_penalty: -0.5, frequency_penalty: -1.2 },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('-0.5');
+      expect(tooltip?.textContent).toContain('-1.2');
+    });
+
+    it('displays config with string values containing special characters', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { model: 'gpt-4o-2024-05-13', stop: ['\n\n', '###'] },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('gpt-4o-2024-05-13');
+    });
+
+    it('displays config with lines without colons', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: {
+            stop: ['STOP', 'END'],
+          },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      // YAML arrays render with - prefix, which doesn't match colon pattern
+      expect(tooltip?.textContent).toContain('STOP');
+      expect(tooltip?.textContent).toContain('END');
+    });
+
+    it('handles config with multiple colons in value', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { baseURL: 'https://api.openai.com:443/v1' },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      // Regex should only match the FIRST colon, preserving colons in the value
+      expect(tooltip?.textContent).toContain('https://api.openai.com:443/v1');
+    });
+
+    it('displays config with zero numeric value correctly', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { temperature: 0, presence_penalty: 0 },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      // Zero should be detected as a number and styled appropriately
+      expect(tooltip?.textContent).toContain('0');
+    });
+
+    it('handles very long provider string gracefully', () => {
+      const longString =
+        'custom-provider:very-long-model-name-that-exceeds-normal-length-constraints-v2024';
+      const providers = [
+        {
+          id: longString,
+          config: { temperature: 0.5 },
+        },
+      ];
+      renderWithProviders(longString, providers);
+      expect(
+        screen.getByText('very-long-model-name-that-exceeds-normal-length-constraints-v2024'),
+      ).toBeInTheDocument();
+    });
+
+    it('handles config with empty string values', async () => {
+      const user = userEvent.setup();
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          config: { suffix: '', user: '' },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      await user.hover(screen.getByText('gpt-4o'));
+      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
+      const tooltip = document.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toContain('suffix');
+      expect(tooltip?.textContent).toContain('user');
     });
   });
 });
