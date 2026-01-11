@@ -14,7 +14,10 @@ function NavigationMenu({
   return (
     <NavigationMenuPrimitive.Root
       ref={ref}
-      className={cn('relative z-10 flex max-w-max flex-1 items-center justify-center', className)}
+      className={cn(
+        'relative z-(--z-dropdown) flex max-w-max flex-1 items-center justify-center',
+        className,
+      )}
       {...props}
     >
       {children}
@@ -40,7 +43,7 @@ function NavigationMenuList({
 const NavigationMenuItem = NavigationMenuPrimitive.Item;
 
 const navigationMenuTriggerStyle = cva(
-  'group inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-50',
+  'group inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
 );
 
 function NavigationMenuTrigger({
@@ -57,7 +60,7 @@ function NavigationMenuTrigger({
     >
       {children}{' '}
       <ChevronDown
-        className="relative top-[1px] ml-1 h-3 w-3 transition duration-300 group-data-[state=open]:rotate-180"
+        className="relative top-px ml-1 size-3 transition duration-300 group-data-[state=open]:rotate-180"
         aria-hidden="true"
       />
     </NavigationMenuPrimitive.Trigger>
@@ -116,7 +119,7 @@ function NavigationMenuIndicator({
       )}
       {...props}
     >
-      <div className="relative top-[60%] h-2 w-2 rotate-45 rounded-tl-sm bg-border shadow-md" />
+      <div className="relative top-[60%] size-2 rotate-45 rounded-tl-sm bg-border shadow-md" />
     </NavigationMenuPrimitive.Indicator>
   );
 }

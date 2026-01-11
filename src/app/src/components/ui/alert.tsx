@@ -4,18 +4,18 @@ import { cn } from '@app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const alertVariants = cva(
-  'relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground',
+  'relative w-full rounded-lg border p-4 flex items-start gap-3 [&>svg]:shrink-0 [&>svg]:mt-0.5',
   {
     variants: {
       variant: {
-        default: 'bg-background text-foreground',
+        default: 'bg-background text-foreground [&>svg]:text-foreground',
         destructive:
           'border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive',
         warning:
-          'border-yellow-500/50 bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200 [&>svg]:text-yellow-600',
+          'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-500',
         success:
-          'border-green-500/50 bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200 [&>svg]:text-green-600',
-        info: 'border-blue-500/50 bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200 [&>svg]:text-blue-600',
+          'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-500',
+        info: 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-500',
       },
     },
     defaultVariants: {
@@ -55,7 +55,13 @@ function AlertDescription({
   ref,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement> & { ref?: React.Ref<HTMLParagraphElement> }) {
-  return <div ref={ref} className={cn('text-sm [&_p]:leading-relaxed', className)} {...props} />;
+  return (
+    <div
+      ref={ref}
+      className={cn('text-sm leading-relaxed [&_p]:leading-relaxed', className)}
+      {...props}
+    />
+  );
 }
 
 export { Alert, AlertTitle, AlertDescription };

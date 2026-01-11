@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing --var flag
+# Note: --var sets defaultTest vars, which are merged with test vars
+# Test vars take precedence over defaultTest vars
+description: 'Smoke test - variable flag testing'
+
+providers:
+  - echo
+
+prompts:
+  - 'Name: {{name}}, Age: {{age}}, City: {{city}}'
+
+tests:
+  # Test with no vars - will use --var values
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'Name:'

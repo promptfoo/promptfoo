@@ -340,7 +340,7 @@ export class XAIVoiceProvider implements ApiProvider {
       transcript: string;
     };
   }> {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const connectionStartTime = Date.now();
 
       logger.debug('[xAI Voice] Connecting to WebSocket', { url: XAI_VOICE_WS_URL });

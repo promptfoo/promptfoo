@@ -41,8 +41,8 @@ interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
-  failuresByPlugin?: Record<string, any[]>;
-  passesByPlugin?: Record<string, any[]>;
+  failuresByPlugin?: Record<string, unknown[]>;
+  passesByPlugin?: Record<string, unknown[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -107,6 +107,7 @@ const TestSuites = ({
 
   const customPoliciesById = useCustomPoliciesMap(plugins);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const allRows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)
@@ -329,7 +330,7 @@ const TestSuites = ({
               <TooltipTrigger asChild>
                 <span className="flex cursor-help items-center gap-2">
                   <span
-                    className="h-3 w-3 rounded-full"
+                    className="size-3 rounded-full"
                     style={{ backgroundColor: getRiskScoreColor(value) }}
                   />
                   {value.toFixed(2)}
@@ -520,7 +521,7 @@ const TestSuites = ({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
         <Button onClick={exportToCSV} className="print:hidden">
-          <Download className="mr-2 h-4 w-4" />
+          <Download className="mr-2 size-4" />
           Export vulnerabilities to CSV
         </Button>
       </div>

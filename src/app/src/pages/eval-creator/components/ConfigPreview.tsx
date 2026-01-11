@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/car
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import { UnifiedConfig } from '@promptfoo/types';
 import { Code, Eye } from 'lucide-react';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import YamlEditor from './YamlEditor';
@@ -31,7 +32,7 @@ function ConfigSummaryItem({ label, value, isEmpty }: ConfigSummaryItemProps) {
 }
 
 interface ConfigSummaryProps {
-  config: any;
+  config: Partial<UnifiedConfig>;
 }
 
 function ConfigSummary({ config }: ConfigSummaryProps) {
@@ -60,11 +61,11 @@ export function ConfigPreview() {
           <Tabs value={view} onValueChange={(v) => setView(v as 'preview' | 'yaml')}>
             <TabsList className="h-8">
               <TabsTrigger value="preview" className="text-xs">
-                <Eye className="h-3 w-3 mr-1" />
+                <Eye className="size-3 mr-1" />
                 Preview
               </TabsTrigger>
               <TabsTrigger value="yaml" className="text-xs">
-                <Code className="h-3 w-3 mr-1" />
+                <Code className="size-3 mr-1" />
                 YAML
               </TabsTrigger>
             </TabsList>

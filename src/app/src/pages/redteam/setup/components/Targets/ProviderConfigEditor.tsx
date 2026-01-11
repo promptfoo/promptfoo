@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import Box from '@mui/material/Box';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -246,7 +245,7 @@ function ProviderConfigEditor({
   }, [onValidationRequest, validate]);
 
   return (
-    <Box>
+    <div>
       {providerType === 'custom' && (
         <CustomTargetConfiguration
           selectedTarget={provider}
@@ -254,6 +253,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -324,6 +324,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -337,6 +338,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -350,6 +352,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -370,19 +373,18 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
-      <Box sx={{ mt: 3 }}>
+      <div className="mt-6">
         <CommonConfigurationOptions
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 

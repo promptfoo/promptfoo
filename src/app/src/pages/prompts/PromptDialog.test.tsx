@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -493,22 +492,14 @@ describe('PromptDialog', () => {
   it('should render prompt in dark mode without errors', () => {
     const handleClose = vi.fn();
 
-    const darkTheme = createTheme({
-      palette: {
-        mode: 'dark',
-      },
-    });
-
     render(
       <MemoryRouter>
-        <ThemeProvider theme={darkTheme}>
-          <PromptDialog
-            openDialog={true}
-            handleClose={handleClose}
-            selectedPrompt={mockSelectedPromptNoEvals}
-            showDatasetColumn={true}
-          />
-        </ThemeProvider>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPromptNoEvals}
+          showDatasetColumn={true}
+        />
       </MemoryRouter>,
     );
 
@@ -520,23 +511,15 @@ describe('PromptDialog', () => {
   it('should render Eval History count badge in dark mode', () => {
     const handleClose = vi.fn();
 
-    const darkTheme = createTheme({
-      palette: {
-        mode: 'dark',
-      },
-    });
-
     render(
-      <ThemeProvider theme={darkTheme}>
-        <MemoryRouter>
-          <PromptDialog
-            openDialog={true}
-            handleClose={handleClose}
-            selectedPrompt={mockSelectedPrompt}
-            showDatasetColumn={true}
-          />
-        </MemoryRouter>
-      </ThemeProvider>,
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
     );
 
     // Badge is rendered with eval count
@@ -549,14 +532,12 @@ describe('PromptDialog', () => {
 
     render(
       <MemoryRouter>
-        <ThemeProvider theme={createTheme({ palette: { mode: 'dark' } })}>
-          <PromptDialog
-            openDialog={true}
-            handleClose={handleClose}
-            selectedPrompt={mockSelectedPromptNoEvals}
-            showDatasetColumn={true}
-          />
-        </ThemeProvider>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPromptNoEvals}
+          showDatasetColumn={true}
+        />
       </MemoryRouter>,
     );
   });

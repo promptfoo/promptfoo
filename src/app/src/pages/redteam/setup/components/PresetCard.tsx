@@ -1,6 +1,5 @@
-import Paper from '@mui/material/Paper';
-import { alpha } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Card } from '@app/components/ui/card';
+import { cn } from '@app/lib/utils';
 
 interface PresetCardProps {
   name: string;
@@ -10,61 +9,30 @@ interface PresetCardProps {
 }
 
 export default function PresetCard({ name, description, isSelected, onClick }: PresetCardProps) {
+  const testId = `preset-card-${name.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
-    <Paper
-      elevation={2}
+    <Card
+      data-testid={testId}
       onClick={onClick}
-      sx={{
-        p: 2.5,
-        height: '100%',
-        cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-        position: 'relative',
-        overflow: 'hidden',
-        transition: 'all 0.2s ease-in-out',
-        width: '230px',
-        border: (theme) =>
-          `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
-        bgcolor: (theme) =>
-          isSelected ? alpha(theme.palette.primary.main, 0.04) : 'background.paper',
-        '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: (theme) => `0 6px 20px ${alpha(theme.palette.common.black, 0.09)}`,
-          bgcolor: (theme) =>
-            isSelected
-              ? alpha(theme.palette.primary.main, 0.08)
-              : alpha(theme.palette.action.hover, 0.04),
-          '& .MuiTypography-root': {
-            color: 'primary.main',
-          },
-        },
-      }}
+      className={cn(
+        'group flex h-full cursor-pointer flex-col items-start justify-start overflow-hidden p-5 transition-all',
+        isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-background',
+        'hover:-translate-y-0.5 hover:shadow-lg',
+        isSelected ? 'hover:bg-primary/[0.08]' : 'hover:bg-muted/30',
+      )}
     >
-      <Typography
-        variant="h6"
-        sx={{
-          fontWeight: 500,
-          color: isSelected ? 'primary.main' : 'text.primary',
-          transition: 'color 0.2s ease-in-out',
-          mb: 1.5,
-        }}
+      <h3
+        className={cn(
+          'mb-3 text-lg font-medium transition-colors',
+          isSelected ? 'text-primary' : 'text-foreground',
+          'group-hover:text-primary',
+        )}
       >
         {name}
-      </Typography>
+      </h3>
 
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{
-          opacity: 0.8,
-          lineHeight: 1.5,
-        }}
-      >
-        {description}
-      </Typography>
-    </Paper>
+      <p className="text-sm leading-relaxed text-muted-foreground opacity-80">{description}</p>
+    </Card>
   );
 }

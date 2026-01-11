@@ -235,7 +235,7 @@ export class PythonProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      let result: any;
 
       // Use worker pool instead of runPython
       result = await this.pool!.execute(functionName, args);

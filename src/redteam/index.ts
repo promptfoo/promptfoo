@@ -22,6 +22,7 @@ import {
   isFanoutStrategy,
   isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
+  MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
@@ -37,7 +38,7 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { extractGoalFromPrompt, getShortPluginId } from './util';
+import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
@@ -225,6 +226,13 @@ function addLanguageToPluginMetadata(
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
 
+  // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
+  // then fall back to the original plugin.config?.modifiers
+  const pluginModifiers =
+    (test.metadata?.pluginConfig?.modifiers as Record<string, string> | undefined) ||
+    (plugin.config?.modifiers as Record<string, string> | undefined) ||
+    {};
+
   return {
     ...test,
     metadata: {
@@ -233,7 +241,7 @@ function addLanguageToPluginMetadata(
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
       modifiers: {
         ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-        ...(plugin.config?.modifiers || {}),
+        ...pluginModifiers,
         ...test.metadata?.modifiers,
         // Add language to modifiers if not already present (respect existing)
         ...languageToAdd,
@@ -336,26 +344,41 @@ async function applyStrategies(
     newTestCases.push(
       ...strategyTestCases
         .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-        .map((t) => ({
-          ...t,
-          metadata: {
-            ...(t?.metadata || {}),
-            // Don't set strategyId for retry strategy (it's not user-facing)
-            ...(strategy.id !== 'retry' && {
-              strategyId: t?.metadata?.strategyId || strategy.id,
-            }),
-            ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-            ...(t?.metadata?.pluginConfig && {
-              pluginConfig: t.metadata.pluginConfig,
-            }),
-            ...(strategy.config && {
-              strategyConfig: {
-                ...strategy.config,
-                ...(t?.metadata?.strategyConfig || {}),
-              },
-            }),
-          },
-        })),
+        .map((t) => {
+          // Re-extract individual keys from transformed JSON if inputs was used
+          const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+          let updatedVars = t.vars;
+          if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
+            try {
+              const parsed = JSON.parse(String(t.vars[injectVar]));
+              updatedVars = { ...t.vars };
+              Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
+            } catch {
+              // If parsing fails, keep original vars
+            }
+          }
+          return {
+            ...t,
+            vars: updatedVars,
+            metadata: {
+              ...(t?.metadata || {}),
+              // Don't set strategyId for retry strategy (it's not user-facing)
+              ...(strategy.id !== 'retry' && {
+                strategyId: t?.metadata?.strategyId || strategy.id,
+              }),
+              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+              ...(t?.metadata?.pluginConfig && {
+                pluginConfig: t.metadata.pluginConfig,
+              }),
+              ...(strategy.config && {
+                strategyConfig: {
+                  ...strategy.config,
+                  ...(t?.metadata?.strategyConfig || {}),
+                },
+              }),
+            },
+          };
+        }),
     );
 
     // Compute a display id for reporting (helpful for layered strategies)
@@ -558,6 +581,7 @@ export async function synthesize({
   delay,
   entities: entitiesOverride,
   injectVar,
+  inputs,
   language,
   maxConcurrency = 1,
   plugins,
@@ -648,7 +672,7 @@ export async function synthesize({
     return true;
   });
 
-  validateStrategies(strategies);
+  await validateStrategies(strategies);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
@@ -727,6 +751,19 @@ export async function synthesize({
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
 
+  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  if (hasMultipleInputs) {
+    const inputKeys = Object.keys(inputs);
+    logger.info(
+      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
+    );
+    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
+    // with user-defined input variable names
+    injectVar = MULTI_INPUT_VAR;
+  }
+
+  // Determine injectVar if not explicitly set (only applies to single-input mode)
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
@@ -923,6 +960,8 @@ export async function synthesize({
           config: {
             ...resolvePluginConfig(plugin.config),
             ...(lang ? { language: lang } : {}),
+            // Pass inputs to plugin for multi-variable test case generation
+            ...(hasMultipleInputs ? { inputs } : {}),
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),

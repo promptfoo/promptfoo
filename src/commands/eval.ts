@@ -58,6 +58,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
   // resume: z.union([z.string(), z.boolean()]).optional(),
@@ -374,6 +375,7 @@ export async function doEval(
     if (!resumeEval) {
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
+        failingOnly: cmdObj.filterFailingOnly,
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
@@ -1269,7 +1271,11 @@ export function evalCommand(
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option(
       '--filter-failing <path or id>',
-      'Path to json output file or eval ID to filter failing tests from',
+      'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
+    )
+    .option(
+      '--filter-failing-only <path or id>',
+      'Path to json output file or eval ID to filter assertion failures from (excludes errors)',
     )
     .option(
       '--filter-errors-only <path or id>',
@@ -1316,6 +1322,10 @@ export function evalCommand(
       'Generate N new prompts and append them to the prompt list',
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option(
+      '-x, --extension <paths...>',
+      'Extension hooks to run (e.g., file://handler.js:afterAll)',
+    )
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
