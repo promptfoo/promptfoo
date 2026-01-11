@@ -95,7 +95,7 @@ export default function ConfigurationTab({
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">Select Models</h2>
         <Button variant="outline" onClick={onShowOptions}>
-          <SettingsIcon className="h-4 w-4 mr-2" />
+          <SettingsIcon className="size-4 mr-2" />
           Advanced Options
         </Button>
       </div>
@@ -123,7 +123,7 @@ export default function ConfigurationTab({
                 {isScanning || isCheckingInstallation ? (
                   <Spinner size="sm" className="mr-2" />
                 ) : (
-                  <PlayArrowIcon className="h-5 w-5 mr-2" />
+                  <PlayArrowIcon className="size-5 mr-2" />
                 )}
                 {getScanButtonText()}
               </Button>

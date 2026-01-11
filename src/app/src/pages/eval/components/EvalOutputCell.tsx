@@ -1,29 +1,33 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import {
-  Check,
-  ContentCopy,
-  Edit,
-  Link,
-  Numbers,
-  Search,
-  Star,
-  ThumbDown,
-  ThumbUp,
-} from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+  resolveVideoSource,
+} from '@app/utils/media';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
+import {
+  Check,
+  ClipboardCopy,
+  Hash,
+  Link,
+  Pencil,
+  Search,
+  Star,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -63,9 +67,22 @@ export function isImageProvider(provider: string | undefined): boolean {
   return false;
 }
 
-const tooltipSlotProps: TooltipProps['slotProps'] = {
-  popper: { disablePortal: true },
-};
+/**
+ * Detects if the provider is a video generation provider.
+ * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
+ * - 'google:video:veo-3.1-generate-preview' (Google Veo)
+ * - 'google:video:veo-2-generate' (Google Veo 2)
+ * Used to skip truncation for video content.
+ */
+export function isVideoProvider(provider: string | undefined): boolean {
+  if (!provider) {
+    return false;
+  }
+  // Check for :video: namespace (OpenAI Sora, Google Veo)
+  return provider.includes(':video:');
+}
 
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
@@ -153,10 +170,34 @@ function EvalOutputCell({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-  const toggleLightbox = (url?: string) => {
-    setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+
+  // Memoized to maintain stable reference across renders, preventing
+  // unnecessary re-renders of markdown components that use this callback.
+  // Uses functional update to avoid stale closure issues.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const toggleLightbox = useCallback((url?: string) => {
+    setLightboxImage(url ?? null);
+    setLightboxOpen((prev) => !prev);
+  }, []);
+
+  // Memoized components object for ReactMarkdown to prevent re-renders.
+  // Creating this inline would cause ReactMarkdown to re-render on every
+  // parent render, even when content hasn't changed.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <img
+          loading="lazy"
+          src={src}
+          alt={alt}
+          onClick={() => toggleLightbox(src)}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
+    }),
+    [toggleLightbox],
+  );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
@@ -216,7 +257,8 @@ function EvalOutputCell({
   }
 
   // Include provider-level error if present (e.g., from Python provider returning error)
-  if (output.error) {
+  // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
+  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     failReasons.unshift(output.error);
   }
 
@@ -293,9 +335,14 @@ function EvalOutputCell({
     }
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc
+    inlineImageSrc ||
+    text?.trim().startsWith('<svg')
   ) {
-    const src = inlineImageSrc || text;
+    // Convert raw SVG to data URI if needed
+    let src = inlineImageSrc || text;
+    if (text?.trim().startsWith('<svg')) {
+      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+    }
     node = (
       <img
         src={src}
@@ -326,6 +373,36 @@ function EvalOutputCell({
         </div>
       );
     }
+  } else if (output.video || output.response?.video) {
+    // Support both top-level video (new format) and response.video (fallback)
+    // Video can use blob storage (blobRef), storage refs (storageRef), or legacy URL paths
+    const videoData = output.video || output.response?.video;
+    const videoSource = resolveVideoSource(videoData);
+    if (videoSource) {
+      node = (
+        <div className="video-output">
+          <video
+            controls
+            style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+            poster={videoSource.poster}
+            data-testid="video-player"
+          >
+            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+            Your browser does not support the video element.
+          </video>
+          <div
+            className="video-metadata"
+            style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
+          >
+            {videoData?.model && (
+              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
+            )}
+            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
+          </div>
+        </div>
+      );
+    }
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
     // display as JSON if it's a valid object/array, otherwise render as Markdown
@@ -342,22 +419,14 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      // Use stable constants and memoized components to prevent unnecessary
+      // re-renders when parent re-renders due to layout changes.
+      // @see https://github.com/promptfoo/promptfoo/issues/969
       node = (
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          // Allow data: URIs for inline images (e.g., from Gemini image generation)
-          urlTransform={(url) => url}
-          components={{
-            img: ({ src, alt }) => (
-              <img
-                loading="lazy"
-                src={src}
-                alt={alt}
-                onClick={() => toggleLightbox(src)}
-                style={{ cursor: 'pointer' }}
-              />
-            ),
-          }}
+          remarkPlugins={REMARK_PLUGINS}
+          urlTransform={IDENTITY_URL_TRANSFORM}
+          components={markdownComponents}
         >
           {normalizedText}
         </ReactMarkdown>
@@ -365,16 +434,16 @@ function EvalOutputCell({
     }
   }
 
-  const handleRating = React.useCallback(
-    (isPass: boolean) => {
-      const newRating = activeRating === isPass ? null : isPass;
-      setActiveRating(newRating);
+  const handleRating = (isPass: boolean) => {
+    const newRating = activeRating === isPass ? null : isPass;
+    setActiveRating(newRating);
+    // Defer the API call to allow the UI to update first
+    queueMicrotask(() => {
       onRating(newRating, undefined, output.gradingResult?.comment);
-    },
-    [activeRating, onRating, output.gradingResult?.comment],
-  );
+    });
+  };
 
-  const handleSetScore = React.useCallback(() => {
+  const handleSetScore = () => {
     const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
       const parsedScore = Number.parseFloat(score);
@@ -384,10 +453,10 @@ function EvalOutputCell({
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
     }
-  }, [onRating, output.score, output.gradingResult?.comment]);
+  };
 
   const [linked, setLinked] = React.useState(false);
-  const handleRowShareLink = React.useCallback(() => {
+  const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
 
@@ -400,13 +469,20 @@ function EvalOutputCell({
       .catch((error) => {
         console.error('Failed to copy link to clipboard:', error);
       });
-  }, [rowIndex]);
+  };
 
   const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    navigator.clipboard.writeText(output.text);
-    setCopied(true);
-  }, [output.text]);
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy output to clipboard:', error);
+      });
+  };
 
   let tokenUsageDisplay;
   let latencyDisplay;
@@ -460,53 +536,48 @@ function EvalOutputCell({
         tokenUsage.completionDetails.reasoning ?? 0,
       );
 
+      const tooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`;
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-            {` R${reasoningTokens}`}
-          </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span aria-label={tooltipText}>
+              {totalTokens}
+              {(promptTokens !== '0' || completionTokens !== '0') &&
+                ` (${promptTokens}+${completionTokens})`}
+              {` R${reasoningTokens}`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{tooltipText}</TooltipContent>
         </Tooltip>
       );
     } else {
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-          </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              {totalTokens}
+              {(promptTokens !== '0' || completionTokens !== '0') &&
+                ` (${promptTokens}+${completionTokens})`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}</TooltipContent>
         </Tooltip>
       );
     }
   }
 
-  const cellStyle = useMemo(() => {
-    const base = output.gradingResult?.comment?.startsWith('!highlight')
-      ? {
-          backgroundColor: 'var(--cell-highlight-color)',
-        }
-      : {};
-
-    return {
-      ...base,
-      '--max-image-width': `${maxImageWidth}px`,
-      '--max-image-height': `${maxImageHeight}px`,
-    } as CSSPropertiesWithCustomVars;
-  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+  const cellStyle: CSSPropertiesWithCustomVars = {
+    ...(output.gradingResult?.comment?.startsWith('!highlight')
+      ? { backgroundColor: 'var(--cell-highlight-color)' }
+      : {}),
+    '--max-image-width': `${maxImageWidth}px`,
+    '--max-image-height': `${maxImageHeight}px`,
+  };
 
   // Style for main content area when highlighted
-  const contentStyle = useMemo(() => {
-    return output.gradingResult?.comment?.startsWith('!highlight')
-      ? { color: 'var(--cell-highlight-text-color)' }
-      : {};
-  }, [output.gradingResult?.comment]);
+  const contentStyle = output.gradingResult?.comment?.startsWith('!highlight')
+    ? { color: 'var(--cell-highlight-text-color)' }
+    : {};
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -587,32 +658,30 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
-  const providerOverride = useMemo(() => {
-    const provider = output.testCase?.provider;
-    let testCaseProvider: string | null = null;
-
-    if (!provider) {
-      return null;
-    }
-
-    if (typeof provider === 'string') {
-      testCaseProvider = provider;
-    } else if (typeof provider === 'object' && 'id' in provider) {
-      const id = provider.id;
-      if (typeof id === 'string') {
-        testCaseProvider = id;
-      }
-    }
-
-    if (testCaseProvider) {
-      return (
-        <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider pill">{testCaseProvider}</span>
+  // Compute provider override badge for test case-level model overrides
+  let providerOverride: React.ReactNode = null;
+  const testCaseProvider = output.testCase?.provider;
+  if (testCaseProvider) {
+    const providerId: string | null =
+      typeof testCaseProvider === 'string'
+        ? testCaseProvider
+        : typeof testCaseProvider === 'object' &&
+            testCaseProvider !== null &&
+            'id' in testCaseProvider &&
+            typeof testCaseProvider.id === 'string'
+          ? testCaseProvider.id
+          : null;
+    if (providerId) {
+      providerOverride = (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="provider pill">{providerId}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top">Model override for this test</TooltipContent>
         </Tooltip>
       );
     }
-    return null;
-  }, [output]);
+  }
 
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
     ? output.gradingResult.comment.slice('!highlight'.length).trim()
@@ -655,48 +724,137 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+  const [actionsHovered, setActionsHovered] = React.useState(false);
+  const showExtraActions = shiftKeyPressed || actionsHovered;
+
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
+    <div
+      className="cell-actions"
+      onMouseEnter={() => setActionsHovered(true)}
+      onMouseLeave={() => setActionsHovered(false)}
+    >
+      {showExtraActions && (
         <>
-          <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleCopy}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-            </IconButton>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleCopy}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
-          <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleToggleHighlight}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              <Star fontSize="small" />
-            </IconButton>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
+                onClick={handleToggleHighlight}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Toggle test highlight"
+              >
+                <Star
+                  className={`size-4 ${commentText.startsWith('!highlight') ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={commentText.startsWith('!highlight') ? 'currentColor' : 'none'}
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
-            <IconButton
-              className="action"
-              size="small"
-              onClick={handleRowShareLink}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {linked ? <Check fontSize="small" /> : <Link fontSize="small" />}
-            </IconButton>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleRowShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Share output"
+              >
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Share output</TooltipContent>
           </Tooltip>
         </>
       )}
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            onClick={() => handleRating(true)}
+            aria-pressed={activeRating === true}
+            aria-label="Mark test passed"
+          >
+            <ThumbsUp
+              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+              fill={activeRating === true ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            onClick={() => handleRating(false)}
+            aria-pressed={activeRating === false}
+            aria-label="Mark test failed"
+          >
+            <ThumbsDown
+              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+              fill={activeRating === false ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleSetScore}
+            aria-label="Set test score"
+          >
+            <Hash className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Set test score</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleCommentOpen}
+            aria-label="Edit comment"
+          >
+            <Pencil className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Edit comment</TooltipContent>
+      </Tooltip>
       {output.prompt && (
         <>
-          <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
-            <IconButton className="action" size="small" onClick={handlePromptOpen}>
-              <Search fontSize="small" />
-            </IconButton>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handlePromptOpen}
+                aria-label="View output and test details"
+              >
+                <Search className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>View output and test details</TooltipContent>
           </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
@@ -728,40 +886,6 @@ function EvalOutputCell({
           )}
         </>
       )}
-      <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
-        <IconButton
-          className={`action ${activeRating === true ? 'active' : ''}`}
-          size="small"
-          onClick={() => handleRating(true)}
-          color={activeRating === true ? 'success' : 'default'}
-          aria-pressed={activeRating === true}
-          aria-label="Mark test passed"
-        >
-          <ThumbUp fontSize="small" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
-        <IconButton
-          className={`action ${activeRating === false ? 'active' : ''}`}
-          size="small"
-          onClick={() => handleRating(false)}
-          color={activeRating === false ? 'error' : 'default'}
-          aria-pressed={activeRating === false}
-          aria-label="Mark test failed"
-        >
-          <ThumbDown fontSize="small" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
-        <IconButton className="action" size="small" onClick={handleSetScore}>
-          <Numbers fontSize="small" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
-        <IconButton className="action" size="small" onClick={handleCommentOpen}>
-          <Edit fontSize="small" />
-        </IconButton>
-      </Tooltip>
     </div>
   );
 
@@ -814,10 +938,17 @@ function EvalOutputCell({
           </audio>
         </div>
       )}
-      <div style={contentStyle}>
+      <div
+        className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
+        style={contentStyle}
+      >
         <TruncatedText
           text={node || normalizedText}
-          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+          maxLength={
+            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+              ? 0
+              : maxTextLength
+          }
         />
       </div>
       {comment}

@@ -1786,6 +1786,96 @@ describe('evaluator', () => {
     );
   });
 
+  it('evaluator should correctly count named scores with template metric variables', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for template metrics')],
+      tests: [
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{metricCategory}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScores: expect.objectContaining({
+              Accuracy: expect.any(Number),
+            }),
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 3, // 2 assertions in first test + 1 in second
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should handle mixed static and template metrics correctly', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test mixed metrics')],
+      tests: [
+        {
+          vars: { category: 'Dynamic' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{category}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Static',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Dynamic: 1,
+              Static: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -2149,6 +2239,90 @@ describe('evaluator', () => {
     expect(summary.results[0].success).toBe(true);
     expect(summary.results[0].score).toBe(1);
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should apply max-score to overall pass/fail and stats', async () => {
+    const maxScoreProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('max-score-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [maxScoreProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'max-score' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results
+      .filter((result) => result.testIdx === 0)
+      .sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].success).toBe(true);
+    expect(results[1].success).toBe(false);
+    expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.errors).toBe(0);
+  });
+
+  it('should apply select-best to overall pass/fail and stats', async () => {
+    // Mock matchesSelectBest to return deterministic results (first wins, second loses)
+    const matchers = await import('../src/matchers');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: false, score: 0, reason: 'Not selected' },
+    ]);
+
+    try {
+      const selectBestProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('select-best-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'hello world',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [selectBestProvider],
+        prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+        tests: [
+          {
+            assert: [
+              { type: 'contains', value: 'hello' },
+              { type: 'select-best', value: 'choose the best one' },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      const results = summary.results
+        .filter((result) => result.testIdx === 0)
+        .sort((a, b) => a.promptIdx - b.promptIdx);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].success).toBe(true);
+      expect(results[1].success).toBe(false);
+      expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.stats.successes).toBe(1);
+      expect(summary.stats.failures).toBe(1);
+      expect(summary.stats.errors).toBe(0);
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
   });
 
   it('should apply prompt config to provider call', async () => {
@@ -2832,6 +3006,95 @@ describe('evaluator', () => {
     }
   });
 
+  it('should honor external abortSignal when timeoutMs is set', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+    let abortTimer: NodeJS.Timeout | null = null;
+    const abortController = new AbortController();
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 200);
+
+          abortTimer = setTimeout(() => {
+            abortController.abort();
+          }, 10);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            if (abortTimer) {
+              clearTimeout(abortTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        timeoutMs: 1000,
+        abortSignal: abortController.signal,
+      });
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('aborted'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+      if (abortTimer) {
+        clearTimeout(abortTimer);
+      }
+    }
+  });
+
   it('should abort when exceeding maxEvalTimeMs', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -3374,6 +3637,14 @@ describe('isAllowedPrompt', () => {
     expect(isAllowedPrompt(prompt2, ['group1'])).toBe(true);
   });
 
+  it('should return true if allowedPrompts includes a wildcard prefix', () => {
+    expect(isAllowedPrompt(prompt2, ['group1:*'])).toBe(true);
+  });
+
+  it('should return false if a wildcard prefix does not match the prompt label', () => {
+    expect(isAllowedPrompt(prompt3, ['group1:*'])).toBe(false);
+  });
+
   it('should return false if allowedPrompts does not include the prompt label or any matching start label with a colon', () => {
     expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
   });
@@ -3603,6 +3874,44 @@ describe('runEval', () => {
     expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
   });
 
+  it('should preserve provider error context and plugin metadata on failure', async () => {
+    const apiError: any = new Error('Request failed with status code 400');
+    apiError.response = {
+      status: 400,
+      statusText: 'Bad Request',
+      data: 'Invalid payload',
+    };
+
+    const failingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('failing-provider'),
+      label: 'Azure GPT 5',
+      callApi: vi.fn().mockRejectedValue(apiError),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: failingProvider,
+      prompt: { raw: 'Test prompt', label: 'error-label' },
+      test: { metadata: { pluginId: 'plugin-123', strategyId: 'basic' } },
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.metadata?.errorContext).toMatchObject({
+      providerId: 'failing-provider',
+      providerLabel: 'Azure GPT 5',
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    expect(result.metadata?.errorContext?.responseSnippet).toContain('Invalid payload');
+    expect(result.metadata?.pluginId).toBe('plugin-123');
+    expect(result.metadata?.strategyId).toBe('basic');
+    expect(result.error).toContain('Request failed with status code 400');
+  });
+
   it('should handle registers', async () => {
     const registers = { savedValue: 'stored data' };
 
@@ -3773,6 +4082,161 @@ describe('runEval', () => {
           rejectedPrediction: 0,
         },
       },
+    });
+  });
+
+  it('should skip rendering redteam inject variable to prevent nunjucks errors on template syntax', async () => {
+    // This tests the fix for Discord issue where redteam prompts containing {{purpose | trim}}
+    // caused "TypeError: Cannot read properties of undefined (reading 'replace')"
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          // This contains template syntax that would fail if rendered (purpose is undefined)
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          injectVar: 'prompt',
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // The inject var should be preserved as-is, not rendered
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
+    // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          // injectVar NOT set - should fall back to 'prompt'
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // Should still skip rendering the default 'prompt' var
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  describe('latencyMs handling', () => {
+    it('should use provider-supplied latencyMs when available', async () => {
+      const providerWithLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 5000,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(5000);
+    });
+
+    it('should use provider-supplied latencyMs for cached responses', async () => {
+      const cachedProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Cached output',
+          cached: true,
+          latencyMs: 3500,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: cachedProvider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(3500);
+      expect(results[0].response?.cached).toBe(true);
+    });
+
+    it('should fall back to measured latency when provider does not supply latencyMs', async () => {
+      const providerWithoutLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('no-latency-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return {
+            output: 'Test output',
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+          };
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithoutLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      // Should have measured latency (>= 50ms since we added a delay)
+      expect(results[0].latencyMs).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should respect provider latencyMs of 0', async () => {
+      const providerWithZeroLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('zero-latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 0,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithZeroLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(0);
     });
   });
 });

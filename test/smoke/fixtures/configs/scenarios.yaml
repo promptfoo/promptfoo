@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - scenarios feature (7.3.1)'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}, welcome to {{location}}'
+
+scenarios:
+  - description: 'US users scenario'
+    config:
+      # Config must be an array of var combinations
+      - vars:
+          region: 'US'
+    tests:
+      - vars:
+          name: Alice
+          location: New York
+        assert:
+          - type: contains
+            value: 'New York'
+      - vars:
+          name: Bob
+          location: California
+        assert:
+          - type: contains
+            value: 'California'
+
+  - description: 'EU users scenario'
+    config:
+      - vars:
+          region: 'EU'
+    tests:
+      - vars:
+          name: Claude
+          location: Paris
+        assert:
+          - type: contains
+            value: 'Paris'

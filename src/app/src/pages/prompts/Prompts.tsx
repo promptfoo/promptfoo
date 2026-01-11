@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
+import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -43,6 +45,7 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
@@ -116,25 +119,29 @@ export default function Prompts({
   };
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-0 bg-zinc-50 dark:bg-zinc-950 overflow-y-auto">
+    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
-        <div className="container max-w-7xl mx-auto px-6 py-6">
+        <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Prompts</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage and track all prompt templates and their evaluation history
           </p>
         </div>
       </PageHeader>
-      <div className="container max-w-7xl mx-auto px-6 py-6">
-        <DataTable
-          columns={columns}
-          data={data}
-          isLoading={isLoading}
-          error={error}
-          onRowClick={handleRowClick}
-          emptyMessage="Create a prompt to start evaluating your AI responses"
-          initialSorting={[{ id: 'recentEvalDate', desc: true }]}
-        />
+      <div className="flex-1 min-h-0 flex flex-col p-6">
+        <div className="container max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
+          <Card className="bg-white dark:bg-zinc-900 p-4 flex-1 min-h-0 flex flex-col">
+            <DataTable
+              columns={columns}
+              data={data}
+              isLoading={isLoading}
+              error={error}
+              onRowClick={handleRowClick}
+              emptyMessage="Create a prompt to start evaluating your AI responses"
+              initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+            />
+          </Card>
+        </div>
       </div>
       {dialogState.open &&
         dialogState.selectedIndex < data.length &&
@@ -146,6 +153,6 @@ export default function Prompts({
             showDatasetColumn={showDatasetColumn}
           />
         )}
-    </div>
+    </PageContainer>
   );
 }

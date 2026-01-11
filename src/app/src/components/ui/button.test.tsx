@@ -65,7 +65,7 @@ describe('Button', () => {
       </Button>,
     );
     const button = screen.getByRole('button', { name: 'Icon button' });
-    expect(button).toHaveClass('h-9', 'w-9');
+    expect(button).toHaveClass('size-9');
   });
 
   it('handles onClick event', () => {

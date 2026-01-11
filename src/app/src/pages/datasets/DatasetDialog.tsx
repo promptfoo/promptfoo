@@ -97,7 +97,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeft className="size-4" />
                     </Button>
                     <span className="text-sm text-muted-foreground">
                       Page {page} of {totalPages}
@@ -108,7 +108,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                       disabled={page >= totalPages}
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="size-4" />
                     </Button>
                   </div>
                 )}
@@ -119,12 +119,12 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                   <thead className="bg-muted/50">
                     <tr className="border-b border-border">
                       <th className="px-3 py-2 text-left font-semibold w-[15%]">Prompt ID</th>
-                      <th className="px-3 py-2 text-left font-semibold w-[25%]">Prompt Content</th>
+                      <th className="px-3 py-2 text-left font-semibold w-1/4">Prompt Content</th>
                       <th className="px-3 py-2 text-right font-semibold w-[12%]">Raw Score</th>
                       <th className="px-3 py-2 text-right font-semibold w-[12%]">Pass Rate</th>
                       <th className="px-3 py-2 text-right font-semibold w-[12%]">Pass Count</th>
                       <th className="px-3 py-2 text-right font-semibold w-[12%]">Fail Count</th>
-                      <th className="px-3 py-2 text-left font-semibold w-[20%]">Latest Eval</th>
+                      <th className="px-3 py-2 text-left font-semibold w-1/5">Latest Eval</th>
                     </tr>
                   </thead>
                   <tbody>

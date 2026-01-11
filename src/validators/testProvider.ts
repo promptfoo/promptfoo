@@ -3,6 +3,7 @@ import { evaluate } from '../evaluator';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { HttpProviderConfig } from '../providers/http';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';
@@ -15,14 +16,19 @@ import {
 } from './util';
 
 import type { EvaluateOptions, TestSuite } from '../types/index';
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, ProviderResponse } from '../types/providers';
+
+interface Result {
+  response?: ProviderResponse;
+  metadata?: Record<string, unknown>;
+}
 
 export interface ProviderTestResult {
   success: boolean;
   message: string;
   error?: string;
-  providerResponse?: any;
-  transformedRequest?: any;
+  providerResponse?: unknown;
+  transformedRequest?: unknown;
   sessionId?: string;
   analysis?: {
     changes_needed?: boolean;
@@ -40,9 +46,9 @@ export interface SessionTestResult {
     sessionId?: string;
     sessionSource?: string;
     request1?: { prompt: string; sessionId?: string };
-    response1?: any;
+    response1?: unknown;
     request2?: { prompt: string; sessionId?: string };
-    response2?: any;
+    response2?: unknown;
   };
 }
 
@@ -282,7 +288,7 @@ function validateServerSessionExtraction({
   sessionSource: string;
   sessionId: string;
   firstPrompt: string;
-  firstResult: any;
+  firstResult: Result;
 }): ValidationResult {
   if (sessionSource !== 'server') {
     return { success: true };
@@ -320,9 +326,9 @@ function buildServerSessionTroubleshootingAdvice({
   secondResult,
 }: {
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: any;
-  firstResult: any;
-  secondResult: any;
+  providerConfig: HttpProviderConfig;
+  firstResult: Result;
+  secondResult: Result;
 }): string {
   const firstSessionId = firstResult.response?.sessionId ?? firstResult.metadata?.sessionId;
   const secondSessionId = secondResult.response?.sessionId ?? secondResult.metadata?.sessionId;
@@ -357,10 +363,10 @@ function buildTroubleshootingAdvice({
   sessionWorking: boolean;
   sessionSource: string;
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: any;
+  providerConfig: HttpProviderConfig;
   initialSessionId: string | undefined;
-  firstResult: any;
-  secondResult: any;
+  firstResult: Result;
+  secondResult: Result;
 }): string {
   if (sessionWorking) {
     return '';

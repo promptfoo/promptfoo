@@ -1,6 +1,5 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
 import Citations from './Citations';
 
 interface CodeDisplayProps {
@@ -49,7 +48,7 @@ export function OutputsPanel({
   const promptKey = providerPrompt ? 'providerPrompt' : 'redteamFinalPrompt';
 
   return (
-    <Box>
+    <div>
       {actualPrompt && (
         <CodeDisplay
           content={actualPrompt}
@@ -84,6 +83,6 @@ export function OutputsPanel({
         />
       )}
       {citations && <Citations citations={citations} />}
-    </Box>
+    </div>
   );
 }

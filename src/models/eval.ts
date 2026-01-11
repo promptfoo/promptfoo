@@ -85,12 +85,14 @@ function sanitizeRuntimeOptions(
   const sanitized = { ...options };
 
   // Remove known non-serializable fields
-  delete (sanitized as any).abortSignal;
+  delete sanitized.abortSignal;
 
   // Remove any function or symbol values
   for (const key in sanitized) {
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
     const value = (sanitized as any)[key];
     if (typeof value === 'function' || typeof value === 'symbol') {
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
       delete (sanitized as any)[key];
     }
   }
@@ -248,6 +250,12 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
 
+  /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
+
   static async latest() {
     const db = getDb();
     const db_results = await db
@@ -305,7 +313,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
-      runtimeOptions: (eval_ as any).runtimeOptions,
+      runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
@@ -513,7 +521,7 @@ export default class Eval {
 
   async save() {
     const db = getDb();
-    const updateObj: Record<string, any> = {
+    const updateObj: Record<string, unknown> = {
       config: this.config,
       prompts: this.prompts,
       description: this.config.description,
@@ -1081,6 +1089,7 @@ export default class Eval {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata,
+        // biome-ignore lint/suspicious/noExplicitAny: FIXME yeah that aint right
         spans: (trace.spans || []).map((span: any) => {
           // Calculate duration
           const durationMs =
@@ -1420,6 +1429,7 @@ export async function getEvalSummaries(
             if (keys.length === 1 && !('id' in p)) {
               // This is a declarative provider
               const providerId = keys[0];
+              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
               const providerConfig = (p as any)[providerId];
               deserializedProviders.push({
                 id: providerId,
@@ -1428,8 +1438,8 @@ export async function getEvalSummaries(
             } else {
               // `providers: ProviderOptions[]` with explicit id
               deserializedProviders.push({
-                id: (p as any).id ?? 'unknown',
-                label: (p as any).label ?? null,
+                id: p.id ?? 'unknown',
+                label: p.label ?? null,
               });
             }
           }
