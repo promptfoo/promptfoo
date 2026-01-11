@@ -455,8 +455,6 @@ export async function doEval(
         : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
-    // Re-enabled after fixing root cause: process.exit() was bypassing shutdownGracefully()
-    // See: docs/plans/sigint-graceful-shutdown.md
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
