@@ -12,7 +12,7 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
-import { PartialGenerationError } from '../../../src/redteam/shared';
+import { PartialGenerationError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,

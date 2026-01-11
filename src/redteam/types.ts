@@ -365,3 +365,41 @@ export interface AudioGradingConfig {
  * This is a cleaner subset of RedteamCliGenerateOptions for external use
  */
 export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
+
+/**
+ * Information about a plugin that failed to generate test cases.
+ */
+export interface FailedPluginInfo {
+  pluginId: string;
+  requested: number;
+}
+
+/**
+ * Custom error class for partial test generation failures.
+ * Thrown when some plugins completely fail to generate any test cases,
+ * which would significantly impact scan quality and completeness.
+ */
+export class PartialGenerationError extends Error {
+  public readonly failedPlugins: FailedPluginInfo[];
+
+  constructor(failedPlugins: FailedPluginInfo[]) {
+    const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+    const message =
+      `Test case generation failed for ${failedPlugins.length} plugin(s):\n` +
+      `${pluginList.join('\n')}\n\n` +
+      `The scan has been stopped because missing test cases would significantly ` +
+      `decrease scan quality and completeness.\n\n` +
+      `Possible causes:\n` +
+      `  - API rate limiting or connectivity issues\n` +
+      `  - Invalid plugin configuration\n` +
+      `  - Provider errors during generation\n\n` +
+      `To troubleshoot:\n` +
+      `  - Run with --verbose flag to see detailed error messages\n` +
+      `  - Check API keys and provider configuration\n` +
+      `  - Retry the scan after resolving any reported errors`;
+
+    super(message);
+    this.name = 'PartialGenerationError';
+    this.failedPlugins = failedPlugins;
+  }
+}
