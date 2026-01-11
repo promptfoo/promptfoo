@@ -2436,7 +2436,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
           stream: true,
-          response_format: { type: 'json_schema' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'person',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: { name: { type: 'string' }, age: { type: 'number' } },
+                required: ['name', 'age'],
+                additionalProperties: false,
+              },
+            },
+          },
         },
       });
       const result = await provider.callApi(
@@ -2619,7 +2631,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
           stream: true,
-          response_format: { type: 'json_schema' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'test_output',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: { value: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          },
         },
       });
       const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
