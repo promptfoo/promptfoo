@@ -523,7 +523,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
         // Check abort signal
         if (callOptions?.abortSignal?.aborted) {
-          throw new Error('AbortError');
+          const abortError = new Error('AbortError');
+          abortError.name = 'AbortError';
+          throw abortError;
         }
 
         switch (event.type) {
@@ -645,6 +647,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             usage = event.usage;
             logger.debug('Codex turn completed', { usage });
             break;
+          default:
+            // Log unknown event types for debugging
+            logger.debug('Codex unknown event type', { type: event.type });
         }
 
         // Update last event time for next iteration
@@ -836,7 +841,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       model: modelName,
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex:
+        typeof context?.test?.vars?.__testIdx === 'number'
+          ? context.test.vars.__testIdx
+          : undefined,
       promptLabel: context?.prompt?.label,
       traceparent: context?.traceparent,
       requestBody: prompt,
