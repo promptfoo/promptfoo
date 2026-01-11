@@ -74,8 +74,7 @@ export function filterConfigForDisplay(obj: any, depth = 0): any {
 }
 
 /**
- * Renders a YAML-like config display with syntax highlighting.
- * Keys are muted, values are colored by type.
+ * Renders config as formatted YAML with syntax highlighting.
  */
 function StyledConfigContent({
   displayId,
@@ -84,75 +83,52 @@ function StyledConfigContent({
   displayId: string | null;
   configYaml: string | null;
 }): ReactNode {
-  const lines: ReactNode[] = [];
-
-  // Add id line if present
+  // Build the full YAML content
+  let fullYaml = '';
   if (displayId) {
-    lines.push(
-      <div key="id" className="flex">
-        <span className="text-slate-500 dark:text-slate-500">id: </span>
-        <span className="text-slate-700 dark:text-slate-300">{displayId}</span>
-      </div>,
-    );
+    fullYaml = `id: ${displayId}`;
   }
-
-  // Parse and style YAML lines
   if (configYaml) {
-    const yamlLines = configYaml.split('\n');
-    yamlLines.forEach((line, index) => {
-      if (!line.trim()) {
-        return;
-      }
-
-      // Find the colon that separates key from value
-      const colonIndex = line.indexOf(':');
-      if (colonIndex === -1) {
-        // No colon - just render as-is (shouldn't happen in valid YAML)
-        lines.push(
-          <div key={index} className="text-slate-700 dark:text-slate-300">
-            {line}
-          </div>,
-        );
-        return;
-      }
-
-      // Extract indentation, key, and value
-      const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1] : '';
-      const keyPart = line.slice(indent.length, colonIndex);
-      const valuePart = line.slice(colonIndex + 1);
-
-      // Style based on value type
-      let valueElement: ReactNode;
-      const trimmedValue = valuePart.trim();
-
-      if (trimmedValue === '' || trimmedValue === '|' || trimmedValue === '>') {
-        // Empty value or YAML block indicator - just show colon
-        valueElement = null;
-      } else if (trimmedValue === 'true' || trimmedValue === 'false') {
-        // Boolean
-        valueElement = <span className="text-amber-600 dark:text-amber-400">{valuePart}</span>;
-      } else if (/^-?\d+\.?\d*$/.test(trimmedValue)) {
-        // Number
-        valueElement = <span className="text-emerald-600 dark:text-emerald-400">{valuePart}</span>;
-      } else {
-        // String or other
-        valueElement = <span className="text-slate-700 dark:text-slate-300">{valuePart}</span>;
-      }
-
-      lines.push(
-        <div key={index} className="flex">
-          <span className="text-slate-500 dark:text-slate-500 whitespace-pre">
-            {indent}
-            {keyPart}:
-          </span>
-          {valueElement}
-        </div>,
-      );
-    });
+    fullYaml = fullYaml ? `${fullYaml}\n${configYaml}` : configYaml;
   }
 
-  return <>{lines}</>;
+  if (!fullYaml) {
+    return null;
+  }
+
+  // Apply syntax highlighting to YAML
+  const highlighted = fullYaml.split('\n').map((line, index) => {
+    // Match pattern: indentation, key, colon, optional value
+    const match = line.match(/^(\s*)([^:]+)(:)(.*)$/);
+    if (!match) {
+      // Lines without colons (like array items starting with -)
+      return (
+        <div key={index} className="whitespace-pre text-slate-700 dark:text-slate-300">
+          {line}
+        </div>
+      );
+    }
+
+    const [, indent, key, colon, value] = match;
+    const trimmedValue = value.trim();
+
+    // Determine value color based on type
+    let valueClass = 'text-slate-700 dark:text-slate-300';
+    if (trimmedValue === 'true' || trimmedValue === 'false') {
+      valueClass = 'text-amber-600 dark:text-amber-400';
+    } else if (/^-?\d+\.?\d*$/.test(trimmedValue)) {
+      valueClass = 'text-emerald-600 dark:text-emerald-400';
+    }
+
+    return (
+      <div key={index} className="whitespace-pre">
+        <span className="text-slate-500 dark:text-slate-500">{`${indent}${key}${colon}`}</span>
+        <span className={valueClass}>{value}</span>
+      </div>
+    );
+  });
+
+  return <>{highlighted}</>;
 }
 
 /**
