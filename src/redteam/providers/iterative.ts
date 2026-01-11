@@ -130,6 +130,7 @@ export async function runRedteamConversation({
   inputs?: Record<string, string>;
 }): Promise<{
   output: string;
+  prompt?: string;
   metadata: IterativeMetadata;
   tokenUsage: TokenUsage;
   error?: string;
@@ -664,6 +665,7 @@ export async function runRedteamConversation({
   return {
     output: bestResponse || lastResponse?.output || '',
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    prompt: bestInjectVar,
     metadata: {
       finalIteration,
       highestScore,
