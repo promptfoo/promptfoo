@@ -38,11 +38,6 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
 - `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
 
-**Gemini 1.5 (Legacy):**
-
-- `vertex:gemini-1.5-pro` - Text/chat with long-context understanding
-- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume applications
-
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
@@ -204,7 +199,7 @@ gcloud auth login
 gcloud auth application-default login
 
 # Set your project ID
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 #### Option 2: Service Account (Production)
@@ -217,7 +212,7 @@ For production environments or CI/CD pipelines:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 #### Option 3: Service Account via Config (Alternative)
@@ -256,10 +251,8 @@ For quick testing, you can use a temporary access token:
 
 ```bash
 # Get a temporary access token
-export VERTEX_API_KEY=$(gcloud auth print-access-token)
-# or use GEMINI_API_KEY
-export GEMINI_API_KEY=$(gcloud auth print-access-token)
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_API_KEY=$(gcloud auth print-access-token)
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
@@ -304,10 +297,6 @@ GOOGLE_API_KEY=your-api-key  # For express mode
 ```
 
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
-
-:::tip Recommended Environment Variables
-Prefer `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. Legacy Vertex-specific variables (`VERTEX_API_KEY`, `VERTEX_PROJECT_ID`, `VERTEX_REGION`) are still supported for backward compatibility.
-:::
 
 ### Authentication Configuration Details
 
@@ -358,17 +347,15 @@ providers:
 
 The following environment variables can be used to configure the Vertex AI provider:
 
-| Variable                         | Description                                     | Default        | Required |
-| -------------------------------- | ----------------------------------------------- | -------------- | -------- |
-| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID                         | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                            | `us-central1`  | No       |
-| `GOOGLE_API_KEY`                 | API key for express mode                        | None           | No\*     |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials             | None           | No\*     |
-| `VERTEX_PROJECT_ID`              | Project ID (legacy, use `GOOGLE_CLOUD_PROJECT`) | None           | No       |
-| `VERTEX_REGION`                  | Region (legacy, use `GOOGLE_CLOUD_LOCATION`)    | None           | No       |
-| `VERTEX_PUBLISHER`               | Model publisher                                 | `google`       | No       |
-| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)             | Auto-generated | No       |
-| `VERTEX_API_VERSION`             | API version                                     | `v1`           | No       |
+| Variable                         | Description                         | Default        | Required |
+| -------------------------------- | ----------------------------------- | -------------- | -------- |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
+| `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
+| `VERTEX_API_HOST`                | Override API host (e.g., for proxy) | Auto-generated | No       |
+| `VERTEX_API_VERSION`             | API version                         | `v1`           | No       |
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
@@ -481,8 +468,8 @@ jobs:
         run: |
           npx promptfoo@latest eval
         env:
-          VERTEX_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          VERTEX_REGION: us-central1
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION: us-central1
 ```
 
 ### 4. Advanced Configuration Example
@@ -493,8 +480,8 @@ providers:
     config:
       # Authentication options
       credentials: 'file://service-account.json' # Optional: Use specific service account
-      projectId: ${VERTEX_PROJECT_ID}
-      region: ${VERTEX_REGION:-us-central1}
+      projectId: ${GOOGLE_CLOUD_PROJECT}
+      region: ${GOOGLE_CLOUD_LOCATION:-us-central1}
 
       generationConfig:
         temperature: 0.2
@@ -615,7 +602,7 @@ defaultTest:
 | `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
 | `apiVersion`                       | API version                                            | `v1`                                 |
 | `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
-| `projectId`                        | GCloud project ID                                      | `VERTEX_PROJECT_ID` env var          |
+| `projectId`                        | GCloud project ID                                      | `GOOGLE_CLOUD_PROJECT` env var       |
 | `region`                           | GCloud region                                          | `us-central1`                        |
 | `publisher`                        | Model publisher                                        | `google`                             |
 | `context`                          | Model context                                          | None                                 |
@@ -996,11 +983,11 @@ Enable Model Armor by specifying template paths in your provider config:
 providers:
   - id: vertex:gemini-2.5-flash
     config:
-      projectId: ${VERTEX_PROJECT_ID}
+      projectId: ${GOOGLE_CLOUD_PROJECT}
       region: us-central1
       modelArmor:
-        promptTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
-        responseTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
+        promptTemplate: projects/${GOOGLE_CLOUD_PROJECT}/locations/us-central1/templates/basic-safety
+        responseTemplate: projects/${GOOGLE_CLOUD_PROJECT}/locations/us-central1/templates/basic-safety
 ```
 
 | Option                        | Description                                 |
