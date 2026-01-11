@@ -14,7 +14,6 @@ import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
   ComparisonEvalNotFoundError,
-  evalTableToCsv,
   evalTableToJson,
   generateEvalCsv,
   mergeComparisonTables,

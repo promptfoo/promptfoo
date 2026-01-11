@@ -5,7 +5,6 @@ import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
   EvalResultsFilterMode,
-  EvaluateTable,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
