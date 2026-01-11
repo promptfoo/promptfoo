@@ -37,11 +37,13 @@ src/ui/
 ### Option A: Single Large PR (Current Approach)
 
 **Pros:**
+
 - Feature is complete and cohesive
 - Already reviewed and tested as a unit
 - Avoids merge conflicts between incremental PRs
 
 **Cons:**
+
 - Large PR is harder to review thoroughly
 - All-or-nothing - harder to roll back partially
 - Risk of introducing multiple issues at once
@@ -53,6 +55,7 @@ src/ui/
 Split into logical phases, each as a separate PR:
 
 #### Phase 1: Core Infrastructure (Week 1)
+
 ```
 src/ui/
 ├── hooks/             # useKeypress, useTerminalSize, useClipboard
@@ -65,6 +68,7 @@ src/ui/
 **PR Size:** ~3,000 lines
 
 #### Phase 2: Shared Components (Week 1-2)
+
 ```
 src/ui/components/
 ├── common/            # StatusBadge, ProgressBar
@@ -77,6 +81,7 @@ src/ui/components/
 **PR Size:** ~8,000 lines
 
 #### Phase 3: Init Wizard (Week 2)
+
 ```
 src/ui/init/
 ├── machines/          # State machines for init flows
@@ -89,6 +94,7 @@ src/ui/init/
 **PR Size:** ~15,000 lines
 
 #### Phase 4: View Command Enhancement (Week 3)
+
 ```
 src/ui/
 ├── list/              # Interactive browser
@@ -101,6 +107,7 @@ src/ui/
 **PR Size:** ~12,000 lines
 
 #### Phase 5: Specialized UIs (Week 4)
+
 ```
 src/ui/
 ├── auth/              # Auth flows
@@ -116,12 +123,12 @@ src/ui/
 // src/util/config.ts
 export const EXPERIMENTAL_FLAGS = {
   INK_INIT: process.env.PROMPTFOO_EXPERIMENTAL_INIT === '1',
-  INK_VIEW: process.env.PROMPTFOO_INTERACTIVE === '1' ||
-            process.argv.includes('--interactive'),
+  INK_VIEW: process.env.PROMPTFOO_INTERACTIVE === '1' || process.argv.includes('--interactive'),
 };
 ```
 
 This allows:
+
 1. Merging code without enabling features
 2. Opt-in testing by users
 3. Gradual rollout with easy rollback
@@ -129,19 +136,24 @@ This allows:
 ## Risk Mitigation
 
 ### 1. Dynamic Imports
+
 The UI uses dynamic imports throughout:
+
 ```typescript
 // Good: Only loads Ink/React when needed
 const { renderInk } = await import('../ui/render.js');
 ```
 
 This ensures:
+
 - Zero performance impact on library usage
 - No bundle size increase for non-interactive use
 - Graceful degradation if terminal doesn't support raw mode
 
 ### 2. Fallback Behavior
+
 All new UIs should have non-interactive fallbacks:
+
 ```typescript
 if (!isRawModeSupported() || !process.stdout.isTTY) {
   // Fall back to existing non-interactive behavior
@@ -150,12 +162,15 @@ if (!isRawModeSupported() || !process.stdout.isTTY) {
 ```
 
 ### 3. Testing Strategy
+
 - **Unit tests**: Already exist for components
 - **Integration tests**: Add tests for command flows
 - **Manual testing**: Test on different terminal emulators (iTerm2, Terminal.app, VSCode, Windows Terminal)
 
 ### 4. Rollback Plan
+
 Each feature can be individually disabled:
+
 ```bash
 # Emergency rollback
 export PROMPTFOO_DISABLE_INK=1
@@ -180,6 +195,7 @@ Given the current state (all tests passing, code well-isolated), I recommend:
 ## Migration Checklist
 
 Before each phase lands:
+
 - [ ] All tests passing
 - [ ] Lint clean
 - [ ] Build successful
@@ -191,6 +207,7 @@ Before each phase lands:
 ## Long-term Maintenance
 
 After full landing:
+
 1. Add Ink v6 to peerDependencies documentation
 2. Create contribution guide for UI components
 3. Add Storybook-like tool for component development
@@ -198,13 +215,13 @@ After full landing:
 
 ## Timeline Estimate
 
-| Phase | Scope | Risk | Effort |
-|-------|-------|------|--------|
-| 1 | Core Infrastructure | Low | 2 days |
-| 2 | Shared Components | Low | 3 days |
-| 3 | Init Wizard | Medium | 1 week |
-| 4 | View Enhancement | Medium | 1 week |
-| 5 | Specialized UIs | Low | 3 days |
+| Phase | Scope               | Risk   | Effort |
+| ----- | ------------------- | ------ | ------ |
+| 1     | Core Infrastructure | Low    | 2 days |
+| 2     | Shared Components   | Low    | 3 days |
+| 3     | Init Wizard         | Medium | 1 week |
+| 4     | View Enhancement    | Medium | 1 week |
+| 5     | Specialized UIs     | Low    | 3 days |
 
 **Total: ~4 weeks** for incremental landing with thorough testing.
 
