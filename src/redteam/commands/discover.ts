@@ -425,6 +425,7 @@ export function discoverCommand(
           }`,
         );
         process.exitCode = 1;
+        return;
       }
     });
 }

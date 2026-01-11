@@ -874,6 +874,7 @@ export function redteamGenerateCommand(
           );
         }
         process.exitCode = 1;
+        return;
       }
     });
 }
