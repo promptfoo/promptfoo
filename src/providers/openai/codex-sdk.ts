@@ -447,8 +447,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     };
   }
 
-  private async getOrCreateThread(config: OpenAICodexSDKConfig, cacheKey?: string): Promise<any> {
+  private async getOrCreateThread(
+    config: OpenAICodexSDKConfig,
+    cacheKey: string | undefined,
+    instance: any,
+  ): Promise<any> {
     const threadOptions = this.buildThreadOptions(config);
+
+    // When deep_tracing is enabled, skip all thread caching/persistence
+    // Each call needs a fresh thread for correct span linking
+    if (config.deep_tracing) {
+      return instance.startThread(threadOptions);
+    }
 
     // Resume specific thread
     if (config.thread_id) {
@@ -457,7 +467,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return cached;
       }
 
-      const thread = this.codexInstance!.resumeThread(config.thread_id, threadOptions);
+      const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
         this.threads.set(config.thread_id, thread);
       }
@@ -482,7 +492,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     // Create new thread
-    const thread = this.codexInstance!.startThread(threadOptions);
+    const thread = instance.startThread(threadOptions);
 
     if (config.persist_threads && cacheKey) {
       this.threads.set(cacheKey, thread);
@@ -532,12 +542,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           case 'item.started': {
             // Guard against malformed events
             const item = event.item;
-            if (!item?.id) {
-              logger.warn('Codex item.started event missing item or item.id', { event });
+            if (!item) {
+              logger.warn('Codex item.started event missing item', { event });
               break;
             }
-            // Coerce id to string for consistent Map keys
-            const itemId = String(item.id);
+            // Generate fallback ID if missing (some SDK versions may not provide IDs)
+            const itemId = item.id ? String(item.id) : crypto.randomUUID();
             // Create a child span for this item
             const spanName = this.getSpanNameForItem(item);
             const span = tracer.startSpan(spanName, {
@@ -556,12 +566,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           case 'item.completed': {
             // Guard against malformed events
             const item = event.item;
-            if (!item?.id) {
-              logger.warn('Codex item.completed event missing item or item.id', { event });
+            if (!item) {
+              logger.warn('Codex item.completed event missing item', { event });
               break;
             }
-            // Coerce id to string for consistent Map keys
-            const itemId = String(item.id);
+            // Generate fallback ID if missing (some SDK versions may not provide IDs)
+            const itemId = item.id ? String(item.id) : crypto.randomUUID();
             items.push(item);
 
             // Collect reasoning text for summary
@@ -624,13 +634,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               });
             }
 
-            // Set status based on item
-            if (item.status === 'failed' || item.type === 'error') {
+            // Set status based on item - check for any error indicators
+            const hasError =
+              item.status === 'failed' ||
+              item.type === 'error' ||
+              item.error !== undefined ||
+              (item.type === 'command_execution' &&
+                typeof item.exit_code === 'number' &&
+                item.exit_code !== 0);
+
+            if (hasError) {
               span.setStatus({
                 code: SpanStatusCode.ERROR,
                 message:
                   (typeof item.message === 'string' ? item.message : null) ||
                   (typeof item.error?.message === 'string' ? item.error.message : null) ||
+                  (item.type === 'command_execution' && item.exit_code !== 0
+                    ? `Command exited with code ${item.exit_code}`
+                    : null) ||
                   'Item failed',
               });
             } else {
@@ -966,15 +987,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexModule = await loadCodexSDK();
     }
 
-    // Compute hash of environment for instance caching
-    // Note: deep_tracing is INCOMPATIBLE with thread persistence
-    // The CLI only sees TRACEPARENT at spawn time - subsequent calls would have wrong parent span
-    // When deep_tracing is enabled, we MUST recreate the instance for each call to get correct spans
-    const stableEnv = { ...env };
-    if (config.deep_tracing) {
-      // Keep full TRACEPARENT in hash - forces instance recreation per-call
-      // This ensures each call's child spans are correctly linked to the right parent span
-      // Thread persistence (persist_threads, thread_id, thread_pool_size) is disabled in this mode
+    // Deep tracing requires per-call instances (each call has unique TRACEPARENT)
+    // This avoids race conditions where concurrent calls destroy shared instances
+    let localInstance: any = undefined;
+    const useLocalInstance = config.deep_tracing;
+
+    if (useLocalInstance) {
+      // Warn about ignored thread options (only once)
       if (
         (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
         !this.deepTracingWarningShown
@@ -985,46 +1004,57 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         );
         this.deepTracingWarningShown = true;
       }
-    } else {
-      // When NOT doing deep tracing, exclude TRACEPARENT entirely
-      // This preserves thread persistence across traces
-      delete stableEnv.TRACEPARENT;
-    }
-    // OTEL config vars stay in hash - they're configuration, not per-request context
-    const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
-    const envChanged = this.codexInstanceEnvHash !== envHash;
 
-    // Initialize Codex instance - recreate only if stable config changed
-    if (!this.codexInstance || envChanged) {
-      if (envChanged && this.codexInstance) {
-        logger.debug('[CodexSDK] Recreating instance due to configuration change');
-        // Clean up old instance to prevent resource leaks
-        try {
-          if (typeof this.codexInstance.destroy === 'function') {
-            await this.codexInstance.destroy();
-          } else if (typeof this.codexInstance.cleanup === 'function') {
-            await this.codexInstance.cleanup();
-          } else if (typeof this.codexInstance.close === 'function') {
-            await this.codexInstance.close();
-          }
-        } catch (cleanupError) {
-          logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
-        }
-        // Clear thread pool when instance is recreated
-        this.threads.clear();
-      }
-      // Create new instance with full environment (including TRACEPARENT for initial trace linking)
-      this.codexInstance = new this.codexModule.Codex({
+      // Create a fresh instance for this call only (not cached)
+      localInstance = new this.codexModule.Codex({
         env,
         ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
         ...(config.base_url ? { baseUrl: config.base_url } : {}),
       });
-      this.codexInstanceEnvHash = envHash;
+    } else {
+      // Standard caching path for non-deep-tracing mode
+      // Exclude TRACEPARENT from hash to preserve thread persistence across traces
+      const stableEnv = { ...env };
+      delete stableEnv.TRACEPARENT;
+
+      const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
+      const envChanged = this.codexInstanceEnvHash !== envHash;
+
+      // Initialize Codex instance - recreate only if stable config changed
+      if (!this.codexInstance || envChanged) {
+        if (envChanged && this.codexInstance) {
+          logger.debug('[CodexSDK] Recreating instance due to configuration change');
+          // Clean up old instance to prevent resource leaks
+          try {
+            if (typeof this.codexInstance.destroy === 'function') {
+              await this.codexInstance.destroy();
+            } else if (typeof this.codexInstance.cleanup === 'function') {
+              await this.codexInstance.cleanup();
+            } else if (typeof this.codexInstance.close === 'function') {
+              await this.codexInstance.close();
+            }
+          } catch (cleanupError) {
+            logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
+          }
+          // Clear thread pool when instance is recreated
+          this.threads.clear();
+        }
+        // Create new instance with full environment
+        this.codexInstance = new this.codexModule.Codex({
+          env,
+          ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
+          ...(config.base_url ? { baseUrl: config.base_url } : {}),
+        });
+        this.codexInstanceEnvHash = envHash;
+      }
     }
 
-    // Get or create thread
+    // Use local instance for deep_tracing, otherwise shared cached instance
+    const activeInstance = useLocalInstance ? localInstance : this.codexInstance;
+
+    // Get or create thread (pass instance to avoid using stale this.codexInstance)
     const cacheKey = this.generateCacheKey(config, prompt);
-    const thread = await this.getOrCreateThread(config, cacheKey);
+    const thread = await this.getOrCreateThread(config, cacheKey, activeInstance);
 
     // Prepare run options
     const runOptions: any = {};
@@ -1090,9 +1120,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         error: `Error calling OpenAI Codex SDK: ${error.message}`,
       };
     } finally {
-      // Clean up ephemeral threads
-      if (!config.persist_threads && !config.thread_id && cacheKey) {
+      // Clean up ephemeral threads (only for non-deep-tracing mode)
+      if (!config.deep_tracing && !config.persist_threads && !config.thread_id && cacheKey) {
         this.threads.delete(cacheKey);
+      }
+
+      // Clean up local instance used for deep tracing (not shared, safe to destroy)
+      if (useLocalInstance && localInstance) {
+        try {
+          if (typeof localInstance.destroy === 'function') {
+            await localInstance.destroy();
+          } else if (typeof localInstance.cleanup === 'function') {
+            await localInstance.cleanup();
+          } else if (typeof localInstance.close === 'function') {
+            await localInstance.close();
+          }
+        } catch (cleanupError) {
+          logger.debug('[CodexSDK] Error cleaning up local instance', { error: cleanupError });
+        }
       }
     }
   }
