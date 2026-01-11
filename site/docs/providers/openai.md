@@ -99,6 +99,7 @@ Supported parameters include:
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
 | `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
+| `stream`                | Enable streaming mode for the request. Helps prevent 504 gateway timeouts for long-running requests by keeping the connection alive. Default: `false`.                                                                                                                                            |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
@@ -132,6 +133,7 @@ interface OpenAiConfig {
   user?: string;
   metadata?: Record<string, string>;
   store?: boolean;
+  stream?: boolean;
   passthrough?: object;
 
   // Function tool callbacks

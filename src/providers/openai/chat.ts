@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { fetchWithCache } from '../../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
@@ -10,6 +10,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
@@ -413,6 +414,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
+    // Use streaming mode if explicitly enabled
+    // Streaming helps prevent 504 gateway timeouts for long-running requests
+    const shouldStream = config.stream ?? false;
+    if (shouldStream) {
+      return this.callApiStreaming(body, config, context);
+    }
+
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
         OpenAI.ChatCompletion.Choice & {
@@ -733,6 +741,258 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  /**
+   * Handles streaming API calls using native fetch with SSE parsing.
+   * Streaming helps prevent 504 gateway timeouts for long-running requests
+   * by keeping the connection alive with incremental data.
+   */
+  private async callApiStreaming(
+    body: Record<string, any>,
+    config: OpenAiCompletionOptions,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    const startTime = Date.now();
+
+    // Check cache first
+    const cache = await getCache();
+    const cacheKey = `openai:stream:${JSON.stringify(body)}`;
+
+    if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
+      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached streaming response for ${this.modelName}`);
+        try {
+          const parsed = JSON.parse(cachedResponse);
+          return { ...parsed, cached: true };
+        } catch {
+          logger.warn('Failed to parse cached streaming response');
+        }
+      }
+    }
+
+    try {
+      // Build streaming request body
+      const streamBody = {
+        ...body,
+        stream: true,
+        // Request usage stats in the final chunk
+        stream_options: { include_usage: true },
+      };
+
+      const url = `${this.getApiUrl()}/chat/completions`;
+      logger.debug(`Starting streaming request to ${url}`, { model: this.modelName });
+
+      const response = await fetchWithProxy(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          ...config.headers,
+        },
+        body: JSON.stringify(streamBody),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          error: `API error: ${response.status} ${response.statusText}\n${errorText}`,
+        };
+      }
+
+      if (!response.body) {
+        return { error: 'No response body for streaming request' };
+      }
+
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Collect the streamed content
+      let content = '';
+      let finishReason: string | null = null;
+      let usage:
+        | { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+        | undefined;
+      let functionCall: { name: string; arguments: string } | null = null;
+      const toolCalls: Array<{
+        id: string;
+        type: string;
+        function: { name: string; arguments: string };
+      }> = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        // Decode chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE lines from buffer
+        const lines = buffer.split('\n');
+        // Keep the last potentially incomplete line in the buffer
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || trimmedLine.startsWith(':')) {
+            // Empty line or comment, skip
+            continue;
+          }
+
+          if (trimmedLine.startsWith('data: ')) {
+            const data = trimmedLine.slice(6);
+            if (data === '[DONE]') {
+              continue;
+            }
+
+            try {
+              const chunk = JSON.parse(data);
+              const choice = chunk.choices?.[0];
+
+              if (choice?.delta?.content) {
+                content += choice.delta.content;
+              }
+
+              if (choice?.delta?.function_call) {
+                if (!functionCall) {
+                  functionCall = { name: '', arguments: '' };
+                }
+                if (choice.delta.function_call.name) {
+                  functionCall.name += choice.delta.function_call.name;
+                }
+                if (choice.delta.function_call.arguments) {
+                  functionCall.arguments += choice.delta.function_call.arguments;
+                }
+              }
+
+              if (choice?.delta?.tool_calls) {
+                for (const tc of choice.delta.tool_calls) {
+                  const idx = tc.index;
+                  if (!toolCalls[idx]) {
+                    toolCalls[idx] = {
+                      id: '',
+                      type: 'function',
+                      function: { name: '', arguments: '' },
+                    };
+                  }
+                  if (tc.id) {
+                    toolCalls[idx].id = tc.id;
+                  }
+                  if (tc.function?.name) {
+                    toolCalls[idx].function.name += tc.function.name;
+                  }
+                  if (tc.function?.arguments) {
+                    toolCalls[idx].function.arguments += tc.function.arguments;
+                  }
+                }
+              }
+
+              if (choice?.finish_reason) {
+                finishReason = choice.finish_reason;
+              }
+
+              // Usage comes in the final chunk when stream_options.include_usage is true
+              if (chunk.usage) {
+                usage = chunk.usage;
+              }
+            } catch {
+              // Skip invalid JSON chunks
+              logger.debug(`Failed to parse SSE chunk: ${data}`);
+            }
+          }
+        }
+      }
+
+      const latencyMs = Date.now() - startTime;
+      logger.debug(`Streaming request completed in ${latencyMs}ms`, {
+        model: this.modelName,
+        contentLength: content.length,
+        finishReason,
+      });
+
+      // Determine output based on what was returned
+      let output: any = content;
+      if (functionCall && functionCall.name) {
+        output = functionCall;
+      } else if (toolCalls.length > 0) {
+        // Filter out any empty tool calls
+        const validToolCalls = toolCalls.filter((tc) => tc.function?.name);
+        if (validToolCalls.length > 0) {
+          output = content ? { content, tool_calls: validToolCalls } : validToolCalls;
+        }
+      }
+
+      // Handle structured output parsing
+      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output: ${error}`);
+        }
+      }
+
+      const normalizedFinishReason = normalizeFinishReason(finishReason);
+      const contentFiltered = normalizedFinishReason === FINISH_REASON_MAP.content_filter;
+
+      const tokenUsage = usage
+        ? {
+            prompt: usage.prompt_tokens || 0,
+            completion: usage.completion_tokens || 0,
+            total: usage.total_tokens || 0,
+            cached: 0,
+          }
+        : undefined;
+
+      const providerResponse: ProviderResponse = {
+        output,
+        tokenUsage,
+        cached: false,
+        latencyMs,
+        ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
+        cost: calculateOpenAICost(
+          this.modelName,
+          config,
+          usage?.prompt_tokens,
+          usage?.completion_tokens,
+        ),
+        guardrails: { flagged: contentFiltered },
+      };
+
+      // Cache the successful response
+      if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
+        try {
+          // Don't cache error responses or content-filtered responses
+          if (!contentFiltered) {
+            await cache.set(cacheKey, JSON.stringify(providerResponse));
+          }
+        } catch (err) {
+          logger.error(`Failed to cache streaming response: ${String(err)}`);
+        }
+      }
+
+      return providerResponse;
+    } catch (err) {
+      const latencyMs = Date.now() - startTime;
+      logger.error(`Streaming API call error after ${latencyMs}ms: ${String(err)}`);
+
+      // Check for timeout errors
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        return {
+          error: `API call timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        };
+      }
+
+      return {
+        error: `API call error: ${String(err)}`,
       };
     }
   }

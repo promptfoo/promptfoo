@@ -1,11 +1,18 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import {
+  disableCache,
+  enableCache,
+  fetchWithCache,
+  getCache,
+  isCacheEnabled,
+} from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -13,8 +20,13 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
     enableCache: vi.fn(),
     disableCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+    getCache: vi.fn(),
   };
 });
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -31,10 +43,32 @@ vi.mock('../../../src/esm', async (importOriginal) => {
 });
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
+const mockFetchWithProxy = vi.mocked(fetchWithProxy);
+const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
+const mockGetCache = vi.mocked(getCache);
 const mockLogger = vi.mocked(logger);
 const mockImportModule = vi.mocked(importModule);
 const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
+
+/**
+ * Helper to create a mock ReadableStream that yields SSE data chunks
+ */
+function createMockSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  let chunkIndex = 0;
+
+  return new ReadableStream({
+    pull(controller) {
+      if (chunkIndex < chunks.length) {
+        controller.enqueue(encoder.encode(chunks[chunkIndex]));
+        chunkIndex++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -2247,6 +2281,303 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           process.env.OPENAI_API_KEY = originalOpenAIEnv;
         }
       }
+    });
+  });
+
+  describe('Streaming API', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockFetchWithProxy.mockReset();
+      mockFetchWithCache.mockReset();
+      // Disable cache for streaming tests to ensure test isolation
+      mockIsCacheEnabled.mockReturnValue(false);
+      mockGetCache.mockResolvedValue({
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      } as any);
+    });
+
+    it('should handle basic streaming response with content', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Say hello' }]),
+      );
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Hello world');
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        cached: 0,
+      });
+      expect(result.cached).toBe(false);
+    });
+
+    it('should handle streaming with tool calls', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","function":{"name":"get_weather"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"loc"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ation\\": \\"NYC\\"}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":15,"completion_tokens":20,"total_tokens":35}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather in NYC?' }]),
+      );
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(result.output).toEqual([
+        {
+          id: 'call_123',
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            arguments: '{"location": "NYC"}',
+          },
+        },
+      ]);
+    });
+
+    it('should handle streaming with function_call (legacy)', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"function_call":{"name":"search"}}}]}\n\n',
+        'data: {"choices":[{"delta":{"function_call":{"arguments":"{\\"query\\": \\"test\\"}"}}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"function_call"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Search for test' }]),
+      );
+
+      expect(result.output).toEqual({
+        name: 'search',
+        arguments: '{"query": "test"}',
+      });
+    });
+
+    it('should handle streaming API error response', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        text: () => Promise.resolve('Rate limit exceeded'),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toContain('429 Too Many Requests');
+      expect(result.error).toContain('Rate limit exceeded');
+    });
+
+    it('should handle streaming with missing response body', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: null,
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toBe('No response body for streaming request');
+    });
+
+    it('should parse JSON structured output in streaming mode', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"{\\"name\\": \\"John\\""}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":", \\"age\\": 30}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          stream: true,
+          response_format: { type: 'json_schema' },
+        },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Get person' }]),
+      );
+
+      expect(result.output).toEqual({ name: 'John', age: 30 });
+    });
+
+    it('should handle content_filter finish reason in streaming', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"content_filter"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Partial');
+      expect(result.finishReason).toBe('content_filter');
+      expect(result.guardrails).toEqual({ flagged: true });
+    });
+
+    it('should handle partial SSE lines across chunks', async () => {
+      // Simulate partial line split across chunks
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Hel',
+        'lo"}}]}\n\ndata: {"choices":[{"delta":{"content":" wor',
+        'ld"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Hello world');
+    });
+
+    it('should skip SSE comments and empty lines', async () => {
+      const sseChunks = [
+        ': this is a comment\n\n',
+        '\n',
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        ': another comment\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Hello');
+    });
+
+    it('should include stream_options in request body', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Test"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetchWithProxy.mock.calls[0];
+      const requestBody = JSON.parse(callArgs[1]?.body as string);
+      expect(requestBody.stream).toBe(true);
+      expect(requestBody.stream_options).toEqual({ include_usage: true });
+    });
+
+    it('should handle network errors during streaming', async () => {
+      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toContain('Network error');
+    });
+
+    it('should handle mixed content and tool calls in streaming', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Let me check "}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"the weather."}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","function":{"name":"weather","arguments":"{}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual({
+        content: 'Let me check the weather.',
+        tool_calls: [
+          {
+            id: 'call_abc',
+            type: 'function',
+            function: { name: 'weather', arguments: '{}' },
+          },
+        ],
+      });
     });
   });
 });
