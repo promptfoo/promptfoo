@@ -142,7 +142,9 @@ npm run local -- eval -c config.yaml --no-cache
 ## Git Workflow (CRITICAL)
 
 - **NEVER** commit/push directly to main
-- **NEVER** use `--force` or `--amend` without explicit approval
+- **NEVER** use `--force` without explicit approval
+- **NEVER** comment on GitHub issues - only create PRs to address them
+- **ALWAYS create new commits** - never amend, squash, or rebase unless explicitly asked
 - All changes go through pull requests
 
 **Standard workflow:**
@@ -152,8 +154,8 @@ git checkout main && git pull origin main   # Always start fresh
 git checkout -b feature/your-branch-name    # New branch for changes
 # Make changes...
 git add <specific-files>                    # Never blindly add everything
+npm run l && npm run f                      # Lint and format before commit/push
 git commit -m "type(scope): description"    # Conventional commit format
-npm run l && npm run f                      # Lint and format
 git fetch origin main && git merge origin/main  # Sync with main
 git push -u origin feature/your-branch-name # Push branch
 ```
@@ -162,6 +164,41 @@ git push -u origin feature/your-branch-name # Push branch
 
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection (especially THE REDTEAM RULE).
+
+## Screenshots for Pull Requests
+
+GitHub has no official API for uploading images to PR descriptions. When asked to add screenshots to a PR:
+
+1. **Take the screenshot** using browser tools or other methods
+2. **Upload to freeimage.host** (no API key required):
+
+```bash
+curl -s -X POST \
+  -F "source=@/path/to/screenshot.png" \
+  -F "type=file" \
+  -F "action=upload" \
+  "https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5" \
+  | jq -r '.image.url'
+```
+
+3. **Update the PR body** with the returned URL:
+
+```bash
+gh pr edit <PR_NUMBER> --body "$(cat <<'EOF'
+## Summary
+...
+## Screenshot
+![Screenshot](https://iili.io/XXXXXXX.png)
+...
+EOF
+)"
+```
+
+**Do NOT:**
+
+- Commit screenshots to the branch
+- Upload to GitHub release assets
+- Use GitHub's internal upload endpoints (require browser cookies, not PATs)
 
 ## Code Style Guidelines
 
@@ -173,6 +210,7 @@ See `docs/agents/pr-conventions.md` for PR title format and scope selection (esp
 - Use `async/await` for asynchronous code
 - Use Vitest for all tests (both `test/` and `src/app/`)
 - Use consistent error handling with proper type checks
+- Avoid re-exporting from files; import directly from the source module
 
 **Before committing:** `npm run l && npm run f`
 

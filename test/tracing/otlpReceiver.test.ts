@@ -1,5 +1,7 @@
 import path from 'path';
+
 import protobuf from 'protobufjs';
+import request from 'supertest';
 import {
   afterEach,
   beforeAll,
@@ -7,10 +9,9 @@ import {
   describe,
   expect,
   it,
-  vi,
   type MockedFunction,
+  vi,
 } from 'vitest';
-import request from 'supertest';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';

@@ -89,7 +89,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-sample <number>`          | Only run a random sample of N tests                                           |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                      |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                    |
-| `--filter-providers <providers>`    | Only run tests with these providers (regex match)                             |
+| `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`) |
 | `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)              |
 | `--grader <provider>`               | Model that will grade outputs                                                 |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                        |
@@ -163,10 +163,9 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 
 Create a URL that can be shared online.
 
-| Option        | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `--show-auth` | Include auth info in the shared URL             |
-| `-y, --yes`   | Skip confirmation before creating shareable URL |
+| Option        | Description                         |
+| ------------- | ----------------------------------- |
+| `--show-auth` | Include auth info in the shared URL |
 
 ## `promptfoo cache`
 
@@ -268,9 +267,64 @@ Deletes a specific resource.
 | ----------- | -------------------------- |
 | `eval <id>` | Delete an evaluation by id |
 
+## `promptfoo retry <evalId>`
+
+Retry all ERROR results from a specific evaluation. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures), removes them from the database, and re-runs only those test cases. The results are updated in place in the original evaluation.
+
+| Option                       | Description                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided) |
+| `-v, --verbose`              | Verbose output                                                                   |
+| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                         |
+| `--delay <number>`           | Delay between evaluations in milliseconds                                        |
+
+Examples:
+
+```sh
+# Retry errors from a specific evaluation
+promptfoo retry eval-abc123
+
+# Retry with a different config file
+promptfoo retry eval-abc123 -c updated-config.yaml
+
+# Retry with verbose output and limited concurrency
+promptfoo retry eval-abc123 -v --max-concurrency 2
+```
+
+:::tip
+Unlike `--filter-errors-only` which creates a new evaluation, `promptfoo retry` updates the original evaluation in place. Use `retry` when you want to fix errors in an existing eval without creating duplicates.
+:::
+
 ## `promptfoo import <filepath>`
 
 Import an eval file from JSON format.
+
+| Option     | Description                                                                          |
+| ---------- | ------------------------------------------------------------------------------------ |
+| `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
+| `--force`  | Replace an existing eval with the same ID                                            |
+
+When importing an eval, the following data is preserved from the export:
+
+- **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
+- **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
+- **Author** - The original author is always preserved (even with `--new-id` or `--force`)
+- **Config, results, and all test data** - Fully preserved
+
+If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
+
+Example:
+
+```sh
+# Import an eval, preserving the original ID
+promptfoo import my-eval.json
+
+# Import even if an eval with this ID exists (creates duplicate with new ID)
+promptfoo import --new-id my-eval.json
+
+# Replace an existing eval with updated data
+promptfoo import --force my-eval.json
+```
 
 ## `promptfoo export`
 
@@ -344,9 +398,9 @@ Login to the promptfoo cloud.
 
 | Option                | Description                                                                |
 | --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to login to                                            |
+| `-o, --org <orgId>`   | The organization ID to log in to                                           |
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Login using an API key                                                     |
+| `-k, --api-key <key>` | Log in using an API key                                                    |
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 

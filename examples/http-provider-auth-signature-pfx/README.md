@@ -15,7 +15,7 @@ This example demonstrates how to setup authentication with an HTTP provider usin
 
 ## Prerequisites
 
-- Node.js 20.0.0 or higher
+- Node.js 20+
 - Either a PFX certificate file OR separate CRT and KEY files with a keypair for signing/verification
 
 ## Setup

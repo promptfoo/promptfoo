@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import dedent from 'dedent';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,
@@ -425,6 +425,23 @@ describe('json utilities', () => {
         inputs.forEach((input, i) => {
           expect(convertSlashCommentsToHash(input)).toBe(expected[i]);
         });
+      });
+
+      it('should not treat URL schemes as comments', () => {
+        const inputs = [
+          'url: http://example.com/path',
+          'url: https://example.com/path',
+          'url: http://example.com//double-slash',
+        ];
+        inputs.forEach((input) => {
+          expect(convertSlashCommentsToHash(input)).toBe(input);
+        });
+      });
+
+      it('should still convert comments after URLs', () => {
+        const input = 'url: http://example.com/path // trailing comment';
+        const expected = 'url: http://example.com/path # trailing comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
       });
     });
 

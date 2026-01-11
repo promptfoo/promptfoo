@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -288,7 +288,8 @@ describe('GolangProvider', () => {
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
       expect(mockExecFile).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result' });
+      expect(result.cached).toBe(true);
+      expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should handle cache errors', async () => {

@@ -208,10 +208,12 @@ export interface CompletionOptions {
       proactiveAudio?: boolean;
     };
 
-    // Thinking configuration
+    // Thinking configuration for Gemini 2.5+ models
+    // Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+    // Gemini 3 Pro supports: LOW, HIGH
     thinkingConfig?: {
       thinkingBudget?: number;
-      thinkingLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
     };
   };
 
@@ -275,6 +277,18 @@ export interface CompletionOptions {
    * Note: Model Armor floor settings only work with the non-streaming API.
    */
   streaming?: boolean;
+
+  /**
+   * Control Vertex AI express mode (API key authentication).
+   *
+   * Express mode is AUTOMATIC when an API key is available and no explicit
+   * projectId or credentials are configured. Set to `false` to force OAuth
+   * authentication even when an API key is present.
+   *
+   * @default undefined (automatic detection)
+   * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
+   */
+  expressMode?: boolean;
 }
 
 // Claude API interfaces
@@ -312,5 +326,129 @@ export interface ClaudeResponse {
     cache_creation_input_tokens: number;
     cache_read_input_tokens: number;
     output_tokens: number;
+  };
+}
+
+// =============================================================================
+// Video Generation Types (Veo)
+// =============================================================================
+
+/**
+ * Supported Veo video models
+ */
+export type GoogleVideoModel =
+  | 'veo-3.1-generate-preview'
+  | 'veo-3.1-fast-preview'
+  | 'veo-3-generate'
+  | 'veo-3-fast'
+  | 'veo-2-generate';
+
+/**
+ * Supported aspect ratios for Veo video generation
+ */
+export type GoogleVideoAspectRatio = '16:9' | '9:16';
+
+/**
+ * Supported resolutions for Veo video generation
+ */
+export type GoogleVideoResolution = '720p' | '1080p';
+
+/**
+ * Valid video durations by model
+ * Veo 3.1/3: 4, 6, 8 seconds
+ * Veo 2: 5, 6, 8 seconds
+ */
+export type GoogleVideoDuration = 4 | 5 | 6 | 8;
+
+/**
+ * Person generation control settings
+ */
+export type GoogleVideoPersonGeneration = 'allow_all' | 'allow_adult' | 'dont_allow';
+
+/**
+ * Reference image for guiding video content (Veo 3.1 only)
+ */
+export interface GoogleVideoReferenceImage {
+  /** Base64 encoded image data or file:// path */
+  image: string;
+  /** Type of reference: 'asset' for style/character/product guidance */
+  referenceType: 'asset';
+}
+
+/**
+ * Configuration options for Google video generation (Veo)
+ */
+export interface GoogleVideoOptions {
+  // Model selection
+  model?: GoogleVideoModel;
+
+  // Video parameters
+  aspectRatio?: GoogleVideoAspectRatio;
+  resolution?: GoogleVideoResolution;
+  durationSeconds?: GoogleVideoDuration;
+  duration?: GoogleVideoDuration; // Alias for durationSeconds
+
+  // Content guidance
+  negativePrompt?: string;
+
+  // Image-to-video: first frame
+  image?: string; // Base64 or file:// path
+
+  // Interpolation: last frame (Veo 3.1 only, requires image)
+  lastFrame?: string; // Base64 or file:// path
+  lastImage?: string; // Alias for lastFrame
+
+  // Reference images (Veo 3.1 only, up to 3)
+  // Can be string[] (file paths) or GoogleVideoReferenceImage[] (objects with referenceType)
+  referenceImages?: (string | GoogleVideoReferenceImage)[];
+
+  // Video extension (Veo 3.1 only)
+  extendVideoId?: string; // Operation ID from previous Veo generation
+  sourceVideo?: string; // Alias for extendVideoId (must be Veo operation ID, not file path)
+
+  // Person generation control
+  personGeneration?: GoogleVideoPersonGeneration;
+
+  // Seed for improved (not guaranteed) determinism (Veo 3 only)
+  seed?: number;
+
+  // Polling configuration
+  pollIntervalMs?: number; // Default: 10000 (10 seconds)
+  maxPollTimeMs?: number; // Default: 600000 (10 minutes)
+
+  // Vertex AI configuration
+  projectId?: string; // Google Cloud project ID
+  region?: string; // Vertex AI region (default: us-central1)
+  credentials?: string; // Path to credentials file or JSON string
+}
+
+/**
+ * Veo API operation response
+ */
+export interface GoogleVideoOperation {
+  name: string;
+  done?: boolean;
+  metadata?: {
+    progress?: number;
+  };
+  response?: {
+    '@type'?: string;
+    // New format: videos array with base64 encoded video
+    videos?: Array<{
+      bytesBase64Encoded: string;
+    }>;
+    // Legacy format with URI
+    generateVideoResponse?: {
+      generatedSamples: Array<{
+        video: {
+          uri: string;
+        };
+      }>;
+    };
+    raiMediaFilteredCount?: number;
+  };
+  error?: {
+    code: number;
+    message: string;
   };
 }

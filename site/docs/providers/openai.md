@@ -25,6 +25,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
+- `openai:video:<model name>` - uses Sora video generation models
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -480,16 +481,52 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-1` - OpenAI's latest and most capable image generation model
+- `gpt-image-1.5` - OpenAI's state-of-the-art image generation model with best instruction following
+- `gpt-image-1` - High-quality image generation model
 - `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
 - `dall-e-3` - High quality image generation with larger resolution support
 - `dall-e-2` - Lower cost option with concurrent requests support
 
 See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
 
+#### GPT Image 1.5
+
+GPT Image 1.5 is OpenAI's most advanced image generation model with superior instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1.5
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+| Parameter            | Description                             | Options                                       |
+| -------------------- | --------------------------------------- | --------------------------------------------- |
+| `size`               | Image dimensions                        | `1024x1024`, `1024x1536`, `1536x1024`, `auto` |
+| `quality`            | Rendering quality                       | `low`, `medium`, `high`, `auto`               |
+| `background`         | Background transparency (png/webp only) | `transparent`, `opaque`, `auto`               |
+| `output_format`      | Output image format                     | `png`, `jpeg`, `webp`                         |
+| `output_compression` | Compression level (jpeg/webp only)      | `0-100`                                       |
+| `moderation`         | Content moderation strictness           | `auto`, `low`                                 |
+
+**Pricing:**
+
+GPT Image 1.5 uses token-based pricing at $5/1M input text tokens, $10/1M output text tokens, $8/1M input image tokens, and $32/1M output image tokens. Estimated costs per image:
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | ~$0.064   | ~$0.096   | ~$0.096   |
+| Medium  | ~$0.128   | ~$0.192   | ~$0.192   |
+| High    | ~$0.192   | ~$0.288   | ~$0.288   |
+
 #### GPT Image 1
 
-GPT Image 1 is OpenAI's state-of-the-art image generation model with superior instruction following, text rendering, and real-world knowledge.
+GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -574,7 +611,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:gpt-image-1
+  - openai:image:gpt-image-1.5
 
 tests:
   - vars:
@@ -590,6 +627,113 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 ```
 
 Then, enable 'Render markdown' under Table Settings.
+
+## Video Generation (Sora)
+
+OpenAI supports video generation via `openai:video:<model>`. Supported models include:
+
+- `sora-2` - OpenAI's video generation model ($0.10/second)
+- `sora-2-pro` - Higher quality video generation ($0.30/second)
+
+### Basic Usage
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
+      seconds: 8 # Duration: 4, 8, or 12 seconds
+```
+
+### Configuration Options
+
+| Parameter              | Description                                       | Default    |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| `size`                 | Video dimensions                                  | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                 | `8`        |
+| `input_reference`      | Base64 image data or file path for image-to-video | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix              | -          |
+| `poll_interval_ms`     | Polling interval for job status                   | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation         | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                        | `true`     |
+| `download_spritesheet` | Download spritesheet preview                      | `true`     |
+
+### Example Configuration
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'A cinematic shot of: {{scene}}'
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 4
+  - id: openai:video:sora-2-pro
+    config:
+      size: 720x1280
+      seconds: 8
+
+tests:
+  - vars:
+      scene: a cat riding a skateboard through a city
+  - vars:
+      scene: waves crashing on a beach at sunset
+```
+
+### Image-to-Video Generation
+
+Generate videos starting from a source image using `input_reference`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      input_reference: file://assets/start-image.png
+      seconds: 4
+
+prompts:
+  - 'Animate this image: the character slowly walks forward'
+```
+
+The `input_reference` accepts either a `file://` path or base64-encoded image data.
+
+### Video Remixing
+
+Remix an existing Sora video with a new prompt using `remix_video_id`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      remix_video_id: video_abc123def456
+
+prompts:
+  - 'Make the scene more dramatic with stormy weather'
+```
+
+The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
+
+:::note
+Remixed videos are not cached since each remix produces unique results even with the same prompt.
+:::
+
+### Viewing Generated Videos
+
+Videos are automatically displayed in the web viewer with playback controls. The viewer shows:
+
+- Video player with controls
+- Video metadata (model, size, duration)
+- Thumbnail preview (if enabled)
+
+Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and served via the web interface.
+
+### Pricing
+
+| Model      | Cost per Second |
+| ---------- | --------------- |
+| sora-2     | $0.10           |
+| sora-2-pro | $0.30           |
 
 ## Web Search Support
 
@@ -644,14 +788,14 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 - The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
 - Each search-rubric assertion may perform one or more searches
-- Use caching (`--cache`) to avoid redundant searches during development
+- Caching is enabled by default; use `--no-cache` to force fresh searches during development
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
 ### Best Practices
 
 1. **Use specific search queries**: More specific queries yield better verification results
-2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+2. **Use caching**: Caching is enabled by default; results are reused to avoid repeated searches
 3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 

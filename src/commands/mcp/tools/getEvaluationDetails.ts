@@ -1,8 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { readResult } from '../../../util/database';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { EvaluationDetailsSummary } from '../lib/types';
 
 /**
  * Tool to retrieve detailed results for a specific evaluation run
@@ -43,15 +45,15 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
 
         // Extract key metrics for easier consumption
         const evalData = result.result;
-        const summary: any = {
+        const summary = {
           id,
-        };
+        } as EvaluationDetailsSummary;
 
         // Handle different eval data structures
         if ('results' in evalData && Array.isArray(evalData.results)) {
           summary.totalTests = evalData.results.length;
-          summary.passedTests = evalData.results.filter((r: any) => r.success).length;
-          summary.failedTests = evalData.results.filter((r: any) => !r.success).length;
+          summary.passedTests = evalData.results.filter((r) => r.success).length;
+          summary.failedTests = evalData.results.filter((r) => !r.success).length;
         } else {
           summary.totalTests = 0;
           summary.passedTests = 0;

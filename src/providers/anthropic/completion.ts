@@ -5,8 +5,8 @@ import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
 
-import type { ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
+import type { ProviderResponse } from '../../types/index';
 import type { AnthropicCompletionOptions } from './types';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
@@ -69,6 +69,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         return {
           output: JSON.parse(cachedResponse as string),
           tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }

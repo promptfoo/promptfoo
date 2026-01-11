@@ -5,7 +5,7 @@ import type { ApiProvider } from '../types/providers';
 /**
  * Formats config body for troubleshooting display
  */
-export function formatConfigBody({ body }: { body: any }): string {
+export function formatConfigBody({ body }: { body: unknown }): string {
   if (!body) {
     return 'None configured';
   }
@@ -43,7 +43,7 @@ export function formatConfigBody({ body }: { body: any }): string {
 export function formatConfigHeaders({
   headers,
 }: {
-  headers: Record<string, any> | undefined;
+  headers: Record<string, unknown> | undefined;
 }): string {
   if (!headers) {
     return 'None configured';

@@ -1,9 +1,9 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
 import ScanStatistics from './ScanStatistics';
+
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 const createMockScanResults = ({
   issues = [],
@@ -29,16 +29,15 @@ const renderScanStatistics = (
   onSeverityClick = vi.fn(),
   onFilesClick = vi.fn(),
 ) => {
-  const theme = createTheme();
   return render(
-    <ThemeProvider theme={theme}>
+    <TooltipProvider delayDuration={0}>
       <ScanStatistics
         scanResults={scanResults}
         selectedSeverity={selectedSeverity}
         onSeverityClick={onSeverityClick}
         onFilesClick={onFilesClick}
       />
-    </ThemeProvider>,
+    </TooltipProvider>,
   );
 };
 
@@ -61,16 +60,16 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('2');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('3');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('125');
   });
 
@@ -81,7 +80,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     fireEvent.click(criticalCard as HTMLElement);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith('error');
@@ -96,7 +95,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, selectedSeverity, mockOnSeverityClick, mockOnFilesClick);
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     fireEvent.click(warningsCard as Element);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith(null);
@@ -109,7 +108,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     fireEvent.click(filesScannedCard as Element);
 
     expect(mockOnFilesClick).toHaveBeenCalled();
@@ -127,16 +126,16 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('1');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('1');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('10');
   });
 });

@@ -51,3 +51,22 @@ Use current model identifiers (see `site/docs/providers/` for full list):
 - Make test cases engaging, not boring
 - Document required environment variables in README
 - Test examples before submitting
+- **If adding example for a new provider**, verify docs exist at `site/docs/providers/<provider>.md`
+
+## Chat Format Prompts
+
+Some providers require specific message structures (e.g., exactly one system + one user message). Use a JSON file instead of inline YAML:
+
+```json
+// prompts/chat.json
+[
+  { "role": "system", "content": "You are a helpful assistant." },
+  { "role": "user", "content": "Help with: {{topic}}" }
+]
+```
+
+```yaml
+# promptfooconfig.yaml
+prompts:
+  - file://prompts/chat.json
+```

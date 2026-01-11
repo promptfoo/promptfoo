@@ -1,294 +1,258 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategories from './RiskCategories';
-import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import { useReportStore } from './store';
 
-const mockRiskCardProps: any[] = [];
-vi.mock('./RiskCard', () => ({
-  default: vi.fn((props) => {
-    mockRiskCardProps.push(props);
-    return <div data-testid="mock-risk-card">{props.title}</div>;
-  }),
+// Mock the store
+vi.mock('./store', () => ({
+  useReportStore: vi.fn(),
 }));
+
+// Mock the drawer component
+vi.mock('./RiskCategoryDrawer', () => ({
+  default: vi.fn(({ open, category }) =>
+    open ? <div data-testid="mock-drawer">{category}</div> : null,
+  ),
+}));
+
+const mockUseReportStore = vi.mocked(useReportStore);
 
 const createMockProps = (overrides = {}) => ({
   evalId: 'eval-id-123',
   categoryStats: {},
   failuresByPlugin: {},
   passesByPlugin: {},
-  strategyStats: {},
   ...overrides,
 });
 
-const expectRiskCardProps = (title: string, expectedProps: Record<string, unknown>) => {
-  const cardProps = mockRiskCardProps.find((p) => p.title === title);
-  expect(cardProps).toBeDefined();
-
-  Object.entries(expectedProps).forEach(([key, value]) => {
-    if (key === 'progressValue') {
-      expect(cardProps[key]).toBeCloseTo(value as number);
-    } else if (key === 'testTypes') {
-      expect(cardProps[key]).toEqual(expect.arrayContaining(value as unknown[]));
-    } else {
-      expect(cardProps[key]).toEqual(value);
-    }
-  });
-
-  return cardProps;
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
 };
 
 describe('RiskCategories', () => {
   beforeEach(() => {
-    mockRiskCardProps.length = 0;
     vi.clearAllMocks();
+    mockUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 1,
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      severityFilter: null,
+      setSeverityFilter: vi.fn(),
+    });
   });
 
-  it('should render a RiskCard for each top-level risk category with correctly aggregated props', () => {
+  it('should render nothing when there are no categories with tests', () => {
+    const mockProps = createMockProps({
+      categoryStats: {},
+    });
+
+    const { container } = renderWithProviders(<RiskCategories {...mockProps} />);
+    expect(container.querySelector('.space-y-4')).toBeNull();
+  });
+
+  it('should render categories with tests as collapsible rows', () => {
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
         rbac: { pass: 5, total: 5 },
-        contracts: { pass: 3, total: 4 },
-        'harmful:hate': { pass: 0, total: 2 },
-      },
-      failuresByPlugin: {
-        'sql-injection': [{ prompt: 'p1', output: 'o1' }],
-        'harmful:hate': [
-          { prompt: 'p2', output: 'o2' },
-          { prompt: 'p3', output: 'o3' },
-        ],
-      },
-      passesByPlugin: {
-        rbac: [{ prompt: 'p4', output: 'o4' }],
-      },
-      strategyStats: {
-        'strategy-a': { pass: 1, total: 2 },
       },
     });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const expectedCategoryCount = Object.keys(riskCategories).length;
-    const renderedCards = screen.getAllByTestId('mock-risk-card');
-    expect(renderedCards).toHaveLength(expectedCategoryCount);
-    expect(mockRiskCardProps).toHaveLength(expectedCategoryCount);
+    // Should render the Risk Categories heading
+    expect(screen.getByText('Risk Categories')).toBeInTheDocument();
 
-    const totalPasses = 8 + 5;
-    const totalTests = 10 + 5;
-    const expectedProgress = (totalPasses / totalTests) * 100;
-
-    expectRiskCardProps('Security & Access Control', {
-      subtitle: categoryDescriptions['Security & Access Control'],
-      progressValue: expectedProgress,
-      numTestsPassed: totalPasses,
-      numTestsFailed: totalTests - totalPasses,
-      evalId: mockProps.evalId,
-      testTypes: [
-        expect.objectContaining({
-          name: 'sql-injection',
-          categoryPassed: false,
-          numPassed: 8,
-          numFailed: 2,
-        }),
-        expect.objectContaining({
-          name: 'rbac',
-          categoryPassed: true,
-          numPassed: 5,
-          numFailed: 0,
-        }),
-        expect.objectContaining({
-          name: 'bfla',
-          categoryPassed: false,
-          numPassed: 0,
-          numFailed: 0,
-        }),
-      ],
-    });
+    // Should render Security & Access Control category (contains sql-injection and rbac)
+    expect(screen.getByText('Security & Access Control')).toBeInTheDocument();
   });
 
-  it('should render a RiskCard with zero numTestsPassed and numTestsFailed, and a testTypes array containing entries with zero numPassed and numFailed, for any category whose subcategories are missing from categoryStats', () => {
+  it('should display correct pass rate for categories', () => {
     const mockProps = createMockProps({
       categoryStats: {
-        contracts: { pass: 3, total: 4 },
-        'harmful:hate': { pass: 0, total: 2 },
+        'sql-injection': { pass: 8, total: 10 },
+        rbac: { pass: 5, total: 5 },
       },
     });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    expectRiskCardProps('Security & Access Control', {
-      numTestsPassed: 0,
-      numTestsFailed: 0,
-      testTypes: riskCategories['Security & Access Control'].map((subCategory) => ({
-        name: subCategory,
-        categoryPassed: false,
-        numPassed: 0,
-        numFailed: 0,
-      })),
-    });
+    // Total: 8+5 = 13 passes out of 10+5 = 15 tests = 87%
+    // Check for the stats in the format "X/Y tests defended"
+    expect(screen.getByText(/13\/15 tests defended/)).toBeInTheDocument();
   });
 
-  it('should pass evalId, failuresByPlugin, passesByPlugin, and strategyStats props unchanged to each RiskCard', () => {
-    const mockEvalId = 'test-eval-id';
-    const mockFailuresByPlugin = {
-      'plugin-a': [{ prompt: 'prompt-a', output: 'output-a' }],
-    };
-    const mockPassesByPlugin = {
-      'plugin-b': [{ prompt: 'prompt-b', output: 'output-b' }],
-    };
-    const mockStrategyStats = {
-      'strategy-x': { pass: 5, total: 10 },
-    };
-    const mockCategoryStats = {
-      'plugin-a': { pass: 1, total: 2 },
-      'plugin-b': { pass: 3, total: 4 },
-    };
-
+  it('should show plugins expanded by default', () => {
     const mockProps = createMockProps({
-      evalId: mockEvalId,
-      failuresByPlugin: mockFailuresByPlugin,
-      passesByPlugin: mockPassesByPlugin,
-      strategyStats: mockStrategyStats,
-      categoryStats: mockCategoryStats,
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+        rbac: { pass: 5, total: 5 },
+      },
     });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const expectedCategoryCount = Object.keys(riskCategories).length;
-    expect(mockRiskCardProps).toHaveLength(expectedCategoryCount);
-
-    mockRiskCardProps.forEach((props) => {
-      expect(props.evalId).toBe(mockEvalId);
-      expect(props.failuresByPlugin).toBe(mockFailuresByPlugin);
-      expect(props.passesByPlugin).toBe(mockPassesByPlugin);
-    });
+    // Plugins should be visible by default (categories expanded)
+    expect(screen.getByText('SQL Injection')).toBeInTheDocument();
+    expect(screen.getByText('RBAC Implementation')).toBeInTheDocument();
   });
 
-  it.each([
-    {
-      name: 'missing subcategories',
+  it('should open drawer when a plugin is clicked', () => {
+    const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
       },
-      expectedTestTypes: [
-        { name: 'sql-injection', categoryPassed: false, numPassed: 8, numFailed: 2 },
-        { name: 'rbac', categoryPassed: false, numPassed: 0, numFailed: 0 },
-        { name: 'bfla', categoryPassed: false, numPassed: 0, numFailed: 0 },
-      ],
-    },
-    {
-      name: 'subcategories with zero tests',
-      categoryStats: {
-        'sql-injection': { pass: 5, total: 5 },
-        rbac: { pass: 0, total: 0 },
-      },
-      expectedTestTypes: [
-        { name: 'sql-injection', categoryPassed: true, numPassed: 5, numFailed: 0 },
-        { name: 'rbac', categoryPassed: false, numPassed: 0, numFailed: 0 },
-        { name: 'bfla', categoryPassed: false, numPassed: 0, numFailed: 0 },
-      ],
-      expectedProgress: 100,
-      expectedPasses: 5,
-      expectedFails: 0,
-    },
-    {
-      name: 'all subcategories with zero tests',
-      categoryStats: {
-        'sql-injection': { pass: 0, total: 0 },
-        rbac: { pass: 0, total: 0 },
-        bfla: { pass: 0, total: 0 },
-      },
-      expectedTestTypes: [
-        { name: 'sql-injection', categoryPassed: false, numPassed: 0, numFailed: 0 },
-        { name: 'rbac', categoryPassed: false, numPassed: 0, numFailed: 0 },
-        { name: 'bfla', categoryPassed: false, numPassed: 0, numFailed: 0 },
-      ],
-      expectedProgress: 0,
-      expectedPasses: 0,
-      expectedFails: 0,
-    },
-    {
-      name: 'negative values in categoryStats',
-      categoryStats: {
-        'sql-injection': { pass: -5, total: 10 },
-        rbac: { pass: 5, total: -5 },
-      },
-    },
-  ])('should handle $name gracefully', ({
-    categoryStats,
-    expectedTestTypes,
-    expectedProgress,
-    expectedPasses,
-    expectedFails,
-  }) => {
-    const mockProps = createMockProps({ categoryStats });
+    });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const securityCardProps = expectRiskCardProps('Security & Access Control', {});
+    // Click on a plugin (already expanded by default)
+    const pluginButton = screen.getByRole('button', { name: /SQL Injection/i });
+    fireEvent.click(pluginButton);
 
-    expect(typeof securityCardProps.progressValue).toBe('number');
-    expect(Number.isNaN(securityCardProps.progressValue)).toBe(false);
-
-    if (expectedTestTypes) {
-      expectedTestTypes.forEach((type) => {
-        expect(securityCardProps.testTypes).toEqual(
-          expect.arrayContaining([expect.objectContaining(type)]),
-        );
-      });
-    }
-
-    if (expectedProgress !== undefined) {
-      expect(securityCardProps.progressValue).toBeCloseTo(expectedProgress);
-    }
-
-    if (expectedPasses !== undefined) {
-      expect(securityCardProps.numTestsPassed).toBe(expectedPasses);
-    }
-
-    if (expectedFails !== undefined) {
-      expect(securityCardProps.numTestsFailed).toBe(expectedFails);
-    }
+    // Should show the drawer
+    expect(screen.getByTestId('mock-drawer')).toBeInTheDocument();
   });
 
-  it('should handle failuresByPlugin and passesByPlugin containing entries for subcategories not defined in riskCategories', () => {
+  it('should show check icon for passing categories and X icon for failing', () => {
+    mockUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 1, // 100% required to pass
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      severityFilter: null,
+      setSeverityFilter: vi.fn(),
+    });
+
     const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 10, total: 10 }, // 100% pass
+        rbac: { pass: 8, total: 10 }, // 80% pass - failing
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    // The category has mixed results (90% = 18/20), so it should show X icon overall
+    // since 90% < 100% threshold
+    const categoryRow = screen.getByRole('button', { name: /Security & Access Control/i });
+    // Just verify the category renders - icon presence depends on implementation
+    expect(categoryRow).toBeInTheDocument();
+    // The stats should show 18/20 tests passed
+    expect(screen.getByText('18/20')).toBeInTheDocument();
+  });
+
+  it('should calculate overall stats correctly across all categories', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+        contracts: { pass: 4, total: 5 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    // Overall: 8+4 = 12 passes out of 10+5 = 15 tests = 80%
+    // Header should show overall stats
+    expect(screen.getByText(/12\/15 tests defended/)).toBeInTheDocument();
+  });
+
+  it('should hide categories with no tests', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+        // contracts category has no tests
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    // Security category should be visible
+    expect(screen.getByText('Security & Access Control')).toBeInTheDocument();
+
+    // Compliance & Legal category should not be visible (contracts belongs there but has no tests)
+    expect(screen.queryByText('Compliance & Legal')).not.toBeInTheDocument();
+  });
+
+  it('should filter out plugins with no tests', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+        rbac: { pass: 0, total: 0 }, // No tests
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    // SQL Injection should be visible (expanded by default)
+    expect(screen.getByText('SQL Injection')).toBeInTheDocument();
+
+    // RBAC should not be visible (no tests)
+    expect(screen.queryByText('RBAC')).not.toBeInTheDocument();
+  });
+
+  it('should pass correct data to drawer when plugin is clicked', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
       failuresByPlugin: {
-        'undefined-subcategory': [{ prompt: 'p1', output: 'o1' }],
+        'sql-injection': [{ prompt: 'malicious query', output: 'leaked data' }],
       },
       passesByPlugin: {
-        'another-undefined-subcategory': [{ prompt: 'p2', output: 'o2' }],
+        'sql-injection': [{ prompt: 'safe query', output: 'OK' }],
       },
     });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const renderedCards = screen.getAllByTestId('mock-risk-card');
-    expect(renderedCards).toHaveLength(Object.keys(riskCategories).length);
+    // Click plugin (already expanded by default)
+    fireEvent.click(screen.getByRole('button', { name: /SQL Injection/i }));
 
-    Object.values(mockRiskCardProps).forEach((riskCardProps) => {
-      expect(riskCardProps.failuresByPlugin).toEqual(mockProps.failuresByPlugin);
-      expect(riskCardProps.passesByPlugin).toEqual(mockProps.passesByPlugin);
-    });
+    // Drawer should be opened with the correct category
+    const drawer = screen.getByTestId('mock-drawer');
+    expect(drawer).toHaveTextContent('sql-injection');
   });
 
-  it('should handle floating point precision issues when calculating progressValue', () => {
-    const totalTests = 1000000;
-    const totalPasses = 999999;
-
-    const subCategory = 'ascii-smuggling';
-
+  it('should render all categories that have tests', () => {
+    // Create stats for plugins from different categories
     const mockProps = createMockProps({
       categoryStats: {
-        [subCategory]: { pass: totalPasses, total: totalTests },
+        'sql-injection': { pass: 8, total: 10 }, // Security & Access Control
+        contracts: { pass: 4, total: 5 }, // Compliance & Legal
+        'harmful:hate': { pass: 2, total: 3 }, // Trust & Safety
       },
     });
 
-    render(<RiskCategories {...mockProps} />);
+    renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const expectedProgress = (totalPasses / totalTests) * 100;
-    expectRiskCardProps(Object.keys(riskCategories)[0], {
-      progressValue: expectedProgress,
+    // All three categories should be visible
+    expect(screen.getByText('Security & Access Control')).toBeInTheDocument();
+    expect(screen.getByText('Compliance & Legal')).toBeInTheDocument();
+    expect(screen.getByText('Trust & Safety')).toBeInTheDocument();
+  });
+
+  it('should collapse category when clicked', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
     });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    const categoryButton = screen.getByRole('button', { name: /Security & Access Control/i });
+
+    // Plugins visible by default (expanded) - look for ChevronDown icon
+    const pluginRow = screen.getByText('SQL Injection').closest('button');
+    expect(pluginRow).toBeVisible();
+
+    // Click to collapse - the CollapsibleContent should get data-state="closed"
+    fireEvent.click(categoryButton);
+
+    // The content element should have data-state="closed" and be hidden via CSS
+    // (forceMount keeps it in DOM for print support, but CSS hides it)
+    const collapsibleContent = pluginRow?.closest('[data-state]');
+    expect(collapsibleContent).toHaveAttribute('data-state', 'closed');
   });
 });

@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -12,8 +11,8 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -33,7 +32,7 @@ export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
-  const id = uuidv4();
+  const id = crypto.randomUUID();
   evalJobs.set(id, {
     evalId: null,
     status: 'in-progress',
@@ -113,7 +112,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 });
 
-evalRouter.patch('/:id', (req: Request, res: Response): void => {
+evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
   const { table, config } = req.body;
 
@@ -123,7 +122,7 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    await updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
@@ -362,6 +361,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
     id,
+    stats: eval_.getStats(),
   } as EvalTableDTO);
 });
 
@@ -483,6 +483,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Handle different provider config formats
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     let providerConfig: any;
     if (Array.isArray(providers)) {
       if (providers.length === 0) {

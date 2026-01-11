@@ -1,13 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { useMemo } from 'react';
+
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { callApi } from '@app/utils/api';
+import { ResultFailureReason } from '@promptfoo/types';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { useMemo } from 'react';
-import type { ResultsFile, EvaluateResult, GradingResult } from '@promptfoo/types';
-import { ResultFailureReason } from '@promptfoo/types';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
-import { callApi } from '@app/utils/api';
+import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
+
+// Helper to render with all needed providers
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <TooltipProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </TooltipProvider>,
+  );
+};
 
 vi.mock('@app/utils/api');
 vi.mock('react-router-dom', async () => {
@@ -100,6 +110,7 @@ describe('Report filtering logic', () => {
 
       // Simulate the useMemo logic
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -147,6 +158,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -186,6 +198,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -236,6 +249,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -282,6 +296,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -339,6 +354,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 0;
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -385,6 +401,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 999; // Out of bounds
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -448,6 +465,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -486,6 +504,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -612,11 +631,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const overviewTotal = await screen.findByTestId('overview-total');
     expect(overviewTotal).toHaveTextContent('1');
@@ -635,11 +650,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toHaveTextContent('Target: Provider 0');
@@ -696,11 +707,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toBeInTheDocument();
@@ -713,11 +720,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const chip = await screen.findByText('Target:');
     expect(chip).toBeInTheDocument();
@@ -773,11 +776,7 @@ describe('App component categoryStats calculation with moderation', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />,
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('overview-category-stats')).toBeInTheDocument();

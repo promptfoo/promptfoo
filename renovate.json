@@ -1,6 +1,5 @@
 {
-  "extends": ["config:base", ":disableDependencyDashboard"],
-  "pinVersions": false,
+  "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
   "lockFileMaintenance": {
@@ -18,17 +17,6 @@
     "examples/**/package.json"
   ],
   "packageRules": [
-    {
-      "description": "Group @adaline provider packages together across all dependency types",
-      "matchPackagePatterns": ["^@adaline/"],
-      "matchDepTypes": [
-        "dependencies",
-        "devDependencies",
-        "optionalDependencies",
-        "peerDependencies"
-      ],
-      "groupName": "@adaline packages"
-    },
     {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
@@ -66,11 +54,6 @@
         "peerDependencies"
       ],
       "groupName": "Azure packages"
-    },
-    {
-      "description": "Group Biome packages together",
-      "matchPackagePatterns": ["^@biomejs/"],
-      "groupName": "Biome"
     },
     {
       "description": "Group Docusaurus packages together",
@@ -202,7 +185,6 @@
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
       "matchPackagePatterns": [
-        "^@adaline/",
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
         "^@aws-sdk/client-sagemaker",

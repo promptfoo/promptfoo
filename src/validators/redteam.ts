@@ -27,10 +27,17 @@ import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import type {
+  PluginConfig,
+  RedteamContext,
+  RedteamFileConfig,
+  RedteamPluginObject,
+  RedteamStrategy,
+  TracingConfig,
+} from '../redteam/types';
 
-const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
+const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
     enabled: z.boolean().optional(),
     includeInAttack: z.boolean().optional(),
@@ -45,6 +52,20 @@ const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
     strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
   }),
 );
+
+/**
+ * Schema for redteam contexts - allows testing multiple security contexts/states
+ */
+export const RedteamContextSchema = z.object({
+  id: z.string().describe('Unique identifier for the context'),
+  purpose: z
+    .string()
+    .describe('Purpose/context for this context - used for generation and grading'),
+  vars: z
+    .record(z.string())
+    .optional()
+    .describe('Variables passed to provider (e.g., context_file, user_role)'),
+});
 
 const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
   FrameworkComplianceId,
@@ -256,6 +277,10 @@ export const RedteamConfigSchema = z
       .array(z.string())
       .optional()
       .describe('Names of people, brands, or organizations related to your LLM application'),
+    contexts: z
+      .array(RedteamContextSchema)
+      .optional()
+      .describe('Security contexts for testing multiple states - each context has its own purpose'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
@@ -309,13 +334,9 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Fire-and-forget async import to avoid circular dependency at module load time
-        (async () => {
-          const { default: logger } = await import('../logger');
-          logger.debug(
-            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-          );
-        })();
+        console.debug(
+          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+        );
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate
@@ -337,7 +358,7 @@ export const RedteamConfigSchema = z
 
     const addPlugin = (
       id: string,
-      config: any,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -357,7 +378,7 @@ export const RedteamConfigSchema = z
 
     const expandCollection = (
       collection: string[] | ReadonlySet<Plugin>,
-      config: any,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -371,8 +392,8 @@ export const RedteamConfigSchema = z
     };
 
     const handleCollectionExpansion = (
-      id: string,
-      config: any,
+      id: Collection,
+      config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
@@ -398,7 +419,7 @@ export const RedteamConfigSchema = z
     };
 
     const handlePlugin = (plugin: string | RedteamPluginObject) => {
-      const pluginObj =
+      const pluginObj: RedteamPluginObject =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
@@ -406,9 +427,9 @@ export const RedteamConfigSchema = z
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
           plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as any)) {
+            if (COLLECTIONS.includes(id as Collection)) {
               handleCollectionExpansion(
-                id,
+                id as Collection,
                 pluginObj.config,
                 pluginObj.numTests,
                 pluginObj.severity,
@@ -419,9 +440,9 @@ export const RedteamConfigSchema = z
           });
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
-      } else if (COLLECTIONS.includes(pluginObj.id as any)) {
+      } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
         handleCollectionExpansion(
-          pluginObj.id,
+          pluginObj.id as Collection,
           pluginObj.config,
           pluginObj.numTests,
           pluginObj.severity,
@@ -433,9 +454,9 @@ export const RedteamConfigSchema = z
         if (mapping) {
           const [, aliasedMapping] = mapping;
           aliasedMapping[pluginObj.id].plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as any)) {
+            if (COLLECTIONS.includes(id as Collection)) {
               handleCollectionExpansion(
-                id,
+                id as Collection,
                 pluginObj.config,
                 pluginObj.numTests,
                 pluginObj.severity,
@@ -519,6 +540,7 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.contexts ? { contexts: data.contexts as RedteamContext[] } : {}),
       ...(data.excludeTargetOutputFromAgenticAttackGeneration
         ? {
             excludeTargetOutputFromAgenticAttackGeneration:

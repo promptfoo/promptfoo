@@ -42,14 +42,14 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # Use the Node.js version specified in .nvmrc (node >= 20 required)
+   # Use the Node.js version specified in .nvmrc (Node.js >= 20.0.0 required)
    nvm use
 
    # Install dependencies (npm, pnpm, or yarn all work)
    npm install
    ```
 
-   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+   3.2 Set up using `devcontainer` (requires Docker and VSCode)
 
    Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
 
@@ -341,7 +341,7 @@ npm run dev
 This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
-npm run dev:web
+npm run dev:app
 ```
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:

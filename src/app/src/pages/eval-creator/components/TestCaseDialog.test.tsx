@@ -1,11 +1,10 @@
-import { render, screen, act } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import type { Assertion, TestCase } from '@promptfoo/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AssertsForm from './AssertsForm';
 import TestCaseForm from './TestCaseDialog';
 import VarsForm from './VarsForm';
-import AssertsForm from './AssertsForm';
+import type { Assertion, TestCase } from '@promptfoo/types';
 
 vi.mock('./VarsForm', () => ({
   default: vi.fn(() => <div data-testid="mock-vars-form" />),
@@ -36,12 +35,7 @@ describe('TestCaseForm', () => {
       onCancel,
       initialValues: undefined,
     };
-    const theme = createTheme();
-    return render(
-      <ThemeProvider theme={theme}>
-        <TestCaseForm {...defaultProps} {...props} />
-      </ThemeProvider>,
-    );
+    return render(<TestCaseForm {...defaultProps} {...props} />);
   };
 
   it('should render with the title "Add Test Case" and show both "Add Test Case" and "Add Another" buttons when initialValues is undefined and open is true', () => {
@@ -198,15 +192,13 @@ describe('TestCaseForm', () => {
     };
 
     rerender(
-      <ThemeProvider theme={createTheme()}>
-        <TestCaseForm
-          open={true}
-          onAdd={onAdd}
-          varsList={['var1', 'var2']}
-          onCancel={onCancel}
-          initialValues={initialValues2}
-        />
-      </ThemeProvider>,
+      <TestCaseForm
+        open={true}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues2}
+      />,
     );
 
     // Get the last call since it was re-rendered with new props
@@ -244,15 +236,13 @@ describe('TestCaseForm', () => {
     });
 
     rerender(
-      <ThemeProvider theme={createTheme()}>
-        <TestCaseForm
-          open={true}
-          onAdd={onAdd}
-          varsList={['var1', 'var2']}
-          onCancel={onCancel}
-          initialValues={initialValues}
-        />
-      </ThemeProvider>,
+      <TestCaseForm
+        open={true}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues}
+      />,
     );
 
     const lastVarsFormCall = mockVarsForm.mock.calls[mockVarsForm.mock.calls.length - 1];

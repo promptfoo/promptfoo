@@ -1,22 +1,22 @@
-import DownloadIcon from '@mui/icons-material/Download';
-import Button from '@mui/material/Button';
+import { Button } from '@app/components/ui/button';
+import { DownloadIcon } from '@app/components/ui/icons';
+import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
+  type FrameworkComplianceId,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
-  type FrameworkComplianceId,
 } from '@promptfoo/redteam/constants';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 interface CSVExporterProps {
   categoryStats: CategoryStats;
@@ -202,13 +202,8 @@ const CSVExporter = ({
   };
 
   return (
-    <Button
-      variant="contained"
-      color="primary"
-      startIcon={<DownloadIcon />}
-      onClick={exportToCSV}
-      className="print-hide"
-    >
+    <Button onClick={exportToCSV} className="print-hide">
+      <DownloadIcon className="mr-2 size-4" />
       Export framework results to CSV
     </Button>
   );

@@ -543,10 +543,15 @@ tests:
 You can access environment variables in your templates using the `env` global:
 
 ```yaml
+prompts:
+  - 'file://{{ env.PROMPT_DIR }}/prompt.txt'
+
 tests:
   - vars:
       headline: 'Articles about {{ env.TOPIC }}'
 ```
+
+Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
 
 ## Tools and Functions
 

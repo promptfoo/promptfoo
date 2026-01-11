@@ -49,7 +49,8 @@ const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
  * Critical build outputs that must exist for the build to be valid.
  */
 const REQUIRED_BUILD_OUTPUTS = [
-  'dist/src/main.js', // CLI entry
+  'dist/src/entrypoint.js', // CLI entry (Node version check wrapper)
+  'dist/src/main.js', // CLI main module
   'dist/src/index.js', // ESM library entry
   'dist/src/index.cjs', // CJS library entry
   'dist/src/server/index.js', // Server entry
@@ -263,14 +264,17 @@ export function postbuild(): PostbuildResult {
     result.success = false;
   }
 
-  // Make CLI executable (no-op on Windows, but doesn't hurt)
-  const mainJs = path.join(DIST, 'src', 'main.js');
-  try {
-    fs.chmodSync(mainJs, 0o755);
-    log('Made executable: ./dist/src/main.js');
-  } catch (error) {
-    // chmod may fail on Windows - this is acceptable
-    log(`Note: chmod failed (expected on Windows): ${error}`);
+  // Make CLI executables (no-op on Windows, but doesn't hurt)
+  const cliExecutables = ['entrypoint.js', 'main.js'];
+  for (const executable of cliExecutables) {
+    const execPath = path.join(DIST, 'src', executable);
+    try {
+      fs.chmodSync(execPath, 0o755);
+      log(`Made executable: ./dist/src/${executable}`);
+    } catch (error) {
+      // chmod may fail on Windows - this is acceptable
+      log(`Note: chmod failed (expected on Windows): ${error}`);
+    }
   }
 
   if (result.success) {

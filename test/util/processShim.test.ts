@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import {
-  getProcessShim,
-  _isBrowserEnvironment,
   _createBrowserProcessShim,
+  _isBrowserEnvironment,
+  getProcessShim,
 } from '../../src/util/processShim';
 
 describe('processShim', () => {

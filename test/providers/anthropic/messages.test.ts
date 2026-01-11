@@ -1,11 +1,11 @@
-import type { Mocked } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Mocked } from 'vitest';
 
 const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
@@ -162,7 +162,11 @@ describe('AnthropicMessagesProvider', () => {
 
       const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject(resultFromCache);
+      expect(resultFromCache.cached).toBe(true);
+      // Both results should match except for the cached flag
+      expect(result.output).toEqual(resultFromCache.output);
+      expect(result.cost).toEqual(resultFromCache.cost);
+      expect(result.tokenUsage).toEqual(resultFromCache.tokenUsage);
     });
 
     it('should pass the tool choice if specified', async () => {
@@ -326,6 +330,7 @@ describe('AnthropicMessagesProvider', () => {
       await getCache().set(cacheKey, 'Test output');
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
+      // Legacy cache items (plain strings) don't get the cached flag
       expect(result).toMatchObject({
         output: 'Test output',
         tokenUsage: {},
