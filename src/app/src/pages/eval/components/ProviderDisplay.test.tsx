@@ -2,211 +2,62 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { ProviderDisplay, sanitizeConfig } from './ProviderDisplay';
+import { filterConfigForDisplay, ProviderDisplay } from './ProviderDisplay';
 
-describe('sanitizeConfig', () => {
-  describe('sensitive field names', () => {
-    it('redacts apiKey field', () => {
-      const config = { apiKey: 'sk-1234567890abcdef', temperature: 0.7 };
-      const result = sanitizeConfig(config);
-      expect(result.apiKey).toBe('[REDACTED]');
-      expect(result.temperature).toBe(0.7);
-    });
-
-    it('redacts api_key field (snake_case)', () => {
-      const config = { api_key: 'secret-key', model: 'gpt-4' };
-      const result = sanitizeConfig(config);
-      expect(result.api_key).toBe('[REDACTED]');
-      expect(result.model).toBe('gpt-4');
-    });
-
-    it('redacts token field', () => {
-      const config = { token: 'bearer-token-here', max_tokens: 1000 };
-      const result = sanitizeConfig(config);
-      expect(result.token).toBe('[REDACTED]');
-      expect(result.max_tokens).toBe(1000);
-    });
-
-    it('redacts password field', () => {
-      const config = { password: 'supersecret', username: 'user' };
-      const result = sanitizeConfig(config);
-      expect(result.password).toBe('[REDACTED]');
-      expect(result.username).toBe('user');
-    });
-
-    it('redacts credentials field', () => {
-      const config = { credentials: { key: 'value' }, setting: true };
-      const result = sanitizeConfig(config);
-      expect(result.credentials).toBe('[REDACTED]');
-      expect(result.setting).toBe(true);
-    });
-
-    it('redacts secret field', () => {
-      const config = { secret: 'my-secret', public: 'my-public' };
-      const result = sanitizeConfig(config);
-      expect(result.secret).toBe('[REDACTED]');
-      expect(result.public).toBe('my-public');
-    });
-
-    it('is case-insensitive for field names', () => {
-      const config = { ApiKey: 'secret', APIKEY: 'secret2', apiKEY: 'secret3' };
-      const result = sanitizeConfig(config);
-      expect(result.ApiKey).toBe('[REDACTED]');
-      expect(result.APIKEY).toBe('[REDACTED]');
-      expect(result.apiKEY).toBe('[REDACTED]');
-    });
-  });
-
-  describe('sensitive header names', () => {
-    it('redacts Authorization header', () => {
-      const config = {
-        headers: {
-          Authorization: 'Bearer token123',
-          'Content-Type': 'application/json',
-        },
-      };
-      const result = sanitizeConfig(config);
-      expect(result.headers.Authorization).toBe('[REDACTED]');
-      expect(result.headers['Content-Type']).toBe('application/json');
-    });
-
-    it('redacts X-API-Key header', () => {
-      const config = {
-        headers: {
-          'X-API-Key': 'my-api-key',
-          Accept: 'application/json',
-        },
-      };
-      const result = sanitizeConfig(config);
-      expect(result.headers['X-API-Key']).toBe('[REDACTED]');
-      expect(result.headers.Accept).toBe('application/json');
-    });
-
-    it('redacts x-auth-token header (case-insensitive)', () => {
-      const config = {
-        headers: {
-          'x-auth-token': 'token-value',
-        },
-      };
-      const result = sanitizeConfig(config);
-      expect(result.headers['x-auth-token']).toBe('[REDACTED]');
-    });
-
-    it('does not redact non-sensitive headers', () => {
-      const config = {
-        headers: {
-          'User-Agent': 'MyApp/1.0',
-          'X-Custom-Header': 'custom-value',
-        },
-      };
-      const result = sanitizeConfig(config);
-      expect(result.headers['User-Agent']).toBe('MyApp/1.0');
-      expect(result.headers['X-Custom-Header']).toBe('custom-value');
-    });
-  });
-
-  describe('sensitive value patterns', () => {
-    it('redacts OpenAI API keys (sk-...)', () => {
-      const config = {
-        someField: 'sk-1234567890abcdefghijklmnop',
-        otherField: 'normal-value',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.someField).toBe('[REDACTED]');
-      expect(result.otherField).toBe('normal-value');
-    });
-
-    it('redacts OpenAI project keys (sk-proj-...)', () => {
-      const config = {
-        key: 'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.key).toBe('[REDACTED]');
-    });
-
-    it('redacts Anthropic keys (sk-ant-...)', () => {
-      const config = {
-        key: 'sk-ant-api03-abcdefghijklmnop',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.key).toBe('[REDACTED]');
-    });
-
-    it('redacts Bearer tokens in values', () => {
-      const config = {
-        auth: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.auth).toBe('[REDACTED]');
-    });
-
-    it('redacts long alphanumeric strings (likely tokens)', () => {
-      const config = {
-        // 64+ chars to trigger redaction (threshold is 64 to reduce false positives)
-        possibleToken: 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZab',
-        shortValue: 'abc123',
-        mediumValue: 'abcdefghijklmnopqrstuvwxyz1234567890ABCD', // 40 chars - not redacted
-      };
-      const result = sanitizeConfig(config);
-      expect(result.possibleToken).toBe('[REDACTED]');
-      expect(result.shortValue).toBe('abc123');
-      expect(result.mediumValue).toBe('abcdefghijklmnopqrstuvwxyz1234567890ABCD');
-    });
-
-    it('redacts AWS access keys', () => {
-      const config = {
-        awsKey: 'AKIAIOSFODNN7EXAMPLE',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.awsKey).toBe('[REDACTED]');
-    });
-
-    it('redacts Google API keys', () => {
-      const config = {
-        googleKey: 'AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.googleKey).toBe('[REDACTED]');
-    });
-
-    it('does not redact normal strings', () => {
-      const config = {
-        model: 'gpt-4o',
-        prompt: 'Hello world',
-        format: 'json',
-      };
-      const result = sanitizeConfig(config);
-      expect(result.model).toBe('gpt-4o');
-      expect(result.prompt).toBe('Hello world');
-      expect(result.format).toBe('json');
-    });
-  });
-
+describe('filterConfigForDisplay', () => {
   describe('excluded fields', () => {
     it('excludes callApi field entirely', () => {
       const config = { callApi: () => {}, temperature: 0.5 };
-      const result = sanitizeConfig(config);
+      const result = filterConfigForDisplay(config);
       expect(result.callApi).toBeUndefined();
+      expect(result.temperature).toBe(0.5);
+    });
+
+    it('excludes callEmbeddingApi field entirely', () => {
+      const config = { callEmbeddingApi: () => {}, model: 'text-embedding-3-small' };
+      const result = filterConfigForDisplay(config);
+      expect(result.callEmbeddingApi).toBeUndefined();
+      expect(result.model).toBe('text-embedding-3-small');
+    });
+
+    it('excludes callClassificationApi field entirely', () => {
+      const config = { callClassificationApi: () => {}, threshold: 0.8 };
+      const result = filterConfigForDisplay(config);
+      expect(result.callClassificationApi).toBeUndefined();
+      expect(result.threshold).toBe(0.8);
+    });
+
+    it('excludes prompts field entirely', () => {
+      const config = { prompts: ['prompt1', 'prompt2'], temperature: 0.5 };
+      const result = filterConfigForDisplay(config);
+      expect(result.prompts).toBeUndefined();
       expect(result.temperature).toBe(0.5);
     });
 
     it('excludes transform field entirely', () => {
       const config = { transform: 'some transform', model: 'gpt-4' };
-      const result = sanitizeConfig(config);
+      const result = filterConfigForDisplay(config);
       expect(result.transform).toBeUndefined();
       expect(result.model).toBe('gpt-4');
     });
 
+    it('excludes delay field entirely', () => {
+      const config = { delay: 1000, temperature: 0.7 };
+      const result = filterConfigForDisplay(config);
+      expect(result.delay).toBeUndefined();
+      expect(result.temperature).toBe(0.7);
+    });
+
     it('excludes env field entirely', () => {
       const config = { env: { VAR: 'value' }, temperature: 0.7 };
-      const result = sanitizeConfig(config);
+      const result = filterConfigForDisplay(config);
       expect(result.env).toBeUndefined();
       expect(result.temperature).toBe(0.7);
     });
   });
 
   describe('nested objects', () => {
-    it('sanitizes nested config objects', () => {
+    it('preserves nested config objects', () => {
       const config = {
         generationConfig: {
           thinkingConfig: {
@@ -215,21 +66,9 @@ describe('sanitizeConfig', () => {
           temperature: 0.7,
         },
       };
-      const result = sanitizeConfig(config);
+      const result = filterConfigForDisplay(config);
       expect(result.generationConfig.thinkingConfig.thinkingLevel).toBe('HIGH');
       expect(result.generationConfig.temperature).toBe(0.7);
-    });
-
-    it('redacts secrets in nested objects', () => {
-      const config = {
-        nested: {
-          apiKey: 'secret-key',
-          setting: 'value',
-        },
-      };
-      const result = sanitizeConfig(config);
-      expect(result.nested.apiKey).toBe('[REDACTED]');
-      expect(result.nested.setting).toBe('value');
     });
 
     it('handles deeply nested structures', () => {
@@ -237,60 +76,77 @@ describe('sanitizeConfig', () => {
         level1: {
           level2: {
             level3: {
-              apiKey: 'secret',
-              value: 'safe',
+              setting: 'value',
             },
           },
         },
       };
-      const result = sanitizeConfig(config);
-      expect(result.level1.level2.level3.apiKey).toBe('[REDACTED]');
-      expect(result.level1.level2.level3.value).toBe('safe');
+      const result = filterConfigForDisplay(config);
+      expect(result.level1.level2.level3.setting).toBe('value');
+    });
+
+    it('excludes fields in nested objects', () => {
+      const config = {
+        outer: {
+          callApi: () => {},
+          temperature: 0.5,
+        },
+      };
+      const result = filterConfigForDisplay(config);
+      expect(result.outer.callApi).toBeUndefined();
+      expect(result.outer.temperature).toBe(0.5);
     });
   });
 
   describe('arrays', () => {
-    it('sanitizes arrays of objects', () => {
+    it('preserves arrays of objects', () => {
       const config = {
         items: [
-          { name: 'item1', apiKey: 'secret1' },
-          { name: 'item2', apiKey: 'secret2' },
+          { name: 'item1', value: 100 },
+          { name: 'item2', value: 200 },
         ],
       };
-      const result = sanitizeConfig(config);
+      const result = filterConfigForDisplay(config);
       expect(result.items[0].name).toBe('item1');
-      expect(result.items[0].apiKey).toBe('[REDACTED]');
+      expect(result.items[0].value).toBe(100);
       expect(result.items[1].name).toBe('item2');
-      expect(result.items[1].apiKey).toBe('[REDACTED]');
+      expect(result.items[1].value).toBe(200);
     });
 
-    it('sanitizes arrays of strings with secrets', () => {
+    it('preserves arrays of strings', () => {
       const config = {
-        keys: ['sk-1234567890abcdefghijklmnop', 'normal-string'],
+        tags: ['tag1', 'tag2', 'tag3'],
       };
-      const result = sanitizeConfig(config);
-      expect(result.keys[0]).toBe('[REDACTED]');
-      expect(result.keys[1]).toBe('normal-string');
+      const result = filterConfigForDisplay(config);
+      expect(result.tags).toEqual(['tag1', 'tag2', 'tag3']);
+    });
+
+    it('preserves arrays of numbers', () => {
+      const config = {
+        scores: [0.8, 0.9, 0.95],
+      };
+      const result = filterConfigForDisplay(config);
+      expect(result.scores).toEqual([0.8, 0.9, 0.95]);
     });
   });
 
   describe('edge cases', () => {
     it('returns undefined for null input', () => {
-      expect(sanitizeConfig(null)).toBeUndefined();
+      expect(filterConfigForDisplay(null)).toBeUndefined();
     });
 
     it('returns undefined for undefined input', () => {
-      expect(sanitizeConfig(undefined)).toBeUndefined();
+      expect(filterConfigForDisplay(undefined)).toBeUndefined();
     });
 
     it('returns undefined for empty object', () => {
-      expect(sanitizeConfig({})).toBeUndefined();
+      expect(filterConfigForDisplay({})).toBeUndefined();
     });
 
     it('handles primitive values', () => {
-      expect(sanitizeConfig('string')).toBe('string');
-      expect(sanitizeConfig(123)).toBe(123);
-      expect(sanitizeConfig(true)).toBe(true);
+      expect(filterConfigForDisplay('string')).toBe('string');
+      expect(filterConfigForDisplay(123)).toBe(123);
+      expect(filterConfigForDisplay(true)).toBe(true);
     });
 
     it('prevents infinite recursion with depth limit', () => {
@@ -300,7 +156,28 @@ describe('sanitizeConfig', () => {
         obj = { nested: obj };
       }
       // Should not throw, should return undefined for too-deep content
-      expect(() => sanitizeConfig(obj)).not.toThrow();
+      expect(() => filterConfigForDisplay(obj)).not.toThrow();
+    });
+
+    it('preserves all non-excluded fields', () => {
+      const config = {
+        apiKey: 'sk-1234567890',
+        temperature: 0.7,
+        max_tokens: 1000,
+        model: 'gpt-4',
+        headers: {
+          Authorization: 'Bearer token',
+          'Content-Type': 'application/json',
+        },
+      };
+      const result = filterConfigForDisplay(config);
+      // All fields should be preserved (no redaction)
+      expect(result.apiKey).toBe('sk-1234567890');
+      expect(result.temperature).toBe(0.7);
+      expect(result.max_tokens).toBe(1000);
+      expect(result.model).toBe('gpt-4');
+      expect(result.headers.Authorization).toBe('Bearer token');
+      expect(result.headers['Content-Type']).toBe('application/json');
     });
   });
 });

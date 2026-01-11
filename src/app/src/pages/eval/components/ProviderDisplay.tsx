@@ -3,13 +3,6 @@ import type { ReactNode } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-// Import shared sanitization utilities from backend
-import {
-  isSecretField,
-  looksLikeSecret,
-  normalizeFieldName,
-  REDACTED,
-} from '@promptfoo/util/sanitizer';
 import yaml from 'js-yaml';
 import { findProviderConfig, getProviderDisplayName } from './providerConfig';
 
@@ -23,20 +16,8 @@ interface ProviderDisplayProps {
 }
 
 /**
- * Header names that contain auth info - their values should be redacted.
- * Note: These are normalized (lowercase, no hyphens) for comparison.
- */
-const SENSITIVE_HEADER_NAMES = new Set([
-  'authorization',
-  'xapikey', // x-api-key
-  'apikey', // api-key
-  'xauthtoken', // x-auth-token
-  'xaccesstoken', // x-access-token
-  'proxyauthorization', // proxy-authorization
-]);
-
-/**
- * Fields to completely exclude (not useful for understanding model behavior).
+ * Fields to exclude from display (not useful for understanding model behavior).
+ * These are implementation details or shown elsewhere in the UI.
  */
 const EXCLUDED_FIELDS = new Set([
   'callApi',
@@ -49,22 +30,10 @@ const EXCLUDED_FIELDS = new Set([
 ]);
 
 /**
- * Check if a header name is sensitive (case-insensitive, normalized).
+ * Recursively filter config for display, removing non-useful fields.
+ * Returns undefined for empty objects to keep tooltip clean.
  */
-function isSensitiveHeaderName(headerName: string): boolean {
-  return SENSITIVE_HEADER_NAMES.has(normalizeFieldName(headerName));
-}
-
-/**
- * Recursively sanitize config for display, redacting sensitive values.
- * Shows field names but hides secret values.
- *
- * This extends the shared sanitizer with frontend-specific features:
- * - Excluded fields (callApi, transform, env, etc.)
- * - Returns undefined for empty objects (cleaner tooltip display)
- * - Higher depth limit (10 vs 4) for detailed config display
- */
-export function sanitizeConfig(obj: any, depth = 0, parentKey = ''): any {
+export function filterConfigForDisplay(obj: any, depth = 0): any {
   if (depth > 10) {
     return undefined; // Prevent infinite recursion
   }
@@ -72,49 +41,32 @@ export function sanitizeConfig(obj: any, depth = 0, parentKey = ''): any {
     return undefined;
   }
 
-  // Handle primitive values
+  // Handle primitive values - pass through as-is
   if (typeof obj !== 'object') {
-    // Check if the value itself looks like a secret
-    if (typeof obj === 'string' && looksLikeSecret(obj)) {
-      return REDACTED;
-    }
     return obj;
   }
 
   // Handle arrays
   if (Array.isArray(obj)) {
     const filtered = obj
-      .map((item) => sanitizeConfig(item, depth + 1, parentKey))
+      .map((item) => filterConfigForDisplay(item, depth + 1))
       .filter((x) => x !== undefined);
     return filtered.length > 0 ? filtered : undefined;
   }
 
-  // Handle objects
+  // Handle objects - filter out excluded fields
   const result: Record<string, any> = {};
-  const isHeadersObject = normalizeFieldName(parentKey) === 'headers';
 
   for (const [key, value] of Object.entries(obj)) {
-    // Skip excluded fields entirely (frontend-specific)
+    // Skip excluded fields (implementation details)
     if (EXCLUDED_FIELDS.has(key)) {
       continue;
     }
 
-    // Redact sensitive field values (using shared sanitizer logic)
-    if (isSecretField(key)) {
-      result[key] = REDACTED;
-      continue;
-    }
-
-    // Redact sensitive header values
-    if (isHeadersObject && isSensitiveHeaderName(key)) {
-      result[key] = REDACTED;
-      continue;
-    }
-
     // Recurse into nested objects
-    const sanitizedValue = sanitizeConfig(value, depth + 1, key);
-    if (sanitizedValue !== undefined) {
-      result[key] = sanitizedValue;
+    const filteredValue = filterConfigForDisplay(value, depth + 1);
+    if (filteredValue !== undefined) {
+      result[key] = filteredValue;
     }
   }
 
@@ -123,7 +75,7 @@ export function sanitizeConfig(obj: any, depth = 0, parentKey = ''): any {
 
 /**
  * Renders a YAML-like config display with syntax highlighting.
- * Keys are muted, values are emphasized, with proper indentation preserved.
+ * Keys are muted, values are colored by type.
  */
 function StyledConfigContent({
   displayId,
@@ -180,11 +132,6 @@ function StyledConfigContent({
       } else if (trimmedValue === 'true' || trimmedValue === 'false') {
         // Boolean
         valueElement = <span className="text-amber-600 dark:text-amber-400">{valuePart}</span>;
-      } else if (trimmedValue === '[REDACTED]') {
-        // Redacted secret
-        valueElement = (
-          <span className="text-red-500/70 dark:text-red-400/70 italic">{valuePart}</span>
-        );
       } else if (/^-?\d+\.?\d*$/.test(trimmedValue)) {
         // Number
         valueElement = <span className="text-emerald-600 dark:text-emerald-400">{valuePart}</span>;
@@ -244,7 +191,7 @@ export function ProviderDisplay({
     providerConfig.id !== displayedText;
   const displayId = showId ? providerConfig.id : null;
 
-  // Tooltip: show id (if label used) + sanitized config as YAML
+  // Tooltip: show id (if label used) + filtered config as YAML
   const tooltipData = useMemo(() => {
     if (!providerConfig) {
       return null;
@@ -262,14 +209,14 @@ export function ProviderDisplay({
       // Remove id/label from the config display (shown separately or in provider name)
       const { id: _id, label: _label, ...restConfig } = configToShow;
 
-      // Sanitize the config (redact secrets)
-      const sanitizedConfig = sanitizeConfig(restConfig);
+      // Filter the config (remove non-useful fields like callApi, transform, env)
+      const filteredConfig = filterConfigForDisplay(restConfig);
 
       // Generate YAML for config
       let configYaml: string | null = null;
-      if (sanitizedConfig && Object.keys(sanitizedConfig).length > 0) {
+      if (filteredConfig && Object.keys(filteredConfig).length > 0) {
         configYaml = yaml
-          .dump(sanitizedConfig, {
+          .dump(filteredConfig, {
             indent: 2,
             lineWidth: 80,
             noRefs: true,
