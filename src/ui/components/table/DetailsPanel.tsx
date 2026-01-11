@@ -392,6 +392,7 @@ export function DetailsPanel({
   }, [output?.gradingResult, rowData.originalRow.vars.length]);
 
   // Reset state when navigating to a different cell
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentRowIndex and currentColIndex are props that should trigger this effect
   useEffect(() => {
     // Reset scroll offsets
     setScrollOffsets({
@@ -554,7 +555,7 @@ export function DetailsPanel({
 
     // Copy
     if (input === 'y') {
-      handleCopy();
+      void handleCopy();
       return;
     }
   });

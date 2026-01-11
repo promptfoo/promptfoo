@@ -61,13 +61,13 @@ function getDescription(pluginId: string): string {
  * Get severity based on plugin type.
  */
 function getSeverity(pluginId: string): 'critical' | 'high' | 'medium' | 'low' {
-  if (pluginId.startsWith('harmful:') || PII_PLUGINS.includes(pluginId as any)) {
+  if (pluginId.startsWith('harmful:') || (PII_PLUGINS as readonly string[]).includes(pluginId)) {
     return 'critical';
   }
   if (pluginId.includes('injection') || pluginId.includes('jailbreak')) {
     return 'high';
   }
-  if (BIAS_PLUGINS.includes(pluginId as any)) {
+  if ((BIAS_PLUGINS as readonly string[]).includes(pluginId)) {
     return 'medium';
   }
   return 'low';
@@ -81,8 +81,8 @@ function createPluginDef(pluginId: string): PluginDefinition {
     id: pluginId,
     name: getDisplayName(pluginId),
     description: getDescription(pluginId),
-    defaultSelected: DEFAULT_PLUGINS.has(pluginId as any),
-    requiresConfig: CONFIG_REQUIRED_PLUGINS.includes(pluginId as any),
+    defaultSelected: (DEFAULT_PLUGINS as Set<string>).has(pluginId),
+    requiresConfig: (CONFIG_REQUIRED_PLUGINS as readonly string[]).includes(pluginId),
     severity: getSeverity(pluginId),
   };
 }
@@ -190,5 +190,5 @@ export function getPlugin(pluginId: string): PluginDefinition | undefined {
  * Check if a plugin requires configuration.
  */
 export function requiresConfig(pluginId: string): boolean {
-  return CONFIG_REQUIRED_PLUGINS.includes(pluginId as any);
+  return (CONFIG_REQUIRED_PLUGINS as readonly string[]).includes(pluginId);
 }

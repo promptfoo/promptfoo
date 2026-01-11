@@ -72,7 +72,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
       });
       // Don't auto-exit, let user see the completion screen
     }
-  }, [state, exit, onComplete, onCancel]);
+  }, [state, exit, onComplete, onCancel, outputDirectory]);
 
   // Generate preview files when entering preview state
   const handleGeneratePreview = useCallback(async () => {
@@ -103,7 +103,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
   // Generate files when entering preview state
   useEffect(() => {
     if (state.matches('previewing') && state.context.filesToWrite.length === 0) {
-      handleGeneratePreview();
+      void handleGeneratePreview();
     }
   }, [state, handleGeneratePreview]);
 

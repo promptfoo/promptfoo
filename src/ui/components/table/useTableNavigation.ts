@@ -26,7 +26,7 @@
  *   - :clear → clear all filters
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
 import { parseFilterCommand } from './CommandInput';
@@ -501,7 +501,10 @@ export function useTableNavigation({
     stateRef.current = state;
   }, [state]);
 
-  const bounds = { rowCount, colCount, visibleRows, minCol };
+  const bounds = useMemo(
+    () => ({ rowCount, colCount, visibleRows, minCol }),
+    [rowCount, colCount, visibleRows, minCol],
+  );
 
   const dispatch = useCallback(
     (action: NavigationAction) => {

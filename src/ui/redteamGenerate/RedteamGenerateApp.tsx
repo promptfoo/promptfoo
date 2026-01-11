@@ -5,8 +5,15 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import type React from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+
+// Type-safe global state for redteam generate UI controller communication
+interface RedteamGenerateGlobal {
+  __redteamGenerateSetProgress?: React.Dispatch<React.SetStateAction<GenerateProgress>>;
+}
+const redteamGenerateGlobal = globalThis as typeof globalThis & RedteamGenerateGlobal;
 
 export interface PluginProgress {
   id: string;
@@ -192,9 +199,9 @@ export function RedteamGenerateApp({ onComplete: _onComplete, onCancel }: Redtea
   // Expose update function for external control
   useEffect(() => {
     // This would be called by the controller
-    (globalThis as any).__redteamGenerateSetProgress = setProgress;
+    redteamGenerateGlobal.__redteamGenerateSetProgress = setProgress;
     return () => {
-      delete (globalThis as any).__redteamGenerateSetProgress;
+      delete redteamGenerateGlobal.__redteamGenerateSetProgress;
     };
   }, []);
 
@@ -323,7 +330,7 @@ export interface RedteamGenerateController {
 }
 
 export function createRedteamGenerateController(): RedteamGenerateController {
-  const getSetProgress = () => (globalThis as any).__redteamGenerateSetProgress;
+  const getSetProgress = () => redteamGenerateGlobal.__redteamGenerateSetProgress;
 
   return {
     init(plugins, strategies, totalTests) {

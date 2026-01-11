@@ -51,6 +51,13 @@ export interface AuthAppProps {
   onExit?: () => void;
 }
 
+// Type-safe global state for auth UI controller communication
+interface AuthGlobal {
+  __authSetProgress?: React.Dispatch<React.SetStateAction<AuthProgress>>;
+}
+
+const authGlobal = globalThis as typeof globalThis & AuthGlobal;
+
 function TeamSelector({
   teams,
   selectedIndex,
@@ -126,9 +133,9 @@ export function AuthApp({
 
   // Expose update function for external control
   useEffect(() => {
-    (globalThis as any).__authSetProgress = setProgress;
+    authGlobal.__authSetProgress = setProgress;
     return () => {
-      delete (globalThis as any).__authSetProgress;
+      delete authGlobal.__authSetProgress;
     };
   }, []);
 
@@ -239,7 +246,7 @@ export interface AuthController {
 }
 
 export function createAuthController(): AuthController {
-  const getSetProgress = () => (globalThis as any).__authSetProgress;
+  const getSetProgress = () => authGlobal.__authSetProgress;
 
   return {
     setPhase(phase) {

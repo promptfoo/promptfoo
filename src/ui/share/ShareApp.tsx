@@ -54,6 +54,13 @@ export interface ShareAppProps {
   onComplete?: (shareUrl: string) => void;
 }
 
+// Type-safe global state for share UI controller communication
+interface ShareGlobal {
+  __shareSetProgress?: React.Dispatch<React.SetStateAction<ShareProgress>>;
+}
+
+const shareGlobal = globalThis as typeof globalThis & ShareGlobal;
+
 function ProgressBar({ progress }: { progress: number }) {
   const width = 30;
   const filled = Math.round((progress / 100) * width);
@@ -88,7 +95,7 @@ export function ShareApp({
   // Auto-copy URL to clipboard when sharing completes
   useEffect(() => {
     if (progress.phase === 'complete' && progress.shareUrl && clipboardAvailable) {
-      copyToClipboard(progress.shareUrl).then((result) => {
+      void copyToClipboard(progress.shareUrl).then((result) => {
         if (result.success) {
           setProgress((prev) => ({ ...prev, copiedToClipboard: true }));
         }
@@ -118,7 +125,7 @@ export function ShareApp({
       }
       // Copy URL to clipboard
       if ((input === 'c' || input === 'C') && progress.shareUrl && clipboardAvailable) {
-        copyToClipboard(progress.shareUrl).then((result) => {
+        void copyToClipboard(progress.shareUrl).then((result) => {
           if (result.success) {
             setProgress((prev) => ({ ...prev, copiedToClipboard: true }));
           }
@@ -136,9 +143,9 @@ export function ShareApp({
 
   // Expose update function for external control
   useEffect(() => {
-    (globalThis as any).__shareSetProgress = setProgress;
+    shareGlobal.__shareSetProgress = setProgress;
     return () => {
-      delete (globalThis as any).__shareSetProgress;
+      delete shareGlobal.__shareSetProgress;
     };
   }, []);
 
@@ -147,7 +154,7 @@ export function ShareApp({
     if (skipConfirmation) {
       onConfirm?.();
     }
-  }, [skipConfirmation]);
+  }, [skipConfirmation, onConfirm]);
 
   const phaseMessages: Record<SharePhase, string> = {
     confirming: 'Share this evaluation?',
@@ -297,7 +304,7 @@ export interface ShareController {
 }
 
 export function createShareController(): ShareController {
-  const getSetProgress = () => (globalThis as any).__shareSetProgress;
+  const getSetProgress = () => shareGlobal.__shareSetProgress;
 
   return {
     setPhase(phase) {

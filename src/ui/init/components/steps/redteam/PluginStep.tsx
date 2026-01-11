@@ -65,7 +65,7 @@ export function PluginStep({
       const defaultPlugins = getDefaultPlugins().map((id) => ({ id }));
       onSelect(defaultPlugins);
     }
-  }, []); // Only run on mount
+  }, [selected.length, onSelect]);
 
   // Handle selection change
   const handleSelect = (ids: string[]) => {

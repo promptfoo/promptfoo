@@ -62,14 +62,14 @@ function getDescription(strategyId: string): string {
  * Create a strategy definition from a strategy ID.
  */
 function createStrategyDef(strategyId: string): StrategyDefinition {
-  const isMultiTurn = MULTI_TURN_STRATEGIES.includes(strategyId as any);
-  const isMultiModal = MULTI_MODAL_STRATEGIES.includes(strategyId as any);
+  const isMultiTurn = (MULTI_TURN_STRATEGIES as readonly string[]).includes(strategyId);
+  const isMultiModal = (MULTI_MODAL_STRATEGIES as readonly string[]).includes(strategyId);
 
   return {
     id: strategyId,
     name: getDisplayName(strategyId),
     description: getDescription(strategyId),
-    defaultSelected: DEFAULT_STRATEGIES.includes(strategyId as any),
+    defaultSelected: (DEFAULT_STRATEGIES as readonly string[]).includes(strategyId),
     isMultiTurn,
     isMultiModal,
     requiresConfig: ['custom', 'layer'].includes(strategyId),

@@ -53,7 +53,7 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
   useEffect(() => {
     if (!initialStats && onRefresh) {
       setLoading(true);
-      onRefresh()
+      void onRefresh()
         .then((data) => {
           setStats(data);
           setLoading(false);
@@ -63,14 +63,14 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
           setLoading(false);
         });
     }
-  }, []);
+  }, [initialStats, onRefresh]);
 
   // Keyboard handling
   useInput((input, key) => {
     // Handle confirmation dialog
     if (confirmClear) {
       if (input === 'y' || input === 'Y') {
-        handleClear();
+        void handleClear();
         setConfirmClear(false);
       } else if (input === 'n' || input === 'N' || key.escape) {
         setConfirmClear(false);
@@ -84,7 +84,7 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
         setConfirmClear(true);
       }
     } else if (input === 'r' || input === 'R') {
-      handleRefresh();
+      void handleRefresh();
     } else if (input === 'q' || key.escape) {
       onExit?.();
       exit();

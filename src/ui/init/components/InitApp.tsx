@@ -162,7 +162,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
   // Generate preview files when entering redteam preview state
   useEffect(() => {
     if (state.matches('redteam.previewing') && state.context.filesToWrite.length === 0) {
-      handleGeneratePreview();
+      void handleGeneratePreview();
     }
   }, [state, handleGeneratePreview]);
 

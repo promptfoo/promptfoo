@@ -78,7 +78,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
         setState('error');
       }
     }
-    loadEvals();
+    void loadEvals();
   }, []);
 
   // Filter evals when search query changes
@@ -233,7 +233,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
 
       // Select
       if (key.return) {
-        handleLoadEval();
+        void handleLoadEval();
         return;
       }
     },

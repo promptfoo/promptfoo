@@ -61,7 +61,7 @@ export function StrategyStep({
       const defaultStrategies = getDefaultStrategies();
       onSelect(defaultStrategies);
     }
-  }, []); // Only run on mount
+  }, [selected.length, onSelect]);
 
   // Handle escape for back navigation
   useInput(

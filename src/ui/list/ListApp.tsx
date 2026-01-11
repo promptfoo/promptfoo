@@ -254,7 +254,7 @@ export function ListApp({
   useEffect(() => {
     if (initialItems.length === 0 && onLoadMore) {
       setLoading(true);
-      onLoadMore(0, pageSize)
+      void onLoadMore(0, pageSize)
         .then((data) => {
           setItems(data);
           setHasMore(data.length >= pageSize);
@@ -265,7 +265,7 @@ export function ListApp({
           setLoading(false);
         });
     }
-  }, []);
+  }, [initialItems.length, onLoadMore, pageSize]);
 
   // Handle search
   const handleSearch = useCallback(async () => {
@@ -328,7 +328,7 @@ export function ListApp({
         const newIndex = Math.min(items.length - 1, prev + 1);
         // Load more when approaching bottom (within 5 items)
         if (hasMore && newIndex >= items.length - 5) {
-          handleLoadMore();
+          void handleLoadMore();
         }
         return newIndex;
       });
@@ -339,7 +339,7 @@ export function ListApp({
         const newIndex = Math.min(items.length - 1, prev + visibleRows);
         // Load more when approaching bottom
         if (hasMore && newIndex >= items.length - 5) {
-          handleLoadMore();
+          void handleLoadMore();
         }
         return newIndex;
       });
@@ -349,7 +349,7 @@ export function ListApp({
       setSelectedIndex(items.length - 1);
       // Load more when jumping to end
       if (hasMore) {
-        handleLoadMore();
+        void handleLoadMore();
       }
     }
 
@@ -365,7 +365,7 @@ export function ListApp({
       // Refresh
       if (onLoadMore) {
         setLoading(true);
-        onLoadMore(0, pageSize)
+        void onLoadMore(0, pageSize)
           .then((data) => {
             setItems(data);
             setSelectedIndex(0);
