@@ -98,6 +98,28 @@ vi.mock('../../../src/providers/google/util', async () => {
   };
 });
 
+// Mock GoogleAuthManager to prevent API key detection from environment
+vi.mock('../../../src/providers/google/auth', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/providers/google/auth')>(
+    '../../../src/providers/google/auth',
+  );
+  return {
+    ...actual,
+    GoogleAuthManager: {
+      ...actual.GoogleAuthManager,
+      // Return no API key by default so tests use OAuth mode
+      getApiKey: vi.fn().mockReturnValue({ apiKey: undefined, source: 'none' }),
+      determineVertexMode: vi.fn().mockReturnValue(true),
+      validateAndWarn: vi.fn(),
+      // Respect config.region when provided, otherwise default to us-central1
+      resolveRegion: vi.fn().mockImplementation((config?: { region?: string }) => {
+        return config?.region || 'us-central1';
+      }),
+      resolveProjectId: vi.fn().mockResolvedValue('test-project-id'),
+    },
+  };
+});
+
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -158,6 +180,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -325,6 +350,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -420,6 +448,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -481,6 +512,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1042,6 +1076,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1094,6 +1131,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1140,6 +1180,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1186,6 +1229,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1238,6 +1284,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1286,6 +1335,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1330,6 +1382,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1377,6 +1432,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1433,6 +1491,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1484,6 +1545,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1533,6 +1597,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1644,6 +1711,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1720,6 +1790,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1810,6 +1883,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1886,6 +1962,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1938,6 +2017,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1993,6 +2075,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');

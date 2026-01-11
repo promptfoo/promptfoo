@@ -15,6 +15,7 @@ vi.mock('../../../src/providers/google/util', () => ({
     contents: [{ parts: [{ text: prompt }], role: 'user' }],
     systemInstruction: undefined,
   })),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 describe('GeminiImageProvider', () => {
@@ -30,7 +31,12 @@ describe('GeminiImageProvider', () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
 
-    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockLoadCredentials.mockImplementation((creds) => {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
@@ -496,8 +502,12 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=gemini-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'gemini-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
@@ -540,8 +550,12 @@ describe('GeminiImageProvider', () => {
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=config-api-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'config-api-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,

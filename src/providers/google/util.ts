@@ -1,6 +1,7 @@
+import crypto from 'crypto';
+
 import Clone from 'rfdc';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -8,11 +9,10 @@ import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
+import { loadCredentials } from './auth';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 
-import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 const ajv = getAjv();
@@ -296,113 +296,15 @@ export function maybeCoerceToGeminiFormat(
   };
 }
 
-let cachedAuth: GoogleAuth | undefined;
-
-/**
- * Clears the cached GoogleAuth instance (for testing)
- * @internal
- */
-export function clearCachedAuth() {
-  cachedAuth = undefined;
-}
-
-/**
- * Loads and processes Google credentials from various sources
- */
-export function loadCredentials(credentials?: string): string | undefined {
-  if (!credentials) {
-    return undefined;
-  }
-
-  if (credentials.startsWith('file://')) {
-    try {
-      return maybeLoadFromExternalFile(credentials) as string;
-    } catch (error) {
-      throw new Error(`Failed to load credentials from file: ${error}`);
-    }
-  }
-
-  return credentials;
-}
-
-/**
- * Creates a Google client with optional custom credentials
- */
-export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
-  if (!cachedAuth) {
-    let GoogleAuth;
-    try {
-      const importedModule = await import('google-auth-library');
-      GoogleAuth = importedModule.GoogleAuth;
-      cachedAuth = new GoogleAuth({
-        scopes: 'https://www.googleapis.com/auth/cloud-platform',
-      });
-    } catch {
-      throw new Error(
-        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
-  }
-
-  const processedCredentials = loadCredentials(credentials);
-
-  let client;
-  if (processedCredentials) {
-    try {
-      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
-    } catch (error) {
-      logger.error(`[Vertex] Could not load credentials: ${error}`);
-      throw new Error(`[Vertex] Could not load credentials: ${error}`);
-    }
-  } else {
-    client = await cachedAuth.getClient();
-  }
-
-  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
-  // This allows the fallback logic in resolveProjectId to work properly
-  let projectId;
-  try {
-    projectId = await cachedAuth.getProjectId();
-  } catch {
-    // If Google Auth Library can't detect project ID from environment,
-    // let resolveProjectId handle the fallback logic
-    projectId = undefined;
-  }
-
-  return { client, projectId };
-}
-
-/**
- * Gets project ID from config, environment, or Google client
- */
-export async function resolveProjectId(
-  config: { projectId?: string; credentials?: string },
-  env?: EnvOverrides,
-): Promise<string> {
-  const processedCredentials = loadCredentials(config.credentials);
-  const { projectId: googleProjectId } = await getGoogleClient({
-    credentials: processedCredentials,
-  });
-
-  return (
-    config.projectId ||
-    env?.VERTEX_PROJECT_ID ||
-    env?.GOOGLE_PROJECT_ID ||
-    getEnvString('VERTEX_PROJECT_ID') ||
-    getEnvString('GOOGLE_PROJECT_ID') ||
-    googleProjectId ||
-    ''
-  );
-}
-
-export async function hasGoogleDefaultCredentials() {
-  try {
-    await getGoogleClient();
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Re-export auth functions from auth.ts for backward compatibility
+// These were previously implemented here but are now centralized in auth.ts
+export {
+  clearCachedAuth,
+  getGoogleClient,
+  hasGoogleDefaultCredentials,
+  loadCredentials,
+  resolveProjectId,
+} from './auth';
 
 // Separate cached auth client for Generative Language API with specific scopes
 let cachedGenerativeLanguageAuth: InstanceType<
@@ -1094,4 +996,47 @@ export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<str
   }
 
   return result;
+}
+
+/**
+ * Create a cache discriminator from auth headers.
+ *
+ * This is used to ensure different API keys/credentials don't share cached responses.
+ * The discriminator is included as a custom property in fetchWithCache options,
+ * which gets included in the cache key automatically.
+ *
+ * Security note: We hash auth headers rather than using them directly to avoid
+ * exposing sensitive credentials in cache keys or logs. The hash is truncated
+ * to 16 hex characters (64 bits) for brevity - collision probability is acceptably
+ * low for cache key differentiation (birthday problem: ~4 billion entries needed
+ * for 50% collision probability).
+ *
+ * @param headers - Request headers containing auth info
+ * @returns A short hash string for cache key differentiation
+ */
+export function createAuthCacheDiscriminator(headers: Record<string, string>): string {
+  // Extract auth-related header values
+  const authValues: string[] = [];
+
+  const authHeaderNames = [
+    'authorization',
+    'x-goog-api-key',
+    'x-api-key',
+    'api-key',
+    'x-goog-user-project',
+  ];
+
+  for (const name of authHeaderNames) {
+    const value = headers[name] || headers[name.toLowerCase()];
+    if (value) {
+      authValues.push(`${name}:${value}`);
+    }
+  }
+
+  if (authValues.length === 0) {
+    return '';
+  }
+
+  // Create a short hash for cache key (16 hex chars = 64 bits, sufficient for cache differentiation)
+  return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }

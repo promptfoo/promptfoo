@@ -451,10 +451,10 @@ export class GoogleVideoProvider implements ApiProvider {
     // Check for project ID - try to resolve from ADC if not explicitly configured
     let projectId =
       this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
       getEnvString('GOOGLE_PROJECT_ID') ||
-      getEnvString('VERTEX_PROJECT_ID') ||
-      this.env?.GOOGLE_PROJECT_ID ||
-      this.env?.VERTEX_PROJECT_ID;
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     // If no explicit project ID, try to resolve from ADC credentials
     if (!projectId) {
@@ -463,7 +463,7 @@ export class GoogleVideoProvider implements ApiProvider {
       } catch {
         return {
           error:
-            'Google Veo video generation requires Vertex AI. Set GOOGLE_PROJECT_ID environment variable or add `projectId` to the provider config, then run "gcloud auth application-default login".',
+            'Google Veo video generation requires Vertex AI. Set GOOGLE_CLOUD_PROJECT environment variable or add `projectId` to the provider config, then run "gcloud auth application-default login".',
         };
       }
     }

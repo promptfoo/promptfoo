@@ -28,22 +28,16 @@ You have three options for providing your API key:
 
 #### Option 1: Environment Variable (Recommended)
 
-Set the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable:
+Set the `GOOGLE_API_KEY` environment variable:
 
 ```bash
 # Using export (Linux/macOS)
-export GEMINI_API_KEY="your_api_key_here"
-# or
 export GOOGLE_API_KEY="your_api_key_here"
 
 # Using set (Windows Command Prompt)
-set GEMINI_API_KEY=your_api_key_here
-# or
 set GOOGLE_API_KEY=your_api_key_here
 
 # Using $env (Windows PowerShell)
-$env:GEMINI_API_KEY="your_api_key_here"
-# or
 $env:GOOGLE_API_KEY="your_api_key_here"
 ```
 
@@ -53,8 +47,6 @@ Create a `.env` file in your project root:
 
 ```bash
 # .env
-GEMINI_API_KEY=your_api_key_here
-# or
 GOOGLE_API_KEY=your_api_key_here
 ```
 
@@ -71,15 +63,15 @@ providers:
       apiKey: your_api_key_here
 ```
 
-**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
+**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
 
 If you need to explicitly reference an environment variable in your config, use Nunjucks template syntax:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
+  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
     config:
-      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
       temperature: 0.7
 ```
 
@@ -163,9 +155,9 @@ tests:
 ```yaml
 # Reference environment variables in your config
 providers:
-  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
+  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
     config:
-      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
       temperature: '{{ env.TEMPERATURE | default(0.7) }}' # Default to 0.7 if not set
 ```
 
@@ -250,12 +242,12 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio          | Vertex AI                  | Notes                                   |
-| ------------------------- | -------------------------- | --------------------------------------- |
-| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`  | Same model, different endpoint          |
-| `GOOGLE_API_KEY`          | `VERTEX_PROJECT_ID` + auth | Vertex uses Google Cloud authentication |
-| Simple API key            | Multiple auth methods      | Vertex supports ADC, service accounts   |
-| Global endpoint           | Regional endpoints         | Vertex requires region selection        |
+| Google AI Studio          | Vertex AI                     | Notes                                   |
+| ------------------------- | ----------------------------- | --------------------------------------- |
+| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`     | Same model, different endpoint          |
+| `GOOGLE_API_KEY`          | `GOOGLE_CLOUD_PROJECT` + auth | Vertex uses Google Cloud authentication |
+| Simple API key            | Multiple auth methods         | Vertex supports ADC, service accounts   |
+| Global endpoint           | Regional endpoints            | Vertex requires region selection        |
 
 Example migration:
 
@@ -294,11 +286,6 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
-- `google:gemini-1.5-flash` - Gemini 1.5 Flash multimodal model
-- `google:gemini-1.5-flash-8b` - Small Gemini 1.5 model optimized for high-volume, lower complexity tasks
-- `google:gemini-1.5-pro` - Gemini 1.5 Pro model for complex reasoning tasks
-- `google:gemini-pro` - General purpose text and chat
-- `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
 ### Embedding Models
 

@@ -135,7 +135,8 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY');
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
   }
 
   /**
