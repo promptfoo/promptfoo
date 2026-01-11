@@ -10,7 +10,6 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { closeDbIfOpen } from '../database/index';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
@@ -485,27 +484,22 @@ export async function doEval(
     if (cmdObj.write !== false) {
       sigintHandler = () => {
         if (paused) {
-          // Second Ctrl+C: force exit (UNSAFE - WAL may be inconsistent)
-          logger.warn('Force exiting - database may need recovery on next run...');
-          try {
-            closeDbIfOpen(); // Best-effort WAL checkpoint
-          } catch {
-            // Ignore - we're force exiting anyway
-          }
+          // Second Ctrl+C: immediate force exit
+          // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
+          // Database will recover on next run via WAL replay
+          logger.warn('Force exiting...');
           process.exit(130);
         }
         paused = true;
         logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
         abortController.abort();
 
-        // Set a timeout for force exit if graceful shutdown hangs
+        // Set a timeout for force exit if evaluate() hangs after abort signal
+        // Note: This covers the evaluation phase only. Shutdown (telemetry/logger)
+        // is covered by main.ts signal handling.
         forceExitTimeout = setTimeout(() => {
-          logger.warn('Graceful shutdown timed out, force exiting...');
-          try {
-            closeDbIfOpen();
-          } catch {
-            // Ignore
-          }
+          // Skip closeDbIfOpen() - could block, defeating the timeout
+          logger.warn('Evaluation shutdown timed out, force exiting...');
           process.exit(130);
         }, 10000).unref();
       };
