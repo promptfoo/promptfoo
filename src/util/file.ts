@@ -386,7 +386,7 @@ export async function readFilters(
  */
 export function maybeLoadFromExternalFileWithVars(
   config: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   const rendered = renderVarsInObject(config, vars);
   return maybeLoadFromExternalFile(rendered);
@@ -407,7 +407,7 @@ export function maybeLoadFromExternalFileWithVars(
  */
 export function maybeLoadResponseFormatFromExternalFile(
   responseFormat: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   if (responseFormat === undefined || responseFormat === null) {
     return responseFormat;
