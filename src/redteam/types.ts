@@ -105,6 +105,7 @@ export const StrategyConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
     plugins: z.array(z.string()).optional(),
+    numTests: z.number().int().min(0).finite().optional(),
     // Allow arbitrary extra fields for strategy configs
     // Use .catchall to accept any additional unknown properties
     // See: https://github.com/colinhacks/zod#catchall
