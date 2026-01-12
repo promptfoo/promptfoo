@@ -351,6 +351,45 @@ export default class Eval {
     );
   }
 
+  /**
+   * Get paginated evals with offset support for efficient infinite scroll.
+   * @param offset - Number of evals to skip
+   * @param limit - Maximum number of evals to return
+   */
+  static async getPaginated(
+    offset: number = 0,
+    limit: number = DEFAULT_QUERY_LIMIT,
+  ): Promise<Eval[]> {
+    const db = getDb();
+    const evals = await db
+      .select()
+      .from(evalsTable)
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+    return evals.map(
+      (e) =>
+        new Eval(e.config, {
+          id: e.id,
+          createdAt: new Date(e.createdAt),
+          author: e.author || undefined,
+          description: e.description || undefined,
+          prompts: e.prompts || [],
+          persisted: true,
+        }),
+    );
+  }
+
+  /**
+   * Get total count of evals for pagination.
+   */
+  static async getCount(): Promise<number> {
+    const db = getDb();
+    const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
+    return result?.count ?? 0;
+  }
+
   static async create(
     config: Partial<UnifiedConfig>,
     renderedPrompts: Prompt[], // The config doesn't contain the actual prompts, so we need to pass them in separately
