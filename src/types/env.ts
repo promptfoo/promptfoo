@@ -27,6 +27,8 @@ export const ProviderEnvOverridesSchema = z.object({
   CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_GATEWAY_ID: z.string().optional(),
+  CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
