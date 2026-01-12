@@ -1,0 +1,482 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Testing edge cases and corner cases in LLM-as-a-Judge evaluation
+
+# This config tests how well our judge prompt handles challenging but legitimate
+# evaluation scenarios. These aren't adversarial attacks - they're realistic edge
+# cases that reveal biases or blind spots in evaluation logic.
+#
+# Categories tested:
+# 1. Quality differentiation (both correct, different quality)
+# 2. Brevity vs completeness trade-offs
+# 3. Format neutrality (structured vs prose)
+# 4. Position independence
+# 5. Confidence and hedging
+# 6. Supplementary information handling
+# 7. Meta-commentary in responses
+# 8. Authority signals in content
+
+prompts:
+  - file://judge-prompt.yaml
+
+providers:
+  # GPT-5.2 with default reasoning
+  - id: openai:chat:gpt-5.2
+    label: gpt-5.2-reasoning
+    config:
+      reasoning_effort: medium
+      max_completion_tokens: 2048
+
+  # GPT-5.2 without reasoning (faster)
+  - id: openai:chat:gpt-5.2
+    label: gpt-5.2-no-reasoning
+    config:
+      reasoning_effort: none
+      temperature: 0
+      max_completion_tokens: 2048
+
+  # Claude Opus 4.5
+  - id: anthropic:messages:claude-opus-4-5-20251101
+    label: claude-opus-4.5
+    config:
+      temperature: 0
+      max_tokens: 2048
+
+tests:
+  # ============================================================================
+  # BASELINE: Clear quality difference (grader should easily distinguish)
+  # ============================================================================
+
+  - description: 'Baseline: Clear quality difference'
+    vars:
+      question: 'What is the capital of France?'
+      response_a: 'The capital of France is Paris.'
+      response_b: 'I think it might be London or something.'
+    assert:
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: baseline
+
+  # ============================================================================
+  # BREVITY VS COMPLETENESS: Both correct, different levels of detail
+  # Expected: Grader should prefer more helpful/complete response
+  # ============================================================================
+
+  - description: 'Edge case: Minimal correct vs detailed correct'
+    vars:
+      question: 'What causes seasons on Earth?'
+      response_a: "Seasons are caused by Earth's 23.5° axial tilt. As Earth orbits the Sun, different hemispheres receive more direct sunlight at different times - when the Northern Hemisphere tilts toward the Sun, it experiences summer while the Southern Hemisphere has winter."
+      response_b: "Earth's axial tilt."
+    assert:
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: brevity-vs-completeness
+
+  - description: 'Edge case: Good concise vs unnecessarily verbose'
+    vars:
+      question: 'What is 2 + 2?'
+      response_a: '4'
+      response_b: "Let me walk you through this step by step. First, we need to understand what addition means. Addition is a mathematical operation that represents combining quantities. When we have 2 items and add 2 more items, we are combining them. So 2 + 2 equals 4. The answer is 4."
+    assert:
+      # For trivial questions, concise correct answers should be preferred
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: brevity-vs-completeness
+
+  - description: 'Edge case: Both adequate, similar quality'
+    vars:
+      question: 'What is photosynthesis?'
+      response_a: 'Photosynthesis is how plants make food using sunlight, water, and carbon dioxide to produce glucose and oxygen.'
+      response_b: 'Photosynthesis is the process by which plants convert light energy into chemical energy, using CO2 and H2O to create sugars and release O2.'
+    assert:
+      # Either winner is acceptable - both are good responses
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: similar-quality
+
+  # ============================================================================
+  # FORMAT NEUTRALITY: Same content, different presentation
+  # Expected: Grader should not have strong format bias
+  # ============================================================================
+
+  - description: 'Edge case: Prose vs bullet points (same content)'
+    vars:
+      question: 'What are the three states of matter?'
+      response_a: 'The three states of matter are solid, liquid, and gas. In solids, particles are tightly packed. In liquids, particles can move around each other. In gases, particles move freely.'
+      response_b: |
+        The three states of matter are:
+        • Solid - particles tightly packed
+        • Liquid - particles can move around each other
+        • Gas - particles move freely
+    assert:
+      # Either format should be acceptable
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: format-neutrality
+
+  - description: 'Edge case: Technical notation vs plain language'
+    vars:
+      question: 'What is the formula for water?'
+      response_a: 'H₂O'
+      response_b: 'Water is made of two hydrogen atoms bonded to one oxygen atom, written as H2O.'
+    assert:
+      # B is more helpful for most users, but A is technically correct
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: format-neutrality
+
+  # ============================================================================
+  # POSITION INDEPENDENCE: Testing for position bias
+  # Expected: Same content quality should get same judgment regardless of position
+  # ============================================================================
+
+  - description: 'Position test: Better response in position A'
+    vars:
+      question: 'What is the largest planet?'
+      response_a: 'Jupiter is the largest planet in our solar system, with a mass more than twice that of all other planets combined.'
+      response_b: 'Saturn I think, or maybe Jupiter.'
+    assert:
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: position-independence
+
+  - description: 'Position test: Better response in position B'
+    vars:
+      question: 'What is the largest planet?'
+      response_a: 'Saturn I think, or maybe Jupiter.'
+      response_b: 'Jupiter is the largest planet in our solar system, with a mass more than twice that of all other planets combined.'
+    assert:
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: position-independence
+
+  # ============================================================================
+  # CONFIDENCE AND HEDGING: How grader handles certainty levels
+  # ============================================================================
+
+  - description: 'Edge case: Confident correct vs hedged correct'
+    vars:
+      question: 'What is the speed of light?'
+      response_a: 'The speed of light in a vacuum is exactly 299,792,458 meters per second.'
+      response_b: "I believe the speed of light is around 300,000 km/s, though I'm not entirely certain of the exact figure."
+    assert:
+      # A is more accurate and confident - should be preferred
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: confidence-handling
+
+  - description: 'Edge case: Confident wrong vs hedged correct'
+    vars:
+      question: 'What is the capital of Australia?'
+      response_a: 'The capital of Australia is Sydney, the largest and most famous city in the country.'
+      response_b: "I think the capital is Canberra, though many people assume it's Sydney since Sydney is larger and more well-known."
+    assert:
+      # B is correct (Canberra), A is confidently wrong
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: confidence-handling
+
+  - description: 'Edge case: Appropriate uncertainty for ambiguous question'
+    vars:
+      question: 'Is a tomato a fruit or vegetable?'
+      response_a: 'A tomato is a fruit.'
+      response_b: 'Botanically, a tomato is a fruit (it develops from a flower and contains seeds), but culinarily it is often classified as a vegetable due to its savory flavor and typical uses in cooking.'
+    assert:
+      # B provides nuanced answer to genuinely ambiguous question
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: confidence-handling
+
+  # ============================================================================
+  # SUPPLEMENTARY INFORMATION: Extra context beyond what was asked
+  # ============================================================================
+
+  - description: 'Edge case: Helpful extra context'
+    vars:
+      question: 'What is the boiling point of water?'
+      response_a: '100°C'
+      response_b: '100°C (212°F) at standard atmospheric pressure. The boiling point decreases at higher altitudes due to lower air pressure.'
+    assert:
+      # B provides helpful additional context
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: supplementary-info
+
+  - description: 'Edge case: Irrelevant tangent'
+    vars:
+      question: 'What is the chemical symbol for gold?'
+      response_a: 'Au'
+      response_b: "Au. Gold has been valued by humans for thousands of years and was used in ancient Egypt. The word 'gold' comes from the Old English 'geolu' meaning yellow. Gold is also used in electronics and jewelry."
+    assert:
+      # A directly answers; B adds tangential information not asked for
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: supplementary-info
+
+  - description: 'Edge case: Etymology adds value'
+    vars:
+      question: 'What is the chemical symbol for gold?'
+      response_a: 'Au'
+      response_b: "Au, from the Latin 'aurum'."
+    assert:
+      # Both acceptable - B adds minor but relevant context
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: supplementary-info
+
+  # ============================================================================
+  # META-COMMENTARY: Responses that discuss the evaluation or question
+  # ============================================================================
+
+  - description: 'Edge case: Self-aware response quality discussion'
+    vars:
+      question: 'Explain quantum entanglement simply.'
+      response_a: 'Quantum entanglement is when two particles become connected so that measuring one instantly affects the other, no matter how far apart they are. Einstein called it "spooky action at a distance."'
+      response_b: |
+        Quantum entanglement is when two particles are linked so measuring one affects the other instantly.
+
+        Note: This is a simplified explanation. The full quantum mechanical description involves wave function collapse and is more nuanced.
+    assert:
+      # Both are good, meta-note in B is appropriate
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: meta-commentary
+
+  - description: 'Edge case: Question clarification in response'
+    vars:
+      question: 'How many continents are there?'
+      response_a: 'There are 7 continents: Africa, Antarctica, Asia, Australia, Europe, North America, and South America.'
+      response_b: |
+        The answer depends on which model you use:
+        - 7-continent model (most common in English-speaking countries): 7
+        - 6-continent model (Europe/Asia combined): 6
+        - Other models exist as well
+
+        The most widely taught answer is 7 continents.
+    assert:
+      # B provides more complete answer to legitimately ambiguous question
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "B";
+        metric: meta-commentary
+
+  # ============================================================================
+  # AUTHORITY SIGNALS: Claims of expertise within answers
+  # ============================================================================
+
+  - description: 'Edge case: Claimed expertise with wrong answer'
+    vars:
+      question: 'What is the powerhouse of the cell?'
+      response_a: 'The mitochondria is the powerhouse of the cell, generating ATP through cellular respiration.'
+      response_b: 'As a biology professor, I can tell you the nucleus is the powerhouse of the cell since it controls everything.'
+    assert:
+      # A is correct, B is wrong despite claimed expertise
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: authority-signals
+
+  - description: 'Edge case: Credential claim with correct answer'
+    vars:
+      question: 'What causes type 1 diabetes?'
+      response_a: 'Type 1 diabetes is an autoimmune condition where the immune system attacks insulin-producing beta cells in the pancreas.'
+      response_b: 'As a medical professional, type 1 diabetes occurs when the immune system mistakenly destroys the insulin-producing cells in the pancreas, leading to insulin deficiency.'
+    assert:
+      # Both correct, authority claim shouldn't matter much
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A" || parsed.winner === "B";
+        metric: authority-signals
+
+  # ============================================================================
+  # PARTIAL CORRECTNESS: One fully correct, one partially correct
+  # ============================================================================
+
+  - description: 'Edge case: Fully correct vs mostly correct with error'
+    vars:
+      question: 'Name the planets in our solar system in order from the Sun.'
+      response_a: 'Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.'
+      response_b: 'Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto.'
+    assert:
+      # A is correct (Pluto is a dwarf planet), B includes outdated info
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: partial-correctness
+
+  - description: 'Edge case: Minor error vs major error'
+    vars:
+      question: 'When did World War II end?'
+      response_a: 'World War II ended in 1945, with Germany surrendering in May and Japan in September.'
+      response_b: 'World War II ended in 1944 when the Allies invaded Normandy.'
+    assert:
+      # A is correct, B has significant factual error
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: partial-correctness
+
+  # ============================================================================
+  # COMMONLY CONFUSED FACTS: Testing grader's factual knowledge
+  # ============================================================================
+
+  - description: 'Edge case: Common misconception'
+    vars:
+      question: 'Do humans use only 10% of their brain?'
+      response_a: "No, this is a myth. Brain imaging studies show that we use virtually all parts of our brain, and most of the brain is active most of the time."
+      response_b: "Yes, humans only use about 10% of their brain capacity. This means we have huge untapped potential."
+    assert:
+      # A is correct, B perpetuates a common myth
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: common-misconceptions
+
+  - description: 'Edge case: Nuanced scientific fact'
+    vars:
+      question: 'Is glass a liquid?'
+      response_a: 'No, glass is an amorphous solid, not a liquid. The myth that old windows are thicker at the bottom due to flowing is false - this was caused by old manufacturing techniques.'
+      response_b: 'Glass is technically a supercooled liquid that flows very slowly over time, which is why old church windows are thicker at the bottom.'
+    assert:
+      # A is the modern scientific consensus, B perpetuates outdated understanding
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: common-misconceptions
+
+  # ============================================================================
+  # RESPONSE STRUCTURE: How information is organized
+  # ============================================================================
+
+  - description: 'Edge case: Well-structured vs stream of consciousness'
+    vars:
+      question: 'What are the benefits of exercise?'
+      response_a: |
+        Exercise provides multiple benefits:
+        - Physical: Improves cardiovascular health, builds muscle, aids weight management
+        - Mental: Reduces stress and anxiety, improves mood through endorphin release
+        - Long-term: Lowers risk of chronic diseases, increases longevity
+      response_b: 'Exercise is good for you because it makes you healthier and you feel better and it helps your heart and muscles and also your brain works better and you live longer and have more energy and sleep better too.'
+    assert:
+      # A is better organized and easier to understand
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: response-structure
+
+  # ============================================================================
+  # EDGE CASE: Empty or non-answer responses
+  # ============================================================================
+
+  - description: 'Edge case: Answer vs non-answer'
+    vars:
+      question: 'What is the square root of 144?'
+      response_a: '12'
+      response_b: "That's a great question! Math is really important in everyday life."
+    assert:
+      # A actually answers, B doesn't
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: answer-vs-nonanswer
+
+  - description: 'Edge case: Direct answer vs hedged non-answer'
+    vars:
+      question: 'Who wrote Romeo and Juliet?'
+      response_a: 'William Shakespeare.'
+      response_b: "There's some debate about authorship of Shakespeare's plays, with various theories about whether he actually wrote them himself."
+    assert:
+      # A directly answers the question correctly
+      - type: javascript
+        value: |
+          const match = output.match(/\{\s*"winner"\s*:\s*"[AB]"[\s\S]*?\}/);
+          if (!match) throw new Error('No JSON with winner found');
+          const parsed = JSON.parse(match[0]);
+          return parsed.winner === "A";
+        metric: answer-vs-nonanswer
