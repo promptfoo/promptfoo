@@ -125,7 +125,7 @@ $ promptfoo list
 
 ## Complete File List for PR 1
 
-```
+```text
 # Foundation (Core Infrastructure)
 src/ui/constants.ts
 src/ui/interactiveCheck.ts
@@ -166,7 +166,7 @@ package-lock.json
 
 ### Dependency Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    src/commands/list.ts                         │
 │                           │                                     │

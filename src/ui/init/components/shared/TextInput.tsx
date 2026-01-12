@@ -72,12 +72,22 @@ export function TextInput({
         return;
       }
 
-      // Delete character before cursor
-      if (key.backspace || key.delete) {
+      // Backspace: Delete character before cursor
+      if (key.backspace) {
         if (cursorPosition > 0) {
           const newValue = value.slice(0, cursorPosition - 1) + value.slice(cursorPosition);
           onChange(newValue);
           setCursorPosition(cursorPosition - 1);
+        }
+        return;
+      }
+
+      // Delete: Delete character after cursor
+      if (key.delete) {
+        if (cursorPosition < value.length) {
+          const newValue = value.slice(0, cursorPosition) + value.slice(cursorPosition + 1);
+          onChange(newValue);
+          // Cursor stays in same position
         }
         return;
       }

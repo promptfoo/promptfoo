@@ -15,7 +15,7 @@ This plan breaks PR #6611 (~46,000 lines, 199 files) into 6 incremental PRs that
 
 ## PR Dependency Graph
 
-```
+```text
 PR 1: Foundation
     │
     ▼
@@ -38,7 +38,7 @@ PR 5: Init Wizard (optional dependency on PR 3 patterns)
 
 ### Files
 
-```
+```text
 # Source files
 src/ui/constants.ts
 src/ui/interactiveCheck.ts
@@ -144,7 +144,7 @@ Remove the files and revert package.json changes. No user-visible impact since f
 
 ### Files
 
-```
+```text
 # Hooks
 src/ui/hooks/index.ts
 src/ui/hooks/useKeypress.ts
@@ -230,7 +230,7 @@ Remove files. No user-visible impact since no command integrations yet.
 
 ### Files
 
-```
+```text
 # Contexts
 src/ui/contexts/index.ts
 src/ui/contexts/EvalContext.tsx
@@ -389,7 +389,7 @@ PROMPTFOO_EXPERIMENTAL_INK=1 promptfoo eval  # Env-based opt-in
 
 ### Files
 
-```
+```text
 # Auth UI
 src/ui/auth/index.ts
 src/ui/auth/AuthApp.tsx
@@ -488,7 +488,7 @@ If desired, this PR can be split into 5 smaller PRs (one per UI). Each is ~1,200
 
 ### Files
 
-```
+```text
 # Init Components
 src/ui/init/index.ts
 src/ui/init/initRunner.tsx
@@ -618,7 +618,7 @@ This is 40% of the codebase. Consider:
 
 ### Files
 
-```
+```text
 # Source
 src/ui/redteamGenerate/index.ts
 src/ui/redteamGenerate/RedteamGenerateApp.tsx

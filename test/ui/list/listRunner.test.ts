@@ -48,24 +48,27 @@ vi.mock('../../../src/ui/list/ListApp', () => ({
 
 describe('listRunner', () => {
   beforeEach(async () => {
-    vi.clearAllMocks();
-    // Reset mocks to default return values
+    // Reset mocks with mockReset() for full test isolation (clears implementations too)
     const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
     const { renderInteractive } = await import('../../../src/ui/render');
-    vi.mocked(shouldUseInkUI).mockReturnValue(false); // Default opt-in: not enabled
-    vi.mocked(renderInteractive).mockResolvedValue({
-      cleanup: vi.fn(),
-      clear: vi.fn(),
-      unmount: vi.fn(),
-      rerender: vi.fn(),
-      waitUntilExit: vi.fn().mockResolvedValue(undefined),
-      frames: [],
-      lastFrame: vi.fn(),
-      instance: {},
-    } as any);
+
+    vi.mocked(shouldUseInkUI).mockReset().mockReturnValue(false); // Default opt-in: not enabled
+    vi.mocked(renderInteractive)
+      .mockReset()
+      .mockResolvedValue({
+        cleanup: vi.fn(),
+        clear: vi.fn(),
+        unmount: vi.fn(),
+        rerender: vi.fn(),
+        waitUntilExit: vi.fn().mockResolvedValue(undefined),
+        frames: [],
+        lastFrame: vi.fn(),
+        instance: {},
+      } as any);
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     delete process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
   });
 

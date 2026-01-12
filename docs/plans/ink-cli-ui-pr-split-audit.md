@@ -23,7 +23,7 @@ The current structure has a problem: **you cannot land ANY feature UI without fi
 
 **Dependency Chain:**
 
-```
+```text
 Feature UIs (auth, cache, list, menu, share)
     └── render.ts
         └── interactiveCheck.ts
@@ -64,7 +64,7 @@ Tests are organized 1:1 with source files:
 
 ### 4. **The Init Wizard is 40% of the Codebase**
 
-```
+```text
 src/ui/init/ - 39 files (~15,000 lines)
 test/ui/init/ - 7 files (~2,500 lines)
 ```
@@ -101,7 +101,7 @@ Instead of "infrastructure first", land **complete vertical slices** with featur
 
 **Files:**
 
-```
+```text
 src/ui/constants.ts
 src/ui/interactiveCheck.ts
 src/ui/render.ts
@@ -134,7 +134,7 @@ PROMPTFOO_ENABLE_INTERACTIVE_UI=true  # Enable Ink UI (opt-in)
 
 **Files:**
 
-```
+```text
 src/ui/hooks/*
 src/ui/utils/*
 src/ui/components/shared/*
@@ -158,7 +158,7 @@ test/ui/components/shared/*
 
 **Files:**
 
-```
+```text
 src/ui/contexts/*
 src/ui/machines/evalMachine.ts
 src/ui/evalBridge.ts
@@ -196,7 +196,7 @@ PROMPTFOO_EXPERIMENTAL_INK=1 promptfoo eval  # Env-based opt-in
 
 **Files:**
 
-```
+```text
 src/ui/auth/*
 src/ui/cache/*
 src/ui/list/*
@@ -229,7 +229,7 @@ test/ui/share/*
 
 **Files:**
 
-```
+```text
 src/ui/init/*
 src/commands/init.ts (modified)
 src/redteam/commands/init.ts (modified)
@@ -257,7 +257,7 @@ PROMPTFOO_EXPERIMENTAL_INIT=1 promptfoo init
 
 **Files:**
 
-```
+```text
 src/ui/redteamGenerate/*
 src/redteam/commands/generate.ts (modified)
 test/ui/redteamGenerate/*
@@ -305,7 +305,7 @@ Combines PR 4-6 above.
 
 ## Dependency Graph (Visual)
 
-```
+```text
                     ┌─────────────────────┐
                     │ PR 1: Foundation    │
                     │ (interactiveCheck,  │
