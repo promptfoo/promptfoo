@@ -101,7 +101,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       if (verboseToggleCleanup) {
         verboseToggleCleanup();
       }
-      return;
+      // Re-throw so CLI exits with non-zero code and callers can handle appropriately
+      throw error;
     }
     // Re-throw other errors
     throw error;

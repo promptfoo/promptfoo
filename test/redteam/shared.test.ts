@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
+import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
@@ -383,6 +384,57 @@ describe('doRedteamRun', () => {
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+  });
+
+  describe('PartialGenerationError handling', () => {
+    it('should re-throw PartialGenerationError after logging', async () => {
+      const failedPlugins = [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      await expect(doRedteamRun({})).rejects.toThrow(PartialGenerationError);
+    });
+
+    it('should log error message before re-throwing PartialGenerationError', async () => {
+      const mockLogger = (await import('../../src/logger')).default;
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({});
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when PartialGenerationError is thrown', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({});
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should re-throw other errors without special handling', async () => {
+      const genericError = new Error('Some other error');
+      vi.mocked(doGenerateRedteam).mockRejectedValue(genericError);
+
+      await expect(doRedteamRun({})).rejects.toThrow('Some other error');
     });
   });
 });
