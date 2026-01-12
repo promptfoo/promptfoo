@@ -119,8 +119,63 @@ export interface VarKeyResult {
  * Escapes a key for use in a JSON path expression.
  * Handles backslashes and double quotes which have special meaning in JSON paths.
  */
-function escapeJsonPathKey(key: string): string {
+export function escapeJsonPathKey(key: string): string {
   return key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
+ * Builds a safe JSON path for use in SQLite json_extract() queries.
+ *
+ * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
+ * because SQLite's json_extract() function only accepts JSON paths as string literals,
+ * not as parameterized values.
+ *
+ * Safety is ensured through double escaping:
+ * 1. JSON path characters are escaped (backslashes and double quotes)
+ * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
+ *
+ * @param field - The JSON field name from user input
+ * @returns A sql.raw() fragment containing the safely escaped JSON path
+ */
+export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
+  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
+  // Escape single quotes for SQL string literal (standard SQL escaping)
+  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
+  // sql.raw() is safe here because we've fully escaped the content
+  return sql.raw(`'${sqlSafeJsonPath}'`);
+}
+
+/**
+ * Represents a filter condition with its associated logic operator.
+ */
+export interface FilterConditionWithOperator {
+  condition: SQL<unknown>;
+  logicOperator: string;
+}
+
+/**
+ * Combines multiple filter conditions using their associated logic operators (AND/OR).
+ *
+ * @param filterConditions - Array of conditions with their logic operators
+ * @returns A single SQL fragment combining all conditions, or null if empty
+ */
+export function combineFilterConditions(
+  filterConditions: FilterConditionWithOperator[],
+): SQL<unknown> | null {
+  if (filterConditions.length === 0) {
+    return null;
+  }
+
+  if (filterConditions.length === 1) {
+    return filterConditions[0].condition;
+  }
+
+  return filterConditions.reduce((acc, { condition: cond, logicOperator }, idx) => {
+    if (idx === 0) {
+      return cond;
+    }
+    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+  }, filterConditions[0].condition);
 }
 
 export class EvalQueries {
@@ -656,28 +711,6 @@ export default class Eval {
   }): SQL<unknown> {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
-    /**
-     * Builds a safe JSON path for use in SQLite json_extract() queries.
-     *
-     * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
-     * because SQLite's json_extract() function only accepts JSON paths as string literals,
-     * not as parameterized values.
-     *
-     * Safety is ensured through double escaping:
-     * 1. JSON path characters are escaped (backslashes and double quotes)
-     * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
-     *
-     * @param field - The JSON field name from user input
-     * @returns A sql.raw() fragment containing the safely escaped JSON path
-     */
-    const buildSafeJsonPath = (field: string): ReturnType<typeof sql.raw> => {
-      const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
-      // Escape single quotes for SQL string literal (standard SQL escaping)
-      const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-      // sql.raw() is safe here because we've fully escaped the content
-      return sql.raw(`'${sqlSafeJsonPath}'`);
-    };
-
     // Build filter conditions as SQL fragments
     const conditions: SQL<unknown>[] = [sql`eval_id = ${this.id}`];
 
@@ -693,10 +726,6 @@ export default class Eval {
 
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
-      interface FilterConditionWithOperator {
-        condition: SQL<unknown>;
-        logicOperator: string;
-      }
       const filterConditions: FilterConditionWithOperator[] = [];
 
       opts.filters.forEach((filter) => {
@@ -823,17 +852,8 @@ export default class Eval {
       });
 
       // Combine filter conditions with logic operators
-      if (filterConditions.length > 0) {
-        const filterClause = filterConditions.reduce(
-          (acc, { condition: cond, logicOperator }, idx) => {
-            if (idx === 0) {
-              return cond;
-            }
-            return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
-          },
-          filterConditions[0].condition,
-        );
-
+      const filterClause = combineFilterConditions(filterConditions);
+      if (filterClause) {
         conditions.push(sql`(${filterClause})`);
       }
     }
