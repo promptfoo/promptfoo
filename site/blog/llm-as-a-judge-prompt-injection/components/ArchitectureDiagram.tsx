@@ -15,8 +15,8 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
       role="img"
       aria-label={
         isVulnerable
-          ? 'Vulnerable architecture: untrusted content concatenated with rubric'
-          : 'Secure architecture: deterministic extraction before LLM evaluation'
+          ? 'Vulnerable: Control plane and data plane share the same context with no privilege boundary'
+          : 'Secure: Code extracts content before LLM evaluation, restoring the boundary'
       }
       style={{
         width: '100%',
