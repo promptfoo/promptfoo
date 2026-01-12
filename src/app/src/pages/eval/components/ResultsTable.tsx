@@ -218,6 +218,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  hasMinimalScrollRoom,
   zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
@@ -227,11 +228,14 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
   'use no memo';
   return (
-    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
+    <div
+      className={`relative ${stickyHeader ? 'results-table-sticky' : ''} ${hasMinimalScrollRoom ? 'minimal-scroll-room' : ''}`}
+    >
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button
           type="button"
@@ -1349,6 +1353,27 @@ function ResultsTable({
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  useEffect(() => {
+    const checkScrollRoom = () => {
+      const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+      setHasMinimalScrollRoom(scrollRoom < 150);
+    };
+
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render and when content might change
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [filteredResultsCount]);
+
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
       return;
@@ -1408,6 +1433,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
         zoom={zoom}
       />
       <div
