@@ -22,6 +22,7 @@ src/ui/
 - `PROMPTFOO_ENABLE_INTERACTIVE_UI=true` environment variable
 
 **Requirements:**
+
 - stdout must be a TTY (Ink requires this to render)
 
 **Why opt-in?**
@@ -60,9 +61,9 @@ Search and filter operations happen in-memory on already-loaded data. This provi
 // Good - filter loaded items locally
 const filteredItems = useMemo(() => {
   if (!searchQuery.trim()) return items;
-  return items.filter(item =>
-    item.id.toLowerCase().includes(query) ||
-    item.description?.toLowerCase().includes(query)
+  return items.filter(
+    (item) =>
+      item.id.toLowerCase().includes(query) || item.description?.toLowerCase().includes(query),
   );
 }, [items, searchQuery]);
 
@@ -76,13 +77,13 @@ const handleSearch = async (query) => {
 
 Use consistent colors for status/severity across all components:
 
-| Status | Color | Use Case |
-|--------|-------|----------|
-| Success/Good | Green | Pass rate ≥80%, success states |
-| Warning/Medium | Yellow | Pass rate 50-79%, warnings |
-| Error/Bad | Red | Pass rate <50%, errors, redteam |
-| Muted | Gray/Dim | Secondary info, timestamps |
-| Highlight | Cyan | Selected items, headers |
+| Status         | Color    | Use Case                        |
+| -------------- | -------- | ------------------------------- |
+| Success/Good   | Green    | Pass rate ≥80%, success states  |
+| Warning/Medium | Yellow   | Pass rate 50-79%, warnings      |
+| Error/Bad      | Red      | Pass rate <50%, errors, redteam |
+| Muted          | Gray/Dim | Secondary info, timestamps      |
+| Highlight      | Cyan     | Selected items, headers         |
 
 ### 3. Rich Selection Feedback
 
