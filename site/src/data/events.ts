@@ -84,14 +84,54 @@ function getEventStatus(endDate: string): EventStatus {
 export const events: Event[] = [
   // Future Events (2026)
   {
+    id: 'bsides-seattle-2026',
+    slug: 'bsides-seattle-2026',
+    name: 'Promptfoo at BSides Seattle 2026',
+    shortName: 'BSides Seattle 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-02-27T12:00:00',
+    endDate: '2026-02-28T12:00:00',
+    location: {
+      venue: 'TBD',
+      city: 'Seattle',
+      state: 'WA',
+      country: 'USA',
+    },
+    description:
+      'Join us at BSides Seattle 2026 for hands-on AI security workshops and community discussions with the PNW security community.',
+    fullDescription:
+      'Connect with the Promptfoo team and the Pacific Northwest security community at BSides Seattle 2026. Experience hands-on workshops, participate in AI security discussions, and learn about the latest threats to LLM applications.',
+    cardImage: '/img/events/bsides-seattle-2026.jpg',
+    heroImage: '/img/events/bsides-seattle-2026.jpg',
+    highlights: [
+      {
+        icon: '🌲',
+        title: 'PNW Community',
+        description: 'Connect with Seattle security pros',
+      },
+      {
+        icon: '🛠️',
+        title: 'Workshops',
+        description: 'Hands-on AI security training',
+      },
+      {
+        icon: '🤝',
+        title: 'Networking',
+        description: 'Meet security researchers',
+      },
+    ],
+    customPageUrl: '/events/bsides-seattle-2026',
+  },
+  {
     id: 'rsa-2026',
     slug: 'rsa-2026',
     name: 'Promptfoo at RSA Conference 2026',
     shortName: 'RSA 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-23T12:00:00',
-    endDate: '2026-03-26T12:00:00',
+    startDate: '2026-03-22T12:00:00',
+    endDate: '2026-03-25T12:00:00',
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -162,6 +202,126 @@ export const events: Event[] = [
       },
     ],
     customPageUrl: '/events/bsides-sf-2026',
+  },
+  {
+    id: 'humanx-2026',
+    slug: 'humanx-2026',
+    name: 'Promptfoo at HumanX 2026',
+    shortName: 'HumanX 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-04-06T12:00:00',
+    endDate: '2026-04-09T12:00:00',
+    location: {
+      venue: 'TBD',
+      city: 'San Francisco',
+      state: 'CA',
+      country: 'USA',
+    },
+    description:
+      'Meet Promptfoo at HumanX 2026, the premier AI leadership conference bringing together executives and innovators.',
+    fullDescription:
+      'Join us at HumanX 2026 to explore how AI leaders are securing their AI applications. Meet our team, see live demos of AI security testing, and learn how enterprises protect their LLM deployments.',
+    cardImage: '/img/events/humanx-2026.jpg',
+    heroImage: '/img/events/humanx-2026.jpg',
+    highlights: [
+      {
+        icon: '🧠',
+        title: 'AI Leadership',
+        description: 'Connect with AI executives and innovators',
+      },
+      {
+        icon: '🎯',
+        title: 'Live Demos',
+        description: 'See AI security testing in action',
+      },
+      {
+        icon: '🤝',
+        title: 'Networking',
+        description: 'Meet enterprise AI teams',
+      },
+    ],
+    customPageUrl: '/events/humanx-2026',
+  },
+  {
+    id: 'gartner-security-2026',
+    slug: 'gartner-security-2026',
+    name: 'Promptfoo at Gartner Security & Risk Management Summit 2026',
+    shortName: 'Gartner Security 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-06-01T12:00:00',
+    endDate: '2026-06-03T12:00:00',
+    location: {
+      venue: 'TBD',
+      city: 'Washington',
+      state: 'DC',
+      country: 'USA',
+    },
+    description:
+      'Meet Promptfoo at Gartner Security & Risk Management Summit 2026. Schedule analyst briefings and see enterprise AI security solutions.',
+    fullDescription:
+      'Join us at Gartner Security & Risk Management Summit 2026 to discuss AI security strategies with CISOs and security directors. Schedule analyst briefings and learn how Fortune 500 companies secure their AI applications.',
+    cardImage: '/img/events/gartner-security-2026.jpg',
+    heroImage: '/img/events/gartner-security-2026.jpg',
+    highlights: [
+      {
+        icon: '📊',
+        title: 'Analyst Briefings',
+        description: 'Meet with Gartner analysts',
+      },
+      {
+        icon: '🏢',
+        title: 'Enterprise Focus',
+        description: 'Solutions for large organizations',
+      },
+      {
+        icon: '🔒',
+        title: 'Risk Management',
+        description: 'AI governance and compliance',
+      },
+    ],
+    customPageUrl: '/events/gartner-security-2026',
+  },
+  {
+    id: 'blackhat-2026',
+    slug: 'blackhat-2026',
+    name: 'Promptfoo at Black Hat USA 2026',
+    shortName: 'Black Hat 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-08-01T12:00:00',
+    endDate: '2026-08-06T12:00:00',
+    location: {
+      venue: 'Mandalay Bay Convention Center',
+      city: 'Las Vegas',
+      state: 'NV',
+      country: 'USA',
+    },
+    description:
+      'Meet Promptfoo at Black Hat USA 2026 for live AI red teaming demos and security consultations.',
+    fullDescription:
+      'Join us at Black Hat USA 2026 for live AI red teaming demonstrations, security consultations, and the latest in LLM vulnerability research. See how Fortune 500 companies protect their AI applications.',
+    cardImage: '/img/events/blackhat-2026.jpg',
+    heroImage: '/img/events/blackhat-2026.jpg',
+    highlights: [
+      {
+        icon: '🎯',
+        title: 'Live Demos',
+        description: 'Watch AI red teaming attacks in real-time',
+      },
+      {
+        icon: '🔒',
+        title: 'Free Assessment',
+        description: 'Get a complimentary AI vulnerability assessment',
+      },
+      {
+        icon: '🎁',
+        title: 'Exclusive Swag',
+        description: 'Limited edition Promptfoo gear',
+      },
+    ],
+    customPageUrl: '/events/blackhat-2026',
   },
 
   // Past Events (2025)
