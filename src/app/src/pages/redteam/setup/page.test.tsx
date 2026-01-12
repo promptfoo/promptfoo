@@ -1,6 +1,7 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
@@ -98,6 +99,7 @@ describe('RedTeamSetupPage', () => {
 
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
+      const user = userEvent.setup();
       render(
         <MemoryRouter initialEntries={['/redteam/setup']}>
           <RedTeamSetupPage />
@@ -106,10 +108,12 @@ describe('RedTeamSetupPage', () => {
 
       // Simulate a tab change by clicking the "Plugins" tab (index 3)
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/i });
-      fireEvent.click(pluginsTab);
+      await user.click(pluginsTab);
 
       // Assert that useNavigate is called with the correct hash
-      expect(mockNavigate).toHaveBeenCalledWith('#3');
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('#3');
+      });
     });
   });
 

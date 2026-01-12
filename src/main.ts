@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
-import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
@@ -214,7 +213,7 @@ async function main() {
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
-  showCommand(program);
+  void showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -288,7 +287,6 @@ try {
 }
 
 if (isMain) {
-  checkNodeVersion();
   let mainError: unknown;
   try {
     await main();

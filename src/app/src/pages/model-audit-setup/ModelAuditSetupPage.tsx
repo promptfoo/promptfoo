@@ -111,8 +111,8 @@ export default function ModelAuditSetupPage() {
       <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
         <div className="container max-w-6xl mx-auto px-4 py-10">
           <div className="flex items-start gap-4">
-            <div className="shrink-0 w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <SettingsIcon className="h-7 w-7 text-primary" />
+            <div className="shrink-0 size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <SettingsIcon className="size-7 text-primary" />
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-bold tracking-tight">Model Audit Setup</h1>
@@ -145,7 +145,7 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                      <CheckCircleIcon className="h-4 w-4" />
+                      <CheckCircleIcon className="size-4" />
                       <span className="text-sm font-medium">Ready</span>
                     </div>
                   </TooltipTrigger>
@@ -155,14 +155,14 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <ErrorIcon className="h-4 w-4 text-destructive" />
+                      <ErrorIcon className="size-4 text-destructive" />
                       <span className="text-sm font-medium text-destructive">Not Installed</span>
                       <button
                         type="button"
                         onClick={() => checkInstallation()}
                         className="p-1 hover:bg-muted rounded"
                       >
-                        <RefreshIcon className="h-4 w-4 text-muted-foreground" />
+                        <RefreshIcon className="size-4 text-muted-foreground" />
                       </button>
                     </div>
                   </TooltipTrigger>

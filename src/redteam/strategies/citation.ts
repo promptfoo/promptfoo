@@ -47,7 +47,17 @@ async function generateCitations(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface CitationGenerationResponse {
+        error?: string;
+        result?: {
+          citation: {
+            type: string;
+            content: string;
+          };
+        };
+      }
+
+      const { data } = await fetchWithCache<CitationGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

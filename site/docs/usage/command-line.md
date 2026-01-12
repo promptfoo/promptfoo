@@ -92,7 +92,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-sample <number>`          | Only run a random sample of N tests                                           |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                      |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                    |
-| `--filter-providers <providers>`    | Only run tests with these providers (regex match)                             |
+| `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`) |
 | `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)              |
 | `--grader <provider>`               | Model that will grade outputs                                                 |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                        |
@@ -324,6 +324,34 @@ Deletes a specific resource.
 | Option      | Description                |
 | ----------- | -------------------------- |
 | `eval <id>` | Delete an evaluation by id |
+
+## `promptfoo retry <evalId>`
+
+Retry all ERROR results from a specific evaluation. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures), removes them from the database, and re-runs only those test cases. The results are updated in place in the original evaluation.
+
+| Option                       | Description                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided) |
+| `-v, --verbose`              | Verbose output                                                                   |
+| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                         |
+| `--delay <number>`           | Delay between evaluations in milliseconds                                        |
+
+Examples:
+
+```sh
+# Retry errors from a specific evaluation
+promptfoo retry eval-abc123
+
+# Retry with a different config file
+promptfoo retry eval-abc123 -c updated-config.yaml
+
+# Retry with verbose output and limited concurrency
+promptfoo retry eval-abc123 -v --max-concurrency 2
+```
+
+:::tip
+Unlike `--filter-errors-only` which creates a new evaluation, `promptfoo retry` updates the original evaluation in place. Use `retry` when you want to fix errors in an existing eval without creating duplicates.
+:::
 
 ## `promptfoo import <filepath>`
 

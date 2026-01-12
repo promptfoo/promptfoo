@@ -27,6 +27,8 @@ export const ProviderEnvOverridesSchema = z.object({
   CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_GATEWAY_ID: z.string().optional(),
+  CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
@@ -80,6 +82,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_ALIAS: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
+  QUIVERAI_API_KEY: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
   SHAREPOINT_BASE_URL: z.string().optional(),
@@ -110,4 +113,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
+// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
+// while maintaining type safety for known env vars
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

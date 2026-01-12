@@ -29,7 +29,7 @@ export default function ScannedFilesDialog({
       <DialogContent className="max-w-3xl max-h-[80vh]">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <FileIcon className="h-5 w-5" />
+            <FileIcon className="size-5" />
             <DialogTitle>Scanned Files</DialogTitle>
           </div>
         </DialogHeader>
@@ -57,7 +57,7 @@ export default function ScannedFilesDialog({
                       key={index}
                       className="flex items-start gap-3 px-4 py-2 hover:bg-muted/50 border-b last:border-b-0"
                     >
-                      <FileIcon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                      <FileIcon className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{file.split('/').pop()}</p>
                         <div className="flex items-center gap-2 mt-0.5">
@@ -88,9 +88,9 @@ export default function ScannedFilesDialog({
                         className="flex items-center gap-3 px-4 py-2 hover:bg-muted/50 border-b last:border-b-0"
                       >
                         {path.type === 'directory' ? (
-                          <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
                         ) : (
-                          <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-mono truncate">{path.path}</p>

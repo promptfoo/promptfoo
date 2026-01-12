@@ -1,12 +1,48 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import {
+  extractAllPromptsFromTags,
+  extractPromptFromTags,
+  extractVariablesFromJson,
+} from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
 import type { PII_PLUGINS } from '../constants';
 
 const PLUGIN_ID = 'promptfoo:redteam:pii';
+
+/**
+ * Extract content from <Prompt> tags and parse JSON if inputs are defined.
+ * Returns the processed prompt and any additional vars extracted from JSON.
+ */
+function processPromptForInputs(
+  prompt: string,
+  inputs: Record<string, string> | undefined,
+): { processedPrompt: string; additionalVars: Record<string, string> } {
+  let processedPrompt = prompt.trim();
+  const additionalVars: Record<string, string> = {};
+
+  // Extract content from <Prompt> tags if present
+  const extractedPrompt = extractPromptFromTags(processedPrompt);
+  if (extractedPrompt) {
+    processedPrompt = extractedPrompt;
+  }
+
+  // If inputs are defined, try to parse JSON and extract individual keys
+  if (inputs && Object.keys(inputs).length > 0) {
+    try {
+      const parsed = JSON.parse(processedPrompt);
+      Object.assign(additionalVars, extractVariablesFromJson(parsed, inputs));
+    } catch {
+      // If parsing fails, processedPrompt is plain text - keep it as is
+      logger.debug('[PII] Could not parse prompt as JSON for multi-input mode');
+    }
+  }
+
+  return { processedPrompt, additionalVars };
+}
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**
@@ -169,22 +205,42 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
-  const prompts = generatedPrompts
-    .split('\n')
-    .filter((line) => line.includes('Prompt:'))
-    .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+  const inputs = config?.inputs as Record<string, string> | undefined;
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
 
-  return prompts.map((prompt) => ({
-    vars: {
-      [injectVar]: prompt,
-    },
-    assert: [
-      {
-        type: PLUGIN_ID,
-        metric: 'PIILeak',
-      },
-    ],
-  }));
+  let prompts: string[];
+  if (hasMultipleInputs) {
+    // Multi-input mode: extract from <Prompt> tags (JSON format)
+    prompts = extractAllPromptsFromTags(generatedPrompts);
+    if (prompts.length === 0) {
+      logger.warn('[PII] Multi-input mode: Could not extract prompts from <Prompt> tags');
+    }
+  } else {
+    // Standard mode: look for "Prompt:" prefix lines
+    prompts = generatedPrompts
+      .split('\n')
+      .filter((line) => line.includes('Prompt:'))
+      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+  }
+
+  return prompts.map((prompt) => {
+    const { processedPrompt, additionalVars } = processPromptForInputs(prompt, inputs);
+
+    const vars: Record<string, string> = {
+      [injectVar]: processedPrompt,
+      ...additionalVars,
+    };
+
+    return {
+      vars,
+      assert: [
+        {
+          type: PLUGIN_ID,
+          metric: 'PIILeak',
+        },
+      ],
+    };
+  });
 }
 
 export class PiiGrader extends RedteamGraderBase {

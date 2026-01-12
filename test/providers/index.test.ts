@@ -20,6 +20,7 @@ import {
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 import {
+  getProviderIds,
   loadApiProvider,
   loadApiProviders,
   resolveProviderConfigs,
@@ -157,27 +158,6 @@ const defaultMockResponse = {
     entries: vi.fn().mockReturnValue([]),
   },
 };
-
-// Dynamic import
-vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:chat:${modelName}`,
-        constructor: { name: 'AdalineGatewayChatProvider' },
-      };
-    }),
-
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:embedding:${modelName}`,
-        constructor: { name: 'AdalineGatewayEmbeddingProvider' },
-      };
-    }),
-  };
-});
 
 describe('call provider apis', () => {
   beforeEach(() => {
@@ -956,6 +936,115 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('supports templating in provider URL with context env overrides', async () => {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
+      env: {
+        MY_HOST: 'api.example.com',
+        MY_PORT: '8080',
+      },
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('uses provider env overrides when rendering provider config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_API_KEY: 'secret',
+        },
+        config: {
+          apiKey: '{{ env.MY_API_KEY }}',
+        },
+      },
+    });
+
+    expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('passes provider env overrides to provider instances', async () => {
+    const provider = (await loadApiProvider('openai:chat', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+        config: {
+          apiKeyRequired: false,
+        },
+      },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('isolates env overrides between multiple provider loads', async () => {
+    // First provider with HOST=dev
+    const devProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'dev.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Second provider with HOST=prod
+    const prodProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'prod.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Each provider should have its own resolved URL
+    expect(devProvider.id()).toBe('https://dev.example.com/v1/api');
+    expect(prodProvider.id()).toBe('https://prod.example.com/v1/api');
+  });
+
+  it('options.env takes precedence over context.env for same keys', async () => {
+    const provider = await loadApiProvider('https://{{ env.HOST }}:{{ env.PORT }}/query', {
+      env: {
+        HOST: 'context-host.com',
+        PORT: '8080',
+      },
+      options: {
+        env: {
+          HOST: 'options-host.com', // Should override context.env.HOST
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // HOST should come from options.env, PORT from context.env
+    expect(provider.id()).toBe('https://options-host.com:8080/query');
+  });
+
+  it('renders label using env overrides', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: 'API ({{ env.ENVIRONMENT }})',
+        env: {
+          ENVIRONMENT: 'staging',
+        },
+      },
+    });
+
+    expect(provider.label).toBe('API (staging)');
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
@@ -1069,22 +1158,6 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
   });
 
-  it('loadApiProvider with adaline:openai:chat', async () => {
-    const provider = await loadApiProvider('adaline:openai:chat:gpt-5.1-mini');
-    expect(provider.id()).toBe('adaline:openai:chat:gpt-5.1-mini');
-  });
-
-  it('loadApiProvider with adaline:openai:embedding', async () => {
-    const provider = await loadApiProvider('adaline:openai:embedding:text-embedding-3-large');
-    expect(provider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-  });
-
-  it('should throw error for invalid adaline provider path', async () => {
-    await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
-      "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
-    );
-  });
-
   it.each([
     ['dashscope:chat:qwen-max', 'qwen-max'],
     ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],
@@ -1182,6 +1255,145 @@ describe('loadApiProvider', () => {
       expect(provider.id()).toBe('openai:gpt-5.1-mini');
       expect(validateLinkedTargetId).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('getProviderIds', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns provider IDs from a file-based config with multiple providers', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = vi.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/providers.yaml');
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\/]to[\\/]providers\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('returns provider ID from a file with a single provider (non-array)', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/single-provider.yaml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .yml extension', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.yml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .json extension', () => {
+    const mockJsonContent = JSON.stringify({
+      id: 'openai:gpt-4o-mini',
+      config: { key: 'value1' },
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.json');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('flattens file-based providers when mixed with inline providers', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds(['echo', 'file://path/to/providers.yaml']);
+    expect(providerIds).toEqual([
+      'echo',
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+  });
+
+  it('throws error when provider config is missing id', () => {
+    const mockYamlContent = dedent`
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    expect(() => getProviderIds('file://path/to/provider.yaml')).toThrow(
+      'Provider config in path/to/provider.yaml must have an id',
+    );
+  });
+
+  it('returns string provider as-is when not a file reference', () => {
+    const providerIds = getProviderIds('openai:gpt-4o-mini');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('returns custom-function for function provider', () => {
+    const customFunction = async () => ({ output: 'test' });
+    const providerIds = getProviderIds(customFunction);
+    expect(providerIds).toEqual(['custom-function']);
+  });
+
+  it('handles array with function providers', () => {
+    const labeledFunction = async () => ({ output: 'test' });
+    labeledFunction.label = 'my-custom-provider';
+
+    const unlabeledFunction = async () => ({ output: 'test2' });
+
+    const providerIds = getProviderIds(['echo', labeledFunction, unlabeledFunction]);
+    expect(providerIds).toEqual(['echo', 'my-custom-provider', 'custom-function-2']);
+  });
+
+  it('extracts id from ProviderOptions objects', () => {
+    const providerIds = getProviderIds([
+      { id: 'openai:gpt-4o-mini', config: { temperature: 0.5 } },
+      { id: 'anthropic:messages:claude-3-5-sonnet-20241022' },
+    ]);
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+  });
+
+  it('extracts id from ProviderOptionsMap objects', () => {
+    const providerIds = getProviderIds([
+      { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
+      { 'anthropic:messages:claude-3-5-sonnet-20241022': { id: 'custom-id' } },
+    ]);
+    expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
+  });
+
+  it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
+    const providerIds = getProviderIds('file://path/to/provider.js');
+    expect(providerIds).toEqual(['file://path/to/provider.js']);
+  });
+
+  it('throws error for invalid provider type', () => {
+    expect(() => getProviderIds(null as any)).toThrow('Invalid providers list');
   });
 });
 

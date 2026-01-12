@@ -43,6 +43,7 @@ const ProviderConfigDialog = ({
   const isAgentAliasIdValid = !isBedrockAgentProvider || hasContent(localConfig.agentAliasId);
 
   // Reset local config when the dialog opens or providerId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalConfig(config);
   }, [open, providerId, config]);

@@ -192,18 +192,8 @@ type EnvVars = {
   //=========================================================================
   // UI configuration
   //=========================================================================
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   VITE_PUBLIC_BASENAME?: string;
-  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
   VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
 
   //=========================================================================
   // Continuous Integration
@@ -411,6 +401,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - provider with config options (7.1.1)'
+
+providers:
+  - id: echo
+    label: 'Custom Echo Provider'
+    config:
+      customOption: 'test-value'
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: ConfigTest
+    assert:
+      - type: contains
+        value: 'ConfigTest'

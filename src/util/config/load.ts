@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
 
@@ -33,7 +34,7 @@ import {
 } from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { readFilters } from '../../util/index';
+import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
@@ -165,28 +166,40 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+
+    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
+    // This allows env vars to be used in paths and other config values.
+    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
+    const renderedConfig = renderEnvOnlyInObject(dereferencedConfig);
+
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
       .innerType()
       .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
-    ret = dereferencedConfig;
+    ret = renderedConfig;
   } else if (isJavascriptFile(configPath)) {
+    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
-    const validationResult = UnifiedConfigSchema.safeParse(imported);
+
+    // Render environment variable templates for JS configs too.
+    // This ensures consistent behavior across config file types.
+    const renderedConfig = renderEnvOnlyInObject(imported as UnifiedConfig);
+
+    const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
-    ret = imported as UnifiedConfig;
+    ret = renderedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -232,10 +245,16 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
-    return undefined;
+  try {
+    return await readConfig(configPath);
+  } catch (error) {
+    // If file doesn't exist, return undefined
+    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
   }
-  return readConfig(configPath);
 }
 
 /**
@@ -568,7 +587,10 @@ export async function resolveConfigs(
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extensions: fileConfig.extensions || defaultConfig.extensions || [],
+    extensions: [
+      ...(cmdObj.extension || []),
+      ...(fileConfig.extensions || defaultConfig.extensions || []),
+    ],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,

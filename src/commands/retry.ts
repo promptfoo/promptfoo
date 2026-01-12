@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { and, eq } from 'drizzle-orm';
+import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -16,7 +17,7 @@ import {
 } from '../util/tokenUsageUtils';
 import type { Command } from 'commander';
 
-import type { EvaluateOptions } from '../types/index';
+import type { EvaluateOptions, TokenUsage } from '../types/index';
 
 interface RetryCommandOptions {
   config?: string;
@@ -78,7 +79,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       assertPassCount: number;
       assertFailCount: number;
       totalLatencyMs: number;
-      tokenUsage: any;
+      tokenUsage: TokenUsage;
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
       cost: number;
@@ -129,9 +130,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
 
       // Count assertions contributing to this named score
+      // Note: We need to render template variables in assertion metrics before comparing
+      const testVars = result.testCase?.vars || {};
       let contributingAssertions = 0;
       result.gradingResult?.componentResults?.forEach((componentResult) => {
-        if (componentResult.assertion?.metric === key) {
+        const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+        if (renderedMetric === key) {
           contributingAssertions++;
         }
       });

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
 
@@ -129,7 +129,9 @@ describe('CustomIntentPluginSection', () => {
 
       render(<CustomIntentPluginSection />);
 
-      const deleteButtons = screen.getAllByTestId('DeleteIcon');
+      // Find delete buttons by the Trash2 icon (lucide-trash-2 class)
+      const deleteIcons = document.querySelectorAll('svg.lucide-trash-2');
+      const deleteButtons = Array.from(deleteIcons).map((icon) => icon.closest('button')!);
       expect(deleteButtons).toHaveLength(3);
 
       fireEvent.click(deleteButtons[0]);
@@ -232,8 +234,11 @@ describe('CustomIntentPluginSection', () => {
       render(<CustomIntentPluginSection />);
 
       const dropZone = screen.getByText('Drop files here or click to upload').closest('div')!;
-      expect(dropZone).toHaveClass('MuiPaper-root');
-      expect(screen.getByTestId('CloudUploadIcon')).toBeInTheDocument();
+      // Check for Tailwind classes instead of MUI classes
+      expect(dropZone).toHaveClass('border-dashed');
+      // Lucide cloud upload icon should be present
+      const cloudIcon = document.querySelector('svg.lucide-cloud-upload');
+      expect(cloudIcon).toBeInTheDocument();
     });
   });
 
@@ -290,8 +295,10 @@ describe('CustomIntentPluginSection', () => {
 
       render(<CustomIntentPluginSection />);
 
-      // Should show pagination component
-      expect(screen.getByRole('navigation')).toBeInTheDocument();
+      // Should show pagination controls (Previous/Next buttons and page text)
+      expect(screen.getByText(/Page 1 of/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
 
       // Should show only 10 items per page
       const textFields = screen.getAllByRole('textbox');
@@ -312,18 +319,26 @@ describe('CustomIntentPluginSection', () => {
 
   describe('Plugin Configuration Updates', () => {
     it('calls updatePlugins when intents are modified', async () => {
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       render(<CustomIntentPluginSection />);
 
       const textField = screen.getByRole('textbox');
       fireEvent.change(textField, { target: { value: 'New intent' } });
 
-      // Wait for debounced update
-      await waitFor(
-        () => {
-          expect(mockUpdatePlugins).toHaveBeenCalled();
-        },
-        { timeout: 2000 },
-      );
+      const draftCallback = setTimeoutSpy.mock.calls[0]?.[0] as (() => void) | undefined;
+      act(() => {
+        draftCallback?.();
+      });
+
+      const debounceCallback = setTimeoutSpy.mock.calls[setTimeoutSpy.mock.calls.length - 1]?.[0] as
+        | (() => void)
+        | undefined;
+      act(() => {
+        debounceCallback?.();
+      });
+
+      expect(mockUpdatePlugins).toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
     });
 
     it('shows clear all confirmation dialog', async () => {

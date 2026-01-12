@@ -190,18 +190,28 @@
 
 * {
   box-sizing: border-box;
+  /* Default border color - prevents harsh black borders */
+  border-color: hsl(var(--border));
 }
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 
   /* Z-index scale for layered components
-   * Modal < Dropdown ensures nested dropdowns appear above modals
-   * Values >= 1300 for MUI compatibility during migration */
+   * Banner < AppBar < Modal < Dropdown ensures proper stacking:
+   * - Banner (update notifications) stays below nav
+   * - AppBar (sticky header) contains dropdown menus
+   * - Dropdowns appear above modals when nested
+   * Values >= 1100 for MUI compatibility during migration */
+  --z-banner: 1100;
+  --z-appbar: 1200;
   --z-modal-backdrop: 1300;
   --z-modal: 1310;
   --z-dropdown: 1400;
   --z-tooltip: 1500;
+
+  /* Layout dimensions */
+  --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
 
   /* Design tokens - Light mode (aligned with MUI theme) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */

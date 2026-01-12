@@ -105,8 +105,14 @@ vi.mock('../../../src/logger', () => {
     default: mockLogger,
     getLogLevel: vi.fn().mockReturnValue('info'),
     setLogLevel: vi.fn(),
+    isDebugEnabled: vi.fn().mockReturnValue(false),
   };
 });
+
+vi.mock('../../../src/share', () => ({
+  isSharingEnabled: vi.fn().mockReturnValue(false),
+  createShareableUrl: vi.fn().mockResolvedValue(null),
+}));
 
 describe('redteam warning in eval command', () => {
   beforeEach(() => {

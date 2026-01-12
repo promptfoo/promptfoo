@@ -72,7 +72,7 @@ end
       }
       return parsed;
     } else if (typeof result === 'object') {
-      const obj: Record<string, any> = result as any;
+      const obj = result;
 
       // Support snake_case keys from Ruby (recursively)
       const mappedObj = mapSnakeCaseToCamelCase(obj);
