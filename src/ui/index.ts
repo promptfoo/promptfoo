@@ -3,44 +3,27 @@
  *
  * This module provides React-based terminal UI components for the promptfoo CLI.
  *
- * Entry Points:
- * - Interactive mode: Use `renderInteractive()` with React components
- * - Non-interactive mode: Use utilities from `./noninteractive`
+ * Entry Point: Use `renderInteractive()` with React components when `shouldUseInkUI()` returns true.
  *
  * @example
  * ```typescript
- * import { shouldUseInteractiveUI, renderInteractive } from './ui';
- * import { NonInteractiveProgress } from './ui/noninteractive';
+ * import { shouldUseInkUI, renderInteractive } from './ui';
  *
- * if (shouldUseInteractiveUI()) {
+ * if (shouldUseInkUI()) {
  *   const { waitUntilExit } = await renderInteractive(<MyApp ... />);
  *   await waitUntilExit();
- * } else {
- *   const progress = new NonInteractiveProgress('Processing');
- *   progress.start(totalItems);
- *   // ...
  * }
  * ```
  */
 
 // Interactive UI detection (from interactiveCheck)
-export { shouldUseInkUI } from './interactiveCheck';
+export { canUseInteractiveUI, isInteractiveUIEnabled, shouldUseInkUI } from './interactiveCheck';
 // Core rendering utilities
 export {
   getTerminalSize,
-  isInteractiveUIForced,
   type RenderOptions,
   type RenderResult,
   renderInteractive,
   runInteractive,
-  shouldUseInteractiveUI,
   supportsColor,
 } from './render';
-
-// Re-export non-interactive utilities (but keep them lazy-loadable)
-export type {
-  NonInteractiveProgress,
-  NonInteractiveSpinner,
-  ProgressUpdate,
-  TextOutput,
-} from './noninteractive';

@@ -5,7 +5,12 @@ vi.mock('../../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/envars')>();
   return {
     ...actual,
-    isCI: vi.fn(() => false),
+    getEnvBool: vi.fn((key: string) => {
+      if (key === 'PROMPTFOO_ENABLE_INTERACTIVE_UI') {
+        return process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI === 'true';
+      }
+      return false;
+    }),
   };
 });
 
@@ -19,9 +24,9 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/ui/interactiveCheck', () => ({
-  shouldUseInteractiveUI: vi.fn(() => true),
-  shouldUseInkUI: vi.fn(() => true),
-  isInteractiveUIForced: vi.fn(() => false),
+  shouldUseInkUI: vi.fn(() => false), // Default to false (opt-in behavior)
+  canUseInteractiveUI: vi.fn(() => true),
+  isInteractiveUIEnabled: vi.fn(() => false),
 }));
 
 vi.mock('../../../src/ui/render', () => ({
@@ -45,11 +50,9 @@ describe('listRunner', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Reset mocks to default return values
-    const { isCI } = await import('../../../src/envars');
-    const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
+    const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
     const { renderInteractive } = await import('../../../src/ui/render');
-    vi.mocked(isCI).mockReturnValue(false);
-    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
+    vi.mocked(shouldUseInkUI).mockReturnValue(false); // Default opt-in: not enabled
     vi.mocked(renderInteractive).mockResolvedValue({
       cleanup: vi.fn(),
       clear: vi.fn(),
@@ -63,34 +66,25 @@ describe('listRunner', () => {
   });
 
   afterEach(() => {
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
-    delete process.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
+    delete process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
   });
 
   describe('shouldUseInkList', () => {
-    it('should return true by default when in TTY and not in CI', async () => {
-      const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
-      expect(shouldUseInkList()).toBe(true);
-    });
-
-    it('should return false in CI environment', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
+    it('should return false by default (opt-in behavior)', async () => {
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(false);
     });
 
-    it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI is set even in CI', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+    it('should return true when shouldUseInkUI returns true (user opted in)', async () => {
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(true);
     });
 
-    it('should return false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
+    it('should return false when not in TTY (shouldUseInkUI returns false)', async () => {
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(shouldUseInkUI).mockReturnValue(false); // TTY not available
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(false);
     });

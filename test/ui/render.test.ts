@@ -29,56 +29,55 @@ describe('render utilities', () => {
   beforeEach(() => {
     vi.resetModules();
     // Reset environment
-    delete mockProcess.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
-    delete mockProcess.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
-    delete mockProcess.env.CI;
-    delete mockProcess.env.GITHUB_ACTIONS;
+    delete mockProcess.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
     delete mockProcess.env.NO_COLOR;
     delete mockProcess.env.FORCE_COLOR;
     mockProcess.stdout.isTTY = true;
   });
 
-  describe('shouldUseInteractiveUI', () => {
+  describe('canUseInteractiveUI', () => {
     it('should return true in a TTY environment', async () => {
-      const { shouldUseInteractiveUI } = await import('../../src/ui/render');
-      expect(shouldUseInteractiveUI()).toBe(true);
-    });
-
-    it('should return false when PROMPTFOO_DISABLE_INTERACTIVE_UI is set', async () => {
-      mockProcess.env.PROMPTFOO_DISABLE_INTERACTIVE_UI = 'true';
-      const { shouldUseInteractiveUI } = await import('../../src/ui/render');
-      expect(shouldUseInteractiveUI()).toBe(false);
+      const { canUseInteractiveUI } = await import('../../src/ui/render');
+      expect(canUseInteractiveUI()).toBe(true);
     });
 
     it('should return false when stdout is not a TTY', async () => {
       mockProcess.stdout.isTTY = false;
-      const { shouldUseInteractiveUI } = await import('../../src/ui/render');
-      expect(shouldUseInteractiveUI()).toBe(false);
-    });
-
-    it('should return false in CI environments', async () => {
-      mockProcess.env.CI = 'true';
-      const { shouldUseInteractiveUI } = await import('../../src/ui/render');
-      expect(shouldUseInteractiveUI()).toBe(false);
-    });
-
-    it('should return false when GITHUB_ACTIONS is set', async () => {
-      mockProcess.env.GITHUB_ACTIONS = 'true';
-      const { shouldUseInteractiveUI } = await import('../../src/ui/render');
-      expect(shouldUseInteractiveUI()).toBe(false);
+      const { canUseInteractiveUI } = await import('../../src/ui/render');
+      expect(canUseInteractiveUI()).toBe(false);
     });
   });
 
-  describe('isInteractiveUIForced', () => {
-    it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI is set', async () => {
-      mockProcess.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
-      const { isInteractiveUIForced } = await import('../../src/ui/render');
-      expect(isInteractiveUIForced()).toBe(true);
+  describe('isInteractiveUIEnabled (opt-in check)', () => {
+    it('should return false by default (opt-in behavior)', async () => {
+      const { isInteractiveUIEnabled } = await import('../../src/ui/interactiveCheck');
+      expect(isInteractiveUIEnabled()).toBe(false);
     });
 
-    it('should return false when PROMPTFOO_FORCE_INTERACTIVE_UI is not set', async () => {
-      const { isInteractiveUIForced } = await import('../../src/ui/render');
-      expect(isInteractiveUIForced()).toBe(false);
+    it('should return true when PROMPTFOO_ENABLE_INTERACTIVE_UI is set', async () => {
+      mockProcess.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      const { isInteractiveUIEnabled } = await import('../../src/ui/interactiveCheck');
+      expect(isInteractiveUIEnabled()).toBe(true);
+    });
+  });
+
+  describe('shouldUseInkUI (main entry point)', () => {
+    it('should return false by default (opt-in behavior)', async () => {
+      const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
+      expect(shouldUseInkUI()).toBe(false);
+    });
+
+    it('should return true when explicitly enabled and in TTY', async () => {
+      mockProcess.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
+      expect(shouldUseInkUI()).toBe(true);
+    });
+
+    it('should return false when enabled but not in TTY', async () => {
+      mockProcess.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      mockProcess.stdout.isTTY = false;
+      const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
+      expect(shouldUseInkUI()).toBe(false);
     });
   });
 
