@@ -2,13 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { getConfigDirectoryPath } from '../util/config/manage';
 import { createOutputMetadata, writeOutput } from '../util/index';
-import { getLogFiles } from '../util/logFiles';
+import { getLogDirectory, getLogFilesSync } from '../util/logs';
 import type { Command } from 'commander';
 
 /**
@@ -154,10 +152,7 @@ export function exportCommand(program: Command) {
     .option('-o, --output [outputPath]', 'Output path for the compressed log file')
     .action(async (cmdObj) => {
       try {
-        const configDir = getConfigDirectoryPath(true);
-        const logDir = getEnvString('PROMPTFOO_LOG_DIR')
-          ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
-          : path.join(configDir, 'logs');
+        const logDir = getLogDirectory();
 
         if (!fs.existsSync(logDir)) {
           logger.error('No log directory found. Logs have not been created yet.');
@@ -165,7 +160,7 @@ export function exportCommand(program: Command) {
           return;
         }
 
-        const allLogFiles = getLogFiles(logDir);
+        const allLogFiles = getLogFilesSync();
 
         if (allLogFiles.length === 0) {
           logger.error('No log files found in the logs directory.');

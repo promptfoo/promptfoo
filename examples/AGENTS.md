@@ -36,6 +36,22 @@ tests:
 
 **Field order:** description, env, prompts, providers, defaultTest, scenarios, tests
 
+## Environment Variables in Configs
+
+Use Nunjucks template syntax to reference environment variables:
+
+```yaml
+# ✅ CORRECT - Nunjucks template syntax
+accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+apiKey: '{{env.OPENAI_API_KEY}}'
+
+# ❌ WRONG - Shell syntax doesn't work in YAML configs
+accountId: ${CLOUDFLARE_ACCOUNT_ID}
+apiKey: $OPENAI_API_KEY
+```
+
+Note: Quotes around `'{{env.VAR}}'` are required in YAML to prevent parsing issues.
+
 ## Model Selection
 
 Use current model identifiers (see `site/docs/providers/` for full list):
