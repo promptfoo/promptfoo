@@ -582,6 +582,17 @@ thead {
     pointer-events 0.2s ease-out;
 }
 
+/* When there's minimal scroll room, disable height collapse to prevent jitter.
+   Opacity still fades, but height stays fixed - no feedback loop. */
+.minimal-scroll-room .results-table thead .collapse-hidden {
+  max-height: 1000px !important;
+  transition: opacity 0.1s ease-out;
+}
+
+.minimal-scroll-room .results-table thead .MuiFormControlLabel-root {
+  margin-top: 15px !important;
+}
+
 .results-table thead .MuiFormControlLabel-root {
   margin-top: var(--collapsed--mui-form-label-margin-top, 15px);
   transition: margin-top 0.2s ease-out;

@@ -842,7 +842,8 @@ export function redteamGenerateCommand(
             parsed.error.issues.forEach((err: z.ZodIssue) => {
               logger.error(`  ${err.path.join('.')}: ${err.message}`);
             });
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
           overrides = parsed.data;
         }
@@ -871,7 +872,8 @@ export function redteamGenerateCommand(
               : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 }

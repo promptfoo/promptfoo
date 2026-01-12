@@ -242,6 +242,12 @@
         "CLOUDFLARE_API_KEY": {
           "type": "string"
         },
+        "CLOUDFLARE_GATEWAY_ID": {
+          "type": "string"
+        },
+        "CF_AIG_TOKEN": {
+          "type": "string"
+        },
         "COMETAPI_KEY": {
           "type": "string"
         },
@@ -790,7 +796,8 @@
                 "trace-span-count",
                 "trace-span-duration",
                 "search-rubric",
-                "webhook"
+                "webhook",
+                "word-count"
               ]
             },
             {
@@ -853,7 +860,8 @@
                 "trace-span-count",
                 "trace-span-duration",
                 "search-rubric",
-                "webhook"
+                "webhook",
+                "word-count"
               ]
             },
             {
@@ -1497,6 +1505,12 @@
                       "type": "string"
                     },
                     "CLOUDFLARE_API_KEY": {
+                      "type": "string"
+                    },
+                    "CLOUDFLARE_GATEWAY_ID": {
+                      "type": "string"
+                    },
+                    "CF_AIG_TOKEN": {
                       "type": "string"
                     },
                     "COMETAPI_KEY": {

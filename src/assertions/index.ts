@@ -88,6 +88,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
+import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
@@ -194,6 +195,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
   webhook: handleWebhook,
+  'word-count': handleWordCount,
 };
 
 const nunjucks = getNunjucksEngine();

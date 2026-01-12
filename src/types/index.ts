@@ -538,6 +538,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-span-duration',
   'search-rubric',
   'webhook',
+  'word-count',
 ]);
 
 export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;

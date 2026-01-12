@@ -305,7 +305,8 @@ export function discoverCommand(
 
           To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
         `);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       // Validate the arguments:
@@ -423,9 +424,8 @@ export function discoverCommand(
             error instanceof Error ? error.stack : ''
           }`,
         );
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
-
-      process.exit();
     });
 }
