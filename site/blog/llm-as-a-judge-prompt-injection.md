@@ -1,6 +1,6 @@
 ---
-title: 'The Control Boundary Problem in LLM-as-a-Judge'
-description: 'Why LLM judges are vulnerable to prompt injection: an architectural deep dive into the separation of data and control.'
+title: 'Prompt Injection in LLM-as-a-Judge: Extended Thinking Makes It Worse'
+description: 'We found 4 universal attacks that fool every frontier LLM judge. Extended thinking just produces more sophisticated rationalizations for the wrong answer.'
 image: /img/blog/llm-as-a-judge-prompt-injection/judge-injection.jpg
 keywords:
   [
