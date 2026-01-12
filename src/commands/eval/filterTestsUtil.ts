@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
+import { filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
@@ -82,6 +83,14 @@ export async function filterTestsByResults(
     return [];
   }
 
+  // Log unique test cases in filtered results for debugging
+  const uniqueVarsInResults = new Set(
+    filteredResults.map((r) => JSON.stringify(filterRuntimeVars(r.vars))),
+  );
+  logger.debug(
+    `[filterTestsByResults] ${uniqueVarsInResults.size} unique test cases (by vars) in filtered results`,
+  );
+
   // Match tests against filtered results.
   // We try two matching strategies:
   // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
@@ -117,7 +126,14 @@ export async function filterTestsByResults(
   if (matchedTests.length === 0 && filteredResults.length > 0) {
     logger.warn(
       `[filterTestsByResults] No tests matched ${filteredResults.length} filtered results. ` +
-        'This may indicate a vars mismatch between stored results and current test suite.',
+        'This may indicate a vars or provider mismatch between stored results and current test suite. ' +
+        'Use LOG_LEVEL=debug for detailed matching info.',
+    );
+  } else if (matchedTests.length < uniqueVarsInResults.size) {
+    logger.debug(
+      `[filterTestsByResults] Note: ${uniqueVarsInResults.size - matchedTests.length} unique test cases in results ` +
+        'did not match any test in the current test suite. ' +
+        'This may indicate test suite changes or provider mismatches since the evaluation was run.',
     );
   }
 
