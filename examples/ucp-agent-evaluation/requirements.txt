@@ -5,8 +5,9 @@ requests>=2.28.0
 
 # Google ADK - Agent Development Kit for AI-powered checkout
 # Install with: pip install google-adk
-# Requires GOOGLE_API_KEY or GEMINI_API_KEY environment variable
-# Falls back to deterministic execution if not available
+# Requires either:
+#   - GOOGLE_API_KEY or GEMINI_API_KEY (for Gemini Developer API)
+#   - GOOGLE_CLOUD_PROJECT (for Vertex AI with gcloud credentials)
 google-adk>=0.3.0
 
 # OpenTelemetry - for tracing UCP agent operations

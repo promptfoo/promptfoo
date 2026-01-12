@@ -874,7 +874,7 @@ def run_ucp_scenario(
         # Create ADK agent with Gemini
         agent = Agent(
             name="ucp_checkout_agent",
-            model="gemini-2.5-flash",
+            model="gemini-3.0-flash-preview",
             description="UCP checkout agent that completes commerce transactions",
             instruction=UCP_AGENT_INSTRUCTION,
             tools=[
@@ -944,8 +944,17 @@ def run_ucp_scenario(
 
         # Fallback: If checkout is ready_for_complete but agent didn't complete, do it now
         # This handles LLM reliability issues where the model forgets to call complete_checkout()
+        # NOTE: This fallback masks agent reliability issues - consider disabling for strict evaluation
         if _current_checkout and _current_checkout.get("status") == "ready_for_complete":
-            logger.info("Fallback: Checkout is ready_for_complete, auto-completing...")
+            logger.warning(
+                "AGENT RELIABILITY ISSUE: Checkout was ready_for_complete but agent did not call "
+                "complete_checkout(). Auto-completing as fallback. This indicates the LLM failed "
+                "to follow instructions properly."
+            )
+            _transcript.append({
+                "role": "system",
+                "content": "FALLBACK: Agent failed to complete checkout when ready - auto-completing"
+            })
             try:
                 complete_result = complete_checkout()
                 if complete_result.get("status") == "success":

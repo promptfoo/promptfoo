@@ -95,9 +95,12 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         if platform_profile is None:
             profile_path = provider_config.get("platform_profile_path")
             if profile_path:
-                # Resolve path relative to provider file location
+                # Resolve path relative to provider file location with path traversal protection
                 provider_dir = os.path.dirname(os.path.abspath(__file__))
-                full_path = os.path.join(provider_dir, profile_path)
+                full_path = os.path.normpath(os.path.join(provider_dir, profile_path))
+                # Ensure the resolved path is within the provider directory
+                if not full_path.startswith(provider_dir):
+                    raise ValueError(f"Invalid profile path: {profile_path} (path traversal detected)")
                 with open(full_path) as f:
                     platform_profile = json.load(f)
 
@@ -117,8 +120,14 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         return {"output": json.dumps(result)}
 
     except Exception as e:
+        # Safely extract scenario_id from vars if available
+        scenario_id = "unknown"
+        try:
+            scenario_id = context.get("vars", {}).get("scenario_id", "unknown")
+        except Exception:
+            pass
         error_result = {
-            "scenario_id": vars_dict.get("scenario_id", "unknown") if "vars_dict" in dir() else "unknown",
+            "scenario_id": scenario_id,
             "transport": "unknown",
             "success": False,
             "final_status": "provider_error",

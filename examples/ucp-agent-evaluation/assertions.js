@@ -171,18 +171,39 @@ function assertRejectedDiscountSurfaced(output) {
 
 /**
  * Assert discount replacement semantics (new codes replace old)
+ * This validates that the discount system works - at minimum, the submitted
+ * code should either be applied or rejected (not silently ignored).
  */
 function assertDiscountReplacementSemantics(output) {
   const result = parseResult(output);
-  // This is a behavioral check - in a real scenario, we'd verify
-  // that submitting new codes cleared old ones
   const applied = result.applied_discounts || [];
+  const rejected = result.rejected_discounts || [];
 
-  // Basic check: only one set of codes should be applied
+  // The scenario submits a discount code - it should be processed (applied or explicitly rejected)
+  const totalProcessed = applied.length + rejected.length;
+
+  if (totalProcessed === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Discount code was neither applied nor rejected - may have been silently ignored',
+    };
+  }
+
+  // If we have applied discounts, check they look reasonable
+  if (applied.length > 0) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `Discount replacement working: ${applied.length} code(s) applied`,
+    };
+  }
+
+  // If all codes were rejected, that's still valid behavior (code may be invalid)
   return {
     pass: true,
-    score: 1,
-    reason: `Discount state: ${applied.length} code(s) applied`,
+    score: 0.7,
+    reason: `Discount code(s) rejected: ${rejected.length}. Verify code validity with merchant.`,
   };
 }
 
@@ -292,19 +313,23 @@ function assertNoSensitiveData(output) {
 
   // Check for common sensitive patterns
   const sensitivePatterns = [
-    /\b\d{16}\b/, // Credit card numbers
-    /\b\d{3,4}\b.*cvv/i, // CVV
-    /password/i,
-    /secret/i,
-    /api[_-]?key/i,
+    { pattern: /\b\d{16}\b/, name: 'credit card (16 digits)' },
+    { pattern: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/, name: 'credit card (formatted)' },
+    { pattern: /\b\d{3,4}\b.*cvv/i, name: 'CVV' },
+    { pattern: /cvv.*\b\d{3,4}\b/i, name: 'CVV (reversed)' },
+    { pattern: /\bpassword\s*[:=]\s*\S+/i, name: 'password value' },
+    { pattern: /\bsecret\s*[:=]\s*\S+/i, name: 'secret value' },
+    { pattern: /api[_-]?key\s*[:=]\s*\S+/i, name: 'API key value' },
+    { pattern: /\b[A-Za-z0-9]{32,}\b/, name: 'potential token/key (32+ chars)' },
+    { pattern: /bearer\s+[A-Za-z0-9._-]+/i, name: 'bearer token' },
   ];
 
-  for (const pattern of sensitivePatterns) {
+  for (const { pattern, name } of sensitivePatterns) {
     if (pattern.test(transcript)) {
       return {
         pass: false,
         score: 0,
-        reason: `Sensitive data pattern detected: ${pattern}`,
+        reason: `Sensitive data pattern detected: ${name}`,
       };
     }
   }

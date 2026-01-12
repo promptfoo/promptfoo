@@ -1,6 +1,7 @@
 ---
 title: Evaluating UCP Agents for Agentic Commerce
 sidebar_label: UCP Agents
+sidebar_position: 50
 description: Test AI agents that use Universal Commerce Protocol (UCP) for checkout, discounts, and fulfillment flows.
 ---
 
@@ -137,14 +138,14 @@ The example uses product IDs from the flower shop test data: `bouquet_roses`, `b
 
 ## AI Agent Architecture
 
-The agent uses Google ADK with Gemini 3 Flash to reason about UCP protocol:
+The agent uses Google ADK with Gemini 3.0 Flash to reason about UCP protocol:
 
 ```python
 from google.adk.agents import Agent
 
 agent = Agent(
     name="ucp_checkout_agent",
-    model="gemini-3-flash-preview",
+    model="gemini-3.0-flash-preview",
     tools=[
         discover_ucp_server,
         create_checkout,

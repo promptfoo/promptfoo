@@ -3,7 +3,7 @@
   "description": "Test discount code replacement semantics - new codes replace old ones",
   "line_items": [
     {
-      "merchant_item_id": "bouquet_sunflowers",
+      "merchant_item_id": "bouquet_tulips",
       "quantity": 2
     }
   ],

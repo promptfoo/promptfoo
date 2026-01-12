@@ -9,7 +9,7 @@ This example demonstrates how to:
 - Validate discount and fulfillment extension handling
 - Score agent quality using a weighted rubric
 
-The agent uses [Google's Agent Development Kit (ADK)](https://google.github.io/adk-docs/) with Gemini 3 Flash to reason about UCP protocol interactions.
+The agent uses [Google's Agent Development Kit (ADK)](https://google.github.io/adk-docs/) with Gemini 3.0 Flash to reason about UCP protocol interactions.
 
 ## Quick Start
 
