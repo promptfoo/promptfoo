@@ -1357,22 +1357,28 @@ function ResultsTable({
   // to prevent jitter feedback loop (height change affects scroll position)
   const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
 
-  useEffect(() => {
-    const checkScrollRoom = () => {
-      const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
-      setHasMinimalScrollRoom(scrollRoom < 150);
-    };
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
 
+  useEffect(() => {
     checkScrollRoom();
     window.addEventListener('resize', checkScrollRoom);
-    // Re-check after initial render and when content might change
+    // Re-check after initial render
     const timeoutId = setTimeout(checkScrollRoom, 100);
 
     return () => {
       window.removeEventListener('resize', checkScrollRoom);
       clearTimeout(timeoutId);
     };
-  }, [filteredResultsCount]);
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
 
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
