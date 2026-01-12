@@ -20,7 +20,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
     if (element) {
       const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
+      const offsetPosition = elementPosition + window.scrollY - offset;
       window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }
   };
@@ -203,7 +203,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>Jun 1-3</div>
-                <div className={styles.statLabel}>Washington, DC</div>
+                <div className={styles.statLabel}>National Harbor, MD</div>
               </div>
             </div>
           </div>

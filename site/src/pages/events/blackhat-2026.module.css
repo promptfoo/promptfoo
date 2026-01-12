@@ -1,10 +1,6 @@
 /* Black Hat 2026 - Cyber Theme */
 /* Color Palette: Magenta (#ff0080), purple (#ff00ff), dark */
 
-html {
-  scroll-behavior: smooth;
-}
-
 .blackhatPage {
   overflow-x: hidden;
   position: relative;
