@@ -19,7 +19,6 @@ import invariant from '../util/invariant';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { AnthropicMessageOptions } from './anthropic/types';
@@ -92,6 +91,19 @@ const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
 };
 
 /**
+ * Get a custom environment variable value safely
+ * Uses process.env directly for arbitrary env var names to avoid type casting issues
+ */
+function getCustomEnvValue(envVarName: string, env?: EnvOverrides): string | undefined {
+  // Check env overrides first (for testing), then fall back to process.env
+  const envOverrideValue = env?.[envVarName as keyof EnvOverrides];
+  if (envOverrideValue) {
+    return envOverrideValue as string;
+  }
+  return process.env[envVarName];
+}
+
+/**
  * Get the Cloudflare account ID from config or environment
  */
 function getAccountId(config?: CloudflareGatewayConfig, env?: EnvOverrides): string {
@@ -102,11 +114,9 @@ function getAccountId(config?: CloudflareGatewayConfig, env?: EnvOverrides): str
 
   // Check custom environment variable if specified
   if (config?.accountIdEnvar) {
-    const customValue =
-      getEnvString(config.accountIdEnvar as EnvVarKey) ||
-      env?.[config.accountIdEnvar as keyof EnvOverrides];
+    const customValue = getCustomEnvValue(config.accountIdEnvar, env);
     if (customValue) {
-      return customValue as string;
+      return customValue;
     }
     logger.warn(
       `[CloudflareGateway] Custom account ID environment variable '${config.accountIdEnvar}' is not set. Falling back to CLOUDFLARE_ACCOUNT_ID.`,
@@ -135,11 +145,9 @@ function getGatewayId(config?: CloudflareGatewayConfig, env?: EnvOverrides): str
 
   // Check custom environment variable if specified
   if (config?.gatewayIdEnvar) {
-    const customValue =
-      getEnvString(config.gatewayIdEnvar as EnvVarKey) ||
-      env?.[config.gatewayIdEnvar as keyof EnvOverrides];
+    const customValue = getCustomEnvValue(config.gatewayIdEnvar, env);
     if (customValue) {
-      return customValue as string;
+      return customValue;
     }
     logger.warn(
       `[CloudflareGateway] Custom gateway ID environment variable '${config.gatewayIdEnvar}' is not set. Falling back to CLOUDFLARE_GATEWAY_ID.`,
@@ -161,15 +169,21 @@ function getGatewayId(config?: CloudflareGatewayConfig, env?: EnvOverrides): str
  * Get the optional Cloudflare AI Gateway authentication token
  */
 function getCfAigToken(config?: CloudflareGatewayConfig, env?: EnvOverrides): string | undefined {
-  return (
-    config?.cfAigToken ||
-    (config?.cfAigTokenEnvar
-      ? getEnvString(config.cfAigTokenEnvar as EnvVarKey) ||
-        env?.[config.cfAigTokenEnvar as keyof EnvOverrides]
-      : undefined) ||
-    env?.CF_AIG_TOKEN ||
-    getEnvString('CF_AIG_TOKEN')
-  );
+  // Check explicit config value first
+  if (config?.cfAigToken) {
+    return config.cfAigToken;
+  }
+
+  // Check custom environment variable if specified
+  if (config?.cfAigTokenEnvar) {
+    const customValue = getCustomEnvValue(config.cfAigTokenEnvar, env);
+    if (customValue) {
+      return customValue;
+    }
+  }
+
+  // Fall back to default environment variable
+  return env?.CF_AIG_TOKEN || getEnvString('CF_AIG_TOKEN');
 }
 
 /**
@@ -269,7 +283,6 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     const passthrough = getPassthroughConfig(providerOptions.config);
 
     const providerConfig = PROVIDER_CONFIGS[underlyingProvider];
-    const apiKeyEnvar = providerOptions.config?.apiKeyEnvar || providerConfig?.apiKeyEnvar;
 
     // Build headers, adding cf-aig-authorization if token is provided
     const cfAigToken = getCfAigToken(providerOptions.config, providerOptions.env);
@@ -280,7 +293,12 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
       headers['cf-aig-authorization'] = `Bearer ${cfAigToken}`;
     }
 
-    // For Azure OpenAI, add api-key header instead of Authorization
+    // Build the final API base URL
+    let finalGatewayUrl = gatewayUrl;
+
+    // For Azure OpenAI, use api-key header instead of Authorization header
+    // Azure doesn't use Bearer auth, so we set the key via header and skip apiKeyEnvar
+    let apiKeyEnvar: string | undefined;
     if (underlyingProvider === 'azure-openai') {
       const azureApiKey = providerOptions.config?.apiKey || getEnvString('AZURE_OPENAI_API_KEY');
       invariant(
@@ -288,17 +306,15 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
         'Azure OpenAI API key is required. Set the AZURE_OPENAI_API_KEY environment variable or add apiKey to the provider config.',
       );
       headers['api-key'] = azureApiKey;
-    }
+      // Don't set apiKeyEnvar - Azure uses api-key header, not Authorization Bearer
+      apiKeyEnvar = undefined;
 
-    // Build the final API base URL
-    let finalGatewayUrl = gatewayUrl;
-
-    // For Azure OpenAI, append the api-version query parameter
-    if (underlyingProvider === 'azure-openai') {
+      // Append the api-version query parameter
       const apiVersion = providerOptions.config?.apiVersion || '2024-12-01-preview';
-      // The endpoint path will be appended by the OpenAI SDK, so we just set the base
-      // Azure format: {baseUrl}/chat/completions?api-version={version}
       finalGatewayUrl = `${gatewayUrl}?api-version=${apiVersion}`;
+    } else {
+      // For non-Azure providers, use standard Bearer auth
+      apiKeyEnvar = providerOptions.config?.apiKeyEnvar || providerConfig?.apiKeyEnvar;
     }
 
     const config: OpenAiCompletionOptions = {

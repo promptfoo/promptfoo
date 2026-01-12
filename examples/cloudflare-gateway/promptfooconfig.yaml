@@ -31,29 +31,29 @@ providers:
   # Route OpenAI requests through Cloudflare AI Gateway
   - id: cloudflare-gateway:openai:gpt-4o-mini
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       # Uncomment if using authenticated gateway:
-      # cfAigToken: ${CF_AIG_TOKEN}
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
       temperature: 0.7
       max_tokens: 200
 
   # Route Anthropic requests through Cloudflare AI Gateway
   - id: cloudflare-gateway:anthropic:claude-3-5-haiku-latest
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       # Uncomment if using authenticated gateway:
-      # cfAigToken: ${CF_AIG_TOKEN}
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
       max_tokens: 200
 
   # Route Groq requests through Cloudflare AI Gateway
   - id: cloudflare-gateway:groq:llama-3.1-8b-instant
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       # Uncomment if using authenticated gateway:
-      # cfAigToken: ${CF_AIG_TOKEN}
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
       temperature: 0.7
       max_tokens: 200
 

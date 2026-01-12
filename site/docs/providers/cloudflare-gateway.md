@@ -1,6 +1,7 @@
 ---
 sidebar_label: Cloudflare AI Gateway
-description: Route AI requests through Cloudflare AI Gateway for caching, rate limiting, analytics, and cost tracking with support for OpenAI, Anthropic, Groq, and other providers.
+sidebar_position: 47
+description: Route AI requests through Cloudflare AI Gateway for caching, rate limiting, and analytics.
 ---
 
 # Cloudflare AI Gateway
@@ -60,9 +61,9 @@ providers:
   # No OPENAI_API_KEY needed - Cloudflare uses stored key
   - id: cloudflare-gateway:openai:gpt-4o
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
-      cfAigToken: ${CF_AIG_TOKEN}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      cfAigToken: '{{env.CF_AIG_TOKEN}}'
 ```
 
 :::note
@@ -86,8 +87,8 @@ prompts:
 providers:
   - id: cloudflare-gateway:openai:gpt-4o
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       temperature: 0.7
 
 tests:
@@ -145,8 +146,8 @@ Azure OpenAI requires additional configuration:
 providers:
   - id: cloudflare-gateway:azure-openai:gpt-4
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       resourceName: my-azure-resource
       deploymentName: my-gpt4-deployment
       apiVersion: 2024-12-01-preview
@@ -160,8 +161,8 @@ Workers AI routes requests to Cloudflare's edge-deployed models. The model name 
 providers:
   - id: cloudflare-gateway:workers-ai:@cf/meta/llama-3.1-8b-instruct
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 ```
 
 ### Provider-Specific Options
@@ -172,8 +173,8 @@ All options from the underlying provider are supported. For example, when using 
 providers:
   - id: cloudflare-gateway:openai:gpt-4o
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
       temperature: 0.8
       max_tokens: 1000
       top_p: 0.9
@@ -192,18 +193,18 @@ prompts:
 providers:
   - id: cloudflare-gateway:openai:gpt-4o
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
   - id: cloudflare-gateway:anthropic:claude-sonnet-4-20250514
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
   - id: cloudflare-gateway:groq:llama-3.3-70b-versatile
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
 tests:
   - vars:
@@ -218,9 +219,9 @@ If your AI Gateway requires authentication:
 providers:
   - id: cloudflare-gateway:openai:gpt-4o
     config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      gatewayId: ${CLOUDFLARE_GATEWAY_ID}
-      cfAigToken: ${CF_AIG_TOKEN}
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      cfAigToken: '{{env.CF_AIG_TOKEN}}'
 ```
 
 ### Custom Environment Variables
