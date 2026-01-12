@@ -40,13 +40,13 @@ export default function BSidesSeattle2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at BSides Seattle 2026"
-      description="Meet Promptfoo at BSides Seattle 2026. Join us for AI security workshops, demos, and community discussions with the PNW security community."
+      description="Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at BSides Seattle 2026" />
         <meta
           property="og:description"
-          content="Join the Promptfoo team at BSides Seattle 2026. AI security workshops, red teaming demos, and community-driven security. Feb 27-28, Seattle."
+          content="Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos and practical ways to harden LLM apps. Feb 27-28, Building 92, Redmond."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/bsides-seattle-2026" />
@@ -83,7 +83,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
               BSides Seattle 2026
             </div>
             <h1 className={styles.heroTitle}>
-              Security, Community, <span className={styles.highlight}>Coffee</span>
+              Hands-on AI Security <span className={styles.highlight}>in the PNW</span>
             </h1>
           </div>
         </section>
@@ -92,8 +92,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              Join the Promptfoo team and the Pacific Northwest security community for hands-on AI
-              security workshops, demos, and great conversations.
+              Meet the Promptfoo team for live demos of AI red teaming: prompt injection,
+              jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and
+              leave with a testing plan you can run in CI.
             </p>
 
             <div className={styles.eventDetails}>
@@ -123,7 +124,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                <span>Seattle, WA</span>
+                <span>Building 92, Redmond, WA</span>
               </div>
             </div>
 
@@ -151,70 +152,67 @@ export default function BSidesSeattle2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>What to Expect</h2>
-              <p className={styles.sectionSubtitle}>
-                BSides conferences are the heart of the security community. No corporate polish,
-                just passionate people sharing knowledge.
-              </p>
+              <p className={styles.sectionSubtitle}>Community-first security, with real demos.</p>
             </div>
             <div className={styles.spiritGrid}>
               <div className={styles.spiritCard}>
-                <div className={styles.cardIcon}>🌲</div>
-                <h3>PNW Roots</h3>
+                <div className={styles.cardIcon}>🎯</div>
+                <h3>Live LLM Attack Demos</h3>
                 <p>
-                  Seattle's security community is tight-knit and welcoming. From Boeing to Amazon to
-                  countless startups, the talent here is incredible.
+                  See practical attacks against RAG apps and agents, plus the detection patterns
+                  that catch them early.
                 </p>
               </div>
               <div className={styles.spiritCard}>
-                <div className={styles.cardIcon}>🤝</div>
-                <h3>Community First</h3>
+                <div className={styles.cardIcon}>🔄</div>
+                <h3>Automated Red Teaming Workflows</h3>
                 <p>
-                  BSides isn't about vendor pitches. It's about sharing real knowledge, making
-                  connections, and helping each other level up.
+                  Learn how teams turn one-off testing into repeatable coverage across prompts,
+                  models, and releases.
                 </p>
               </div>
               <div className={styles.spiritCard}>
-                <div className={styles.cardIcon}>☕</div>
-                <h3>Fueled by Coffee</h3>
+                <div className={styles.cardIcon}>🛠️</div>
+                <h3>Fixes You Can Ship</h3>
                 <p>
-                  This is Seattle. The coffee flows freely, the conversations go deep, and nobody
-                  judges your third (or fourth) cup.
+                  We'll share a starter checklist and remediation guidance you can apply
+                  immediately.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* What We'll Share Section */}
+        {/* Attending BSides Seattle Section */}
         <section className={styles.sharedSection}>
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We're Bringing</h2>
+              <h2 className={styles.sectionTitle}>Attending BSides Seattle?</h2>
+              <p className={styles.sectionSubtitle}>
+                Grab a slot for a quick walkthrough tailored to your stack.
+              </p>
             </div>
             <div className={styles.sharedGrid}>
               <div className={styles.sharedCard}>
-                <div className={styles.cardIcon}>🎯</div>
-                <h3>AI Red Teaming Workshops</h3>
+                <div className={styles.cardIcon}>📅</div>
+                <h3>Schedule a Meeting</h3>
                 <p>
-                  Hands-on sessions showing how to find vulnerabilities in LLM applications using
-                  open source tools.
+                  Book time for a short, technical walkthrough of AI red teaming for your specific
+                  use case.
                 </p>
-              </div>
-              <div className={styles.sharedCard}>
-                <div className={styles.cardIcon}>🔓</div>
-                <h3>Live Demos</h3>
-                <p>
-                  Live demonstrations of prompt injection, jailbreaking, and data exfiltration
-                  attacks against popular LLM providers.
-                </p>
+                <Link to="/contact" className={styles.cardLink}>
+                  Book a Time →
+                </Link>
               </div>
               <div className={styles.sharedCard}>
                 <div className={styles.cardIcon}>💬</div>
-                <h3>Office Hours</h3>
+                <h3>Can't Make It?</h3>
                 <p>
-                  Some of the best moments at BSides happen between sessions. Stop by to chat AI
-                  security challenges with our team.
+                  Join our Discord community to connect with our team and the AI security community.
                 </p>
+                <Link to="https://discord.gg/promptfoo" className={styles.cardLink}>
+                  Join Discord →
+                </Link>
               </div>
             </div>
           </div>

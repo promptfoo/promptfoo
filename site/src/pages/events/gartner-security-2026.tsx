@@ -28,7 +28,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at Gartner Security & Risk Management Summit 2026"
-      description="Meet Promptfoo at Gartner Security & Risk Management Summit 2026. Schedule analyst briefings and see enterprise AI security solutions."
+      description="Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting."
     >
       <Head>
         <meta
@@ -37,7 +37,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
         />
         <meta
           property="og:description"
-          content="Join Promptfoo at Gartner Security 2026. Schedule analyst briefings, see enterprise AI security demos, and discuss AI governance with CISOs. Jun 1-3, Washington DC."
+          content="Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting. Jun 1-3, National Harbor MD."
         />
         <meta
           property="og:image"
@@ -72,14 +72,14 @@ export default function GartnerSecurity2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <div className={styles.badge}>Gartner Security & Risk Management Summit 2026</div>
               <h1 className={styles.heroTitle}>
-                Enterprise AI Security
+                Make AI Risk
                 <br />
-                <span className={styles.highlight}>For the C-Suite</span>
+                <span className={styles.highlight}>Measurable</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Join us at Gartner Security & Risk Management Summit 2026 to discuss AI security
-                strategies with CISOs and security directors. Schedule analyst briefings and learn
-                how Fortune 500 companies secure their AI applications.
+                If you're building an AI security program, we can help you move from ad hoc testing
+                to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime
+                guardrails, and reporting security leadership can track.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -130,53 +130,45 @@ export default function GartnerSecurity2026(): React.ReactElement {
                       d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  <span>Washington, DC</span>
+                  <span>National Harbor, MD</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* What We Offer Section */}
+        {/* What to Expect Section */}
         <section className={styles.offerSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We're Bringing</h2>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
               <p className={styles.sectionSubtitle}>
-                Enterprise-grade AI security solutions for CISOs and security leaders
+                Tools and frameworks for security leaders building AI governance programs.
               </p>
             </div>
             <div className={styles.offerGrid}>
               <div className={styles.offerCard}>
                 <div className={styles.cardIcon}>📊</div>
-                <h3>Analyst Briefings</h3>
+                <h3>Operationalize AI Security</h3>
                 <p>
-                  Schedule dedicated sessions with our security experts to discuss AI risk
-                  management strategies and get personalized recommendations.
+                  Learn how to move from ad hoc testing to structured coverage that tracks risk
+                  reduction over time.
                 </p>
               </div>
               <div className={styles.offerCard}>
-                <div className={styles.cardIcon}>🏢</div>
-                <h3>Enterprise Demos</h3>
+                <div className={styles.cardIcon}>📋</div>
+                <h3>Executive-ready Reporting</h3>
                 <p>
-                  See how Fortune 500 companies are using our platform to secure LLM applications at
-                  scale and meet compliance requirements.
-                </p>
-              </div>
-              <div className={styles.offerCard}>
-                <div className={styles.cardIcon}>🔒</div>
-                <h3>Governance & Compliance</h3>
-                <p>
-                  Learn about OWASP LLM Top 10, NIST AI RMF, and EU AI Act compliance. Get automated
-                  reports and actionable remediation guidance.
+                  See dashboards and artifacts that translate technical findings into board-level
+                  summaries.
                 </p>
               </div>
               <div className={styles.offerCard}>
                 <div className={styles.cardIcon}>🎯</div>
-                <h3>Free Risk Assessment</h3>
+                <h3>Briefings and Architecture Reviews</h3>
                 <p>
-                  Schedule a complimentary AI vulnerability assessment for your organization's LLM
-                  applications.
+                  Book dedicated time with our team to walk through your program design and get
+                  personalized recommendations.
                 </p>
               </div>
             </div>
@@ -207,17 +199,16 @@ export default function GartnerSecurity2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Schedule Your Briefing</h2>
+              <h2 className={styles.ctaTitle}>Attending Gartner Security?</h2>
               <p className={styles.ctaText}>
-                Connect with our team to discuss your organization's AI security needs and schedule
-                a dedicated analyst briefing at the summit.
+                Reach out to book a demo or architecture review during the summit.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/contact" className={styles.primaryButton}>
-                  Contact Us
+                  Schedule a Meeting
                 </Link>
-                <Link to="/security" className={styles.secondaryButton}>
-                  Explore Our Platform
+                <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
+                  Join our Discord
                 </Link>
               </div>
             </div>

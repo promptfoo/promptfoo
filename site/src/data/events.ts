@@ -93,15 +93,15 @@ export const events: Event[] = [
     startDate: '2026-02-27T12:00:00',
     endDate: '2026-02-28T12:00:00',
     location: {
-      venue: 'TBD',
-      city: 'Seattle',
+      venue: 'Building 92 (Microsoft Campus)',
+      city: 'Redmond',
       state: 'WA',
       country: 'USA',
     },
     description:
-      'Join us at BSides Seattle 2026 for hands-on AI security workshops and community discussions with the PNW security community.',
+      'Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps.',
     fullDescription:
-      'Connect with the Promptfoo team and the Pacific Northwest security community at BSides Seattle 2026. Experience hands-on workshops, participate in AI security discussions, and learn about the latest threats to LLM applications.',
+      'Meet the Promptfoo team for live demos of AI red teaming: prompt injection, jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and leave with a testing plan you can run in CI.',
     cardImage: '/img/events/bsides-seattle-2026.jpg',
     heroImage: '/img/events/bsides-seattle-2026.jpg',
     highlights: [
@@ -130,8 +130,8 @@ export const events: Event[] = [
     shortName: 'RSA 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-22T12:00:00',
-    endDate: '2026-03-25T12:00:00',
+    startDate: '2026-03-23T12:00:00',
+    endDate: '2026-03-26T12:00:00',
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -139,9 +139,9 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Meet the Promptfoo team at RSA Conference 2026. See live AI red teaming demos and learn how enterprises secure their AI applications.',
+      'Meet Promptfoo at RSAC for executive-ready AI security: red teaming, guardrails, and reporting your leadership can act on.',
     fullDescription:
-      'Join us at RSA Conference 2026 for live AI red teaming demonstrations, security consultations, and the latest in LLM vulnerability research. Meet our security experts and see how Fortune 500 companies protect their AI applications.',
+      'Meet Promptfoo to see how security teams build an AI security program that scales: continuous red teaming, runtime guardrails, and reporting that tracks risk reduction over time.',
     cardImage: '/img/events/rsa-2026.jpg',
     heroImage: '/img/events/rsa-2026.jpg',
     highlights: [
@@ -173,15 +173,15 @@ export const events: Event[] = [
     startDate: '2026-03-21T12:00:00',
     endDate: '2026-03-22T12:00:00',
     location: {
-      venue: 'San Francisco',
+      venue: 'City View at the Metreon',
       city: 'San Francisco',
       state: 'CA',
       country: 'USA',
     },
     description:
-      'Join us at BSides SF 2026 for hands-on AI security workshops and community discussions.',
+      'Practitioner-led AI security during RSA week. Fast demos, deep conversations, and concrete red teaming takeaways.',
     fullDescription:
-      'Connect with the Promptfoo team and the security community at BSides SF 2026. Experience hands-on workshops, participate in AI security challenges, and learn about the latest threats to LLM applications.',
+      'Stop by to compare notes on prompt injection, agent abuse, and the testing workflows security teams actually run. We show quick demos, then go deep on how to reproduce issues and prevent regressions.',
     cardImage: '/img/events/bsides-sf-2026.jpg',
     heroImage: '/img/events/bsides-sf-2026.jpg',
     highlights: [
@@ -213,15 +213,15 @@ export const events: Event[] = [
     startDate: '2026-04-06T12:00:00',
     endDate: '2026-04-09T12:00:00',
     location: {
-      venue: 'TBD',
+      venue: 'Moscone Center South',
       city: 'San Francisco',
       state: 'CA',
       country: 'USA',
     },
     description:
-      'Meet Promptfoo at HumanX 2026, the premier AI leadership conference bringing together executives and innovators.',
+      'For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down.',
     fullDescription:
-      'Join us at HumanX 2026 to explore how AI leaders are securing their AI applications. Meet our team, see live demos of AI security testing, and learn how enterprises protect their LLM deployments.',
+      'AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live demos on testing and securing LLM features across copilots, RAG, and agents, before launch and continuously in production.',
     cardImage: '/img/events/humanx-2026.jpg',
     heroImage: '/img/events/humanx-2026.jpg',
     highlights: [
@@ -253,15 +253,15 @@ export const events: Event[] = [
     startDate: '2026-06-01T12:00:00',
     endDate: '2026-06-03T12:00:00',
     location: {
-      venue: 'TBD',
-      city: 'Washington',
-      state: 'DC',
+      venue: 'Gaylord National Resort & Convention Center',
+      city: 'National Harbor',
+      state: 'MD',
       country: 'USA',
     },
     description:
-      'Meet Promptfoo at Gartner Security & Risk Management Summit 2026. Schedule analyst briefings and see enterprise AI security solutions.',
+      'Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting.',
     fullDescription:
-      'Join us at Gartner Security & Risk Management Summit 2026 to discuss AI security strategies with CISOs and security directors. Schedule analyst briefings and learn how Fortune 500 companies secure their AI applications.',
+      'If you are building an AI security program, we can help you move from ad hoc testing to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime guardrails, and reporting security leadership can track.',
     cardImage: '/img/events/gartner-security-2026.jpg',
     heroImage: '/img/events/gartner-security-2026.jpg',
     highlights: [
@@ -299,26 +299,26 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Meet Promptfoo at Black Hat USA 2026 for live AI red teaming demos and security consultations.',
+      'See live AI attack demos at Black Hat USA: prompt injection, jailbreaks, data exfiltration, and how to automate LLM red teaming at scale.',
     fullDescription:
-      'Join us at Black Hat USA 2026 for live AI red teaming demonstrations, security consultations, and the latest in LLM vulnerability research. See how Fortune 500 companies protect their AI applications.',
+      'Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM vulnerabilities with automated red teaming, repeatable evals, and production guardrails.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
     highlights: [
       {
         icon: '🎯',
-        title: 'Live Demos',
-        description: 'Watch AI red teaming attacks in real-time',
+        title: 'Attack Demos',
+        description: 'Prompt injection, jailbreaks, data exfiltration',
       },
       {
-        icon: '🔒',
-        title: 'Free Assessment',
-        description: 'Get a complimentary AI vulnerability assessment',
+        icon: '🤖',
+        title: 'Red Team Automation',
+        description: 'Generate application-specific attack variants',
       },
       {
-        icon: '🎁',
-        title: 'Exclusive Swag',
-        description: 'Limited edition Promptfoo gear',
+        icon: '🔄',
+        title: 'CI/CD Integration',
+        description: 'Turn findings into regression tests',
       },
     ],
     customPageUrl: '/events/blackhat-2026',

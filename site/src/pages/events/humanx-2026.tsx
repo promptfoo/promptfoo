@@ -28,13 +28,13 @@ export default function HumanX2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at HumanX 2026"
-      description="Meet Promptfoo at HumanX 2026. Connect with AI leaders and see how enterprises secure their AI applications."
+      description="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at HumanX 2026 | AI Security" />
         <meta
           property="og:description"
-          content="Join Promptfoo at HumanX 2026. Live demos of AI security testing, meet enterprise AI teams, and learn how to protect your LLM applications. Apr 6-9, San Francisco."
+          content="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down. Apr 6-9, Moscone Center South, SF."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/humanx-2026.jpg" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/humanx-2026" />
@@ -60,13 +60,14 @@ export default function HumanX2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <div className={styles.badge}>HumanX 2026</div>
               <h1 className={styles.heroTitle}>
-                Where AI Leaders
+                Ship AI
                 <br />
-                <span className={styles.highlight}>Meet Security</span>
+                <span className={styles.highlight}>You Can Trust</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Join us at HumanX 2026 to explore how enterprises are securing their AI
-                applications. Meet our team and see live demos of AI security testing.
+                AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live
+                demos on testing and securing LLM features across copilots, RAG, and agents, before
+                launch and continuously in production.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -117,7 +118,7 @@ export default function HumanX2026(): React.ReactElement {
                       d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  <span>San Francisco, CA</span>
+                  <span>Moscone Center South, San Francisco</span>
                 </div>
               </div>
             </div>
@@ -128,42 +129,32 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.demoSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We're Bringing</h2>
-              <p className={styles.sectionSubtitle}>
-                Connect with us to see how AI-first companies are protecting their applications
-              </p>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
+              <p className={styles.sectionSubtitle}>Practical workflows for AI teams.</p>
             </div>
             <div className={styles.demoGrid}>
               <div className={styles.demoCard}>
-                <div className={styles.cardIcon}>🧠</div>
-                <h3>AI Security Strategy</h3>
+                <div className={styles.cardIcon}>📊</div>
+                <h3>Evals That Measure What Matters</h3>
                 <p>
-                  Learn how AI leaders are building security into their development lifecycle from
-                  day one, not as an afterthought.
+                  Reliability, safety, and policy adherence, with repeatable benchmarks you can
+                  track over time.
                 </p>
               </div>
               <div className={styles.demoCard}>
                 <div className={styles.cardIcon}>🎯</div>
-                <h3>Live Demos</h3>
+                <h3>Red Teaming for Agents and Tools</h3>
                 <p>
-                  See our AI red teaming platform in action. Watch real-time vulnerability detection
-                  and automated testing.
+                  Find risky actions, data exfiltration paths, and permission misuse before your
+                  users do.
                 </p>
               </div>
               <div className={styles.demoCard}>
-                <div className={styles.cardIcon}>🤝</div>
-                <h3>Enterprise Insights</h3>
+                <div className={styles.cardIcon}>📋</div>
+                <h3>Governance Without Bottlenecks</h3>
                 <p>
-                  Hear how Fortune 500 companies are implementing AI security at scale and meeting
-                  compliance requirements.
-                </p>
-              </div>
-              <div className={styles.demoCard}>
-                <div className={styles.cardIcon}>🔒</div>
-                <h3>Free Assessments</h3>
-                <p>
-                  Schedule a complimentary AI vulnerability assessment for your organization's LLM
-                  applications.
+                  Turn testing results into auditable artifacts that support reviews, approvals, and
+                  rollouts.
                 </p>
               </div>
             </div>
@@ -194,17 +185,16 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Let's Connect at HumanX</h2>
+              <h2 className={styles.ctaTitle}>Attending HumanX?</h2>
               <p className={styles.ctaText}>
-                Schedule a meeting to discuss your AI security needs or simply stop by to see our
-                demos.
+                Book a short demo and we'll map a testing plan to your AI roadmap.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/contact" className={styles.primaryButton}>
-                  Contact Us
+                  Schedule a Meeting
                 </Link>
-                <Link to="/security" className={styles.secondaryButton}>
-                  Explore Our Platform
+                <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
+                  Join our Discord
                 </Link>
               </div>
             </div>

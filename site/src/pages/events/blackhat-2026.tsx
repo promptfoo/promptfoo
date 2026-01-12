@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import AssessmentIcon from '@mui/icons-material/Assessment';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -32,13 +31,13 @@ export default function BlackHat2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at Black Hat USA 2026"
-      description="Meet Promptfoo at Black Hat USA 2026. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning."
+      description="This is the biggest stage in offensive security. Meet Promptfoo at Black Hat for live AI attacks, automated red teaming, and practical defenses."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
         <meta
           property="og:description"
-          content="Meet Promptfoo at Black Hat USA 2026. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning. Aug 1-6, Las Vegas."
+          content="This is the biggest stage in offensive security. Meet Promptfoo at Black Hat for live AI attacks, automated red teaming, and practical defenses. Aug 1-6, Las Vegas."
         />
         <meta
           property="og:image"
@@ -70,15 +69,14 @@ export default function BlackHat2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <div className={styles.badge}>Black Hat USA 2026</div>
               <h1 className={styles.heroTitle}>
-                Security for AI used by
+                Break Your AI
                 <br />
-                <span className={styles.highlight}>
-                  {SITE_CONSTANTS.USER_COUNT_DISPLAY} Developers
-                </span>
+                <span className={styles.highlight}>Before Attackers Do</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Join us at Black Hat USA 2026 to see how Promptfoo helps security teams find and fix
-                LLM vulnerabilities before attackers do.
+                This is the biggest stage in offensive security. Meet Promptfoo at Black Hat to see
+                live AI attacks, automated red teaming workflows, and practical defenses you can
+                deploy now.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -136,12 +134,12 @@ export default function BlackHat2026(): React.ReactElement {
           </div>
         </section>
 
-        {/* What We'll Show Section */}
+        {/* What to Expect Section */}
         <section className={styles.demoSection} id="learn-more">
           <div className={styles.demoBackground}>
             <div className={styles.demoContainer}>
               <div className={styles.demoHeader}>
-                <h2 className={styles.demoTitle}>Live From Vegas</h2>
+                <h2 className={styles.demoTitle}>What to Expect</h2>
               </div>
               <div className={styles.demoGrid}>
                 <div className={styles.demoCard} data-demo="1">
@@ -151,11 +149,10 @@ export default function BlackHat2026(): React.ReactElement {
                       <div className={styles.demoIconGlow} />
                     </div>
                     <div className={styles.demoContent}>
-                      <h3>Real-Time Attack Demonstrations</h3>
+                      <h3>Live AI Attack Demos</h3>
                       <p>
-                        Watch our security researchers perform demonstrations of prompt injection,
-                        jailbreaking, and data exfiltration attacks. See how Promptfoo helps you
-                        detect these threats early.
+                        Prompt injection, jailbreaks, data exfiltration, and tool-use exploits
+                        against real-world applications.
                       </p>
                       <div className={styles.demoTag}>LIVE DEMO</div>
                     </div>
@@ -169,10 +166,10 @@ export default function BlackHat2026(): React.ReactElement {
                       <div className={styles.demoIconGlow} />
                     </div>
                     <div className={styles.demoContent}>
-                      <h3>AI-Powered Red Team Automation</h3>
+                      <h3>Automated Red Teaming</h3>
                       <p>
-                        LLM-powered red teaming can generate thousands of application-specific
-                        attack variations to uncover vulnerabilities that static scanners miss.
+                        See how teams scale probing across models, prompts, and releases with zero
+                        manual effort.
                       </p>
                       <div className={styles.demoTag}>INTERACTIVE</div>
                     </div>
@@ -186,29 +183,11 @@ export default function BlackHat2026(): React.ReactElement {
                       <div className={styles.demoIconGlow} />
                     </div>
                     <div className={styles.demoContent}>
-                      <h3>Seamless CI/CD Security Integration</h3>
+                      <h3>Defenses That Ship</h3>
                       <p>
-                        See live demos of our GitHub Actions, GitLab CI, and Jenkins integrations.
-                        Learn how Fortune 500 companies automatically catch LLM vulnerabilities.
+                        Guardrails, detection rules, and remediation guidance you can take home.
                       </p>
                       <div className={styles.demoTag}>HANDS-ON</div>
-                    </div>
-                  </div>
-                  <div className={styles.demoCardBorder} />
-                </div>
-                <div className={styles.demoCard} data-demo="4">
-                  <div className={styles.demoCardInner}>
-                    <div className={styles.demoIconWrapper}>
-                      <AssessmentIcon className={styles.demoIcon} />
-                      <div className={styles.demoIconGlow} />
-                    </div>
-                    <div className={styles.demoContent}>
-                      <h3>Compliance & Risk Assessment</h3>
-                      <p>
-                        Get automated reports for OWASP LLM Top 10, NIST AI RMF, and EU AI Act
-                        compliance. Actionable remediation guidance and executive-ready dashboards.
-                      </p>
-                      <div className={styles.demoTag}>SHOWCASE</div>
                     </div>
                   </div>
                   <div className={styles.demoCardBorder} />
@@ -242,16 +221,14 @@ export default function BlackHat2026(): React.ReactElement {
         {/* Final CTA */}
         <section className={styles.finalCta}>
           <div className={styles.container}>
-            <h2>Don't Leave Your AI Vulnerable</h2>
-            <p>
-              Join hundreds of security teams who trust Promptfoo to protect their LLM applications.
-            </p>
+            <h2>Attending Black Hat?</h2>
+            <p>Schedule a meeting to discuss your use case and see a tailored demo.</p>
             <div className={styles.ctaButtons}>
               <Link to="/contact" className={styles.primaryButton}>
                 Schedule a Meeting
               </Link>
-              <Link to="/security" className={styles.secondaryButton}>
-                Explore Our Security Platform
+              <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
+                Join our Discord
               </Link>
             </div>
           </div>
