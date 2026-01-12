@@ -295,9 +295,10 @@ describe('handleWordCount', () => {
       const result = handleWordCount(params);
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
+      expect(result.reason).toBe('Assertion passed');
     });
 
-    it('should fail inverse when word count matches', () => {
+    it('should fail inverse when word count matches with descriptive message', () => {
       const params: AssertionParams = {
         ...defaultParams,
         assertion: { type: 'not-word-count', value: 2 },
@@ -309,6 +310,49 @@ describe('handleWordCount', () => {
       const result = handleWordCount(params);
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
+      expect(result.reason).toBe('Expected word count to not equal 2, but got 2');
+    });
+
+    it('should fail inverse with range and provide descriptive message', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'not-word-count', value: { min: 1, max: 5 } },
+        renderedValue: { min: 1, max: 5 } as AssertionValue,
+        outputString: 'Three word text',
+        inverse: true,
+      };
+
+      const result = handleWordCount(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Expected word count to not be between 1 and 5, but got 3');
+    });
+
+    it('should fail inverse with min only and provide descriptive message', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'not-word-count', value: { min: 2 } },
+        renderedValue: { min: 2 } as AssertionValue,
+        outputString: 'Three word text',
+        inverse: true,
+      };
+
+      const result = handleWordCount(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Expected word count to be less than 2, but got 3');
+    });
+
+    it('should fail inverse with max only and provide descriptive message', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'not-word-count', value: { max: 5 } },
+        renderedValue: { max: 5 } as AssertionValue,
+        outputString: 'Three word text',
+        inverse: true,
+      };
+
+      const result = handleWordCount(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Expected word count to be greater than 5, but got 3');
     });
   });
 
@@ -376,6 +420,20 @@ describe('handleWordCount', () => {
 
       expect(() => handleWordCount(params)).toThrow(
         '"word-count" assertion value must be a number or an object with min/max properties',
+      );
+    });
+
+    it('should throw error when min is greater than max', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'word-count', value: { min: 10, max: 5 } },
+        renderedValue: { min: 10, max: 5 } as AssertionValue,
+        outputString: 'Some text',
+        inverse: false,
+      };
+
+      expect(() => handleWordCount(params)).toThrow(
+        '"word-count" assertion: min (10) must be less than or equal to max (5)',
       );
     });
   });
