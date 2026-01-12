@@ -46,8 +46,20 @@ const CommonConfigurationOptions = ({
   const handleInputsChange = React.useCallback(
     (inputs: Record<string, string> | undefined) => {
       updateCustomTarget('inputs', inputs);
+
+      // Auto-generate prompts JSON template when inputs are configured
+      if (inputs && Object.keys(inputs).length > 0) {
+        // Create JSON template with all input variable names as template variables
+        const jsonTemplate = JSON.stringify(
+          Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+        );
+        updateConfig('prompts', [jsonTemplate]);
+      } else {
+        // Reset to default prompt when inputs are cleared
+        updateConfig('prompts', ['{{prompt}}']);
+      }
     },
-    [updateCustomTarget],
+    [updateCustomTarget, updateConfig],
   );
 
   return (

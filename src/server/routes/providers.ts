@@ -368,7 +368,7 @@ providersRouter.post(
 // Test multi-turn session functionality
 providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
-  const { provider: providerOptions, sessionConfig } = body;
+  const { provider: providerOptions, sessionConfig, mainInputVariable } = body;
 
   try {
     const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
@@ -394,6 +394,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       sessionConfig,
       undefined, // options
       validatedProvider.inputs || validatedProvider.config?.inputs,
+      mainInputVariable, // main input variable for conversation prompts
     );
 
     res.json(result);

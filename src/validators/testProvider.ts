@@ -418,12 +418,15 @@ function buildTroubleshootingAdvice({
  * Tests multi-turn session functionality by making two sequential requests
  * For server-sourced sessions, extracts sessionId from first response and uses it in second request
  * For client-sourced sessions, generates a sessionId and uses it in both requests
+ * @param mainInputVariable - For multi-input configurations, specifies which variable to use for
+ *   the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.
  */
 export async function testProviderSession(
   provider: ApiProvider,
   sessionConfig?: { sessionSource?: string; sessionParser?: string },
   options?: { skipConfigValidation?: boolean },
   inputs?: Record<string, string>,
+  mainInputVariable?: string,
 ): Promise<SessionTestResult> {
   try {
     // Validate sessions config
@@ -444,9 +447,14 @@ export async function testProviderSession(
     const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
 
     // Generate dummy values for each input variable defined in multi-input configuration
+    // If mainInputVariable is specified, that variable will use the actual conversation prompts
     const inputVars: Record<string, string> = {};
     if (inputs && typeof inputs === 'object') {
       for (const [varName, _description] of Object.entries(inputs)) {
+        // Skip the main input variable - it will be set to the actual prompts
+        if (varName === mainInputVariable) {
+          continue;
+        }
         inputVars[varName] = `test_${varName}`;
       }
     }
@@ -465,6 +473,9 @@ export async function testProviderSession(
       vars: {
         ...(initialSessionId ? { sessionId: initialSessionId } : {}),
         ...inputVars,
+        // If mainInputVariable is specified, set it to the first prompt
+        // This allows multi-input configurations to use a custom variable for the conversation
+        ...(mainInputVariable ? { [mainInputVariable]: firstPrompt } : {}),
       },
       prompt: {
         raw: firstPrompt,
@@ -526,6 +537,8 @@ export async function testProviderSession(
       vars: {
         ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
         ...inputVars,
+        // If mainInputVariable is specified, set it to the second prompt
+        ...(mainInputVariable ? { [mainInputVariable]: secondPrompt } : {}),
       },
       prompt: {
         raw: secondPrompt,
