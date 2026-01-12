@@ -141,6 +141,12 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
+                            "CLOUDFLARE_GATEWAY_ID": {
+                              "type": "string"
+                            },
+                            "CF_AIG_TOKEN": {
+                              "type": "string"
+                            },
                             "COMETAPI_KEY": {
                               "type": "string"
                             },
