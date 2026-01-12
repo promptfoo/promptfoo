@@ -70,6 +70,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -1621,6 +1622,83 @@ assert:
   - type: select-best
     value: 'choose the most engaging response'
     provider: openai:gpt-5-mini
+```
+
+### Word Count
+
+The `word-count` assertion validates that the LLM output contains a specific number of words or falls within a specified range. This is useful for controlling output length, ensuring compliance with word limits, or testing prompt engineering for conciseness.
+
+#### Exact Count
+
+Check if the output has exactly N words:
+
+```yaml
+assert:
+  - type: word-count
+    value: 50
+```
+
+#### Range (Min and Max)
+
+Check if the output has between min and max words (inclusive):
+
+```yaml
+assert:
+  - type: word-count
+    value:
+      min: 20
+      max: 30
+```
+
+#### Minimum Only
+
+Check if the output has at least N words:
+
+```yaml
+assert:
+  - type: word-count
+    value:
+      min: 100
+```
+
+#### Maximum Only
+
+Check if the output has at most N words:
+
+```yaml
+assert:
+  - type: word-count
+    value:
+      max: 20
+```
+
+#### Use Cases
+
+The word-count assertion is particularly useful for:
+
+- **Content Length Control**: Ensuring summaries, descriptions, or responses fit specific length requirements
+- **API Constraints**: Validating outputs don't exceed limits for downstream systems
+- **UX Requirements**: Ensuring user-facing text is concise or detailed enough
+- **Cost Optimization**: Controlling output token usage by limiting response length
+- **Prompt Engineering**: Testing different prompts to achieve desired output lengths
+
+Example with combined assertions:
+
+```yaml
+prompts:
+  - 'Summarize the following in exactly {{count}} words: {{text}}'
+
+tests:
+  - vars:
+      count: 50
+      text: 'Long article text here...'
+    assert:
+      - type: word-count
+        value:
+          min: 45
+          max: 55
+      - type: contains
+        value: 'summary'
 ```
 
 ## See Also
