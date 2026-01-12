@@ -328,7 +328,6 @@ export function logsCommand(program: Command) {
   const logsCmd = program
     .command('logs [file]')
     .description('View promptfoo log files')
-    .passThroughOptions()
     .option('--type <type>', 'Log type: debug, error, or all', 'all')
     .option('-n, --lines <count>', 'Number of lines to display from end')
     .option('--head <count>', 'Number of lines to display from start')
