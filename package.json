@@ -80,7 +80,7 @@
     "test": "vitest run",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock\" --ignore-dirs=\"dist,site,examples\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,ts-node,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library\" --ignore-dirs=\"dist,site,examples\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -135,6 +135,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/pem": "^1.14.4",
     "@types/proxy-from-env": "^1.0.4",
+    "@types/react": "19.2.7",
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
@@ -142,6 +143,7 @@
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.7",
     "ibm-cloud-sdk-core": "^5.4.4",
+    "ink-testing-library": "^4.0.0",
     "knip": "^5.70.2",
     "langfuse": "^3.38.6",
     "madge": "^8.0.0",
@@ -222,6 +224,7 @@
     "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.38.0",
     "@types/ws": "^8.18.1",
+    "@xstate/react": "^6.0.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -251,6 +254,7 @@
     "gcp-metadata": "^8.1.2",
     "glob": "^13.0.0",
     "http-z": "^8.1.1",
+    "ink": "^6.5.1",
     "istextorbinary": "^9.5.0",
     "jks-js": "^1.1.4",
     "js-rouge": "^3.0.0",
@@ -271,6 +275,7 @@
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",
+    "react": "19.2.3",
     "rfdc": "^1.4.1",
     "rxjs": "^7.8.2",
     "semver": "^7.7.3",
@@ -282,6 +287,7 @@
     "undici": "^7.16.0",
     "winston": "^3.19.0",
     "ws": "^8.18.3",
+    "xstate": "^5.25.0",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },

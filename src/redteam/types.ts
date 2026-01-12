@@ -204,6 +204,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  interactive?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
 }
@@ -213,6 +214,36 @@ export interface RedteamFileConfig extends CommonOptions {
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 }
+
+/**
+ * Progress event types for synthesis callbacks.
+ */
+export type SynthesizeProgressEvent =
+  | { type: 'init'; plugins: string[]; strategies: string[]; totalTests: number }
+  | { type: 'purpose'; purpose: string }
+  | { type: 'entities'; entities: string[] }
+  | { type: 'plugin_start'; pluginId: string }
+  | {
+      type: 'plugin_complete';
+      pluginId: string;
+      testsGenerated: number;
+      testsRequested: number;
+      error?: string;
+    }
+  | { type: 'strategies_start' }
+  | {
+      type: 'strategy_complete';
+      strategyId: string;
+      testsGenerated: number;
+      testsRequested: number;
+    }
+  | { type: 'complete'; totalTests: number }
+  | { type: 'error'; message: string };
+
+/**
+ * Progress callback for synthesis.
+ */
+export type SynthesizeProgressCallback = (event: SynthesizeProgressEvent) => void;
 
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
@@ -227,6 +258,8 @@ export interface SynthesizeOptions extends CommonOptions {
   strategies: RedteamStrategyObject[];
   targetIds: string[];
   showProgressBar?: boolean;
+  /** Progress callback for UI updates */
+  onProgress?: SynthesizeProgressCallback;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;

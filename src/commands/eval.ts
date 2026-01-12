@@ -24,10 +24,12 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
+import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -51,6 +53,7 @@ import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
+  interactive: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
@@ -163,7 +166,11 @@ export async function doEval(
         process.exitCode = 1;
         return new Eval({}, { persisted: false });
       }
-      logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+      const willUseInkUIResume = cmdObj.interactive !== false && shouldUseInkUI();
+      if (!willUseInkUIResume) {
+        logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      }
       // Use the saved config as our base to ensure identical test ordering
       ({
         config,
@@ -196,7 +203,11 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
 
-      logger.info('🔄 Retrying ERROR results from latest evaluation...');
+      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+      const willUseInkUIRetry = cmdObj.interactive !== false && shouldUseInkUI();
+      if (!willUseInkUIRetry) {
+        logger.info('🔄 Retrying ERROR results from latest evaluation...');
+      }
 
       // Find the latest evaluation
       const latestEval = await Eval.latest();
@@ -209,11 +220,15 @@ export async function doEval(
       // Get all ERROR result IDs
       const errorResultIds = await getErrorResultIds(latestEval.id);
       if (errorResultIds.length === 0) {
-        logger.info('✅ No ERROR results found in the latest evaluation');
+        if (!willUseInkUIRetry) {
+          logger.info('✅ No ERROR results found in the latest evaluation');
+        }
         return latestEval;
       }
 
-      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+      if (!willUseInkUIRetry) {
+        logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+      }
 
       // Delete the ERROR results so they will be re-evaluated when we run with resume
       await deleteErrorResults(errorResultIds);
@@ -221,9 +236,11 @@ export async function doEval(
       // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
       await recalculatePromptMetrics(latestEval);
 
-      logger.info(
-        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
-      );
+      if (!willUseInkUIRetry) {
+        logger.info(
+          `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+        );
+      }
 
       // Set up for resume mode
       resumeEval = latestEval;
@@ -335,16 +352,23 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
+    // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+    const willUseInkUI = cmdObj.interactive !== false && shouldUseInkUI();
+
     if (cache === false || repeat > 1) {
-      logger.info('Cache is disabled.');
+      if (!willUseInkUI) {
+        logger.info('Cache is disabled.');
+      }
       disableCache();
     }
 
     if (delay > 0) {
       maxConcurrency = 1;
-      logger.info(
-        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-      );
+      if (!willUseInkUI) {
+        logger.info(
+          `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
+        );
+      }
     }
 
     // Apply filtering only when not resuming, to preserve test indices
@@ -485,12 +509,165 @@ export async function doEval(
     */
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret: Eval;
+    // Use Ink UI by default (unless --no-interactive is specified or shouldUseInkUI returns false)
+    const useInkUI = cmdObj.interactive !== false && shouldUseInkUI();
+
+    // Track pending share for display after table (shared across Ink UI and table display)
+    let pendingInkShare: Promise<string | null> | null = null;
+
+    if (useInkUI) {
+      // Use Ink-based interactive UI
+      logger.debug('Using Ink UI for evaluation');
+      cliState.inkUI = true;
+
+      // Determine if sharing is enabled and fetch org context if so
+      // Must use the same precedence logic as the actual sharing decision
+      let shareContext: { organizationName: string; teamName?: string } | null = null;
+      let willShare: boolean;
+      if (
+        cmdObj.share === false ||
+        cmdObj.noShare === true ||
+        getEnvBool('PROMPTFOO_DISABLE_SHARING')
+      ) {
+        // Explicit disable via CLI or env var takes highest priority
+        willShare = false;
+      } else if (cmdObj.share === true) {
+        // Explicit enable via CLI
+        willShare = true;
+      } else if (commandLineOptions?.share !== undefined) {
+        // Config file commandLineOptions.share (can be true or false)
+        willShare = commandLineOptions.share;
+      } else if (config.sharing !== undefined) {
+        // Config file sharing setting (can be false, true, or object)
+        willShare = Boolean(config.sharing);
+      } else {
+        // Default: auto-share when cloud is enabled
+        willShare = cloudConfig.isEnabled();
+      }
+      if (willShare && isSharingEnabled(evalRecord)) {
+        shareContext = await getOrgContext();
+      }
+
+      // Create abort controller for user cancellation via 'q' key
+      const inkAbortController = new AbortController();
+
+      const inkResult = await initInkEval({
+        title: config.description || 'Evaluation',
+        evaluateOptions: {
+          ...options,
+          // Disable CLI progress bar - Ink UI has its own progress display
+          showProgressBar: false,
+          eventSource: 'cli',
+          // Combine any existing abort signal with our UI abort controller
+          abortSignal: evaluateOptions.abortSignal
+            ? AbortSignal.any([evaluateOptions.abortSignal, inkAbortController.signal])
+            : inkAbortController.signal,
+          isRedteam: Boolean(config.redteam),
+        },
+        testSuite,
+        shareContext,
+        onCancel: () => {
+          logger.debug('Evaluation cancelled by user - aborting');
+          inkAbortController.abort();
+          // Force exit since the evaluator may have pending async work
+          // Exit code 130 = 128 + SIGINT (2), standard for user cancellation
+          process.exit(130);
+        },
+      });
+
+      try {
+        // Initialize UI with total tests and providers
+        // Total test results = tests × prompts (each provider runs all combinations)
+        const numTests = testSuite.tests?.length ?? 0;
+        const numPrompts = testSuite.prompts?.length ?? 1;
+        const totalTestsPerProvider = numTests * numPrompts;
+        const providerIds = testSuite.providers.map((p) =>
+          typeof p === 'string' ? p : p.label || p.id?.() || 'unknown',
+        );
+        inkResult.controller.init(totalTestsPerProvider, providerIds, maxConcurrency);
+        inkResult.controller.start();
+
+        // Run evaluation with Ink progress callback
+        ret = await evaluate(testSuite, evalRecord, inkResult.evaluateOptions);
+
+        // Get final stats
+        const results = await evalRecord.getResults();
+        const passed = results.filter((r) => r.success).length;
+        const failed = results.filter((r) => !r.success && !r.error).length;
+        const errors = results.filter((r) => r.error).length;
+
+        inkResult.controller.complete({ passed, failed, errors });
+
+        // willShare was already calculated with full precedence logic before initInkEval
+        const canShareInk = isSharingEnabled(evalRecord);
+
+        logger.debug(`Ink UI - Wants to share: ${willShare}, Can share: ${canShareInk}`);
+
+        // Start sharing in background (non-blocking)
+        if (willShare && canShareInk) {
+          // Update UI to show sharing in progress
+          inkResult.controller.setSharingStatus('sharing');
+
+          // Start sharing in background - don't await
+          pendingInkShare = createShareableUrl(evalRecord, false, { silent: true });
+
+          // Handle share completion asynchronously - updates UI while table is visible
+          pendingInkShare
+            .then((url) => {
+              if (url) {
+                inkResult.controller.setSharingStatus('completed', url);
+                evalRecord.shared = true;
+              } else {
+                inkResult.controller.setSharingStatus('failed');
+              }
+            })
+            .catch((err) => {
+              logger.debug(`Share failed: ${err}`);
+              inkResult.controller.setSharingStatus('failed');
+            });
+        }
+
+        // Brief pause to show completion state
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Transition to results table within the same Ink session
+        // Virtual scrolling handles large tables efficiently (only renders ~25 rows at a time)
+        // The 10,000 row limit is a safety bound for extremely large evals
+        if (cmdObj.table && getLogLevel() !== 'debug') {
+          const table = await evalRecord.getTable();
+          if (table.body.length < 10000) {
+            inkResult.controller.showResults(table);
+            // Wait for user to exit the results table
+            await inkResult.renderResult.waitUntilExit();
+          }
+        }
+      } finally {
+        inkResult.cleanup();
+        cliState.inkUI = false;
+      }
+
+      // Show share URL after table closes (if sharing was still in progress when user exited)
+      if (pendingInkShare && !evalRecord.shared) {
+        try {
+          const shareUrl = await pendingInkShare;
+          if (shareUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
+          }
+        } catch (err) {
+          logger.debug(`Share failed: ${err}`);
+        }
+      }
+    } else {
+      // Use standard CLI output
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+    }
 
     // Cleanup signal handler
     /*
@@ -544,7 +721,8 @@ export async function doEval(
     logger.debug(`Can share eval: ${canShareEval}`);
 
     // Start sharing in background (don't await yet) - this allows us to show results immediately
-    const willShare = wantsToShare && canShareEval;
+    // Skip if already shared or if Ink UI already started background sharing
+    const willShare = wantsToShare && canShareEval && !evalRecord.shared && !pendingInkShare;
     let sharePromise: Promise<string | null> | null = null;
     if (willShare) {
       // Start the share operation in background with silent mode (no progress bar)
@@ -572,18 +750,17 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
-    // Output results table immediately (before share completes)
-    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
+    // Display results table (non-Ink UI mode only - Ink UI handles table in unified session above)
+    // Output results immediately (before share completes)
+    if (!useInkUI && cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
-      // Output CLI table
       const outputTable = generateTable(table);
-
       logger.info('\n' + outputTable.toString());
       if (table.body.length > 25) {
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
-    } else if (failures !== 0) {
+    } else if (failures !== 0 && !useInkUI) {
       logger.debug(
         `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
           evalRecord.prompts,
@@ -591,7 +768,7 @@ export async function doEval(
       );
     }
 
-    if (totalTests >= 500) {
+    if (totalTests >= 500 && !useInkUI) {
       logger.info('Skipping table output because there are more than 500 tests.');
     }
 
@@ -696,7 +873,193 @@ export async function doEval(
     // Write outputs after share completes (so we can include shareableUrl)
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      if (!useInkUI) {
+        logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      }
+    }
+
+    // Skip banner output in Ink UI mode - already shown in the interactive UI
+    if (!useInkUI) {
+      printBorder();
+      if (cmdObj.write) {
+        if (shareableUrl) {
+          logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+        } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
+          notCloudEnabledShareInstructions();
+        } else {
+          logger.info(
+            `${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`,
+          );
+          logger.info(
+            `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
+          );
+          if (cloudConfig.isEnabled()) {
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+            );
+          } else {
+            logger.info(
+              `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
+            );
+          }
+
+          logger.info(
+            `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
+              'https://promptfoo.dev/feedback',
+            )}`,
+          );
+        }
+      } else {
+        logger.info(`${chalk.green('✔')} Evaluation complete`);
+      }
+
+      printBorder();
+    }
+
+    // Skip token usage and final stats in Ink UI mode - already shown in the interactive UI
+    if (!useInkUI) {
+      const durationDisplay = formatDuration(duration);
+      // Handle token usage display
+      if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
+        const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
+        const evalTokens = {
+          prompt: tokenUsage.prompt || 0,
+          completion: tokenUsage.completion || 0,
+          total: tokenUsage.total || combinedTotal,
+          cached: tokenUsage.cached || 0,
+          completionDetails: tokenUsage.completionDetails || {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        };
+
+        logger.info(chalk.bold('Token Usage Summary:'));
+
+        if (isRedteam) {
+          logger.info(
+            `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
+          );
+        }
+
+        // Eval tokens
+        logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
+        logger.info(
+          `    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
+        );
+        if (evalTokens.cached > 0) {
+          logger.info(
+            `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
+          );
+        }
+        if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
+          logger.info(
+            `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
+          );
+        }
+
+        // Provider breakdown
+
+        const providerIds = tracker.getProviderIds();
+        if (providerIds.length > 1) {
+          logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
+
+          // Sort providers by total token usage (descending)
+          const sortedProviders = providerIds
+            .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
+            .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+
+          for (const { id, usage } of sortedProviders) {
+            if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
+              const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
+              // Extract just the provider ID part (remove class name in parentheses)
+              const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
+              logger.info(
+                `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
+              );
+
+              // Show breakdown if there are individual components
+              if (usage.prompt || usage.completion || usage.cached) {
+                const details = [];
+                if (usage.prompt) {
+                  details.push(`${usage.prompt.toLocaleString()} prompt`);
+                }
+                if (usage.completion) {
+                  details.push(`${usage.completion.toLocaleString()} completion`);
+                }
+                if (usage.cached) {
+                  details.push(`${usage.cached.toLocaleString()} cached`);
+                }
+                if (usage.completionDetails?.reasoning) {
+                  details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+                }
+                if (details.length > 0) {
+                  logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
+                }
+              }
+            }
+          }
+        }
+
+        // Grading tokens
+        if (
+          tokenUsage.assertions &&
+          tokenUsage.assertions.total &&
+          tokenUsage.assertions.total > 0
+        ) {
+          logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
+          logger.info(
+            `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
+          );
+          if (tokenUsage.assertions.prompt) {
+            logger.info(
+              `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+            );
+          }
+          if (tokenUsage.assertions.completion) {
+            logger.info(
+              `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+            );
+          }
+          if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
+            logger.info(
+              `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
+            );
+          }
+          if (
+            tokenUsage.assertions.completionDetails?.reasoning &&
+            tokenUsage.assertions.completionDetails.reasoning > 0
+          ) {
+            logger.info(
+              `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
+            );
+          }
+        }
+
+        // Grand total
+        const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
+        logger.info(
+          `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
+        );
+        printBorder();
+      }
+
+      logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+      logger.info(chalk.green.bold(`Successes: ${successes}`));
+      logger.info(chalk.red.bold(`Failures: ${failures}`));
+      if (!Number.isNaN(errors)) {
+        logger.info(chalk.red.bold(`Errors: ${errors}`));
+      }
+      if (!Number.isNaN(passRate)) {
+        logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+      }
+      printBorder();
     }
 
     telemetry.record('command_used', {
@@ -880,9 +1243,14 @@ export function evalCommand(
     .option(
       '-j, --max-concurrency <number>',
       `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
+      (val) => Number.parseInt(val, 10),
     )
-    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
-    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)', (val) =>
+      Number.parseInt(val, 10),
+    )
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)', (val) =>
+      Number.parseInt(val, 10),
+    )
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
@@ -962,6 +1330,7 @@ export function evalCommand(
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--no-interactive', 'Disable interactive UI (use standard CLI output)')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {

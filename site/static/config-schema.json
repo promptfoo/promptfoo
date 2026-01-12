@@ -2106,6 +2106,9 @@
             "retryErrors": {
               "type": "boolean"
             },
+            "interactive": {
+              "type": "boolean"
+            },
             "envPath": {
               "anyOf": [
                 {

@@ -4,6 +4,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import cliState from './cliState';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -290,9 +291,10 @@ async function sendChunkedResults(
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode, CI, or silent mode
+  // Setup progress bar only if not in verbose mode, CI, Ink UI mode, or silent mode
+  const isInkUI = Boolean(cliState.inkUI);
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI() && !silent) {
+  if (!isVerbose && !isCI() && !isInkUI && !silent) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -330,7 +332,7 @@ async function sendChunkedResults(
 
           if (progressBar) {
             progressBar.increment(currentChunk.length);
-          } else {
+          } else if (!isInkUI && !silent) {
             logger.info(
               `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
             );
@@ -355,7 +357,7 @@ async function sendChunkedResults(
 
       if (progressBar) {
         progressBar.increment(currentChunk.length);
-      } else {
+      } else if (!isInkUI && !silent) {
         logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
       }
     }
@@ -474,14 +476,28 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param options Share options (silent mode, showAuth).
+ * @param showAuthOrOptions Whether to show auth in URL (deprecated) or ShareOptions object.
+ * @param legacyOptions Legacy options object (deprecated, use single options object instead).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
-  options: ShareOptions = {},
+  showAuthOrOptions: boolean | ShareOptions = {},
+  legacyOptions: { silent?: boolean } = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false } = options;
+  // Handle both old signature (showAuth, { silent }) and new signature (ShareOptions)
+  let silent: boolean;
+  let showAuth: boolean;
+  if (typeof showAuthOrOptions === 'boolean') {
+    // Old signature: createShareableUrl(eval, showAuth, { silent })
+    showAuth = showAuthOrOptions;
+    silent = legacyOptions.silent ?? false;
+  } else {
+    // New signature: createShareableUrl(eval, { silent, showAuth })
+    const options = showAuthOrOptions;
+    silent = options.silent ?? false;
+    showAuth = options.showAuth ?? false;
+  }
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -500,8 +516,10 @@ export async function createShareableUrl(
     }
   }
 
-  // 1. Handle email collection
-  await handleEmailCollection(evalRecord);
+  // 1. Handle email collection (skip when silent - background sharing)
+  if (!silent) {
+    await handleEmailCollection(evalRecord);
+  }
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);

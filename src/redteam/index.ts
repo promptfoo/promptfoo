@@ -593,6 +593,7 @@ export async function synthesize({
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
+  onProgress,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -689,6 +690,14 @@ export async function synthesize({
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
+
+  // Emit init progress event
+  onProgress?.({
+    type: 'init',
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => s.id),
+    totalTests,
+  });
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -892,6 +901,7 @@ export async function synthesize({
     logger.info('Extracting system purpose...');
   }
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
+  onProgress?.({ type: 'purpose', purpose });
 
   if (showProgressBar) {
     progressBar?.increment(1, { task: 'Extracting entities' });
@@ -901,6 +911,7 @@ export async function synthesize({
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
+  onProgress?.({ type: 'entities', entities });
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -909,6 +920,9 @@ export async function synthesize({
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
+
+    // Emit plugin_start event
+    onProgress?.({ type: 'plugin_start', pluginId: plugin.id });
 
     if (showProgressBar) {
       progressBar?.update({ task: plugin.id });
@@ -1055,6 +1069,14 @@ export async function synthesize({
           generated: allPluginTests.length,
         };
       }
+
+      // Emit plugin_complete event
+      onProgress?.({
+        type: 'plugin_complete',
+        pluginId: plugin.id,
+        testsGenerated: allPluginTests.length,
+        testsRequested: plugin.id === 'intent' ? allPluginTests.length : plugin.numTests,
+      });
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
@@ -1100,14 +1122,40 @@ export async function synthesize({
           requested: plugin.numTests,
           generated: customTests.length,
         };
+
+        // Emit plugin_complete event
+        onProgress?.({
+          type: 'plugin_complete',
+          pluginId: plugin.id,
+          testsGenerated: customTests.length,
+          testsRequested: plugin.numTests,
+        });
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+
+        // Emit plugin_complete event with error
+        onProgress?.({
+          type: 'plugin_complete',
+          pluginId: plugin.id,
+          testsGenerated: 0,
+          testsRequested: plugin.numTests,
+          error: String(e),
+        });
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
+
+      // Emit plugin_complete event
+      onProgress?.({
+        type: 'plugin_complete',
+        pluginId: plugin.id,
+        testsGenerated: 0,
+        testsRequested: plugin.numTests,
+        error: 'Plugin not registered',
+      });
     }
   });
 
@@ -1116,6 +1164,9 @@ export async function synthesize({
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
+
+  // Emit strategies_start event
+  onProgress?.({ type: 'strategies_start' });
 
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
@@ -1146,6 +1197,16 @@ export async function synthesize({
 
   Object.assign(strategyResults, otherStrategyResults);
 
+  // Emit strategy_complete events for all strategies
+  for (const [strategyId, result] of Object.entries(strategyResults)) {
+    onProgress?.({
+      type: 'strategy_complete',
+      strategyId,
+      testsGenerated: result.generated,
+      testsRequested: result.requested,
+    });
+  }
+
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
@@ -1160,6 +1221,9 @@ export async function synthesize({
   }
 
   logger.info(generateReport(pluginResults, strategyResults));
+
+  // Emit complete event
+  onProgress?.({ type: 'complete', totalTests: finalTestCases.length });
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }
