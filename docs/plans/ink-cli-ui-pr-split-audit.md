@@ -108,23 +108,22 @@ src/ui/render.ts
 src/ui/noninteractive/progress.ts
 src/ui/noninteractive/textOutput.ts
 src/ui/noninteractive/index.ts
-src/envars.ts (add PROMPTFOO_DISABLE_INTERACTIVE_UI)
+src/envars.ts (add PROMPTFOO_ENABLE_INTERACTIVE_UI)
 test/ui/noninteractive.test.ts
 test/ui/render.test.ts
 ```
 
 **Why First:**
 
-- Establishes the "is interactive UI enabled?" check
+- Establishes the "is interactive UI enabled?" check (opt-in)
 - Provides fallback for when Ink can't be used
-- Zero user-visible changes (feature is disabled by default)
+- Zero user-visible changes (feature is opt-in)
 - Unblocks all subsequent PRs
 
-**Feature Flag:**
+**Environment Variable:**
 
 ```bash
-PROMPTFOO_EXPERIMENTAL_INK=1  # Enable Ink UI
-PROMPTFOO_DISABLE_INTERACTIVE_UI=1  # Force non-interactive
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true  # Enable Ink UI (opt-in)
 ```
 
 ---

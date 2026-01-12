@@ -49,7 +49,7 @@ src/ui/noninteractive/progress.ts
 src/ui/noninteractive/textOutput.ts
 
 # Config changes
-src/envars.ts                    # Add PROMPTFOO_DISABLE_INTERACTIVE_UI
+src/envars.ts                    # Add PROMPTFOO_ENABLE_INTERACTIVE_UI
 src/cliState.ts                  # UI state tracking
 
 # Tests
@@ -84,8 +84,8 @@ package-lock.json
 
 ```typescript
 // src/envars.ts
-export const PROMPTFOO_EXPERIMENTAL_INK = envBool('PROMPTFOO_EXPERIMENTAL_INK', false);
-export const PROMPTFOO_DISABLE_INTERACTIVE_UI = envBool('PROMPTFOO_DISABLE_INTERACTIVE_UI', false);
+// Interactive UI is opt-in only
+PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
 ```
 
 ### Key Implementation Details
@@ -93,16 +93,20 @@ export const PROMPTFOO_DISABLE_INTERACTIVE_UI = envBool('PROMPTFOO_DISABLE_INTER
 **interactiveCheck.ts** - Core logic for determining if Ink UI can be used:
 
 ```typescript
+// Opt-in check
+export function isInteractiveUIEnabled(): boolean {
+  return getEnvBool('PROMPTFOO_ENABLE_INTERACTIVE_UI');
+}
+
+// TTY check
+export function canUseInteractiveUI(): boolean {
+  return process.stdout.isTTY;
+}
+
+// Combined check - opt-in AND TTY required
 export function shouldUseInkUI(): boolean {
-  // Feature flag check
-  if (!PROMPTFOO_EXPERIMENTAL_INK) return false;
-  if (PROMPTFOO_DISABLE_INTERACTIVE_UI) return false;
-
-  // Environment checks
-  if (!process.stdout.isTTY) return false;
-  if (process.env.CI) return false;
-  if (process.env.TERM === 'dumb') return false;
-
+  if (!isInteractiveUIEnabled()) return false;
+  if (!canUseInteractiveUI()) return false;
   return true;
 }
 ```

@@ -60,11 +60,12 @@ $ promptfoo list
 
 | Feature                 | Description                                           |
 | ----------------------- | ----------------------------------------------------- |
+| **Opt-In**              | Enable via `PROMPTFOO_ENABLE_INTERACTIVE_UI=true`     |
 | **Keyboard Navigation** | Arrow keys, j/k (vim), Page Up/Down, g/G              |
 | **Search**              | Press `/` to filter evals by description              |
 | **Pagination**          | Auto-loads more items when scrolling                  |
 | **Visual Indicators**   | Highlighted selection, relative dates, redteam badges |
-| **Graceful Fallback**   | `--no-interactive` or pipe to disable                 |
+| **Graceful Fallback**   | Non-TTY environments fall back to table output        |
 
 ---
 
@@ -246,33 +247,27 @@ import { runInkList, shouldUseInkList } from '../ui/list';
 
 ---
 
-## CLI Flags and Environment Variables
+## Environment Variable
 
-### New CLI Option
+Interactive UI is **opt-in**. Users must explicitly enable it:
+
+| Variable                          | Default | Purpose                         |
+| --------------------------------- | ------- | ------------------------------- |
+| `PROMPTFOO_ENABLE_INTERACTIVE_UI` | `false` | Enable Ink-based interactive UI |
+
+### How It Works
+
+1. If `PROMPTFOO_ENABLE_INTERACTIVE_UI=true` → Check TTY
+2. If stdout is a TTY → Use interactive UI
+3. Otherwise → Use table output (non-interactive fallback)
 
 ```bash
-# Disable interactive UI explicitly
-promptfoo list --no-interactive
+# Enable interactive UI
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list evals
 
-# Interactive UI is ON by default in TTY
-promptfoo list
+# Default behavior (table output)
+promptfoo list evals
 ```
-
-### Environment Variables
-
-| Variable                           | Default | Purpose                        |
-| ---------------------------------- | ------- | ------------------------------ |
-| `PROMPTFOO_DISABLE_INTERACTIVE_UI` | `false` | Force non-interactive mode     |
-| `PROMPTFOO_FORCE_INTERACTIVE_UI`   | `false` | Force interactive (even in CI) |
-
-### Priority Order
-
-1. `--no-interactive` flag → Disable
-2. `PROMPTFOO_FORCE_INTERACTIVE_UI=true` → Enable (even in CI)
-3. CI environment detected → Disable
-4. `PROMPTFOO_DISABLE_INTERACTIVE_UI=true` → Disable
-5. Default in TTY → Enable
-6. Default when piped → Disable
 
 ---
 
@@ -280,28 +275,22 @@ promptfoo list
 
 ### Unit Tests
 
-| Test                     | File                     | Coverage                             |
-| ------------------------ | ------------------------ | ------------------------------------ |
-| TTY detection            | `render.test.ts`         | `shouldUseInteractiveUI()`           |
-| CI detection             | `render.test.ts`         | `shouldUseInkUI()`                   |
-| Force flags              | `render.test.ts`         | `isInteractiveUIForced()`            |
-| Color support            | `render.test.ts`         | `supportsColor()`                    |
-| Non-interactive progress | `noninteractive.test.ts` | `NonInteractiveProgress`             |
-| Non-interactive spinner  | `noninteractive.test.ts` | `NonInteractiveSpinner`              |
-| Text output              | `noninteractive.test.ts` | `TextOutput`                         |
-| List runner              | `listRunner.test.ts`     | `shouldUseInkList()`, `runInkList()` |
+| Test           | File                 | Coverage                             |
+| -------------- | -------------------- | ------------------------------------ |
+| TTY detection  | `render.test.ts`     | `canUseInteractiveUI()`              |
+| Opt-in check   | `render.test.ts`     | `isInteractiveUIEnabled()`           |
+| Combined check | `render.test.ts`     | `shouldUseInkUI()`                   |
+| List runner    | `listRunner.test.ts` | `shouldUseInkList()`, `runInkList()` |
 
 ### Manual Testing Matrix
 
-| Scenario                | Command                                              | Expected                       |
-| ----------------------- | ---------------------------------------------------- | ------------------------------ |
-| TTY terminal            | `promptfoo list`                                     | Interactive UI                 |
-| Piped output            | `promptfoo list \| cat`                              | Table output                   |
-| CI environment          | `CI=true promptfoo list`                             | Table output                   |
-| Force interactive in CI | `PROMPTFOO_FORCE_INTERACTIVE_UI=true promptfoo list` | Interactive UI                 |
-| Explicit disable        | `promptfoo list --no-interactive`                    | Table output                   |
-| List prompts            | `promptfoo list prompts`                             | Interactive UI (prompts view)  |
-| List datasets           | `promptfoo list datasets`                            | Interactive UI (datasets view) |
+| Scenario                   | Command                                                        | Expected                      |
+| -------------------------- | -------------------------------------------------------------- | ----------------------------- |
+| Default (no env var)       | `promptfoo list evals`                                         | Table output                  |
+| Interactive enabled in TTY | `PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list evals`    | Interactive UI                |
+| Interactive enabled, piped | `PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list \| cat`   | Table output (no TTY)         |
+| List prompts (enabled)     | `PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list prompts`  | Interactive UI (prompts view) |
+| List datasets (enabled)    | `PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list datasets` | Interactive UI (datasets)     |
 
 ### Terminal Compatibility
 
@@ -320,26 +309,23 @@ promptfoo list
 
 ### Infrastructure
 
-- [ ] `shouldUseInkUI()` returns `false` by default (in CI)
-- [ ] `shouldUseInkUI()` returns `true` in TTY terminals
-- [ ] `shouldUseInkUI()` respects `PROMPTFOO_FORCE_INTERACTIVE_UI`
+- [ ] `shouldUseInkUI()` returns `false` by default (opt-in)
+- [ ] `shouldUseInkUI()` returns `true` when `PROMPTFOO_ENABLE_INTERACTIVE_UI=true` + TTY
 - [ ] `renderInteractive()` dynamically imports Ink
-- [ ] `NonInteractiveProgress` outputs at threshold intervals
 - [ ] Signal handlers set correct exit codes (130, 143)
 
 ### List UI
 
-- [ ] `promptfoo list` shows interactive eval list in TTY
-- [ ] `promptfoo list prompts` shows interactive prompt list
-- [ ] `promptfoo list datasets` shows interactive dataset list
+- [ ] `promptfoo list evals` shows table by default
+- [ ] `promptfoo list evals` with env var shows interactive UI in TTY
+- [ ] `promptfoo list prompts` with env var shows interactive prompt list
+- [ ] `promptfoo list datasets` with env var shows interactive dataset list
 - [ ] Arrow keys / j/k navigate the list
 - [ ] Enter selects an item and shows ID
 - [ ] `/` activates search mode
 - [ ] `q` or Escape exits
 - [ ] `r` refreshes the list
-- [ ] `--no-interactive` falls back to table
-- [ ] Piped output falls back to table
-- [ ] CI environment falls back to table
+- [ ] Piped output falls back to table (even with env var)
 
 ### Build & Test
 
@@ -375,29 +361,28 @@ git push -u origin ink-ui/foundation-with-list
 # Create PR
 gh pr create --title "feat(ui): Add Ink-based interactive list UI" \
   --body "## Summary
-- Add foundation for Ink-based CLI UI
+- Add foundation for Ink-based CLI UI (opt-in)
 - Implement interactive \`promptfoo list\` command
 - Support keyboard navigation, search, pagination
-- Graceful fallback for CI/non-TTY environments
+- Graceful fallback for non-TTY environments
 
 ## Usage
 \`\`\`bash
-# Interactive mode (default in TTY)
-promptfoo list
+# Enable interactive UI (opt-in)
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list evals
 
-# Non-interactive mode
-promptfoo list --no-interactive
+# Default behavior (table output)
+promptfoo list evals
 \`\`\`
 
-## Feature Flags
-- \`PROMPTFOO_FORCE_INTERACTIVE_UI=true\` - Force interactive in CI
-- \`PROMPTFOO_DISABLE_INTERACTIVE_UI=true\` - Disable everywhere
+## Environment Variable
+- \`PROMPTFOO_ENABLE_INTERACTIVE_UI=true\` - Enable Ink-based interactive UI
 
 ## Test Plan
-- [ ] Test in iTerm2
-- [ ] Test in VS Code terminal
-- [ ] Test piped output falls back
-- [ ] Test --no-interactive flag
+- [ ] Test with env var in iTerm2
+- [ ] Test with env var in VS Code terminal
+- [ ] Test piped output falls back to table
+- [ ] Test default behavior (table output)
 "
 ```
 
@@ -407,10 +392,8 @@ promptfoo list --no-interactive
 
 ### Quick Disable (No Code Change)
 
-```bash
-# Users can disable immediately via environment variable
-export PROMPTFOO_DISABLE_INTERACTIVE_UI=true
-```
+Since interactive UI is opt-in, simply don't set the environment variable.
+Default behavior is table output (non-interactive).
 
 ### Code Revert
 
@@ -424,12 +407,12 @@ git checkout main -- src/commands/list.ts
 
 ### Risk Assessment
 
-| Risk                     | Likelihood | Impact | Mitigation               |
-| ------------------------ | ---------- | ------ | ------------------------ |
-| Ink crashes in edge case | Low        | Low    | Falls back to table      |
-| TTY detection wrong      | Low        | Low    | `--no-interactive` flag  |
-| Performance issue        | Very Low   | Medium | Non-interactive fallback |
-| Bundle size regression   | Low        | Medium | Dynamic imports          |
+| Risk                     | Likelihood | Impact | Mitigation                           |
+| ------------------------ | ---------- | ------ | ------------------------------------ |
+| Ink crashes in edge case | Low        | Low    | Falls back to table                  |
+| TTY detection wrong      | Low        | Low    | Opt-in only, default is table output |
+| Performance issue        | Very Low   | Medium | Non-interactive fallback             |
+| Bundle size regression   | Low        | Medium | Dynamic imports                      |
 
 ---
 
@@ -444,9 +427,10 @@ Add foundation for Ink-based interactive CLI UI with a working `promptfoo list` 
 
 **Infrastructure:**
 
-- Environment detection (TTY, CI, feature flags)
+- Environment detection (TTY check)
+- Opt-in via `PROMPTFOO_ENABLE_INTERACTIVE_UI=true`
 - Lazy Ink/React loading (no bundle impact for library users)
-- Non-interactive fallback utilities
+- Non-interactive fallback (table output)
 - Signal handling with proper exit codes
 
 **User-Facing Feature:**
@@ -459,13 +443,13 @@ Add foundation for Ink-based interactive CLI UI with a working `promptfoo list` 
 ### Usage
 
 ```bash
-# Interactive mode (default in TTY)
-promptfoo list
-promptfoo list prompts
-promptfoo list datasets
+# Enable interactive mode (opt-in)
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list evals
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list prompts
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true promptfoo list datasets
 
-# Non-interactive mode
-promptfoo list --no-interactive
+# Default behavior (table output)
+promptfoo list evals
 ```
 ````
 
@@ -477,17 +461,16 @@ promptfoo list --no-interactive
 
 - [x] Unit tests for all utilities
 - [x] Integration tests for list runner
-- [ ] Manual test in iTerm2
-- [ ] Manual test in VS Code terminal
-- [ ] Manual test with piped output
-- [ ] Manual test with --no-interactive
+- [ ] Manual test with env var in iTerm2
+- [ ] Manual test with env var in VS Code terminal
+- [ ] Manual test with piped output (should fall back to table)
+- [ ] Manual test default behavior (table output)
 
-### Feature Flags
+### Environment Variable
 
-| Variable                           | Default | Purpose                 |
-| ---------------------------------- | ------- | ----------------------- |
-| `PROMPTFOO_DISABLE_INTERACTIVE_UI` | `false` | Force table output      |
-| `PROMPTFOO_FORCE_INTERACTIVE_UI`   | `false` | Force interactive in CI |
+| Variable                          | Default | Purpose                         |
+| --------------------------------- | ------- | ------------------------------- |
+| `PROMPTFOO_ENABLE_INTERACTIVE_UI` | `false` | Enable Ink-based interactive UI |
 
 ```
 
