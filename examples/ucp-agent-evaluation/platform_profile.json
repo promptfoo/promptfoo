@@ -1,0 +1,31 @@
+{
+  "profile_uri": "https://promptfoo.example/profiles/v2026-01/eval-agent.json",
+  "name": "Promptfoo Evaluation Agent",
+  "description": "Platform profile for promptfoo UCP agent evaluation",
+  "ucp": {
+    "version": "2026-01-11"
+  },
+  "capabilities": [
+    {
+      "name": "dev.ucp.shopping.checkout",
+      "version": "2026-01-11"
+    },
+    {
+      "name": "dev.ucp.shopping.discount",
+      "version": "2026-01-11",
+      "extends": "dev.ucp.shopping.checkout"
+    },
+    {
+      "name": "dev.ucp.shopping.fulfillment",
+      "version": "2026-01-11",
+      "extends": "dev.ucp.shopping.checkout"
+    },
+    {
+      "name": "dev.ucp.shopping.order",
+      "version": "2026-01-11"
+    }
+  ],
+  "contact": {
+    "email": "eval@promptfoo.example"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "scenario_id": "discount_replacement",
+  "description": "Test discount code replacement semantics - new codes replace old ones",
+  "line_items": [
+    {
+      "merchant_item_id": "bouquet_sunflowers",
+      "quantity": 2
+    }
+  ],
+  "buyer": {
+    "email": "code.swapper@example.com",
+    "name": {
+      "given": "Code",
+      "family": "Swapper"
+    }
+  },
+  "discount_codes": ["WELCOME20"],
+  "currency": "USD"
+}

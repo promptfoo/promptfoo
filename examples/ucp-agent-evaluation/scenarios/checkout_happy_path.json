@@ -1,0 +1,18 @@
+{
+  "scenario_id": "checkout_happy_path",
+  "description": "Basic checkout flow with line items and buyer info",
+  "line_items": [
+    {
+      "merchant_item_id": "bouquet_roses",
+      "quantity": 2
+    }
+  ],
+  "buyer": {
+    "email": "jane.doe@example.com",
+    "name": {
+      "given": "Jane",
+      "family": "Doe"
+    }
+  },
+  "currency": "USD"
+}

@@ -1,0 +1,23 @@
+{
+  "scenario_id": "discount_valid",
+  "description": "Checkout with a valid discount code applied",
+  "line_items": [
+    {
+      "merchant_item_id": "bouquet_roses",
+      "quantity": 1
+    },
+    {
+      "merchant_item_id": "bouquet_tulips",
+      "quantity": 2
+    }
+  ],
+  "buyer": {
+    "email": "discount.lover@example.com",
+    "name": {
+      "given": "Discount",
+      "family": "Lover"
+    }
+  },
+  "discount_codes": ["10OFF"],
+  "currency": "USD"
+}

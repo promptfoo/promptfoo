@@ -1,0 +1,47 @@
+{
+  "scenario_id": "fulfillment_shipping",
+  "description": "Checkout requiring shipping fulfillment - agent must provide address and select option",
+  "line_items": [
+    {
+      "merchant_item_id": "orchid_white",
+      "quantity": 1
+    }
+  ],
+  "buyer": {
+    "email": "ship.to.me@example.com",
+    "name": {
+      "given": "Ship",
+      "family": "ToMe"
+    },
+    "phone": "+1-555-0100"
+  },
+  "fulfillment": {
+    "methods": [
+      {
+        "id": "ship_method",
+        "type": "shipping",
+        "groups": [
+          {
+            "id": "ship_group",
+            "selected_option_id": "std-ship"
+          }
+        ],
+        "destinations": [
+          {
+            "id": "ship_dest",
+            "address": {
+              "street1": "123 Main Street",
+              "street2": "Apt 4B",
+              "city": "San Francisco",
+              "region": "CA",
+              "postal_code": "94102",
+              "country": "US"
+            }
+          }
+        ],
+        "selected_destination_id": "ship_dest"
+      }
+    ]
+  },
+  "currency": "USD"
+}

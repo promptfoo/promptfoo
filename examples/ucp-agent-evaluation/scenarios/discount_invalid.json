@@ -1,0 +1,19 @@
+{
+  "scenario_id": "discount_invalid",
+  "description": "Checkout with an invalid/expired discount code - agent should handle rejection gracefully",
+  "line_items": [
+    {
+      "merchant_item_id": "pot_ceramic",
+      "quantity": 1
+    }
+  ],
+  "buyer": {
+    "email": "hopeful.saver@example.com",
+    "name": {
+      "given": "Hopeful",
+      "family": "Saver"
+    }
+  },
+  "discount_codes": ["EXPIRED2023", "INVALID_CODE"],
+  "currency": "USD"
+}

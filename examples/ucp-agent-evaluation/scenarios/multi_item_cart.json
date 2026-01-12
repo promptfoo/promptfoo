@@ -1,0 +1,26 @@
+{
+  "scenario_id": "multi_item_cart",
+  "description": "Checkout with multiple different items",
+  "line_items": [
+    {
+      "merchant_item_id": "bouquet_roses",
+      "quantity": 1
+    },
+    {
+      "merchant_item_id": "pot_ceramic",
+      "quantity": 2
+    },
+    {
+      "merchant_item_id": "gardenias",
+      "quantity": 1
+    }
+  ],
+  "buyer": {
+    "email": "big.spender@example.com",
+    "name": {
+      "given": "Big",
+      "family": "Spender"
+    }
+  },
+  "currency": "USD"
+}

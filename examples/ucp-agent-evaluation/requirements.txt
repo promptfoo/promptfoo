@@ -1,0 +1,16 @@
+# UCP Agent Evaluation Dependencies
+
+# HTTP client
+requests>=2.28.0
+
+# Google ADK - Agent Development Kit for AI-powered checkout
+# Install with: pip install google-adk
+# Requires GOOGLE_API_KEY or GEMINI_API_KEY environment variable
+# Falls back to deterministic execution if not available
+google-adk>=0.3.0
+
+# OpenTelemetry - for tracing UCP agent operations
+opentelemetry-api>=1.28.0
+opentelemetry-sdk>=1.28.0
+opentelemetry-exporter-otlp-proto-http>=1.28.0
+opentelemetry-semantic-conventions>=0.49b0

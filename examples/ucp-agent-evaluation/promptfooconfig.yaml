@@ -1,0 +1,233 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: UCP Agent Evaluation - Universal Commerce Protocol checkout flow testing
+
+# Environment variables for configuration
+env:
+  UCP_BUSINESS_URL: http://localhost:8182
+  UCP_TRANSPORT: rest
+  # Google Cloud project for Vertex AI authentication (uses gcloud application-default credentials)
+  GOOGLE_CLOUD_PROJECT: promptfoo
+  GOOGLE_CLOUD_LOCATION: us-central1
+
+# OpenTelemetry tracing configuration
+# Enables visibility into agent operations (discovery, checkout, etc.)
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      # Python's OTLP exporter uses protobuf by default
+      acceptFormats: ['json', 'protobuf']
+
+prompts:
+  # Prompt is used to pass scenario configuration to the provider
+  - '{{scenario}}'
+
+providers:
+  # REST transport provider
+  - id: file://provider.py
+    label: UCP Agent (REST)
+    config:
+      transport: rest
+      platform_profile_path: platform_profile.json
+
+  # MCP transport provider (for transport parity testing)
+  # Note: Enable this when testing against a server with MCP support
+  # - id: file://provider.py
+  #   label: UCP Agent (MCP)
+  #   config:
+  #     transport: mcp
+  #     platform_profile_path: platform_profile.json
+
+# Default assertions applied to all tests
+defaultTest:
+  metadata:
+    tracingEnabled: true
+  assert:
+    # Protocol compliance checks
+    - type: javascript
+      value: file://assertions.js:assertUCPAgentHeader
+      weight: 1
+    - type: javascript
+      value: file://assertions.js:assertIdempotencyUsed
+      weight: 1
+    # Safety check
+    - type: javascript
+      value: file://assertions.js:assertNoSensitiveData
+      weight: 2
+    # Graceful error handling
+    - type: javascript
+      value: file://assertions.js:assertGracefulErrorHandling
+      weight: 1
+
+    # Trace-based assertions (requires tracing.enabled: true)
+    # Ensure the main checkout scenario span exists
+    - type: trace-span-count
+      value:
+        pattern: 'ucp.checkout_scenario'
+        min: 1
+        max: 1
+      weight: 0
+
+    # Ensure UCP discovery was performed
+    - type: trace-span-count
+      value:
+        pattern: 'ucp.discovery'
+        min: 1
+      weight: 0
+
+    # Ensure no error spans in the trace
+    - type: trace-error-spans
+      value:
+        max_count: 0
+      weight: 0
+
+    # Monitor overall latency (5 second max for checkout flow)
+    - type: trace-span-duration
+      value:
+        pattern: 'ucp.checkout_scenario'
+        max: 5000
+      weight: 0
+      metric: checkout_latency_ms
+
+tests:
+  # =============================================================================
+  # Suite A: Protocol Basics (deterministic correctness)
+  # =============================================================================
+
+  - description: 'Happy path checkout - basic flow completes successfully'
+    vars:
+      scenario: file://scenarios/checkout_happy_path.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 5
+
+  - description: 'Multi-item cart - handles multiple line items'
+    vars:
+      scenario: file://scenarios/multi_item_cart.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 3
+      - type: javascript
+        value: 'file://assertions.js:assertMinLineItems'
+        weight: 2
+
+  # =============================================================================
+  # Suite B: Discount Extension Tests
+  # =============================================================================
+
+  - description: 'Valid discount code - applies and updates totals'
+    vars:
+      scenario: file://scenarios/discount_valid.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertDiscountApplied
+        weight: 3
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 2
+
+  - description: 'Invalid discount code - rejection surfaced to user'
+    vars:
+      scenario: file://scenarios/discount_invalid.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertRejectedDiscountSurfaced
+        weight: 3
+      # Checkout should still succeed (just without the discount)
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 2
+
+  - description: 'Discount replacement - new codes replace old ones'
+    vars:
+      scenario: file://scenarios/discount_replacement.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertDiscountReplacementSemantics
+        weight: 2
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 2
+
+  # =============================================================================
+  # Suite C: Fulfillment Extension Tests
+  # =============================================================================
+
+  - description: 'Shipping fulfillment - address and option selection'
+    vars:
+      scenario: file://scenarios/fulfillment_shipping.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertFulfillmentHandled
+        weight: 3
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 2
+
+  - description: 'Pickup fulfillment - in-store pickup flow'
+    vars:
+      scenario: file://scenarios/fulfillment_pickup.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertFulfillmentHandled
+        weight: 3
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 2
+
+  # =============================================================================
+  # Suite D: Error Handling and Edge Cases
+  # =============================================================================
+
+  - description: 'Missing buyer info - agent provides from scenario'
+    vars:
+      scenario: |
+        {
+          "scenario_id": "missing_buyer",
+          "line_items": [{"merchant_item_id": "bouquet_roses", "quantity": 1}],
+          "buyer": {"email": "late.info@example.com"},
+          "currency": "USD"
+        }
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertSuccessCompleted
+        weight: 3
+
+  - description: 'Empty cart - graceful handling'
+    vars:
+      scenario: |
+        {
+          "scenario_id": "empty_cart",
+          "line_items": [],
+          "buyer": {"email": "empty@example.com"},
+          "currency": "USD"
+        }
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertGracefulErrorHandling
+        weight: 3
+
+  # =============================================================================
+  # Suite E: Overall Quality Scoring
+  # =============================================================================
+
+  - description: 'Overall agent quality - weighted rubric evaluation'
+    vars:
+      scenario: file://scenarios/checkout_happy_path.json
+    assert:
+      - type: javascript
+        value: file://assertions.js:assertOverallQuality
+        weight: 5
+
+# Output configuration
+outputPath: ./output/ucp-eval-results.json
+
+# Evaluation metadata
+metadata:
+  suite: ucp-agent-evaluation
+  version: '1.0.0'
+  transport_comparison: true
