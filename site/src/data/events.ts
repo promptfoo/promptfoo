@@ -332,8 +332,8 @@ export const events: Event[] = [
     shortName: 'ScaleUp:AI 2025',
     status: 'past',
     type: 'webinar',
-    startDate: '2025-12-03',
-    endDate: '2025-12-03',
+    startDate: '2025-12-03T09:00:00-05:00', // EST
+    endDate: '2025-12-03T18:00:00-05:00', // EST
     location: {
       venue: 'Insight Partners',
       city: 'New York',
@@ -376,10 +376,10 @@ export const events: Event[] = [
     slug: 'blackhat-2025',
     name: 'Promptfoo at Black Hat USA 2025',
     shortName: 'Black Hat 2025',
-    status: getEventStatus('2025-08-07'),
+    status: getEventStatus('2025-08-07T18:00:00-07:00'),
     type: 'conference',
-    startDate: '2025-08-05',
-    endDate: '2025-08-07',
+    startDate: '2025-08-05T09:00:00-07:00', // PDT
+    endDate: '2025-08-07T18:00:00-07:00', // PDT
     location: {
       venue: 'Mandalay Bay Convention Center',
       city: 'Las Vegas',
@@ -435,10 +435,10 @@ export const events: Event[] = [
     slug: 'defcon-2025',
     name: 'Promptfoo Party at DEF CON 33',
     shortName: 'DEF CON 33',
-    status: getEventStatus('2025-08-09'),
+    status: getEventStatus('2025-08-09T23:59:00-07:00'),
     type: 'party',
-    startDate: '2025-08-09',
-    endDate: '2025-08-09',
+    startDate: '2025-08-09T20:00:00-07:00', // PDT
+    endDate: '2025-08-09T23:59:00-07:00', // PDT
     location: {
       venue: 'Millennium FANDOM Bar',
       city: 'Las Vegas',
@@ -478,8 +478,8 @@ export const events: Event[] = [
     shortName: 'RSA 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-28',
-    endDate: '2025-05-01',
+    startDate: '2025-04-28T09:00:00-07:00', // PDT
+    endDate: '2025-05-01T18:00:00-07:00', // PDT
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -519,8 +519,8 @@ export const events: Event[] = [
     shortName: 'BSides SF 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-26',
-    endDate: '2025-04-27',
+    startDate: '2025-04-26T09:00:00-07:00', // PDT
+    endDate: '2025-04-27T18:00:00-07:00', // PDT
     location: {
       venue: 'City View at Metreon',
       city: 'San Francisco',
@@ -553,8 +553,8 @@ export const events: Event[] = [
     shortName: 'BSides Seattle 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-18',
-    endDate: '2025-04-19',
+    startDate: '2025-04-18T09:00:00-07:00', // PDT
+    endDate: '2025-04-19T18:00:00-07:00', // PDT
     location: {
       venue: 'Building 92 (Microsoft Visitor Center)',
       city: 'Redmond',
@@ -587,8 +587,8 @@ export const events: Event[] = [
     shortName: 'Telecom Talks 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-09',
-    endDate: '2025-04-09',
+    startDate: '2025-04-09T09:00:00-07:00', // PDT
+    endDate: '2025-04-09T18:00:00-07:00', // PDT
     location: {
       venue: 'SRI International',
       city: 'Menlo Park',
@@ -620,10 +620,10 @@ export const events: Event[] = [
     slug: 'sector-2025',
     name: 'Promptfoo at SecTor 2025',
     shortName: 'SecTor 2025',
-    status: getEventStatus('2025-10-02'),
+    status: getEventStatus('2025-10-02T18:00:00-04:00'),
     type: 'conference',
-    startDate: '2025-09-30',
-    endDate: '2025-10-02',
+    startDate: '2025-09-30T09:00:00-04:00', // EDT
+    endDate: '2025-10-02T18:00:00-04:00', // EDT
     location: {
       venue: 'Metro Toronto Convention Centre',
       city: 'Toronto',
@@ -655,10 +655,10 @@ export const events: Event[] = [
     slug: 'ai-security-summit-2025',
     name: 'Promptfoo at AI Security Summit 2025',
     shortName: 'AI Security Summit 2025',
-    status: getEventStatus('2025-10-23'),
+    status: getEventStatus('2025-10-23T18:00:00-07:00'),
     type: 'conference',
-    startDate: '2025-10-22',
-    endDate: '2025-10-23',
+    startDate: '2025-10-22T09:00:00-07:00', // PDT
+    endDate: '2025-10-23T18:00:00-07:00', // PDT
     location: {
       venue: 'Westin St. Francis',
       city: 'San Francisco',
