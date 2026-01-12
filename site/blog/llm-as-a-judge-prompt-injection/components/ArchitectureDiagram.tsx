@@ -73,20 +73,43 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
       {/* Background */}
       <rect width="700" height="320" fill="var(--ifm-background-color, #ffffff)" />
 
-      {/* Title */}
+      {/* Title Badge */}
+      {isVulnerable ? (
+        <g transform="translate(350, 28)">
+          <rect
+            x="-120"
+            y="-18"
+            width="240"
+            height="28"
+            rx="14"
+            fill="#fef2f2"
+            stroke="#fca5a5"
+            strokeWidth="1.5"
+          />
+          <text x="0" y="2" textAnchor="middle" fontSize="14" fontWeight="700" fill="#dc2626">
+            Vulnerable: Context Merging
+          </text>
+        </g>
+      ) : (
+        <g transform="translate(350, 28)">
+          <rect
+            x="-130"
+            y="-18"
+            width="260"
+            height="28"
+            rx="14"
+            fill="#f0fdf4"
+            stroke="#86efac"
+            strokeWidth="1.5"
+          />
+          <text x="0" y="2" textAnchor="middle" fontSize="14" fontWeight="700" fill="#16a34a">
+            Secure: Deterministic Extraction
+          </text>
+        </g>
+      )}
       <text
         x="350"
-        y="28"
-        textAnchor="middle"
-        fontSize="16"
-        fontWeight="700"
-        fill="var(--ifm-font-color-base, #1f2937)"
-      >
-        {isVulnerable ? '❌ Vulnerable: Context Merging' : '✓ Secure: Deterministic Extraction'}
-      </text>
-      <text
-        x="350"
-        y="48"
+        y="52"
         textAnchor="middle"
         fontSize="11"
         fill="var(--ifm-font-color-secondary, #6b7280)"
