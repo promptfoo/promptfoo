@@ -15,7 +15,7 @@ function countWords(text: string): number {
 /**
  * Handles word-count assertion
  *
- * Supports three formats:
+ * Supports the following formats:
  * 1. Exact count: value: 50
  * 2. Range: value: { min: 20, max: 50 }
  * 3. Min only: value: { min: 10 }

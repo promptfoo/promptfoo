@@ -1,10 +1,10 @@
-# Word Count Assertion Example
+# word-count-assertion (Word Count Assertion)
 
 This example demonstrates the `word-count` assertion type, which validates that LLM outputs contain a specific number of words or fall within a specified range.
 
 ## Usage
 
-The `word-count` assertion supports three formats:
+The `word-count` assertion supports four formats:
 
 ### 1. Exact Count
 

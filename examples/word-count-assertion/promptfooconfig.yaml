@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Word count assertion examples'
 
-providers:
-  - openai:gpt-4o-mini
-
 prompts:
   - 'Summarize the following in exactly {{count}} words: {{text}}'
   - 'Write a {{length}} response about: {{topic}}'
+
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   # Test 1: Exact word count
@@ -61,5 +61,4 @@ tests:
           max: 30
       - type: contains
         value: 'Promptfoo'
-      - type: is-json
-        value: false
+      - type: not-is-json
