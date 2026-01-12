@@ -38,7 +38,7 @@ import {
 } from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { readFilters } from '../../util/index';
+import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
@@ -172,6 +172,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+
+    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
+    // This allows env vars to be used in paths and other config values.
+    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
+    const renderedConfig = renderEnvOnlyInObject(dereferencedConfig);
+
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     // We create a relaxed schema for validation that makes prompts optional
     const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
@@ -190,23 +196,28 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
       },
     );
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = dereferencedConfig;
+    ret = renderedConfig;
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
-    const validationResult = UnifiedConfigSchema.safeParse(imported);
+
+    // Render environment variable templates for JS configs too.
+    // This ensures consistent behavior across config file types.
+    const renderedConfig = renderEnvOnlyInObject(imported as UnifiedConfig);
+
+    const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = imported as UnifiedConfig;
+    ret = renderedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
