@@ -15,6 +15,7 @@ vi.mock('../../../src/providers/google/util', async (importOriginal) => {
     getGoogleClient: vi.fn(),
     loadCredentials: vi.fn(),
     resolveProjectId: vi.fn(),
+    createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
   };
 });
 
