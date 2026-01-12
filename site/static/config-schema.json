@@ -141,6 +141,12 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
+                            "CLOUDFLARE_GATEWAY_ID": {
+                              "type": "string"
+                            },
+                            "CF_AIG_TOKEN": {
+                              "type": "string"
+                            },
                             "COMETAPI_KEY": {
                               "type": "string"
                             },
@@ -298,6 +304,9 @@
                               "type": "string"
                             },
                             "PROMPTFOO_INSECURE_SSL": {
+                              "type": "string"
+                            },
+                            "QUIVERAI_API_KEY": {
                               "type": "string"
                             },
                             "REPLICATE_API_KEY": {

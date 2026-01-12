@@ -1,11 +1,14 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
@@ -179,10 +182,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
-    // Load response_format from external file if needed, similar to chat provider
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     let textFormat;
     if (responseFormat) {
@@ -195,13 +199,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            responseFormat.schema || responseFormat.json_schema?.schema,
-            context?.vars,
-          ),
-        );
-
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
@@ -321,14 +320,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let timeout = REQUEST_TIMEOUT_MS;
     const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
     if (isLongRunningModel) {
-      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
-      // otherwise default to 10 minutes (600,000ms)
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      if (evalTimeout > 0) {
-        timeout = evalTimeout;
-      } else {
-        timeout = 600_000; // 10 minutes default for long-running models
-      }
+      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
