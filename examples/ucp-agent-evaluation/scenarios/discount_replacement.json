@@ -15,5 +15,19 @@
     }
   },
   "discount_codes": ["WELCOME20"],
+  "fulfillment": {
+    "methods": [
+      {
+        "id": "pickup_method",
+        "type": "pickup",
+        "groups": [
+          {
+            "id": "pickup_group",
+            "selected_option_id": "store-pickup"
+          }
+        ]
+      }
+    ]
+  },
   "currency": "USD"
 }

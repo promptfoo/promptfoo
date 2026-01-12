@@ -1,6 +1,6 @@
 {
   "scenario_id": "checkout_happy_path",
-  "description": "Basic checkout flow with line items and buyer info",
+  "description": "Basic checkout flow with line items, buyer info, and pickup fulfillment",
   "line_items": [
     {
       "merchant_item_id": "bouquet_roses",
@@ -13,6 +13,20 @@
       "given": "Jane",
       "family": "Doe"
     }
+  },
+  "fulfillment": {
+    "methods": [
+      {
+        "id": "pickup_method",
+        "type": "pickup",
+        "groups": [
+          {
+            "id": "pickup_group",
+            "selected_option_id": "store-pickup"
+          }
+        ]
+      }
+    ]
   },
   "currency": "USD"
 }

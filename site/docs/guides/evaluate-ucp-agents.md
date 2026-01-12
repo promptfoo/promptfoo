@@ -28,7 +28,9 @@ npx promptfoo@latest init --example ucp-agent-evaluation
    ```bash
    pip install -r requirements.txt
    ```
-2. **Google API Key** (optional): Set `GOOGLE_API_KEY` for AI-powered agent. Falls back to deterministic execution without it.
+2. **Gemini Access** (required): Either:
+   - Set `GOOGLE_API_KEY` for Gemini Developer API, or
+   - Configure `GOOGLE_CLOUD_PROJECT` for Vertex AI with gcloud credentials
 3. **UCP Merchant Server** - See [server setup](#setting-up-the-ucp-merchant-server)
 
 ## Understanding UCP
@@ -118,7 +120,7 @@ tests:
         value: file://assertions.js:assertSuccessCompleted
 ```
 
-Scenarios are JSON files defining checkout inputs. See `scenarios/checkout_happy_path.json` for the complete file:
+Scenarios are JSON files defining checkout inputs. See `scenarios/checkout_happy_path.json` for an example:
 
 ```json title="scenarios/checkout_happy_path.json"
 {
@@ -127,6 +129,13 @@ Scenarios are JSON files defining checkout inputs. See `scenarios/checkout_happy
   "buyer": {
     "email": "jane.doe@example.com",
     "name": { "given": "Jane", "family": "Doe" }
+  },
+  "fulfillment": {
+    "methods": [{
+      "id": "pickup_method",
+      "type": "pickup",
+      "groups": [{ "id": "pickup_group", "selected_option_id": "store-pickup" }]
+    }]
   },
   "currency": "USD"
 }
@@ -138,14 +147,14 @@ The example uses product IDs from the flower shop test data: `bouquet_roses`, `b
 
 ## AI Agent Architecture
 
-The agent uses Google ADK with Gemini 3.0 Flash to reason about UCP protocol:
+The agent uses Google ADK with Gemini 2.0 Flash to reason about UCP protocol:
 
 ```python
 from google.adk.agents import Agent
 
 agent = Agent(
     name="ucp_checkout_agent",
-    model="gemini-3.0-flash-preview",
+    model="gemini-2.0-flash-001",
     tools=[
         discover_ucp_server,
         create_checkout,
@@ -162,8 +171,6 @@ agent = Agent(
 )
 ```
 
-If `GOOGLE_API_KEY` is not set, the agent falls back to deterministic execution for testing without API costs.
-
 ## Testing UCP Extensions
 
 ### Discounts
@@ -172,10 +179,17 @@ UCP's discount extension uses replacement semantics—new codes replace old ones
 
 ```json
 {
-  "scenario_id": "discount_test",
-  "line_items": [{ "merchant_item_id": "bouquet_roses", "quantity": 3 }],
+  "scenario_id": "discount_valid",
+  "line_items": [{ "merchant_item_id": "bouquet_roses", "quantity": 1 }],
   "discount_codes": ["10OFF"],
-  "buyer": { "email": "test@example.com" }
+  "buyer": { "email": "discount.lover@example.com" },
+  "fulfillment": {
+    "methods": [{
+      "id": "pickup_method",
+      "type": "pickup",
+      "groups": [{ "id": "pickup_group", "selected_option_id": "store-pickup" }]
+    }]
+  }
 }
 ```
 
@@ -415,7 +429,10 @@ Add to your CI pipeline:
 
 - name: Run UCP Agent Eval
   env:
+    # Use Gemini API key or Vertex AI credentials
     GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+    # Or for Vertex AI:
+    # GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT }}
   run: npx promptfoo@latest eval --no-cache
 
 - name: Check Results

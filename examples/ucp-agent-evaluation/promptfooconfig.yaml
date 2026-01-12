@@ -5,9 +5,10 @@ description: UCP Agent Evaluation - Universal Commerce Protocol checkout flow te
 env:
   UCP_BUSINESS_URL: http://localhost:8182
   UCP_TRANSPORT: rest
-  # Uncomment and set these for Vertex AI authentication (uses gcloud application-default credentials)
-  # GOOGLE_CLOUD_PROJECT: your-project-id
-  # GOOGLE_CLOUD_LOCATION: us-central1
+  # For Vertex AI authentication (uses gcloud application-default credentials)
+  # Set these if using Vertex AI, or set GOOGLE_API_KEY for Gemini Developer API
+  GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+  GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
 
 # OpenTelemetry tracing configuration
 # Enables visibility into agent operations (discovery, checkout, etc.)

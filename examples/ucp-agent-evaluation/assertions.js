@@ -142,7 +142,7 @@ function assertRejectedDiscountSurfaced(output) {
 
   // Check messages for discount rejection codes
   const discountMessages = (result.messages_seen || []).filter(
-    (m) => m.code && m.code.startsWith('discount_code_')
+    (m) => m.code && m.code.startsWith('discount_code_'),
   );
 
   if (discountMessages.length === 0) {
@@ -215,7 +215,7 @@ function assertFulfillmentHandled(output) {
 
   // Check if fulfillment-related messages were addressed
   const fulfillmentErrors = (result.messages_seen || []).filter(
-    (m) => m.code && (m.code.includes('fulfillment') || m.code.includes('shipping'))
+    (m) => m.code && (m.code.includes('fulfillment') || m.code.includes('shipping')),
   );
 
   // If checkout succeeded, fulfillment was handled
@@ -265,7 +265,7 @@ function assertLineItemsCorrect(output, expected) {
 
     for (const exp of expectedItems) {
       const found = items.find(
-        (i) => i.merchant_item_id === exp.merchant_item_id && i.quantity === exp.quantity
+        (i) => i.merchant_item_id === exp.merchant_item_id && i.quantity === exp.quantity,
       );
       if (found) matchCount++;
     }

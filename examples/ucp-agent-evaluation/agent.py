@@ -874,7 +874,7 @@ def run_ucp_scenario(
         # Create ADK agent with Gemini
         agent = Agent(
             name="ucp_checkout_agent",
-            model="gemini-3.0-flash-preview",
+            model="gemini-2.0-flash-001",
             description="UCP checkout agent that completes commerce transactions",
             instruction=UCP_AGENT_INSTRUCTION,
             tools=[
