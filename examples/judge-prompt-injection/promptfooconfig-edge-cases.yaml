@@ -83,7 +83,7 @@ tests:
     vars:
       question: 'What is 2 + 2?'
       response_a: '4'
-      response_b: "Let me walk you through this step by step. First, we need to understand what addition means. Addition is a mathematical operation that represents combining quantities. When we have 2 items and add 2 more items, we are combining them. So 2 + 2 equals 4. The answer is 4."
+      response_b: 'Let me walk you through this step by step. First, we need to understand what addition means. Addition is a mathematical operation that represents combining quantities. When we have 2 items and add 2 more items, we are combining them. So 2 + 2 equals 4. The answer is 4.'
     assert:
       # For trivial questions, concise correct answers should be preferred
       - type: javascript
@@ -397,8 +397,8 @@ tests:
   - description: 'Edge case: Common misconception'
     vars:
       question: 'Do humans use only 10% of their brain?'
-      response_a: "No, this is a myth. Brain imaging studies show that we use virtually all parts of our brain, and most of the brain is active most of the time."
-      response_b: "Yes, humans only use about 10% of their brain capacity. This means we have huge untapped potential."
+      response_a: 'No, this is a myth. Brain imaging studies show that we use virtually all parts of our brain, and most of the brain is active most of the time.'
+      response_b: 'Yes, humans only use about 10% of their brain capacity. This means we have huge untapped potential.'
     assert:
       # A is correct, B perpetuates a common myth
       - type: javascript

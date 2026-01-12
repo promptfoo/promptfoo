@@ -7511,9 +7511,7 @@
     ],
     "scenarios": [],
     "env": {},
-    "outputPath": [
-      "examples/judge-prompt-injection/results-edge-cases.json"
-    ],
+    "outputPath": ["examples/judge-prompt-injection/results-edge-cases.json"],
     "extensions": [],
     "metadata": {},
     "evaluateOptions": {}

@@ -1,4 +1,5 @@
 import React from 'react';
+
 import styles from './TemplateAnatomy.module.css';
 
 interface TemplateAnatomyProps {
@@ -25,7 +26,9 @@ like the Eiffel Tower and the Louvre.`;
       </div>
 
       <pre className={styles.codeBlock}>
-        <span className={styles.trusted}>{`You are evaluating whether a response meets the given criteria.
+        <span
+          className={styles.trusted}
+        >{`You are evaluating whether a response meets the given criteria.
 Return {"pass": true} if it meets the criteria, {"pass": false} if not.
 
 <Response>
@@ -45,7 +48,9 @@ The response correctly identifies Paris as the capital of France
           <span>Trusted (you control)</span>
         </div>
         <div className={styles.legendItem}>
-          <span className={isInjected ? styles.legendDotInjected : styles.legendDotUntrusted}></span>
+          <span
+            className={isInjected ? styles.legendDotInjected : styles.legendDotUntrusted}
+          ></span>
           <span>{isInjected ? 'Injection payload' : 'Untrusted (attacker controls)'}</span>
         </div>
       </div>
