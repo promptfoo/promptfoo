@@ -234,7 +234,12 @@ function ResultsTableHeader({
   'use no memo';
   return (
     <div
-      className={`relative ${stickyHeader ? 'results-table-sticky' : ''} ${hasMinimalScrollRoom ? 'minimal-scroll-room' : ''}`}
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
     >
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button

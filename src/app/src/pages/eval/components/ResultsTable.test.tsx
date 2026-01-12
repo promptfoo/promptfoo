@@ -3482,7 +3482,7 @@ describe('ResultsTable minimal scroll room detection', () => {
       vi.runAllTimers();
     });
 
-    const stickyContainer = document.querySelector('.relative');
+    const stickyContainer = screen.getByTestId('results-table-header');
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
   });
 
@@ -3498,7 +3498,7 @@ describe('ResultsTable minimal scroll room detection', () => {
       vi.runAllTimers();
     });
 
-    const stickyContainer = document.querySelector('.relative');
+    const stickyContainer = screen.getByTestId('results-table-header');
     expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
   });
 
@@ -3515,7 +3515,7 @@ describe('ResultsTable minimal scroll room detection', () => {
     });
 
     // Verify no class initially
-    let stickyContainer = document.querySelector('.relative');
+    let stickyContainer = screen.getByTestId('results-table-header');
     expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
 
     // Change to minimal scroll room and trigger resize
@@ -3525,7 +3525,7 @@ describe('ResultsTable minimal scroll room detection', () => {
       window.dispatchEvent(new Event('resize'));
     });
 
-    stickyContainer = document.querySelector('.relative');
+    stickyContainer = screen.getByTestId('results-table-header');
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
   });
 });
