@@ -24,8 +24,8 @@ cloudflare-gateway:{provider}:{model}
 
 **Examples:**
 
-- `cloudflare-gateway:openai:gpt-4o`
-- `cloudflare-gateway:anthropic:claude-sonnet-4-20250514`
+- `cloudflare-gateway:openai:gpt-5.2`
+- `cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929`
 - `cloudflare-gateway:groq:llama-3.3-70b-versatile`
 
 ## Required Configuration
@@ -59,7 +59,7 @@ If you've configured [BYOK in Cloudflare](https://developers.cloudflare.com/ai-g
 ```yaml
 providers:
   # No OPENAI_API_KEY needed - Cloudflare uses stored key
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -85,7 +85,7 @@ prompts:
   - 'Answer this question: {{question}}'
 
 providers:
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -167,11 +167,11 @@ providers:
 
 ### Provider-Specific Options
 
-All options from the underlying provider are supported. For example, when using `cloudflare-gateway:openai:gpt-4o`, you can use any [OpenAI provider options](/docs/providers/openai).
+All options from the underlying provider are supported. For example, when using `cloudflare-gateway:openai:gpt-5.2`, you can use any [OpenAI provider options](/docs/providers/openai).
 
 ```yaml
 providers:
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -191,12 +191,12 @@ prompts:
   - 'Explain {{topic}} in simple terms.'
 
 providers:
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
-  - id: cloudflare-gateway:anthropic:claude-sonnet-4-20250514
+  - id: cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -217,7 +217,7 @@ If your AI Gateway requires authentication:
 
 ```yaml
 providers:
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -230,7 +230,7 @@ Use custom environment variable names for different projects or environments:
 
 ```yaml
 providers:
-  - id: cloudflare-gateway:openai:gpt-4o
+  - id: cloudflare-gateway:openai:gpt-5.2
     config:
       accountIdEnvar: MY_CF_ACCOUNT
       gatewayIdEnvar: MY_CF_GATEWAY
