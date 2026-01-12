@@ -39,6 +39,89 @@
     radial-gradient(ellipse at 70% 70%, rgba(212, 165, 55, 0.08) 0%, transparent 50%);
 }
 
+/* Risk Meter Animation */
+.riskMeterContainer {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.riskMeter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(30, 58, 95, 0.3);
+  border: 1px solid rgba(212, 165, 55, 0.2);
+  border-radius: 100px;
+}
+
+.riskMeterLabel {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.riskMeterBars {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 20px;
+}
+
+.riskBar {
+  width: 4px;
+  background: #d4a537;
+  border-radius: 2px;
+  animation: riskPulse 2s ease-in-out infinite;
+}
+
+.riskBar:nth-child(1) {
+  height: 6px;
+  animation-delay: 0s;
+}
+
+.riskBar:nth-child(2) {
+  height: 10px;
+  animation-delay: 0.15s;
+}
+
+.riskBar:nth-child(3) {
+  height: 14px;
+  animation-delay: 0.3s;
+}
+
+.riskBar:nth-child(4) {
+  height: 18px;
+  animation-delay: 0.45s;
+}
+
+.riskBar:nth-child(5) {
+  height: 12px;
+  animation-delay: 0.6s;
+}
+
+@keyframes riskPulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.2);
+  }
+}
+
+.riskMeterStatus {
+  font-size: 0.75rem;
+  color: #22c55e;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .heroContent {
   max-width: 1000px;
   margin: 0 auto;

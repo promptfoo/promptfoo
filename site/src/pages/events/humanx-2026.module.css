@@ -50,6 +50,140 @@
   }
 }
 
+/* AI Thinking Animation */
+.aiThinkingContainer {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.aiThinking {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 100px;
+  font-size: 0.875rem;
+  color: #67e8f9;
+}
+
+.aiThinkingDots {
+  display: flex;
+  gap: 4px;
+}
+
+.aiThinkingDot {
+  width: 6px;
+  height: 6px;
+  background: #06b6d4;
+  border-radius: 50%;
+  animation: aiPulse 1.4s ease-in-out infinite;
+}
+
+.aiThinkingDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.aiThinkingDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes aiPulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Neural Nodes Floating Animation */
+.neuralNodes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.node {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: rgba(124, 58, 237, 0.4);
+  border-radius: 50%;
+  animation: nodeFloat 8s ease-in-out infinite;
+}
+
+.node::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.3), transparent);
+  transform-origin: left center;
+}
+
+.node:nth-child(1) {
+  top: 20%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.node:nth-child(2) {
+  top: 60%;
+  left: 85%;
+  animation-delay: 2s;
+}
+
+.node:nth-child(2)::after {
+  transform: rotate(180deg);
+}
+
+.node:nth-child(3) {
+  top: 80%;
+  left: 20%;
+  animation-delay: 4s;
+}
+
+.node:nth-child(4) {
+  top: 30%;
+  left: 90%;
+  animation-delay: 1s;
+}
+
+.node:nth-child(4)::after {
+  transform: rotate(200deg);
+}
+
+.node:nth-child(5) {
+  top: 70%;
+  left: 5%;
+  animation-delay: 3s;
+}
+
+@keyframes nodeFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1);
+    opacity: 1;
+  }
+}
+
 .heroContent {
   max-width: 1000px;
   margin: 0 auto;

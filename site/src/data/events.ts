@@ -90,8 +90,8 @@ export const events: Event[] = [
     shortName: 'BSides Seattle 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-02-27T12:00:00',
-    endDate: '2026-02-28T12:00:00',
+    startDate: '2026-02-27T09:00:00-08:00', // PST
+    endDate: '2026-02-28T18:00:00-08:00', // PST
     location: {
       venue: 'Building 92 (Microsoft Campus)',
       city: 'Redmond',
@@ -130,8 +130,8 @@ export const events: Event[] = [
     shortName: 'RSA 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-23T12:00:00',
-    endDate: '2026-03-26T12:00:00',
+    startDate: '2026-03-23T09:00:00-07:00', // PDT
+    endDate: '2026-03-26T18:00:00-07:00', // PDT
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -170,8 +170,8 @@ export const events: Event[] = [
     shortName: 'BSides SF 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-21T12:00:00',
-    endDate: '2026-03-22T12:00:00',
+    startDate: '2026-03-21T09:00:00-07:00', // PDT
+    endDate: '2026-03-22T18:00:00-07:00', // PDT
     location: {
       venue: 'City View at the Metreon',
       city: 'San Francisco',
@@ -210,8 +210,8 @@ export const events: Event[] = [
     shortName: 'HumanX 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-04-06T12:00:00',
-    endDate: '2026-04-09T12:00:00',
+    startDate: '2026-04-06T09:00:00-07:00', // PDT
+    endDate: '2026-04-09T18:00:00-07:00', // PDT
     location: {
       venue: 'Moscone Center South',
       city: 'San Francisco',
@@ -250,8 +250,8 @@ export const events: Event[] = [
     shortName: 'Gartner Security 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-06-01T12:00:00',
-    endDate: '2026-06-03T12:00:00',
+    startDate: '2026-06-01T09:00:00-04:00', // EDT
+    endDate: '2026-06-03T18:00:00-04:00', // EDT
     location: {
       venue: 'Gaylord National Resort & Convention Center',
       city: 'National Harbor',
@@ -290,8 +290,8 @@ export const events: Event[] = [
     shortName: 'Black Hat 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-08-01T12:00:00',
-    endDate: '2026-08-06T12:00:00',
+    startDate: '2026-08-01T09:00:00-07:00', // PDT
+    endDate: '2026-08-06T18:00:00-07:00', // PDT
     location: {
       venue: 'Mandalay Bay Convention Center',
       city: 'Las Vegas',

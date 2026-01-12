@@ -81,6 +81,20 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime
                 guardrails, and reporting security leadership can track.
               </p>
+              {/* Risk Meter Animation */}
+              <div className={styles.riskMeterContainer}>
+                <div className={styles.riskMeter}>
+                  <span className={styles.riskMeterLabel}>Risk Coverage</span>
+                  <div className={styles.riskMeterBars}>
+                    <div className={styles.riskBar} />
+                    <div className={styles.riskBar} />
+                    <div className={styles.riskBar} />
+                    <div className={styles.riskBar} />
+                    <div className={styles.riskBar} />
+                  </div>
+                  <span className={styles.riskMeterStatus}>Monitoring</span>
+                </div>
+              </div>
               <div className={styles.heroButtons}>
                 <a
                   href="#learn-more"

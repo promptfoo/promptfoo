@@ -56,6 +56,14 @@ export default function HumanX2026(): React.ReactElement {
       <main className={styles.humanxPage}>
         {/* Hero Section */}
         <section className={styles.hero}>
+          {/* Floating Neural Nodes */}
+          <div className={styles.neuralNodes}>
+            <div className={styles.node} />
+            <div className={styles.node} />
+            <div className={styles.node} />
+            <div className={styles.node} />
+            <div className={styles.node} />
+          </div>
           <div className={styles.heroBackground}>
             <div className={styles.heroContent}>
               <div className={styles.badge}>HumanX 2026</div>
@@ -69,6 +77,17 @@ export default function HumanX2026(): React.ReactElement {
                 demos on testing and securing LLM features across copilots, RAG, and agents, before
                 launch and continuously in production.
               </p>
+              {/* AI Thinking Animation */}
+              <div className={styles.aiThinkingContainer}>
+                <div className={styles.aiThinking}>
+                  <span>AI is evaluating</span>
+                  <div className={styles.aiThinkingDots}>
+                    <div className={styles.aiThinkingDot} />
+                    <div className={styles.aiThinkingDot} />
+                    <div className={styles.aiThinkingDot} />
+                  </div>
+                </div>
+              </div>
               <div className={styles.heroButtons}>
                 <a
                   href="#learn-more"
