@@ -450,6 +450,20 @@ export function logsCommand(program: Command) {
             return;
           }
 
+          // Check if interactive UI should be used
+          // Interactive mode: no --lines, no --head, and PROMPTFOO_ENABLE_INTERACTIVE_UI=true
+          const useInteractive =
+            !cmdObj.lines && !cmdObj.head && (await import('../ui')).shouldUseInkUI();
+
+          if (useInteractive) {
+            const { runInteractiveLogViewer } = await import('../ui/logs/logsRunner');
+            await runInteractiveLogViewer({
+              filePath: logPath,
+              grep: cmdObj.grep,
+            });
+            return;
+          }
+
           // Print header and content
           await printLogHeader(logPath, isCurrentSession);
 

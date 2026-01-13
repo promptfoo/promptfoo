@@ -61,8 +61,8 @@ function NavigableList() {
   const items = ['Item 1', 'Item 2', 'Item 3'];
 
   useNavigationKeys({
-    onUp: () => setIndex(i => Math.max(0, i - 1)),
-    onDown: () => setIndex(i => Math.min(items.length - 1, i + 1)),
+    onUp: () => setIndex((i) => Math.max(0, i - 1)),
+    onDown: () => setIndex((i) => Math.min(items.length - 1, i + 1)),
     onEnter: () => console.log(`Selected: ${items[index]}`),
     onEscape: () => process.exit(0),
   });
@@ -71,7 +71,8 @@ function NavigableList() {
     <Box flexDirection="column">
       {items.map((item, i) => (
         <Text key={i} color={i === index ? 'cyan' : undefined}>
-          {i === index ? '▶ ' : '  '}{item}
+          {i === index ? '▶ ' : '  '}
+          {item}
         </Text>
       ))}
     </Box>
@@ -87,6 +88,7 @@ function ConfirmDialog({ onConfirm }: { onConfirm: (yes: boolean) => void }) {
 ```
 
 **Key properties:**
+
 - `key.name` - Named key: `'up'`, `'down'`, `'return'`, `'escape'`, `'tab'`, `'space'`, etc.
 - `key.key` - Character for printable keys
 - `key.ctrl`, `key.meta`, `key.shift` - Modifier states
@@ -109,10 +111,10 @@ function Loading() {
 
 // Different spinner styles
 function SpinnerDemo() {
-  const dots = useSpinnerFrame({ type: 'dots' });    // ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏
-  const line = useSpinnerFrame({ type: 'line' });    // -\|/
+  const dots = useSpinnerFrame({ type: 'dots' }); // ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏
+  const line = useSpinnerFrame({ type: 'line' }); // -\|/
   const circle = useSpinnerFrame({ type: 'circle' }); // ◐◓◑◒
-  const arc = useSpinnerFrame({ type: 'arc' });       // ◜◠◝◞◡◟
+  const arc = useSpinnerFrame({ type: 'arc' }); // ◜◠◝◞◡◟
 
   return (
     <Box flexDirection="column">
@@ -167,7 +169,9 @@ function ResponsiveList({ items }: { items: string[] }) {
 
   return (
     <Box flexDirection="column">
-      <Text dimColor>Terminal: {width}x{height}</Text>
+      <Text dimColor>
+        Terminal: {width}x{height}
+      </Text>
       {items.slice(0, maxVisible).map((item, i) => (
         <Text key={i}>{truncate(item, Math.floor(width / columns) - 2)}</Text>
       ))}
@@ -213,42 +217,42 @@ import {
   formatPercent,
   truncate,
   calculateETA,
-  formatETA
+  formatETA,
 } from '../utils/format';
 
 // Token counts
-formatTokens(500);        // "500"
-formatTokens(12500);      // "12.5k"
-formatTokens(1500000);    // "1.5M"
+formatTokens(500); // "500"
+formatTokens(12500); // "12.5k"
+formatTokens(1500000); // "1.5M"
 
 // Costs
-formatCost(0.0035);       // "$0.0035"
-formatCost(0.50);         // "$0.50"
-formatCost(1.50);         // "$1.50"
-formatCost(150);          // "$150"
+formatCost(0.0035); // "$0.0035"
+formatCost(0.5); // "$0.50"
+formatCost(1.5); // "$1.50"
+formatCost(150); // "$150"
 
 // Latency (for API response times)
-formatLatency(234);       // "234ms"
-formatLatency(1500);      // "1.5s"
-formatLatency(12000);     // "12s"
+formatLatency(234); // "234ms"
+formatLatency(1500); // "1.5s"
+formatLatency(12000); // "12s"
 
 // Duration (for elapsed time)
-formatDuration(500);      // "500ms"
-formatDuration(5000);     // "5.0s"
-formatDuration(125000);   // "2m 5s"
-formatDuration(7380000);  // "2h 3m"
+formatDuration(500); // "500ms"
+formatDuration(5000); // "5.0s"
+formatDuration(125000); // "2m 5s"
+formatDuration(7380000); // "2h 3m"
 
 // Percentages
-formatPercent(85, 100);   // "85%"
-formatPercent(17, 20);    // "85%"
+formatPercent(85, 100); // "85%"
+formatPercent(17, 20); // "85%"
 
 // Truncation (Unicode-safe)
-truncate('Hello World', 8);  // "Hello W…"
-truncate('Hello', 10);       // "Hello"
+truncate('Hello World', 8); // "Hello W…"
+truncate('Hello', 10); // "Hello"
 
 // ETA calculation
-const eta = calculateETA(50, 100, 30000);  // 50 of 100 done in 30s
-formatETA(eta);  // "~30s left"
+const eta = calculateETA(50, 100, 30000); // 50 of 100 done in 30s
+formatETA(eta); // "~30s left"
 ```
 
 ---
@@ -269,23 +273,23 @@ logs.push('[DEBUG] Processing...');
 logs.push('[ERROR] Failed!');
 
 // Properties
-logs.size;      // 3
-logs.capacity;  // 1000
-logs.isEmpty;   // false
-logs.isFull;    // false
+logs.size; // 3
+logs.capacity; // 1000
+logs.isEmpty; // false
+logs.isFull; // false
 
 // Access items (0 = oldest)
-logs.get(0);           // '[INFO] Starting...'
-logs.newest();         // '[ERROR] Failed!'
-logs.oldest();         // '[INFO] Starting...'
+logs.get(0); // '[INFO] Starting...'
+logs.newest(); // '[ERROR] Failed!'
+logs.oldest(); // '[INFO] Starting...'
 
 // Get arrays
-logs.toArray();        // All items, oldest first
-logs.last(10);         // Last 10 items
+logs.toArray(); // All items, oldest first
+logs.last(10); // Last 10 items
 
 // Find and filter
-logs.find(log => log.includes('ERROR'));  // First error
-logs.filter(log => log.includes('DEBUG')); // All debug logs
+logs.find((log) => log.includes('ERROR')); // First error
+logs.filter((log) => log.includes('DEBUG')); // All debug logs
 
 // Iterate
 for (const log of logs) {
@@ -297,7 +301,7 @@ logs.forEach((log, index) => {
 });
 
 // Map
-const timestamps = logs.map(log => log.slice(1, 6)); // Extract level
+const timestamps = logs.map((log) => log.slice(1, 6)); // Extract level
 
 // Clear
 logs.clear();
@@ -338,7 +342,7 @@ import {
   exportTableToFile,
   convertTableToFormat,
   EXPORT_FORMATS,
-  generateDefaultFilename
+  generateDefaultFilename,
 } from '../utils/export';
 
 const data = {
@@ -347,7 +351,7 @@ const data = {
     { id: 'test-1', score: 0.95, status: 'pass' },
     { id: 'test-2', score: 0.42, status: 'fail' },
   ],
-  summary: { total: 2, passed: 1, failed: 1 }
+  summary: { total: 2, passed: 1, failed: 1 },
 };
 
 // Export to file
@@ -381,20 +385,17 @@ function ResultsSummary({ passed, failed, score }) {
   return (
     <Box flexDirection="column">
       {/* Basic badges */}
-      <Badge variant="success">PASS</Badge>   {/* [PASS] in green */}
-      <Badge variant="error">FAIL</Badge>     {/* [FAIL] in red */}
-      <Badge variant="warning">WARN</Badge>   {/* [WARN] in yellow */}
-      <Badge variant="info">INFO</Badge>      {/* [INFO] in blue */}
-
+      <Badge variant="success">PASS</Badge> {/* [PASS] in green */}
+      <Badge variant="error">FAIL</Badge> {/* [FAIL] in red */}
+      <Badge variant="warning">WARN</Badge> {/* [WARN] in yellow */}
+      <Badge variant="info">INFO</Badge> {/* [INFO] in blue */}
       {/* Pass/fail shorthand */}
-      <PassFail passed={true} />              {/* [PASS] */}
-      <PassFail passed={false} />             {/* [FAIL] */}
-
+      <PassFail passed={true} /> {/* [PASS] */}
+      <PassFail passed={false} /> {/* [FAIL] */}
       {/* Score with auto-coloring */}
-      <Score value={0.95} />                  {/* 95% in green */}
-      <Score value={0.55} />                  {/* 55% in yellow */}
-      <Score value={0.25} />                  {/* 25% in red */}
-
+      <Score value={0.95} /> {/* 95% in green */}
+      <Score value={0.55} /> {/* 55% in yellow */}
+      <Score value={0.25} /> {/* 25% in red */}
       {/* Count with label */}
       <CountBadge count={42} label="tests" color="cyan" />
     </Box>
@@ -415,30 +416,15 @@ function EvalProgress({ completed, total }) {
   return (
     <Box flexDirection="column">
       {/* Full progress bar */}
-      <ProgressBar
-        value={completed}
-        max={total}
-        label="Progress"
-        showPercentage
-        color="green"
-      />
+      <ProgressBar value={completed} max={total} label="Progress" showPercentage color="green" />
       {/* Output: Progress [████████████░░░░░░░░░░░░] 50% */}
 
       {/* With count display */}
-      <ProgressBar
-        value={completed}
-        max={total}
-        showCount
-        showPercentage={false}
-      />
+      <ProgressBar value={completed} max={total} showCount showPercentage={false} />
       {/* Output: [████████████░░░░░░░░░░░░] 50/100 */}
 
       {/* Custom characters */}
-      <ProgressBar
-        value={75}
-        filledChar="="
-        emptyChar="-"
-      />
+      <ProgressBar value={75} filledChar="=" emptyChar="-" />
       {/* Output: [==================------] 75% */}
 
       {/* Compact inline version */}
@@ -470,7 +456,7 @@ function LoadingDemo() {
 
       {/* Status spinner (loading → success/error) */}
       <StatusSpinner
-        status="loading"  // or 'success', 'error', 'warning'
+        status="loading" // or 'success', 'error', 'warning'
         text="Connecting..."
         successText="Connected!"
         errorText="Connection failed"
@@ -534,7 +520,7 @@ function App() {
 
 // Or use HOC
 const SafeComponent = withErrorBoundary(MyRiskyComponent, {
-  fallback: <Text color="red">Error loading component</Text>
+  fallback: <Text color="red">Error loading component</Text>,
 });
 ```
 
@@ -559,7 +545,7 @@ interface EvalResult {
   cost: number;
 }
 
-function EvalViewer({ results, isRunning }: { results: EvalResult[], isRunning: boolean }) {
+function EvalViewer({ results, isRunning }: { results: EvalResult[]; isRunning: boolean }) {
   const { exit } = useApp();
   const { width } = useTerminalSize();
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -568,17 +554,17 @@ function EvalViewer({ results, isRunning }: { results: EvalResult[], isRunning: 
   // Handle keyboard navigation
   useKeypress((key) => {
     if (key.name === 'up' || key.key === 'k') {
-      setSelectedIndex(i => Math.max(0, i - 1));
+      setSelectedIndex((i) => Math.max(0, i - 1));
     }
     if (key.name === 'down' || key.key === 'j') {
-      setSelectedIndex(i => Math.min(results.length - 1, i + 1));
+      setSelectedIndex((i) => Math.min(results.length - 1, i + 1));
     }
     if (key.name === 'escape' || key.key === 'q') {
       exit();
     }
   });
 
-  const passed = results.filter(r => r.passed).length;
+  const passed = results.filter((r) => r.passed).length;
   const total = results.length;
 
   return (
@@ -610,7 +596,8 @@ function EvalViewer({ results, isRunning }: { results: EvalResult[], isRunning: 
             </Badge>
             <Text> {truncate(result.id, 20)} </Text>
             <Text dimColor>
-              {formatLatency(result.latencyMs)} · {formatTokens(result.tokens)} · {formatCost(result.cost)}
+              {formatLatency(result.latencyMs)} · {formatTokens(result.tokens)} ·{' '}
+              {formatCost(result.cost)}
             </Text>
           </Box>
         ))}
