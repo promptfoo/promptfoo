@@ -176,7 +176,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
     // This allows env vars to be used in paths and other config values.
     // Runtime templates like {{ vars.x }} are preserved for later evaluation.
-    const renderedConfig = renderEnvOnlyInObject(dereferencedConfig);
+    let renderedConfig = renderEnvOnlyInObject(dereferencedConfig);
 
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     // We create a relaxed schema for validation that makes prompts optional
@@ -186,18 +186,53 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       providers: ProvidersSchema.optional(),
       targets: ProvidersSchema.optional(),
       prompts: TestSuiteConfigSchema.shape.prompts.optional(),
-    }).refine(
-      (data) => {
-        const hasTargets = data.targets !== undefined;
-        const hasProviders = data.providers !== undefined;
-        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-      },
-      {
-        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-      },
-    );
+      // Top level redteam options to be transformed
+      plugins: z.any().optional(), // Transformed to redteam.plugins
+      strategies: z.any().optional(), // Transformed to redteam.strategies
+    })
+      .refine(
+        (data) => {
+          const hasTargets = data.targets !== undefined;
+          const hasProviders = data.providers !== undefined;
+          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+        },
+        {
+          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+        },
+      )
+      .transform((data) => {
+        if (data.targets && !data.providers) {
+          data.providers = data.targets;
+          delete data.targets;
+        }
+
+        // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+        if (
+          data.extensions === null ||
+          data.extensions === undefined ||
+          (Array.isArray(data.extensions) && data.extensions.length === 0)
+        ) {
+          delete data.extensions;
+        }
+
+        if (data.plugins) {
+          data.redteam = data.redteam || {};
+          data.redteam.plugins = data.plugins;
+          delete data.plugins;
+        }
+        if (data.strategies) {
+          data.redteam = data.redteam || {};
+          data.redteam.strategies = data.strategies;
+          delete data.strategies;
+        }
+
+        return data;
+      });
+
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
-    if (!validationResult.success) {
+    if (validationResult.success) {
+      renderedConfig = validationResult.data as UnifiedConfig;
+    } else {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
@@ -209,10 +244,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 
     // Render environment variable templates for JS configs too.
     // This ensures consistent behavior across config file types.
-    const renderedConfig = renderEnvOnlyInObject(imported as UnifiedConfig);
+    let renderedConfig = renderEnvOnlyInObject(imported as UnifiedConfig);
 
     const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
-    if (!validationResult.success) {
+    if (validationResult.success) {
+      renderedConfig = validationResult.data;
+    } else {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
@@ -222,23 +259,6 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
 
-  if (ret.targets) {
-    logger.debug(`Rewriting config.targets to config.providers`);
-    ret.providers = ret.targets;
-    delete ret.targets;
-  }
-  if (ret.plugins) {
-    logger.debug(`Rewriting config.plugins to config.redteam.plugins`);
-    ret.redteam = ret.redteam || {};
-    ret.redteam.plugins = ret.plugins;
-    delete ret.plugins;
-  }
-  if (ret.strategies) {
-    logger.debug(`Rewriting config.strategies to config.redteam.strategies`);
-    ret.redteam = ret.redteam || {};
-    ret.redteam.strategies = ret.strategies;
-    delete ret.strategies;
-  }
   if (!ret.prompts) {
     logger.debug(`Setting default prompt because there is no \`prompts\` field`);
     const hasAnyPrompt =

@@ -28,6 +28,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import { PluginConfigSchema, StrategyConfigSchema } from '../redteam/types';
 import type {
   PluginConfig,
   RedteamContext,
@@ -109,7 +110,7 @@ export const RedteamPluginObjectSchema = z.object({
     .positive()
     .prefault(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
+  config: PluginConfigSchema.optional().describe('Plugin-specific configuration'),
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
@@ -181,10 +182,7 @@ export const RedteamStrategySchema = z.union([
   strategyIdSchema,
   z.object({
     id: strategyIdSchema,
-    config: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Strategy-specific configuration'),
+    config: StrategyConfigSchema.optional().describe('Strategy-specific configuration'),
   }),
 ]);
 
@@ -549,6 +547,3 @@ function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
-
-// TODO: Why is this never?
-// assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();
