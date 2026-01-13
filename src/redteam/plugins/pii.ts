@@ -8,7 +8,7 @@ import {
 } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { PluginActionParams, PluginConfig, TestCase } from '../../types/index';
+import type { PluginActionParams, TestCase } from '../../types/index';
 import type { PII_PLUGINS } from '../constants';
 
 const PLUGIN_ID = 'promptfoo:redteam:pii';

@@ -6,7 +6,6 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { getPromptOutputFormatter } from './multiInputFormat';
 import { redteamProviderManager } from '../providers/shared';
 import {
   extractInputVarsFromPrompt,
@@ -14,6 +13,7 @@ import {
   isBasicRefusal,
   isEmptyResponse,
 } from '../util';
+import { getPromptOutputFormatter } from './multiInputFormat';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
@@ -26,7 +26,6 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -257,7 +256,9 @@ export abstract class RedteamPluginBase {
 
     // Filter out __outputFormat from regular modifiers section (templates handle it directly)
     const regularModifiers = Object.entries(modifiers)
-      .filter(([key, value]) => key !== '__outputFormat' && typeof value !== 'undefined' && value !== '')
+      .filter(
+        ([key, value]) => key !== '__outputFormat' && typeof value !== 'undefined' && value !== '',
+      )
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 

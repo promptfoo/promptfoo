@@ -821,12 +821,11 @@ export async function synthesize({
 
     // Some plugins don't support multi-input mode; skip them
     const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const before = plugins.length;
+    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
     plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
-    const removed = before - plugins.length;
-    if (removed > 0) {
+    if (removedPlugins.length > 0) {
       logger.info(
-        `Skipping ${removed} plugin${removed > 1 ? 's' : ''} in multi-input mode: ${multiInputExcluded.join(', ')}`,
+        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
       );
     }
   }
