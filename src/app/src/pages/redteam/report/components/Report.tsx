@@ -87,7 +87,7 @@ const App = () => {
       const evalId = searchParams.get('evalId');
       if (evalId) {
         setEvalId(evalId);
-        fetchEvalById(evalId);
+        void fetchEvalById(evalId);
       } else {
         // Need to fetch the latest evalId from the server
         const fetchLatestEvalId = async () => {
@@ -101,7 +101,7 @@ const App = () => {
             if (body.data && body.data.length > 0) {
               const latestEvalId = body.data[0].evalId;
               setEvalId(latestEvalId);
-              fetchEvalById(latestEvalId);
+              void fetchEvalById(latestEvalId);
             } else {
               console.log('No recent evals found');
             }
@@ -110,7 +110,7 @@ const App = () => {
           }
         };
 
-        fetchLatestEvalId();
+        void fetchLatestEvalId();
       }
     }
   }, [recordEvent]);

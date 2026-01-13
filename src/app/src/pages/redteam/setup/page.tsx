@@ -547,7 +547,7 @@ export default function RedTeamSetupPage() {
                   variant="ghost"
                   className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => {
-                    loadConfigs();
+                    void loadConfigs();
                     setLoadDialogOpen(true);
                   }}
                 >

@@ -3,18 +3,6 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
-import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index';
-import RedteamCustomProvider from '../redteam/providers/custom/index';
-import RedteamGoatProvider from '../redteam/providers/goat';
-import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
-import RedteamIterativeProvider from '../redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
-import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
-import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
-import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -140,6 +128,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { MemoryPoisoningProvider } = await import(
+        '../redteam/providers/agentic/memoryPoisoning'
+      );
       return new MemoryPoisoningProvider(providerOptions);
     },
   },
@@ -1319,6 +1310,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamBestOfNProvider } = await import('../redteam/providers/bestOfN');
       return new RedteamBestOfNProvider(providerOptions.config);
     },
   },
@@ -1329,7 +1321,8 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new RedteamCrescendoProvider(providerOptions.config);
+      const { CrescendoProvider } = await import('../redteam/providers/crescendo/index');
+      return new CrescendoProvider(providerOptions.config);
     },
   },
   {
@@ -1341,6 +1334,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamCustomProvider } = await import('../redteam/providers/custom/index');
       return new RedteamCustomProvider(providerOptions.config);
     },
   },
@@ -1351,6 +1345,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamGoatProvider } = await import('../redteam/providers/goat');
       return new RedteamGoatProvider(providerOptions.config);
     },
   },
@@ -1362,6 +1357,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamAuthoritativeMarkupInjectionProvider } = await import(
+        '../redteam/providers/authoritativeMarkupInjection'
+      );
       return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
     },
   },
@@ -1372,6 +1370,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamMischievousUserProvider } = await import(
+        '../redteam/providers/mischievousUser'
+      );
       return new RedteamMischievousUserProvider(providerOptions.config);
     },
   },
@@ -1382,6 +1383,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamIterativeProvider } = await import('../redteam/providers/iterative');
       return new RedteamIterativeProvider(providerOptions.config);
     },
   },
@@ -1392,6 +1394,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamImageIterativeProvider } = await import(
+        '../redteam/providers/iterativeImage'
+      );
       return new RedteamImageIterativeProvider(providerOptions.config);
     },
   },
@@ -1402,6 +1407,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamIterativeTreeProvider } = await import(
+        '../redteam/providers/iterativeTree'
+      );
       return new RedteamIterativeTreeProvider(providerOptions.config);
     },
   },
@@ -1412,6 +1420,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      const { default: RedteamIterativeMetaProvider } = await import(
+        '../redteam/providers/iterativeMeta'
+      );
       return new RedteamIterativeMetaProvider(providerOptions.config);
     },
   },
@@ -1422,7 +1433,8 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new RedteamHydraProvider(providerOptions.config);
+      const { HydraProvider } = await import('../redteam/providers/hydra/index');
+      return new HydraProvider(providerOptions.config);
     },
   },
   {

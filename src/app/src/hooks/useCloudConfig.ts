@@ -48,7 +48,7 @@ export default function useCloudConfig(): {
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    fetchCloudConfig();
+    void fetchCloudConfig();
   }, []);
 
   return {

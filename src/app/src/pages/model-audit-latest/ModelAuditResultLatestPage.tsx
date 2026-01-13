@@ -62,7 +62,7 @@ export default function ModelAuditResultLatestPage() {
       }
     };
 
-    fetchLatestScan();
+    void fetchLatestScan();
 
     return () => abortController.abort();
   }, []);

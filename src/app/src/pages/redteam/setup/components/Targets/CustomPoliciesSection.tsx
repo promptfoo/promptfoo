@@ -146,7 +146,7 @@ export const CustomPoliciesSection = () => {
       }
     }
 
-    buildRows();
+    void buildRows();
 
     return () => {
       cancelled = true;

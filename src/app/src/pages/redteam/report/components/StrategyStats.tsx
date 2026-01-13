@@ -444,7 +444,7 @@ const StrategyStats = ({
                   aria-label={`View details for ${strategy} attack method`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
-                      handleStrategyClick(strategy);
+                      void handleStrategyClick(strategy);
                     }
                   }}
                   onClick={() => handleStrategyClick(strategy)}

@@ -67,7 +67,7 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
       const relativePath = path.relative(workingDir, file);
       return `${relativePath}:${stat.mtimeMs}`;
     })
-    .sort(); // Sort for consistent ordering
+    .sort((a, b) => a.localeCompare(b)); // Sort for consistent ordering
 
   const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
   const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');

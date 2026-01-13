@@ -704,7 +704,7 @@ export async function synthesize({
           const actualTestCount = (p.numTests || 0) * pluginLanguageCount;
           return `${p.id} (${formatTestCount(actualTestCount, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`;
         })
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
         .join('\n'),
     )}\n`,
   );
@@ -726,7 +726,7 @@ export async function synthesize({
             testCount = totalPluginTests * n;
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
-          .sort()
+          .sort((a, b) => a.localeCompare(b))
           .join('\n'),
       )}\n`,
     );

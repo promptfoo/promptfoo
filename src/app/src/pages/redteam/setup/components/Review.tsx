@@ -271,7 +271,7 @@ export default function Review({
       }
     };
 
-    recoverJob();
+    void recoverJob();
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
@@ -576,7 +576,7 @@ export default function Review({
       await handleCancel();
       setIsJobStatusDialogOpen(false);
       setTimeout(() => {
-        handleRunWithSettings();
+        void handleRunWithSettings();
       }, 500);
     } catch (error) {
       console.error('Error canceling existing job:', error);
@@ -1213,7 +1213,7 @@ export default function Review({
           onClose={() => setIsEmailDialogOpen(false)}
           onSuccess={() => {
             setIsEmailDialogOpen(false);
-            handleRunWithSettings();
+            void handleRunWithSettings();
           }}
           message={emailVerificationMessage}
         />

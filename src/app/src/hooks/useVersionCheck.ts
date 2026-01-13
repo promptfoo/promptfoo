@@ -66,7 +66,7 @@ export function useVersionCheck(): UseVersionCheckResult {
       }
     };
 
-    checkVersion();
+    void checkVersion();
 
     // Cleanup function to mark component as unmounted
     return () => {

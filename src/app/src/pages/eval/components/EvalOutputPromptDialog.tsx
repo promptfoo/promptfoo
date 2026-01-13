@@ -214,7 +214,7 @@ export default function EvalOutputPromptDialog({
       }
     };
 
-    loadTraces();
+    void loadTraces();
 
     return () => {
       isActive = false;

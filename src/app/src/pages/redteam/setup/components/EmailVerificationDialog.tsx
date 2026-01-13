@@ -100,7 +100,7 @@ export function EmailVerificationDialog({
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !isSubmitting) {
-      handleSubmit();
+      void handleSubmit();
     }
   };
 

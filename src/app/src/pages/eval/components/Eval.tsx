@@ -202,11 +202,11 @@ export default function Eval({ fetchId }: EvalOptions) {
         if (success) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
-          fetchRecentFileEvals();
+          void fetchRecentFileEvals();
           // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
-      run();
+      void run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
@@ -309,7 +309,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           setLoaded(true);
         }
       };
-      run();
+      void run();
     }
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);

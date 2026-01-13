@@ -31,7 +31,7 @@ function DatasetsPageContent() {
       }
     };
 
-    fetchDatasets();
+    void fetchDatasets();
   }, []);
 
   return <Datasets data={testCases} isLoading={isLoading} error={error} />;

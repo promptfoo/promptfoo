@@ -205,9 +205,9 @@ export default function PathSelector({
           const entry = item.webkitGetAsEntry();
           if (entry) {
             if (entry.isDirectory) {
-              handleAddPath(entry.fullPath + '/');
+              void handleAddPath(entry.fullPath + '/');
             } else {
-              handleAddPath(entry.fullPath);
+              void handleAddPath(entry.fullPath);
             }
           }
         }
@@ -329,7 +329,7 @@ export default function PathSelector({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleAddPath(pathInput);
+                    void handleAddPath(pathInput);
                   }
                 }}
                 placeholder="Type a path or drag & drop above"
@@ -368,7 +368,7 @@ export default function PathSelector({
                     type="button"
                     onClick={() => {
                       if (!paths.some((p) => p.path === path.path)) {
-                        handleAddPath(path.path);
+                        void handleAddPath(path.path);
                       }
                     }}
                     onMouseEnter={() => setHoveredChipIndex(index)}

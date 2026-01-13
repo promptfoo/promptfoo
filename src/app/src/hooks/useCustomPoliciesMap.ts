@@ -57,7 +57,7 @@ export function useCustomPoliciesMap(
       setPoliciesMap(map);
     }
 
-    buildPoliciesMap();
+    void buildPoliciesMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginsKey]);
 

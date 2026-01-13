@@ -81,7 +81,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       }
     };
 
-    handleShare();
+    void handleShare();
   }, [open, evalId, shareUrl, error, onShare]);
 
   const handleCopyClick = () => {

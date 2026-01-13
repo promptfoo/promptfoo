@@ -43,7 +43,7 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
       }
     };
 
-    checkCloudStatus();
+    void checkCloudStatus();
   }, [evalId]);
 
   // If still loading or cloud is enabled, don't show banner

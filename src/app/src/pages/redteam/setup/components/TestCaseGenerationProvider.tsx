@@ -566,7 +566,7 @@ export const TestCaseGenerationProvider: React.FC<{
         const pluginConfig =
           typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
 
-        handleStart(
+        void handleStart(
           { id: newPluginId as Plugin, config: pluginConfig, isStatic: false },
           strategy!,
         );
@@ -575,7 +575,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
       // For multi-turn strategies, always regenerate fresh
       if (strategy && isMultiTurnStrategy(strategy.id)) {
-        handleStart(plugin!, strategy!);
+        void handleStart(plugin!, strategy!);
         return;
       }
 
@@ -593,13 +593,13 @@ export const TestCaseGenerationProvider: React.FC<{
         // Prefetch if running low on cached test cases
         const remaining = testCaseBatch.length - nextIndex;
         if (remaining <= PREFETCH_THRESHOLD && !isPrefetching) {
-          prefetchNextBatch();
+          void prefetchNextBatch();
         }
         return;
       }
 
       // Batch exhausted, generate new batch
-      handleStart(plugin!, strategy!);
+      void handleStart(plugin!, strategy!);
     },
     [
       handleStart,
@@ -666,7 +666,7 @@ export const TestCaseGenerationProvider: React.FC<{
           });
       } else {
         // Multi-turn or subsequent turns: use single generation
-        generateTestCase(abortController);
+        void generateTestCase(abortController);
       }
 
       return () => abortController.abort();
@@ -694,7 +694,7 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current = abortController;
 
       if (shouldEvaluateAgainstTarget) {
-        executeTest(abortController);
+        void executeTest(abortController);
       } else {
         // No target, just finish this turn immediately (only for single turn)
         const testCase = generatedTestCases[generatedTestCases.length - 1];

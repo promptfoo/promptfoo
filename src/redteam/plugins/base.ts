@@ -355,29 +355,31 @@ export abstract class RedteamPluginBase {
   protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
-    return prompts.sort().map((promptObj) => {
-      // Extract input vars from the prompt for multi-input mode
-      const inputVars = hasMultipleInputs
-        ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
-        : undefined;
+    return prompts
+      .sort((a, b) => a.__prompt.localeCompare(b.__prompt))
+      .map((promptObj) => {
+        // Extract input vars from the prompt for multi-input mode
+        const inputVars = hasMultipleInputs
+          ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
+          : undefined;
 
-      // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
-      const vars: Record<string, string> = {
-        [this.injectVar]: promptObj.__prompt,
-        ...(inputVars || {}),
-      };
+        // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
+        const vars: Record<string, string> = {
+          [this.injectVar]: promptObj.__prompt,
+          ...(inputVars || {}),
+        };
 
-      return {
-        vars,
-        assert: this.getAssertions(promptObj.__prompt),
-        metadata: {
-          pluginId: getShortPluginId(this.id),
-          pluginConfig: this.config,
-          // Include extracted input vars in metadata for multi-turn strategies
-          ...(inputVars ? { inputVars } : {}),
-        },
-      };
-    });
+        return {
+          vars,
+          assert: this.getAssertions(promptObj.__prompt),
+          metadata: {
+            pluginId: getShortPluginId(this.id),
+            pluginConfig: this.config,
+            // Include extracted input vars in metadata for multi-turn strategies
+            ...(inputVars ? { inputVars } : {}),
+          },
+        };
+      });
   }
 
   /**

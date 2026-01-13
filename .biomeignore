@@ -1,4 +1,5 @@
 dist/**/*
+coverage/**/*
 site/.docusaurus/**/*
 site/build/**/*
 **/venv/**/*

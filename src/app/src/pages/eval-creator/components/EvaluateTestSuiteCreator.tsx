@@ -102,7 +102,7 @@ const EvaluateTestSuiteCreator = () => {
       }
     };
 
-    fetchConfigStatus();
+    void fetchConfigStatus();
 
     return () => {
       isMounted = false;

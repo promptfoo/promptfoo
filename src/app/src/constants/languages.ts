@@ -507,7 +507,9 @@ export const LANGUAGES: LanguageInfo[] = [
  * List of all language names for autocomplete suggestions
  * Sorted alphabetically for easy browsing
  */
-export const COMMON_LANGUAGE_NAMES = LANGUAGES.map((lang) => lang.name).sort();
+export const COMMON_LANGUAGE_NAMES = LANGUAGES.map((lang) => lang.name).sort((a, b) =>
+  a.localeCompare(b),
+);
 
 /**
  * Map of ISO 639-1 codes to language names (lowercase code -> name)

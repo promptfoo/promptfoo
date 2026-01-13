@@ -66,7 +66,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
 
   useEffect(() => {
     const abortController = new AbortController();
-    fetchReports(abortController.signal);
+    void fetchReports(abortController.signal);
     return () => {
       abortController.abort();
     };

@@ -468,10 +468,12 @@ export async function redteamInit(directory: string | undefined) {
       if (variables.length > 1) {
         const indirectInjectionVar = await select({
           message: 'Which variable would you like to test for indirect prompt injection?',
-          choices: variables.sort().map((variable) => ({
-            name: variable,
-            value: variable,
-          })),
+          choices: variables
+            .sort((a, b) => a.localeCompare(b))
+            .map((variable) => ({
+              name: variable,
+              value: variable,
+            })),
         });
         recordOnboardingStep('chose indirect prompt injection variable');
         plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');

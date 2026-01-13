@@ -137,7 +137,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                         size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
+                          void copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
                         }}
                         className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
                         aria-label={`Copy assertion reason ${i}`}

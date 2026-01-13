@@ -16,7 +16,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       setIsLoading(true);
       setError(null);
       try {

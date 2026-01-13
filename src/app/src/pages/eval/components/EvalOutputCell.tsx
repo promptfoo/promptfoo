@@ -397,8 +397,12 @@ function EvalOutputCell({
             {videoData?.model && (
               <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
             )}
-            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
-            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
+            {videoData?.size != null && videoData.size > 0 && (
+              <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>
+            )}
+            {videoData?.duration != null && videoData.duration > 0 && (
+              <span>Duration: {videoData.duration}s</span>
+            )}
           </div>
         </div>
       );

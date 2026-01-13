@@ -21,6 +21,11 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
+      "!!**/coverage",
+      "!!src/app/src/pages/eval/components/ProviderDisplay.tsx",
+      "!!src/app/src/pages/eval/components/ProviderDisplay.test.tsx",
+      "!!src/providers/openai/chatkit.ts",
+      "!!src/providers/replicate.ts",
       "!!examples/multiple-turn-conversation/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json"
@@ -166,7 +171,10 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "noImportCycles": "warn",
+        "useExhaustiveSwitchCases": "error",
+        "useArraySortCompare": "error"
       }
     }
   },
@@ -275,9 +283,6 @@
           "performance": {
             "noBarrelFile": "off",
             "noReExportAll": "off"
-          },
-          "nursery": {
-            "noFloatingPromises": "off"
           }
         }
       }

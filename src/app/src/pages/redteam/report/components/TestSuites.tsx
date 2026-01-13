@@ -102,7 +102,7 @@ const TestSuites = ({
       setPluginsById(result);
     }
 
-    buildPluginsById();
+    void buildPluginsById();
   }, [plugins, pluginSeverityMap]);
 
   const customPoliciesById = useCustomPoliciesMap(plugins);

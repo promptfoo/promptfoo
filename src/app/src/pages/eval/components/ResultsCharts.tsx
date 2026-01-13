@@ -514,7 +514,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       }
     };
 
-    fetchProgressData();
+    void fetchProgressData();
   }, [config?.description]);
 
   useEffect(() => {

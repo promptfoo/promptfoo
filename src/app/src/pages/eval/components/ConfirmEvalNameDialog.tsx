@@ -95,7 +95,7 @@ export const ConfirmEvalNameDialog = ({
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleConfirm();
+      void handleConfirm();
     }
   };
 

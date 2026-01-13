@@ -65,7 +65,7 @@ export const AuthorChip = ({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
-      handleSave();
+      void handleSave();
     } else if (event.key === 'Escape') {
       handleCancel();
     }

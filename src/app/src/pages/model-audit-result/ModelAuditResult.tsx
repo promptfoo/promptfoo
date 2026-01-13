@@ -80,7 +80,7 @@ export default function ModelAuditResult() {
       }
     };
 
-    loadScan();
+    void loadScan();
     return () => abortController.abort();
   }, [id, fetchScanById]);
 

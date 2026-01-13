@@ -33,7 +33,7 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
       }
     };
 
-    fetchPrompts();
+    void fetchPrompts();
   }, []);
 
   return (

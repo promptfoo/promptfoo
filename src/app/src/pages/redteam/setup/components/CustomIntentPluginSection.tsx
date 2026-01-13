@@ -324,7 +324,7 @@ export default function CustomIntentSection() {
     );
 
     if (supportedFile) {
-      handleFileUpload(supportedFile);
+      void handleFileUpload(supportedFile);
     } else {
       setUploadError('Please drop a .csv or .json file');
     }
@@ -486,7 +486,7 @@ export default function CustomIntentSection() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      handleFileUpload(file);
+                      void handleFileUpload(file);
                     }
                   }}
                   onClick={(e) => {

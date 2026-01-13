@@ -14,7 +14,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     };
 
-    loadUserEmail();
+    void loadUserEmail();
   }, []);
 
   const value = useMemo(() => ({ email, setEmail, isLoading }), [email, isLoading]);
