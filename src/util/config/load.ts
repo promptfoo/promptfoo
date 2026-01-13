@@ -41,14 +41,38 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { RedteamPluginSchema, RedteamStrategySchema } from '../../validators/redteam';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { isProviderFunction, isProviderString, resolveProviderOptions } from '../typeGuards';
 
 /**
  * Type guard to check if a test case has vars property
  */
 function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
   return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
+/**
+ * Process providers to extract/restore function and tool parameters.
+ * Handles string, function, and object provider types uniformly.
+ */
+function processProviders(
+  providers: unknown[],
+  processor: (provider: ProviderOptions, index: number) => void,
+): void {
+  providers.forEach((provider, index) => {
+    // Skip string and function providers - they don't have config
+    if (isProviderString(provider) || isProviderFunction(provider)) {
+      return;
+    }
+
+    // Resolve to ProviderOptions (handles map-style providers)
+    const resolved = resolveProviderOptions(provider);
+    if (resolved?.config) {
+      processor(resolved, index);
+    }
+  });
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -105,28 +129,14 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   const functionsParametersList: { parameters?: object }[][] = [];
   const toolsParametersList: { parameters?: object }[][] = [];
 
+  // Extract parameters before dereferencing to prevent $ref resolution issues
   if (Array.isArray(rawConfig.providers)) {
-    rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
+    processProviders(rawConfig.providers, (provider, index) => {
       if (Array.isArray(provider.config?.functions)) {
-        functionsParametersList[providerIndex] = extractFunctionParameters(
-          provider.config.functions,
-        );
+        functionsParametersList[index] = extractFunctionParameters(provider.config.functions);
       }
-
       if (Array.isArray(provider.config?.tools)) {
-        toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
+        toolsParametersList[index] = extractToolParameters(provider.config.tools);
       }
     });
   }
@@ -134,25 +144,13 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   // Dereference JSON
   const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
 
-  // Restore functions and tools parameters
+  // Restore functions and tools parameters after dereferencing
   if (Array.isArray(config.providers)) {
-    config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
+    processProviders(config.providers, (provider, index) => {
       if (functionsParametersList[index]) {
         provider.config.functions = provider.config.functions || [];
         restoreFunctionParameters(provider.config.functions, functionsParametersList[index]);
       }
-
       if (toolsParametersList[index]) {
         provider.config.tools = provider.config.tools || [];
         restoreToolParameters(provider.config.tools, toolsParametersList[index]);
@@ -187,8 +185,8 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       targets: ProvidersSchema.optional(),
       prompts: TestSuiteConfigSchema.shape.prompts.optional(),
       // Top level redteam options to be transformed
-      plugins: z.any().optional(), // Transformed to redteam.plugins
-      strategies: z.any().optional(), // Transformed to redteam.strategies
+      plugins: z.array(RedteamPluginSchema).optional(), // Transformed to redteam.plugins
+      strategies: z.array(RedteamStrategySchema).optional(), // Transformed to redteam.strategies
     })
       .refine(
         (data) => {
@@ -217,12 +215,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 
         if (data.plugins) {
           data.redteam = data.redteam || {};
-          data.redteam.plugins = data.plugins;
+          data.redteam.plugins = data.plugins as any;
           delete data.plugins;
         }
         if (data.strategies) {
           data.redteam = data.redteam || {};
-          data.redteam.strategies = data.strategies;
+          data.redteam.strategies = data.strategies as any;
           delete data.strategies;
         }
 

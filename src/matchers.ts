@@ -24,12 +24,13 @@ import {
   SELECT_BEST_PROMPT,
 } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
-import { loadApiProvider } from './providers/index';
+import { loadApiProvider, resolveProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import { isApiProvider } from './types/providers';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
@@ -176,11 +177,7 @@ export async function getGradingProvider(
     // No provider specified - check defaultTest.options.provider as fallback
     const defaultTest = cliState.config?.defaultTest;
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
-    const cfg =
-      defaultTestObj?.provider ||
-      defaultTestObj?.options?.provider?.text ||
-      defaultTestObj?.options?.provider ||
-      undefined;
+    const cfg = defaultTestObj?.provider || defaultTestObj?.options?.provider || undefined;
 
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
@@ -632,7 +629,7 @@ export async function matchesLlmRubric(
     };
   }
 
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, DEFAULT_GRADING_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     output: tryParse(llmOutput),
     rubric,
@@ -1772,14 +1769,16 @@ export async function matchesSearchRubric(
   const defaultProviders = await getDefaultProviders();
 
   // Get a provider with web search capabilities
-  let searchProvider =
-    grading.provider ||
-    defaultProviders.webSearchProvider ||
-    defaultProviders.llmRubricProvider ||
-    defaultProviders.gradingProvider;
+  let searchProvider = await getGradingProvider('text', grading.provider, null);
+  if (!searchProvider) {
+    searchProvider =
+      defaultProviders.webSearchProvider ||
+      defaultProviders.llmRubricProvider ||
+      defaultProviders.gradingProvider;
+  }
 
   // Check if current provider has web search, if not try to load one
-  if (!hasWebSearchCapability(searchProvider)) {
+  if (searchProvider && !hasWebSearchCapability(searchProvider)) {
     // Try to load a provider with web search capabilities
     // For search-rubric assertion, prefer Anthropic first (pass true)
     const webSearchProvider = await loadWebSearchProvider(true);

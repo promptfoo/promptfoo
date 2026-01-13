@@ -9,20 +9,30 @@ import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { EvaluateOptionsSchema, TestSuiteConfigSchema } from '../../validators/config';
 import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
+  EvaluateTestSuite,
   EvalTableDTO,
   EvaluateSummaryV2,
-  EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
   PromptMetrics,
   ResultsFile,
 } from '../../index';
+
+/**
+ * Schema for the /job endpoint request body.
+ * Validates test suite configuration with evaluate options.
+ */
+const EvalJobRequestSchema = TestSuiteConfigSchema.extend({
+  writeLatestResults: z.boolean().optional(),
+  evaluateOptions: EvaluateOptionsSchema.optional(),
+}).passthrough(); // Allow additional fields for flexibility
 
 export const evalRouter = Router();
 
@@ -30,7 +40,15 @@ export const evalRouter = Router();
 export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
-  const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
+  // Validate request body
+  const parseResult = EvalJobRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    logger.warn('Invalid /job request body', { errors: parseResult.error.issues });
+    res.status(400).json({ error: z.prettifyError(parseResult.error) });
+    return;
+  }
+
+  const { evaluateOptions, ...testSuite } = parseResult.data;
   const id = crypto.randomUUID();
   evalJobs.set(id, {
     evalId: null,
@@ -41,12 +59,21 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
+  // Normalize prompts to array format expected by evaluate()
+  const normalizedPrompts: (string | object)[] = Array.isArray(testSuite.prompts)
+    ? testSuite.prompts
+    : typeof testSuite.prompts === 'string'
+      ? [testSuite.prompts]
+      : Object.entries(testSuite.prompts).map(([label, raw]) => ({ label, raw }));
+
   promptfoo
     .evaluate(
-      Object.assign({}, testSuite, {
+      {
+        ...testSuite,
+        prompts: normalizedPrompts,
         writeLatestResults: true,
         sharing: testSuite.sharing ?? true,
-      }),
+      } as EvaluateTestSuite,
       Object.assign({}, evaluateOptions, {
         eventSource: 'web',
         progressCallback: (progress: number, total: number) => {
