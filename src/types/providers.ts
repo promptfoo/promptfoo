@@ -15,6 +15,12 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+export interface LoadApiProviderContext {
+  options?: ProviderOptions;
+  basePath?: string;
+  env?: EnvOverrides;
+}
+
 // Local interface to avoid circular dependency with src/types/index.ts
 interface AtomicTestCase {
   description?: string;

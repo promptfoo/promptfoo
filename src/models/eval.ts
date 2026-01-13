@@ -686,7 +686,14 @@ export default class Eval {
       const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let parsed;
+        try {
+          parsed = JSON.parse(filter);
+        } catch {
+          logger.warn(`Skipping invalid filter JSON: ${filter.substring(0, 100)}`);
+          return;
+        }
+        const { logicOperator, type, operator, value, field } = parsed;
         let condition: string | null = null;
 
         if (type === 'metric') {

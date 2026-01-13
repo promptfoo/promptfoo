@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
+export type { Prompt, PromptConfig, PromptFunction };
 
 // Zod schemas for validation
 export const PromptConfigSchema = z.object({

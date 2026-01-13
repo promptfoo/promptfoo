@@ -1,6 +1,7 @@
 import deepEqual from 'fast-deep-equal';
 import { type EvaluateResult, type TestCase } from '../types';
 import { providerToIdentifier } from './provider';
+import { includesString } from './typeGuards';
 
 import type { Vars } from '../types/index';
 
@@ -24,7 +25,7 @@ const EXPLICIT_RUNTIME_VAR_KEYS = ['sessionId'] as const;
  * 2. Being in the explicit runtime var list (for legacy vars like sessionId)
  */
 export function isRuntimeVar(key: string): boolean {
-  return key.startsWith('_') || EXPLICIT_RUNTIME_VAR_KEYS.includes(key as any);
+  return key.startsWith('_') || includesString(EXPLICIT_RUNTIME_VAR_KEYS, key);
 }
 
 /**

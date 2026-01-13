@@ -24,11 +24,12 @@ import {
   SeveritySchema,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import { PluginConfigSchema, StrategyConfigSchema } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { toZodEnum } from '../util/typeGuards';
 import { ProviderSchema } from '../validators/providers';
 
-import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
-import { PluginConfigSchema, StrategyConfigSchema } from '../redteam/types';
+import type { Collection, Plugin, Strategy } from '../redteam/constants';
 import type {
   PluginConfig,
   RedteamContext,
@@ -73,10 +74,7 @@ export const RedteamContextSchema = z.object({
     .describe('Variables passed to provider (e.g., context_file, user_role)'),
 });
 
-const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
-  FrameworkComplianceId,
-  ...FrameworkComplianceId[],
-];
+const frameworkOptions = toZodEnum(FRAMEWORK_COMPLIANCE_IDS);
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -87,7 +85,7 @@ export const pluginOptions: string[] = [
 export const RedteamPluginObjectSchema = z.object({
   id: z
     .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+      z.enum(toZodEnum(pluginOptions)).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
             code: 'custom',
@@ -120,7 +118,7 @@ export const RedteamPluginObjectSchema = z.object({
 export const RedteamPluginSchema = z.union([
   z
     .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+      z.enum(toZodEnum(pluginOptions)).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
             code: 'custom',
@@ -142,7 +140,7 @@ export const RedteamPluginSchema = z.union([
 ]);
 
 export const strategyIdSchema = z.union([
-  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+  z.enum(toZodEnum(ALL_STRATEGIES)).superRefine((val, ctx) => {
     // Allow 'multilingual' for backward compatibility - it will be migrated to language config
     if (val === 'multilingual') {
       return;
@@ -244,9 +242,7 @@ export const RedteamConfigSchema = z
     injectVar: z
       .string()
       .optional()
-      .describe(
-        "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
-      ),
+      .describe('Variable to inject. Inferred from the prompts by default.'),
     purpose: z
       .string()
       .optional()

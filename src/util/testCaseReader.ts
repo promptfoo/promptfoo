@@ -217,7 +217,14 @@ export async function readStandaloneTestsFile(
       .split('\n')
       .filter((line) => line.trim())
       .map((line, idx) => {
-        const row = JSON.parse(line);
+        let row;
+        try {
+          row = JSON.parse(line);
+        } catch {
+          throw new Error(
+            `Invalid JSON on line ${idx + 1} of ${resolvedVarsPath}: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`,
+          );
+        }
         return {
           ...row,
           description: `Row #${idx + 1}`,

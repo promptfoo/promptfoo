@@ -216,19 +216,42 @@ const telemetry = new Telemetry();
 const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
 
+/**
+ * Type-safe accessors for process-level telemetry state.
+ * Uses symbols to avoid conflicts with other modules.
+ */
+interface TelemetryProcessState {
+  instance: Telemetry | undefined;
+  shutdownHandlerRegistered: boolean;
+}
+
+function getTelemetryState(): TelemetryProcessState {
+  const p = process as unknown as Record<symbol, unknown>;
+  return {
+    instance: p[TELEMETRY_INSTANCE_KEY] as Telemetry | undefined,
+    shutdownHandlerRegistered: p[SHUTDOWN_HANDLER_KEY] === true,
+  };
+}
+
+function setTelemetryInstance(instance: Telemetry): void {
+  (process as unknown as Record<symbol, Telemetry>)[TELEMETRY_INSTANCE_KEY] = instance;
+}
+
+function markShutdownHandlerRegistered(): void {
+  (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
+}
+
 // Store telemetry instance on process so the beforeExit handler can access the current instance
-(process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY] = telemetry;
+setTelemetryInstance(telemetry);
 
 // Register cleanup handler only once across all module reloads.
 // This is a safety net to ensure PostHog client is properly shut down when the process exits.
 // The primary fix is disabling PostHog's internal flush timer (flushInterval: 0) so it
 // doesn't keep the event loop alive. See: https://github.com/promptfoo/promptfoo/issues/5893
-if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
-  (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
+if (!getTelemetryState().shutdownHandlerRegistered) {
+  markShutdownHandlerRegistered();
   process.once('beforeExit', () => {
-    const instance = (process as unknown as Record<symbol, Telemetry | undefined>)[
-      TELEMETRY_INSTANCE_KEY
-    ];
+    const { instance } = getTelemetryState();
     if (instance) {
       instance.shutdown().catch(() => {
         // Silently ignore - logger may be unavailable during shutdown

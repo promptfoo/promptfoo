@@ -24,13 +24,12 @@ import {
   SELECT_BEST_PROMPT,
 } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
-import { loadApiProvider, resolveProvider } from './providers/index';
+import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { isApiProvider } from './types/providers';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
@@ -1065,7 +1064,14 @@ export async function matchesGEval(
 
   try {
     // NOTE: use regexp for reliable, because sometimes LLM wraps response to markdown format ```json...```
-    steps = JSON.parse(respSteps.output.match(/\{"steps".+\}/g)[0]).steps;
+    const stepsMatch = respSteps.output.match(/\{"steps".+\}/g);
+    if (!stepsMatch) {
+      return fail(
+        `LLM response does not contain expected JSON steps format: ${respSteps.output}`,
+        tokensUsed,
+      );
+    }
+    steps = JSON.parse(stepsMatch[0]).steps;
 
     if (!steps.length) {
       return fail('LLM does not propose any evaluation step', tokensUsed);
@@ -1108,7 +1114,11 @@ export async function matchesGEval(
   let result;
 
   try {
-    result = JSON.parse(resp.output.match(/\{.+\}/g)[0]);
+    const resultMatch = resp.output.match(/\{.+\}/g);
+    if (!resultMatch) {
+      return fail(`LLM response does not contain expected JSON format: ${resp.output}`, tokensUsed);
+    }
+    result = JSON.parse(resultMatch[0]);
   } catch {
     return fail(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`, tokensUsed);
   }
