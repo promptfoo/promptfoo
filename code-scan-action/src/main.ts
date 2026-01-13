@@ -206,7 +206,7 @@ async function run(): Promise<void> {
 
       if (exitCode !== 0) {
         // Fork PR auth rejection is expected - server posts helpful comment to PR
-        if (scanError.includes('Fork PR scanning not authorized')) {
+        if (scanOutput.includes('Fork PR scanning not authorized')) {
           core.info('🔀 Fork PR detected - see PR comment for scan options');
           return;
         }
