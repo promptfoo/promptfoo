@@ -20,6 +20,7 @@ import { setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { includesString } from '../../util/typeGuards';
 import {
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
@@ -533,7 +534,7 @@ export async function redteamInit(directory: string | undefined) {
         ? {
             name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
             value: strategy,
-            checked: DEFAULT_STRATEGIES.includes(strategy as any),
+            checked: includesString(DEFAULT_STRATEGIES, strategy),
           }
         : strategy,
     );

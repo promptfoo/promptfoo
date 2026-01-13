@@ -5,6 +5,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
+import { includesString } from '../../util/typeGuards';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
 import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -12,11 +13,11 @@ import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types
 // Single-turn strategies = AGENTIC but NOT MULTI_TURN
 // These strategies iterate to find successful attacks but each attempt is a single turn
 const SINGLE_TURN_STRATEGIES = AGENTIC_STRATEGIES.filter(
-  (s) => !MULTI_TURN_STRATEGIES.includes(s as any),
+  (s) => !includesString(MULTI_TURN_STRATEGIES, s),
 );
 
 function isSingleTurnStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
+  return strategyId ? includesString(SINGLE_TURN_STRATEGIES, strategyId) : false;
 }
 
 /**

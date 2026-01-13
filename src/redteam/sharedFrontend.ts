@@ -1,5 +1,6 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
+import { includesString } from '../util/typeGuards';
 import {
   MULTI_TURN_STRATEGIES,
   type Plugin,
@@ -73,7 +74,7 @@ export function getUnifiedConfig(
       }),
       strategies: config.strategies.map((strategy) => {
         if (typeof strategy === 'string') {
-          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config.stateful) {
+          if (includesString(MULTI_TURN_STRATEGIES, strategy) && config.target.config.stateful) {
             return { id: strategy, config: { stateful: true } };
           }
           return { id: strategy };
@@ -81,7 +82,7 @@ export function getUnifiedConfig(
 
         // Determine if this is a stateful multi-turn strategy
         const isStatefulMultiTurn =
-          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config.stateful;
+          includesString(MULTI_TURN_STRATEGIES, strategy.id) && config.target.config.stateful;
 
         // Check if we have any custom configuration
         const hasCustomConfig = strategy.config && Object.keys(strategy.config).length > 0;

@@ -1,4 +1,5 @@
 import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
+import { includesString } from '../../util/typeGuards';
 import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
@@ -17,7 +18,7 @@ export function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as any)) {
+  if (pluginId && includesString(STRATEGY_EXEMPT_PLUGINS, pluginId)) {
     return false;
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {

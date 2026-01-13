@@ -9,6 +9,7 @@ import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { GradingResultSchema } from '../../validators/assertions';
 import { EvaluateOptionsSchema, TestSuiteConfigSchema } from '../../validators/config';
 import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
@@ -16,10 +17,9 @@ import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
-  EvaluateTestSuite,
   EvalTableDTO,
   EvaluateSummaryV2,
-  GradingResult,
+  EvaluateTestSuite,
   Job,
   PromptMetrics,
   ResultsFile,
@@ -574,7 +574,15 @@ evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const gradingResult = req.body as GradingResult;
+
+    // Validate grading result
+    const parseResult = GradingResultSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: z.prettifyError(parseResult.error) });
+      return;
+    }
+    const gradingResult = parseResult.data;
+
     const result = await EvalResult.findById(id);
     invariant(result, 'Result not found');
     const eval_ = await Eval.findById(result.evalId);

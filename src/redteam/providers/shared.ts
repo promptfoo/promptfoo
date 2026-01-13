@@ -27,6 +27,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { extractProviderFromDefaultTest } from '../../util/typeGuards';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -139,14 +140,7 @@ class RedteamProviderManager {
     }
 
     // 3) Try defaultTest config chain (grading-first)
-    const cfg =
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.provider) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider) ||
-      undefined;
+    const cfg = extractProviderFromDefaultTest(cliState.config?.defaultTest);
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly });
