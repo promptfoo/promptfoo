@@ -124,7 +124,7 @@
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
+    "@types/express": "^5.0.6",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/js-yaml": "^4.0.9",
     "@types/jsdom": "^27.0.0",
