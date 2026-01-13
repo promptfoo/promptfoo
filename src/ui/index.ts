@@ -16,6 +16,10 @@
  * ```
  */
 
+// Shared components
+export * from './components/shared';
+// Hooks
+export * from './hooks';
 // Interactive UI detection (from interactiveCheck)
 export { canUseInteractiveUI, isInteractiveUIEnabled, shouldUseInkUI } from './interactiveCheck';
 // Core rendering utilities
@@ -27,3 +31,5 @@ export {
   runInteractive,
   supportsColor,
 } from './render';
+// Utilities
+export * from './utils';
