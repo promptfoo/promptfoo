@@ -42,6 +42,113 @@ interface PageState {
 const pageStateMap = new Map<string, PageState>();
 
 /**
+ * Response from get-web-page-tracking task API.
+ */
+interface WebPageTrackingResponse {
+  uuid: string;
+  wasFetched: boolean;
+  fetchCount: number;
+  wasExfiltrated: boolean;
+  exfilCount: number;
+  exfilRecords: Array<{
+    timestamp: string;
+    ip: string;
+    userAgent: string;
+    queryParams: Record<string, string>;
+  }>;
+  createdAt: string;
+  testCaseId: string;
+}
+
+/**
+ * Get the page state for a test case (for use by grader).
+ */
+export function getPageStateForTestCase(testCaseId: string): PageState | undefined {
+  return pageStateMap.get(testCaseId);
+}
+
+/**
+ * Check exfil tracking for a page UUID.
+ * Returns tracking data that can be used for deterministic grading.
+ */
+export async function checkExfilTracking(uuid: string): Promise<{
+  wasExfiltrated: boolean;
+  exfilCount: number;
+  exfilRecords: WebPageTrackingResponse['exfilRecords'];
+} | null> {
+  try {
+    const url = getRemoteGenerationUrl();
+    const response = await fetchWithRetries(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'get-web-page-tracking',
+          uuid,
+        }),
+      },
+      10000,
+    );
+
+    if (!response.ok) {
+      logger.debug('[IndirectWebPwn] Failed to check exfil tracking', {
+        uuid,
+        status: response.status,
+      });
+      return null;
+    }
+
+    const tracking: WebPageTrackingResponse = await response.json();
+    return {
+      wasExfiltrated: tracking.wasExfiltrated,
+      exfilCount: tracking.exfilCount,
+      exfilRecords: tracking.exfilRecords,
+    };
+  } catch (error) {
+    logger.debug('[IndirectWebPwn] Error checking exfil tracking', {
+      uuid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Replace all URLs in a prompt with the [EXFIL_URL] placeholder.
+ * This ensures that any attacker-generated URLs (e.g., from meta jailbreak)
+ * are replaced with the trackable exfil endpoint.
+ *
+ * Examples of URLs that will be replaced:
+ * - https://api.red-team.sx/collect?data=...
+ * - http://attacker.com/exfil
+ * - https://evil.com/log.php?payload=...
+ */
+function replaceUrlsWithExfilPlaceholder(prompt: string): string {
+  // Match http/https URLs, capturing base URL and query string separately
+  // Group 1: base URL (scheme + host + path)
+  // Group 2: query string (including ?)
+  const urlRegex = /(https?:\/\/[^\s\])"'<>?]+)(\?[^\s\])"'<>]*)?/gi;
+
+  const replacedPrompt = prompt.replace(urlRegex, (_match, _baseUrl, queryString) => {
+    // Replace base URL with placeholder, preserve query string if present
+    return queryString ? `[EXFIL_URL]${queryString}` : '[EXFIL_URL]';
+  });
+
+  // Log if we made replacements
+  const originalUrls = prompt.match(urlRegex);
+  if (originalUrls && originalUrls.length > 0) {
+    logger.debug('[IndirectWebPwn] Replaced URLs with [EXFIL_URL] placeholder', {
+      urlCount: originalUrls.length,
+      originalUrls: originalUrls.slice(0, 5), // Log first 5 URLs max
+      preservedQueryStrings: true,
+    });
+  }
+
+  return replacedPrompt;
+}
+
+/**
  * Generate a prompt asking the target to fetch the URL.
  * Uses different phrasing on each turn.
  */
@@ -90,7 +197,7 @@ async function createWebPage(
         goal,
         purpose,
         email: getUserEmail(),
-        useLlm: useLlm ?? false,
+        useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
       }),
     },
@@ -135,7 +242,7 @@ async function updateWebPage(
         prompt,
         updateTemplate: true, // Always regenerate HTML with new embedding location
         email: getUserEmail(),
-        useLlm: useLlm ?? false,
+        useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
       }),
     },
@@ -209,6 +316,13 @@ function transformForStandaloneMode(
     const originalText = String(testCase.vars![injectVar]);
     return {
       ...testCase,
+      // Add display variables for the UI Variables column
+      // In standalone mode, fetchPrompt and webPageUrl are set by the provider during execution
+      vars: {
+        ...testCase.vars,
+        embeddedInjection: originalText, // The attack payload to embed in the web page
+        // fetchPrompt and webPageUrl will be set by provider during execution
+      },
       provider: {
         id: providerName,
         config: {
@@ -245,13 +359,27 @@ async function transformForPerTurnLayer(
 ): Promise<TestCase[]> {
   logger.debug('[IndirectWebPwn] Using per-turn layer mode (transforming prompts)');
 
-  const useLlm = (config.useLlm as boolean) ?? false;
+  // Default to true to generate contextual HTML pages using LLM
+  const useLlmCreate = (config.useLlm as boolean) ?? true;
+  const useLlmUpdate = (config.useLlm as boolean) ?? true;
   const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
 
   const results: TestCase[] = [];
 
   for (const testCase of testCases) {
-    const attackPrompt = String(testCase.vars?.[injectVar] ?? '');
+    const rawAttackPrompt = String(testCase.vars?.[injectVar] ?? '');
+
+    // Log what prompt we're receiving (helps debug layer integration)
+    logger.info('[IndirectWebPwn] Received prompt for transformation', {
+      promptPreview: rawAttackPrompt.substring(0, 150),
+      promptLength: rawAttackPrompt.length,
+      hasUrls: /https?:\/\//.test(rawAttackPrompt),
+    });
+
+    // Replace any URLs in the attack prompt with [EXFIL_URL] placeholder
+    // This ensures that meta jailbreak or other strategies' URLs get replaced
+    // with our trackable exfil endpoint
+    const attackPrompt = replaceUrlsWithExfilPlaceholder(rawAttackPrompt);
 
     // Generate a stable key for this test case
     // In per-turn mode, we need to track state across calls for the same test
@@ -281,7 +409,7 @@ async function transformForPerTurnLayer(
           attackPrompt,
           goal,
           purpose,
-          useLlm,
+          useLlmCreate,
           preferSmallModel,
         );
 
@@ -324,7 +452,7 @@ async function transformForPerTurnLayer(
         const response = await updateWebPage(
           pageState.uuid,
           attackPrompt,
-          useLlm,
+          useLlmUpdate,
           preferSmallModel,
         );
 
@@ -362,19 +490,26 @@ async function transformForPerTurnLayer(
     });
 
     // Return transformed test case
+    // Add both the fetch prompt (what's sent to the AI) and the embedded injection (what's in the page)
+    // as display variables so they show up in the UI Variables column
     results.push({
       ...testCase,
       vars: {
         ...testCase.vars,
         [injectVar]: fetchPrompt,
+        fetchPrompt, // The prompt sent to AI asking it to visit the URL
+        embeddedInjection: attackPrompt, // The attack payload embedded in the web page
+        webPageUrl: pageState.fullUrl, // The URL of the malicious page
       },
       metadata: {
         ...testCase.metadata,
         webPageUuid: pageState.uuid,
         webPageUrl: pageState.fullUrl,
         webPageEmbeddingLocation: pageState.embeddingLocation,
-        originalPrompt: attackPrompt, // Preserve for grading
+        originalPrompt: rawAttackPrompt, // Preserve original (with URLs) for grading
+        embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
+        fetchPrompt, // The "Please visit URL..." prompt sent to the AI
       },
     });
   }
