@@ -28,3 +28,4 @@ jobs:
         uses: promptfoo/code-scan-action@v0
         with:
           min-severity: medium
+          enable-fork-prs: true
