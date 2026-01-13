@@ -18,8 +18,7 @@
   },
   "workspaces": [
     "src/app",
-    "site",
-    "code-scan-action"
+    "site"
   ],
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
