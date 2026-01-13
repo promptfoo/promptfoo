@@ -188,7 +188,7 @@ describe('simpleVideo strategy', () => {
         },
         assert: [
           {
-            // @ts-expect-error: Testing non-redteam type
+            // Custom assertion types are now allowed for backward compatibility
             type: 'other',
             metric: 'test-metric',
           },

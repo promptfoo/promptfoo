@@ -8,12 +8,7 @@ import {
   handleIContainsAny,
 } from '../../src/assertions/contains';
 
-import type {
-  ApiProvider,
-  AssertionParams,
-  AssertionValue,
-  AtomicTestCase,
-} from '../../src/types/index';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
@@ -40,7 +35,7 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains', value: 'world' },
-      renderedValue: 'world' as AssertionValue,
+      renderedValue: 'world',
       outputString: 'hello world',
       inverse: false,
     };
@@ -58,7 +53,7 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains', value: 'universe' },
-      renderedValue: 'universe' as AssertionValue,
+      renderedValue: 'universe',
       outputString: 'hello world',
       inverse: false,
     };
@@ -76,7 +71,7 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains', value: '42' },
-      renderedValue: '42' as AssertionValue,
+      renderedValue: '42',
       outputString: 'The answer is 42',
       inverse: false,
     };
@@ -94,7 +89,7 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'not-contains', value: 'universe' },
-      renderedValue: 'universe' as AssertionValue,
+      renderedValue: 'universe',
       outputString: 'hello world',
       inverse: true,
     };
@@ -112,8 +107,8 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains', value: 'unused' },
-      renderedValue: 'unused' as AssertionValue,
-      valueFromScript: 'world' as AssertionValue,
+      renderedValue: 'unused',
+      valueFromScript: 'world',
       outputString: 'hello world',
       inverse: false,
     };
@@ -147,7 +142,7 @@ describe('handleIContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains', value: 'WORLD' },
-      renderedValue: 'WORLD' as AssertionValue,
+      renderedValue: 'WORLD',
       outputString: 'hello world',
       inverse: false,
     };
@@ -165,7 +160,7 @@ describe('handleIContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains', value: 'WoRlD' },
-      renderedValue: 'WoRlD' as AssertionValue,
+      renderedValue: 'WoRlD',
       outputString: 'Hello WORLD',
       inverse: false,
     };
@@ -185,7 +180,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: ['world', 'universe'] },
-      renderedValue: ['world', 'universe'] as AssertionValue,
+      renderedValue: ['world', 'universe'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -203,7 +198,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: 'world,universe' },
-      renderedValue: 'world,universe' as AssertionValue,
+      renderedValue: 'world,universe',
       outputString: 'hello world',
       inverse: false,
     };
@@ -221,7 +216,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"hello, world",universe' },
-      renderedValue: '"hello, world",universe' as AssertionValue,
+      renderedValue: '"hello, world",universe',
       outputString: 'hello, world',
       inverse: false,
     };
@@ -242,7 +237,7 @@ describe('handleContainsAny', () => {
         type: 'contains-any',
         value: '"hello, dear world", "goodbye, universe", simple',
       },
-      renderedValue: '"hello, dear world", "goodbye, universe", simple' as AssertionValue,
+      renderedValue: '"hello, dear world", "goodbye, universe", simple',
       outputString: 'hello, dear world is here',
       inverse: false,
     };
@@ -260,7 +255,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"",' },
-      renderedValue: '"",' as AssertionValue,
+      renderedValue: '"",',
       outputString: '',
       inverse: false,
     };
@@ -278,7 +273,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"hello\\"world,test", "another,test"' },
-      renderedValue: '"hello\\"world,test", "another,test"' as AssertionValue,
+      renderedValue: '"hello\\"world,test", "another,test"',
       outputString: 'hello"world,test',
       inverse: false,
     };
@@ -296,7 +291,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '""' },
-      renderedValue: '""' as AssertionValue,
+      renderedValue: '""',
       outputString: 'test',
       inverse: false,
     };
@@ -314,7 +309,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test"' },
-      renderedValue: '"test"' as AssertionValue,
+      renderedValue: '"test"',
       outputString: 'test',
       inverse: false,
     };
@@ -332,7 +327,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test\\test"' },
-      renderedValue: '"test\\test"' as AssertionValue,
+      renderedValue: '"test\\test"',
       outputString: 'test\\test',
       inverse: false,
     };
@@ -350,7 +345,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test\\\\test"' },
-      renderedValue: '"test\\\\test"' as AssertionValue,
+      renderedValue: '"test\\\\test"',
       outputString: 'test\\\\test',
       inverse: false,
     };
@@ -368,7 +363,7 @@ describe('handleContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test' },
-      renderedValue: '"test' as AssertionValue,
+      renderedValue: '"test',
       outputString: 'test',
       inverse: false,
     };
@@ -388,7 +383,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: ['WORLD', 'UNIVERSE'] },
-      renderedValue: ['WORLD', 'UNIVERSE'] as AssertionValue,
+      renderedValue: ['WORLD', 'UNIVERSE'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -406,7 +401,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: 'WORLD,UNIVERSE' },
-      renderedValue: 'WORLD,UNIVERSE' as AssertionValue,
+      renderedValue: 'WORLD,UNIVERSE',
       outputString: 'hello world',
       inverse: false,
     };
@@ -424,7 +419,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: 'HELLO,  WORLD  ,  UNIVERSE' },
-      renderedValue: 'HELLO,  WORLD  ,  UNIVERSE' as AssertionValue,
+      renderedValue: 'HELLO,  WORLD  ,  UNIVERSE',
       outputString: 'hello',
       inverse: false,
     };
@@ -442,7 +437,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: ',WORLD,,' },
-      renderedValue: ',WORLD,,' as AssertionValue,
+      renderedValue: ',WORLD,,',
       outputString: '',
       inverse: false,
     };
@@ -460,7 +455,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: '  HELLO  ' },
-      renderedValue: '  HELLO  ' as AssertionValue,
+      renderedValue: '  HELLO  ',
       outputString: 'hello',
       inverse: false,
     };
@@ -478,7 +473,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: 'HELLO  ,  WORLD' },
-      renderedValue: 'HELLO  ,  WORLD' as AssertionValue,
+      renderedValue: 'HELLO  ,  WORLD',
       outputString: 'hello',
       inverse: false,
     };
@@ -496,7 +491,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: '  HELLO  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  WORLD  ' as AssertionValue,
+      renderedValue: '  HELLO  ,  WORLD  ',
       outputString: 'hello',
       inverse: false,
     };
@@ -514,7 +509,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: '  HELLO  ,  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  ,  WORLD  ' as AssertionValue,
+      renderedValue: '  HELLO  ,  ,  WORLD  ',
       outputString: 'hello',
       inverse: false,
     };
@@ -532,7 +527,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: 'HELLO,,,,WORLD' },
-      renderedValue: 'HELLO,,,,WORLD' as AssertionValue,
+      renderedValue: 'HELLO,,,,WORLD',
       outputString: 'hello',
       inverse: false,
     };
@@ -550,7 +545,7 @@ describe('handleIContainsAny', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: '  ,  ,  ' },
-      renderedValue: '  ,  ,  ' as AssertionValue,
+      renderedValue: '  ,  ,  ',
       outputString: '',
       inverse: false,
     };
@@ -570,7 +565,7 @@ describe('handleContainsAll', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-all', value: ['hello', 'world'] },
-      renderedValue: ['hello', 'world'] as AssertionValue,
+      renderedValue: ['hello', 'world'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -588,7 +583,7 @@ describe('handleContainsAll', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-all', value: ['hello', 'world', 'universe'] },
-      renderedValue: ['hello', 'world', 'universe'] as AssertionValue,
+      renderedValue: ['hello', 'world', 'universe'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -608,7 +603,7 @@ describe('handleIContainsAll', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-all', value: ['HELLO', 'WORLD'] },
-      renderedValue: ['HELLO', 'WORLD'] as AssertionValue,
+      renderedValue: ['HELLO', 'WORLD'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -626,7 +621,7 @@ describe('handleIContainsAll', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-all', value: ['HELLO', 'WORLD', 'UNIVERSE'] },
-      renderedValue: ['HELLO', 'WORLD', 'UNIVERSE'] as AssertionValue,
+      renderedValue: ['HELLO', 'WORLD', 'UNIVERSE'],
       outputString: 'hello world',
       inverse: false,
     };
@@ -644,7 +639,7 @@ describe('handleIContainsAll', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-all', value: ['HeLLo', 'WoRLD'] },
-      renderedValue: ['HeLLo', 'WoRLD'] as AssertionValue,
+      renderedValue: ['HeLLo', 'WoRLD'],
       outputString: 'HELLO world',
       inverse: false,
     };

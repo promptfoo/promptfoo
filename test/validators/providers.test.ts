@@ -41,6 +41,14 @@ describe('ProviderOptionsSchema', () => {
     expect(result.success).toBe(true);
     expect(result.data).toEqual({});
   });
+
+  it('should reject non-integer or negative delay values', () => {
+    const negativeDelay = ProviderOptionsSchema.safeParse({ delay: -1 });
+    const floatDelay = ProviderOptionsSchema.safeParse({ delay: 1.5 });
+
+    expect(negativeDelay.success).toBe(false);
+    expect(floatDelay.success).toBe(false);
+  });
 });
 
 describe('ProviderSchema union', () => {

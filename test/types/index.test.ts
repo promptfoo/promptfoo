@@ -9,8 +9,10 @@ import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   CommandLineOptionsSchema,
+  EvaluateOptionsSchema,
   isGradingResult,
   TestCaseSchema,
+  TestGeneratorConfigSchema,
   TestSuiteConfigSchema,
   TestSuiteSchema,
   UnifiedConfigSchema,
@@ -70,6 +72,38 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('should validate redteam assertion types', () => {
+    const redteamAssertion = {
+      type: 'promptfoo:redteam:policy',
+      value: 'expected',
+    };
+
+    const result = AssertionSchema.safeParse(redteamAssertion);
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept custom string assertion types (for extensions)', () => {
+    // Custom assertion types are allowed for backward compatibility with extensions
+    // Invalid types will fail at runtime with "Unknown assertion type" error
+    const customAssertion = {
+      type: 'custom-assertion-type',
+      value: 'expected',
+    };
+
+    const result = AssertionSchema.safeParse(customAssertion);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject non-string assertion types', () => {
+    const invalidAssertion = {
+      type: 123,
+      value: 'expected',
+    };
+
+    const result = AssertionSchema.safeParse(invalidAssertion);
+    expect(result.success).toBe(false);
+  });
+
   it('should validate assertions with function values', () => {
     const functionAssertion = {
       type: 'equals',
@@ -87,6 +121,16 @@ describe('AssertionSchema', () => {
     };
 
     const result = AssertionSchema.safeParse(arrayAssertion);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate assertions with boolean values', () => {
+    const booleanAssertion = {
+      type: 'equals',
+      value: true,
+    };
+
+    const result = AssertionSchema.safeParse(booleanAssertion);
     expect(result.success).toBe(true);
   });
 });
@@ -306,6 +350,15 @@ describe('TestCaseSchema assertScoringFunction', () => {
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
+
+  it('should reject test case with invalid scoring function type', () => {
+    const testCase = {
+      description: 'Invalid scoring function',
+      assertScoringFunction: 123,
+      vars: { input: 'test' },
+    };
+    expect(TestCaseSchema.safeParse(testCase).success).toBe(false);
+  });
 });
 
 describe('CommandLineOptionsSchema', () => {
@@ -404,6 +457,67 @@ describe('CommandLineOptionsSchema', () => {
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+});
+
+describe('EvaluateOptionsSchema', () => {
+  it('should coerce numeric strings to numbers', () => {
+    const options = {
+      delay: '10',
+      maxConcurrency: '2',
+      repeat: '3',
+      timeoutMs: '500',
+      maxEvalTimeMs: '1000',
+    };
+
+    const result = EvaluateOptionsSchema.safeParse(options);
+    expect(result.success).toBe(true);
+    expect(result.data?.delay).toBe(10);
+    expect(result.data?.maxConcurrency).toBe(2);
+    expect(result.data?.repeat).toBe(3);
+    expect(result.data?.timeoutMs).toBe(500);
+    expect(result.data?.maxEvalTimeMs).toBe(1000);
+  });
+
+  it('should reject invalid numeric values', () => {
+    expect(EvaluateOptionsSchema.safeParse({ delay: -1 }).success).toBe(false);
+    expect(EvaluateOptionsSchema.safeParse({ maxConcurrency: 0 }).success).toBe(false);
+    expect(EvaluateOptionsSchema.safeParse({ repeat: 0 }).success).toBe(false);
+    expect(EvaluateOptionsSchema.safeParse({ timeoutMs: -10 }).success).toBe(false);
+    expect(EvaluateOptionsSchema.safeParse({ maxEvalTimeMs: -10 }).success).toBe(false);
+  });
+});
+
+describe('TestGeneratorConfigSchema', () => {
+  it('should accept nested config values', () => {
+    const config = {
+      path: 'file://path/to/generator.js:generate',
+      config: {
+        strategy: 'basic',
+        retries: 2,
+        flags: [true, false],
+        nested: {
+          mode: 'fast',
+          thresholds: [0.2, 0.8],
+          tags: ['a', 'b'],
+        },
+      },
+    };
+
+    const result = TestGeneratorConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject non-serializable config values', () => {
+    const config = {
+      path: 'file://path/to/generator.js:generate',
+      config: {
+        handler: () => 'nope',
+      },
+    };
+
+    const result = TestGeneratorConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
   });
 });
 
@@ -906,6 +1020,20 @@ describe('TestSuiteSchema', () => {
       const result = TestSuiteSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
       expect(result.data!.defaultTest).toBeUndefined();
+    });
+  });
+
+  describe('redteam validation', () => {
+    it('should reject invalid redteam plugin ids', () => {
+      const suite = {
+        ...baseTestSuite,
+        redteam: {
+          plugins: ['not-a-real-plugin'],
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(false);
     });
   });
 });

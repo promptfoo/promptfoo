@@ -17,17 +17,16 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).toThrow(/type/i);
     });
 
-    it('passes through assertions with unknown types (validated later at runtime)', () => {
-      // Note: Unknown types are validated at runtime, not at config load time
-      // This is because z.custom<RedteamAssertionTypes>() accepts custom plugin types
+    it('accepts custom string assertion types (for extensions)', () => {
+      // Custom assertion types are allowed for backward compatibility with extensions
+      // Invalid types will fail at runtime with "Unknown assertion type" error
       const tests: TestCase[] = [
         {
           vars: {},
-          assert: [{ type: 'not-a-real-type', value: 'foo' } as any],
+          assert: [{ type: 'custom-extension-type', value: 'foo' }],
         },
       ];
 
-      // This should not throw - unknown types are checked at runtime
       expect(() => validateAssertions(tests)).not.toThrow();
     });
 

@@ -2,8 +2,6 @@ import { z } from 'zod';
 import { PluginConfigSchema, StrategyConfigSchema } from '../redteam/types';
 import { JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import {
-  type Assertion,
-  type AssertionOrSet,
   type AssertionSet,
   AssertionOrSetSchema,
   AssertionOrSetOrRefSchema,
