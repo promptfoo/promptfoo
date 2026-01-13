@@ -7,13 +7,11 @@ import type {
   CallApiFunction,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
-  ProviderId,
-  ProviderLabel,
 } from '../types/providers';
 
 export const ProviderOptionsSchema = z.object({
-  id: z.custom<ProviderId>().optional(),
-  label: z.custom<ProviderLabel>().optional(),
+  id: z.string().optional(),
+  label: z.string().optional(),
   config: z.any().optional(),
   prompts: z.array(z.string()).optional(),
   transform: z.string().optional(),
@@ -37,7 +35,7 @@ export const ApiProviderSchema = z.object({
       (v) => typeof v === 'function',
     )
     .optional(),
-  label: z.custom<ProviderLabel>().optional(),
+  label: z.string().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),
   config: z.any().optional(),
