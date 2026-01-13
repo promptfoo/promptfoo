@@ -111,7 +111,10 @@ export const ProviderEnvOverridesSchema = z.object({
   AWS_SAGEMAKER_TOP_P: z.string().optional(),
   AWS_SAGEMAKER_MAX_RETRIES: z.string().optional(),
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
-});
+})
+  // Preserve unknown keys for user-defined env vars (backward compatibility)
+  // This allows users to pass arbitrary env vars like API_KEY, CUSTOM_VAR, etc.
+  .catchall(z.string().optional());
 
 // Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
 // while maintaining type safety for known env vars

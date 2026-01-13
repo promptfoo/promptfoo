@@ -271,7 +271,7 @@ export function reportProviderAPIKeyWarnings(
 ): string[] {
   const ids = providerChoices.map((c) => (typeof c === 'object' ? (c.id ?? '') : c));
 
-  const map: Record<string, keyof EnvOverrides> = {
+  const map: Record<string, string> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
   };

@@ -1764,8 +1764,8 @@ describe('readConfig', () => {
       description: 'Test config',
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
-      plugins: ['plugin1'],
-      strategies: ['strategy1'],
+      plugins: ['contracts'],
+      strategies: ['jailbreak'],
     };
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
@@ -1777,8 +1777,8 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
       redteam: {
-        plugins: ['plugin1'],
-        strategies: ['strategy1'],
+        plugins: ['contracts'],
+        strategies: ['jailbreak'],
       },
     });
   });
@@ -1808,7 +1808,6 @@ describe('readConfig', () => {
       description: 'test_config',
       prompts: ['test {{text}}'],
       providers: [{ $ref: 'defaultParams.yaml#/model' }],
-      temperature: 1,
       tests: [{ vars: { text: 'test text' } }],
     };
 
@@ -1816,7 +1815,6 @@ describe('readConfig', () => {
       description: 'test_config',
       prompts: ['test {{text}}'],
       providers: ['echo'],
-      temperature: 1,
       tests: [{ vars: { text: 'test text' } }],
     };
 

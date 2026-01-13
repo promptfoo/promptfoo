@@ -412,7 +412,9 @@ type EnvVars = {
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
-export type EnvVarKey = keyof EnvVars;
+// Using string instead of keyof EnvVars because env vars can have arbitrary names
+// and the index signature from catchall would make keyof return string | number
+export type EnvVarKey = string;
 
 /**
  * Get an environment variable.

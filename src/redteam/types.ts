@@ -97,7 +97,9 @@ export const PluginConfigSchema = z.object({
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
-});
+})
+  // Preserve unknown keys for custom plugin configs (backward compatibility)
+  .passthrough();
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 
