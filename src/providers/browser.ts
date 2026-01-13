@@ -274,10 +274,14 @@ export class BrowserProvider implements ApiProvider {
       // Handle big blob string of cookies
       const cookieString = maybeLoadFromExternalFile(this.config.cookies) as string;
       const cookiePairs = cookieString.split(';').map((pair) => pair.trim());
-      const cookies = cookiePairs.map((pair) => {
-        const [name, value] = pair.split('=');
-        return { name, value };
-      });
+      const cookies = cookiePairs
+        .filter((pair) => pair.includes('='))
+        .map((pair) => {
+          const eqIndex = pair.indexOf('=');
+          const name = pair.substring(0, eqIndex);
+          const value = pair.substring(eqIndex + 1);
+          return { name, value };
+        });
       await browserContext.addCookies(cookies);
     } else if (Array.isArray(this.config.cookies)) {
       // Handle array of cookie objects

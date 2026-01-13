@@ -5,6 +5,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { transform } from '../util/transform';
+import { includesString } from '../util/typeGuards';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -426,12 +427,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   private parseModelType(modelType: SageMakerConfig['modelType']): SageMakerConfig['modelType'] {
     // If an ID is provided, attempt to extract the model type from it
     const match = this.id().match(/^sagemaker:(?<modelType>.+):.+$/);
-    if (match) {
-      const modelTypeFromId = match.groups!.modelType;
+    if (match?.groups?.modelType) {
+      const modelTypeFromId = match.groups.modelType;
 
       // Validate the model type from ID
-      if (SUPPORTED_MODEL_TYPES.includes(modelTypeFromId as any)) {
-        return modelTypeFromId as SageMakerConfig['modelType'];
+      if (includesString(SUPPORTED_MODEL_TYPES, modelTypeFromId)) {
+        return modelTypeFromId;
       } else {
         throw new Error(
           `Invalid model type "${modelTypeFromId}" in provider ID. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,

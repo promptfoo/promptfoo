@@ -7,7 +7,6 @@ import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
-  InferenceConfig,
   InvokeAgentCommandInput,
   InvokeAgentCommandOutput,
   SessionState,
@@ -142,6 +141,14 @@ interface BedrockAgentsOptions {
       outputType: 'TEXT' | 'IMAGE';
     }>;
   };
+}
+
+interface BedrockAgentInferenceConfig {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maximumLength?: number;
+  stopSequences?: string[];
 }
 
 /**
@@ -293,7 +300,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Build inference configuration from both root-level and nested parameters
    * Root-level parameters take precedence over nested ones for convenience
    */
-  private buildInferenceConfig(): InferenceConfig | undefined {
+  private buildInferenceConfig(): BedrockAgentInferenceConfig | undefined {
     // Check if we have any inference config at root level or nested
     const hasRootConfig =
       this.config.temperature !== undefined ||
@@ -308,44 +315,43 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       return undefined;
     }
 
-    // Build inference config according to AWS SDK types
-    // Note: Using partial typing due to AWS SDK type constraints
-    const inferenceConfig = {} as InferenceConfig;
+    // Build inference config
+    const inferenceConfig: BedrockAgentInferenceConfig = {};
 
     // Start with nested config as base
     if (this.config.inferenceConfig) {
       if (this.config.inferenceConfig.maximumLength !== undefined) {
-        (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
+        inferenceConfig.maximumLength = this.config.inferenceConfig.maximumLength;
       }
       if (this.config.inferenceConfig.stopSequences !== undefined) {
-        (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
+        inferenceConfig.stopSequences = this.config.inferenceConfig.stopSequences;
       }
       if (this.config.inferenceConfig.temperature !== undefined) {
-        (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
+        inferenceConfig.temperature = this.config.inferenceConfig.temperature;
       }
       if (this.config.inferenceConfig.topP !== undefined) {
-        (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
+        inferenceConfig.topP = this.config.inferenceConfig.topP;
       }
       if (this.config.inferenceConfig.topK !== undefined) {
-        (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
+        inferenceConfig.topK = this.config.inferenceConfig.topK;
       }
     }
 
     // Override with root-level parameters (these take precedence for convenience)
     if (this.config.temperature !== undefined) {
-      (inferenceConfig as any).temperature = this.config.temperature;
+      inferenceConfig.temperature = this.config.temperature;
     }
     if (this.config.topP !== undefined) {
-      (inferenceConfig as any).topP = this.config.topP;
+      inferenceConfig.topP = this.config.topP;
     }
     if (this.config.topK !== undefined) {
-      (inferenceConfig as any).topK = this.config.topK;
+      inferenceConfig.topK = this.config.topK;
     }
     if (this.config.maximumLength !== undefined) {
-      (inferenceConfig as any).maximumLength = this.config.maximumLength;
+      inferenceConfig.maximumLength = this.config.maximumLength;
     }
     if (this.config.stopSequences !== undefined) {
-      (inferenceConfig as any).stopSequences = this.config.stopSequences;
+      inferenceConfig.stopSequences = this.config.stopSequences;
     }
 
     return inferenceConfig;

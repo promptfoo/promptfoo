@@ -539,10 +539,20 @@ export function calculateOpenAICost(
 
   const model = [
     ...OPENAI_CHAT_MODELS,
+
     ...OPENAI_COMPLETION_MODELS,
+
     ...OPENAI_REALTIME_MODELS,
+
     ...OPENAI_DEEP_RESEARCH_MODELS,
-  ].find((m) => m.id === modelName);
+  ].find((m) => m.id === modelName) as
+    | {
+        id: string;
+
+        cost: { input: number; output: number; audioInput?: number; audioOutput?: number };
+      }
+    | undefined;
+
   if (!model || !model.cost) {
     return undefined;
   }
@@ -550,12 +560,16 @@ export function calculateOpenAICost(
   let totalCost = 0;
 
   const inputCost = config.cost ?? model.cost.input;
+
   const outputCost = config.cost ?? model.cost.output;
+
   totalCost += inputCost * promptTokens + outputCost * completionTokens;
 
   if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
-    const audioInputCost = config.audioCost ?? (model.cost as any).audioInput ?? 0;
-    const audioOutputCost = config.audioCost ?? (model.cost as any).audioOutput ?? 0;
+    const audioInputCost = config.audioCost ?? model.cost.audioInput ?? 0;
+
+    const audioOutputCost = config.audioCost ?? model.cost.audioOutput ?? 0;
+
     totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
   }
 

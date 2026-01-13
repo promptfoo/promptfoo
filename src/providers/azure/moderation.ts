@@ -34,6 +34,7 @@ interface AzureTextBlocklistMatch {
 interface AzureAnalyzeTextResult {
   categoriesAnalysis?: AzureTextCategoriesAnalysis[];
   blocklistsMatch?: AzureTextBlocklistMatch[];
+  blocklists_match?: AzureTextBlocklistMatch[];
 }
 
 interface AzureModerationConfig {
@@ -59,8 +60,7 @@ export function parseAzureModerationResponse(
     }
 
     const categories = data.categoriesAnalysis || [];
-    const blocklistMatches =
-      data.blocklistsMatch || (data as any).blocklistsMatch || (data as any).blocklists_match || [];
+    const blocklistMatches = data.blocklistsMatch || data.blocklists_match || [];
 
     if (!categories || categories.length === 0) {
       return { flags: [] };
