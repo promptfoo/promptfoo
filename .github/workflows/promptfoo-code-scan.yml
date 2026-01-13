@@ -3,6 +3,11 @@ name: Promptfoo Code Scan
 on:
   pull_request:
     types: [opened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to scan'
+        required: true
 
 jobs:
   security-scan:
