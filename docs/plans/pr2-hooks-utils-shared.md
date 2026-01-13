@@ -21,53 +21,53 @@ These are **pure additions** with no command integrations - they're leaf modules
 
 ### Hooks (`src/ui/hooks/`)
 
-| File                  | Lines | Purpose                                    |
-| --------------------- | ----- | ------------------------------------------ |
-| `index.ts`            | 26    | Barrel exports                             |
-| `useKeypress.ts`      | 232   | Cross-platform keyboard handling           |
-| `useSpinnerFrame.ts`  | 83    | Animated spinner with multiple styles      |
-| `useTerminalSize.ts`  | 77    | Responsive terminal dimensions             |
-| `useTerminalTitle.ts` | 54    | Set terminal window title                  |
-| **Total**             | 472   |                                            |
+| File                  | Lines | Purpose                               |
+| --------------------- | ----- | ------------------------------------- |
+| `index.ts`            | 26    | Barrel exports                        |
+| `useKeypress.ts`      | 232   | Cross-platform keyboard handling      |
+| `useSpinnerFrame.ts`  | 83    | Animated spinner with multiple styles |
+| `useTerminalSize.ts`  | 77    | Responsive terminal dimensions        |
+| `useTerminalTitle.ts` | 54    | Set terminal window title             |
+| **Total**             | 472   |                                       |
 
 > **Note:** `useTokenMetrics.ts` was deferred to PR 3 (Eval UI Core) as it depends on `EvalContext`.
 
 ### Utils (`src/ui/utils/`)
 
-| File                 | Lines | Purpose                                       |
-| -------------------- | ----- | --------------------------------------------- |
-| `index.ts`           | 13    | Barrel exports                                |
-| `clipboard.ts`       | 186   | Cross-platform clipboard operations           |
-| `export.ts`          | 313   | Export results to JSON/CSV/HTML               |
-| `format.ts`          | 236   | Format tokens, costs, latency, percentages    |
-| `history.ts`         | 206   | Command history with persistence              |
-| `InkUITransport.ts`  | 157   | Logger transport for Ink UI                   |
-| `RingBuffer.ts`      | 258   | Efficient circular buffer for log storage     |
-| `sparkline.ts`       | 153   | Unicode sparkline charts for metrics          |
-| **Total**            | 1,522 |                                               |
+| File                | Lines | Purpose                                    |
+| ------------------- | ----- | ------------------------------------------ |
+| `index.ts`          | 13    | Barrel exports                             |
+| `clipboard.ts`      | 186   | Cross-platform clipboard operations        |
+| `export.ts`         | 313   | Export results to JSON/CSV/HTML            |
+| `format.ts`         | 236   | Format tokens, costs, latency, percentages |
+| `history.ts`        | 206   | Command history with persistence           |
+| `InkUITransport.ts` | 157   | Logger transport for Ink UI                |
+| `RingBuffer.ts`     | 258   | Efficient circular buffer for log storage  |
+| `sparkline.ts`      | 153   | Unicode sparkline charts for metrics       |
+| **Total**           | 1,522 |                                            |
 
 ### Shared Components (`src/ui/components/shared/`)
 
-| File                  | Lines | Purpose                                        |
-| --------------------- | ----- | ---------------------------------------------- |
-| `index.ts`            | 38    | Barrel exports                                 |
-| `Badge.tsx`           | 115   | Color-coded badges (PASS/FAIL, scores)         |
-| `ErrorBoundary.tsx`   | 154   | React error boundary for graceful failures     |
-| `ProgressBar.tsx`     | 148   | Horizontal progress bars                       |
-| `Spinner.tsx`         | 90    | Animated loading spinners                      |
-| `StatusMessage.tsx`   | 117   | Success/error/warning messages                 |
-| **Total**             | 662   |                                                |
+| File                | Lines | Purpose                                    |
+| ------------------- | ----- | ------------------------------------------ |
+| `index.ts`          | 38    | Barrel exports                             |
+| `Badge.tsx`         | 115   | Color-coded badges (PASS/FAIL, scores)     |
+| `ErrorBoundary.tsx` | 154   | React error boundary for graceful failures |
+| `ProgressBar.tsx`   | 148   | Horizontal progress bars                   |
+| `Spinner.tsx`       | 90    | Animated loading spinners                  |
+| `StatusMessage.tsx` | 117   | Success/error/warning messages             |
+| **Total**           | 662   |                                            |
 
 ### Tests
 
-| File                                | Lines | Coverage                        |
-| ----------------------------------- | ----- | ------------------------------- |
-| `test/ui/format.test.ts`            | 223   | Format utilities                |
-| `test/ui/utils/RingBuffer.test.ts`  | 487   | Ring buffer (comprehensive)     |
-| `test/ui/utils/clipboard.test.ts`   | 299   | Clipboard operations            |
-| `test/ui/utils/export.test.ts`      | 300   | Export functionality            |
-| `test/ui/utils/history.test.ts`     | 106   | Command history                 |
-| **Total**                           | 1,415 |                                 |
+| File                               | Lines | Coverage                    |
+| ---------------------------------- | ----- | --------------------------- |
+| `test/ui/format.test.ts`           | 223   | Format utilities            |
+| `test/ui/utils/RingBuffer.test.ts` | 487   | Ring buffer (comprehensive) |
+| `test/ui/utils/clipboard.test.ts`  | 299   | Clipboard operations        |
+| `test/ui/utils/export.test.ts`     | 300   | Export functionality        |
+| `test/ui/utils/history.test.ts`    | 106   | Command history             |
+| **Total**                          | 1,415 |                             |
 
 > **Note:** `useTokenMetrics.test.ts` deferred to PR 3 with the hook.
 
@@ -75,13 +75,13 @@ These are **pure additions** with no command integrations - they're leaf modules
 
 ## Summary
 
-| Category           | Files | Lines  |
-| ------------------ | ----- | ------ |
-| Hooks              | 5     | 472    |
-| Utils              | 8     | 1,522  |
-| Shared Components  | 6     | 662    |
-| Tests              | 5     | 1,415  |
-| **Total**          | **24**| **~4,071** |
+| Category          | Files  | Lines      |
+| ----------------- | ------ | ---------- |
+| Hooks             | 5      | 472        |
+| Utils             | 8      | 1,522      |
+| Shared Components | 6      | 662        |
+| Tests             | 5      | 1,415      |
+| **Total**         | **24** | **~4,071** |
 
 ---
 
@@ -95,12 +95,12 @@ Cross-platform keyboard handling with vim-style key detection:
 export function useKeypress(handler: (key: KeyInfo) => void, options?: KeypressOptions): void;
 
 interface KeyInfo {
-  key: string;      // The character
-  raw: string;      // Raw input
-  ctrl: boolean;    // Ctrl modifier
-  meta: boolean;    // Meta/Alt modifier
-  shift: boolean;   // Shift modifier
-  name?: string;    // Named keys: 'escape', 'return', etc.
+  key: string; // The character
+  raw: string; // Raw input
+  ctrl: boolean; // Ctrl modifier
+  meta: boolean; // Meta/Alt modifier
+  shift: boolean; // Shift modifier
+  name?: string; // Named keys: 'escape', 'return', etc.
 }
 
 // Higher-level hooks built on useKeypress:
@@ -114,13 +114,13 @@ export function useKeyHeld(targetKey: string, holdDuration: number): boolean;
 Consistent formatting across the UI:
 
 ```typescript
-formatTokens(12500);     // "12.5k"
-formatTokens(1500000);   // "1.5M"
-formatCost(0.0035);      // "$0.0035"
-formatCost(1.50);        // "$1.50"
-formatLatency(1500);     // "1.5s"
-formatPercent(0.847);    // "84.7%"
-truncate("long text", 10); // "long te..."
+formatTokens(12500); // "12.5k"
+formatTokens(1500000); // "1.5M"
+formatCost(0.0035); // "$0.0035"
+formatCost(1.5); // "$1.50"
+formatLatency(1500); // "1.5s"
+formatPercent(0.847); // "84.7%"
+truncate('long text', 10); // "long te..."
 ```
 
 ### RingBuffer
@@ -129,10 +129,10 @@ Efficient fixed-size circular buffer for log storage:
 
 ```typescript
 const buffer = new RingBuffer<LogEntry>(1000);
-buffer.push(entry);           // O(1) - overwrites oldest if full
-buffer.toArray();             // Get all entries in order
-buffer.slice(-10);            // Get last 10 entries
-buffer.clear();               // Reset buffer
+buffer.push(entry); // O(1) - overwrites oldest if full
+buffer.toArray(); // Get all entries in order
+buffer.slice(-10); // Get last 10 entries
+buffer.clear(); // Reset buffer
 ```
 
 ### Shared Components
@@ -177,7 +177,7 @@ buffer.clear();               // Reset buffer
 ```tsx
 <ErrorBoundary fallback={<Text color="red">Something went wrong</Text>}>
   <MyComponent />
-</ErrorBoundary>
+</ErrorBoundary>;
 
 // Or as HOC
 const SafeComponent = withErrorBoundary(MyComponent);
@@ -244,6 +244,7 @@ git diff main..origin/feat/ink-cli-ui -- src/ui/hooks src/ui/utils src/ui/compon
 ### 3. Verify No Command Changes
 
 This PR should NOT modify any files in:
+
 - `src/commands/`
 - `src/main.ts`
 - `src/evaluator.ts`
@@ -356,7 +357,7 @@ These could be added in this PR or a follow-up.
 
 ## PR Description Template
 
-```markdown
+````markdown
 ## Summary
 
 Adds reusable building blocks for the Ink-based interactive CLI:
@@ -379,12 +380,14 @@ This is part of the [Ink CLI UI migration](#6611) - PR 2 of 6.
 ```bash
 npx vitest run test/ui
 ```
+````
 
 ## Notes
 
 - No command integrations - these are pure building blocks
 - All modules use dynamic imports where appropriate
 - Zero user-visible changes (opt-in UI not affected)
+
 ```
 
 ---
@@ -400,3 +403,4 @@ npx vitest run test/ui
 ## Next Steps After PR 2
 
 With hooks, utils, and shared components in place, **PR 3 (Eval UI Core)** and **PR 4 (Auxiliary UIs)** can begin development in parallel since they both depend only on PR 1 + PR 2.
+```
