@@ -1,28 +1,12 @@
-"""
-UCP Agent Implementation using Google ADK with Gemini
-
-This module implements an AI-powered UCP (Universal Commerce Protocol) agent that uses
-Google's Agent Development Kit (ADK) with Gemini 3 Flash to:
-1. Discover business capabilities via /.well-known/ucp
-2. Negotiate capability intersection with the platform profile
-3. Execute checkout flows by reasoning about protocol state
-4. Handle extensions (fulfillment, discounts) intelligently
-5. Return structured result artifacts for promptfoo evaluation
-
-The agent uses LLM reasoning to decide actions based on checkout state and messages,
-rather than hard-coded deterministic logic.
-
-See: https://ucp.dev/specification/overview/
-"""
+"""UCP Agent using Google ADK with Gemini for agentic commerce evaluation."""
 
 import asyncio
 import json
 import logging
 import os
-import re
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
@@ -41,79 +25,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-# OpenTelemetry imports for tracing
-try:
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
-
-    OTEL_AVAILABLE = True
-except ImportError:
-    OTEL_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
-
-# OpenTelemetry setup - initialized lazily on first use
-_tracer: Optional[Any] = None
-_tracing_initialized = False
-
-
-def _init_tracing():
-    """Initialize OpenTelemetry tracing if available."""
-    global _tracer, _tracing_initialized
-
-    if _tracing_initialized or not OTEL_AVAILABLE:
-        return
-
-    try:
-        resource = Resource.create({
-            "service.name": "ucp-agent-provider",
-            "service.version": "1.0.0",
-        })
-
-        exporter = OTLPSpanExporter(
-            endpoint="http://localhost:4318/v1/traces",
-        )
-
-        provider = TracerProvider(resource=resource)
-        provider.add_span_processor(SimpleSpanProcessor(exporter))
-        trace.set_tracer_provider(provider)
-
-        _tracer = trace.get_tracer("ucp-agent-provider", "1.0.0")
-        _tracing_initialized = True
-        logger.debug("OpenTelemetry tracing initialized")
-    except Exception as e:
-        logger.warning(f"Failed to initialize OpenTelemetry tracing: {e}")
-
-
-def _parse_traceparent(traceparent: str) -> Optional[Any]:
-    """Parse W3C Trace Context traceparent header."""
-    if not OTEL_AVAILABLE:
-        return None
-
-    match = re.match(r"^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$", traceparent)
-    if not match:
-        return None
-
-    version, trace_id, parent_id, trace_flags = match.groups()
-
-    return SpanContext(
-        trace_id=int(trace_id, 16),
-        span_id=int(parent_id, 16),
-        is_remote=True,
-        trace_flags=TraceFlags(int(trace_flags, 16)),
-    )
-
-
-def _get_tracer():
-    """Get or initialize the tracer."""
-    global _tracer
-    if _tracer is None and OTEL_AVAILABLE:
-        _init_tracing()
-    return _tracer
 
 
 class Transport(Enum):
@@ -132,10 +44,7 @@ class CheckoutStatus(Enum):
 
 @dataclass
 class UCPResultArtifact:
-    """
-    Structured result artifact returned by the UCP agent.
-    This schema is designed for promptfoo assertions.
-    """
+    """Structured result artifact for promptfoo assertions."""
 
     scenario_id: str
     transport: str
@@ -156,34 +65,9 @@ class UCPResultArtifact:
     transcript: list[dict] = field(default_factory=list)
     error: Optional[str] = None
 
-    def to_dict(self) -> dict:
-        return {
-            "scenario_id": self.scenario_id,
-            "transport": self.transport,
-            "success": self.success,
-            "final_status": self.final_status,
-            "checkout_id": self.checkout_id,
-            "order_id": self.order_id,
-            "currency": self.currency,
-            "total_amount": self.total_amount,
-            "line_items": self.line_items,
-            "applied_discounts": self.applied_discounts,
-            "rejected_discounts": self.rejected_discounts,
-            "requires_escalation": self.requires_escalation,
-            "continue_url": self.continue_url,
-            "protocol": self.protocol,
-            "metrics": self.metrics,
-            "messages_seen": self.messages_seen,
-            "transcript": self.transcript,
-            "error": self.error,
-        }
-
 
 class UCPClient:
-    """
-    Low-level UCP client for REST transport.
-    Handles profile discovery, capability negotiation, and checkout operations.
-    """
+    """UCP REST client for discovery, negotiation, and checkout operations."""
 
     def __init__(
         self,
@@ -205,18 +89,9 @@ class UCPClient:
         }
 
     def _get_ucp_agent_header(self) -> str:
-        """Generate UCP-Agent header value per RFC 8941 structured field syntax."""
-        profile_uri = self.platform_profile.get("profile_uri", "https://platform.example/profile")
-        return f'profile="{profile_uri}"'
+        return f'profile="{self.platform_profile.get("profile_uri", "https://platform.example/profile")}"'
 
-    def _make_rest_request(
-        self,
-        method: str,
-        path: str,
-        json_data: Optional[dict] = None,
-        idempotency_key: Optional[str] = None,
-    ) -> dict:
-        """Make a REST request with required UCP headers."""
+    def _make_rest_request(self, method: str, path: str, json_data: Optional[dict] = None, idempotency_key: Optional[str] = None) -> dict:
         base = self.rest_endpoint.rstrip("/")
         path = path.lstrip("/")
         url = f"{base}/{path}"
@@ -245,7 +120,6 @@ class UCPClient:
         return response.json()
 
     def discover(self) -> dict:
-        """Fetch business profile from /.well-known/ucp"""
         url = f"{self.business_url}/.well-known/ucp"
         self.metrics["http_requests"] += 1
 
@@ -266,7 +140,6 @@ class UCPClient:
         return self.business_profile
 
     def negotiate_capabilities(self) -> list[dict]:
-        """Compute capability intersection between platform and business."""
         if not self.business_profile:
             raise ValueError("Must call discover() first")
 
@@ -296,18 +169,9 @@ class UCPClient:
         return final_caps
 
     def has_capability(self, name: str) -> bool:
-        """Check if a capability was negotiated."""
         return any(cap["name"] == name for cap in self.negotiated_capabilities)
 
-    def create_checkout(
-        self,
-        line_items: list[dict],
-        buyer: Optional[dict] = None,
-        currency: str = "USD",
-        discounts: Optional[dict] = None,
-        fulfillment: Optional[dict] = None,
-    ) -> dict:
-        """Create a checkout session."""
+    def create_checkout(self, line_items: list[dict], buyer: Optional[dict] = None, currency: str = "USD", discounts: Optional[dict] = None, fulfillment: Optional[dict] = None) -> dict:
         # Transform line_items to UCP API format
         api_line_items = []
         for item in line_items:
@@ -342,11 +206,9 @@ class UCPClient:
         )
 
     def get_checkout(self, checkout_id: str) -> dict:
-        """Get checkout session by ID."""
         return self._make_rest_request("GET", f"/checkout-sessions/{checkout_id}")
 
     def update_checkout(self, checkout_id: str, updates: dict) -> dict:
-        """Update checkout session (full replacement)."""
         payload = {"id": checkout_id, **updates}
         if "payment" not in payload:
             payload["payment"] = {}
@@ -358,18 +220,8 @@ class UCPClient:
         )
 
     def complete_checkout(self, checkout_id: str, payment_data: Optional[dict] = None) -> dict:
-        """Complete checkout."""
         if payment_data is None:
-            payment_data = {
-                "id": "instr_test_1",
-                "handler_id": "mock_payment_handler",
-                "handler_name": "mock_payment_handler",
-                "type": "card",
-                "brand": "Visa",
-                "last_digits": "1234",
-                "credential": {"type": "token", "token": "success_token"},
-            }
-
+            payment_data = {"id": "instr_test_1", "handler_id": "mock_payment_handler", "handler_name": "mock_payment_handler", "type": "card", "brand": "Visa", "last_digits": "1234", "credential": {"type": "token", "token": "success_token"}}
         payload = {"payment_data": payment_data, "risk_signals": {}}
         return self._make_rest_request(
             "POST",
@@ -379,10 +231,6 @@ class UCPClient:
         )
 
 
-# =============================================================================
-# ADK Tool Functions - These wrap UCPClient methods for the AI agent
-# =============================================================================
-
 # Global state for the current checkout session
 _current_client: Optional[UCPClient] = None
 _current_checkout: Optional[dict] = None
@@ -391,26 +239,24 @@ _messages_seen: list[dict] = []
 _transcript: list[dict] = []
 
 
-def discover_ucp_server() -> dict:
-    """
-    Discover the UCP server's capabilities by fetching its profile.
-    This must be called first before any checkout operations.
+def _get_next_action(status: str) -> str:
+    """Get the next action hint based on checkout status."""
+    if status == "ready_for_complete":
+        return "complete_checkout"
+    if status == "requires_escalation":
+        return "report_escalation"
+    return "resolve issues from messages"
 
-    Returns a dict with:
-    - ucp_version: The UCP protocol version
-    - capabilities: List of supported capabilities
-    - rest_endpoint: The REST API endpoint
-    """
+
+def discover_ucp_server() -> dict:
+    """Discover the UCP server's capabilities. Call this first."""
     global _current_client
     if not _current_client:
         return {"error": "Client not initialized"}
-
     try:
         profile = _current_client.discover()
         caps = _current_client.negotiate_capabilities()
-
         _transcript.append({"role": "tool", "content": f"Discovered server with {len(caps)} capabilities"})
-
         return {
             "status": "success",
             "ucp_version": profile.get("ucp", {}).get("version", "unknown"),
@@ -422,30 +268,14 @@ def discover_ucp_server() -> dict:
 
 
 def create_checkout() -> dict:
-    """
-    Create a new checkout session with the items from the current scenario.
-    Call discover_ucp_server first to establish capabilities.
-
-    Returns the checkout state including:
-    - checkout_id: The ID of the created checkout
-    - status: Current checkout status (incomplete, ready_for_complete, etc.)
-    - messages: Any error or warning messages that need attention
-    - line_items: The items in the checkout
-    - totals: Price totals
-    """
+    """Create a new checkout session with items from the current scenario."""
     global _current_client, _current_checkout, _current_scenario, _messages_seen
-
     if not _current_client:
         return {"error": "Client not initialized"}
     if not _current_scenario:
         return {"error": "No scenario loaded"}
-
     try:
-        # Prepare discounts if provided
-        discounts = None
-        if _current_scenario.get("discount_codes"):
-            discounts = {"codes": _current_scenario["discount_codes"]}
-
+        discounts = {"codes": _current_scenario["discount_codes"]} if _current_scenario.get("discount_codes") else None
         checkout = _current_client.create_checkout(
             line_items=_current_scenario.get("line_items", []),
             buyer=_current_scenario.get("buyer"),
@@ -453,64 +283,37 @@ def create_checkout() -> dict:
             discounts=discounts,
             fulfillment=_current_scenario.get("fulfillment"),
         )
-
         _current_checkout = checkout
-
-        # Extract messages
         messages = checkout.get("messages") or []
-        for msg in messages:
-            _messages_seen.append(msg)
-
-        _transcript.append({
-            "role": "tool",
-            "content": f"Created checkout {checkout.get('id')} with status: {checkout.get('status')}"
-        })
-
-        checkout_status = checkout.get("status")
-        next_action = "complete_checkout" if checkout_status == "ready_for_complete" else "resolve issues from messages"
-        if checkout_status == "requires_escalation":
-            next_action = "report_escalation"
-
+        _messages_seen.extend(messages)
+        _transcript.append({"role": "tool", "content": f"Created checkout {checkout.get('id')} with status: {checkout.get('status')}"})
+        status = checkout.get("status")
         return {
             "status": "success",
             "checkout_id": checkout.get("id"),
-            "checkout_status": checkout_status,
+            "checkout_status": status,
             "messages": messages,
             "line_items_count": len(checkout.get("line_items", [])),
             "has_fulfillment": "fulfillment" in checkout,
             "has_discounts": "discounts" in checkout,
-            "NEXT_ACTION": next_action,
+            "NEXT_ACTION": _get_next_action(status),
         }
     except requests.HTTPError as e:
-        error_detail = e.response.json() if e.response else str(e)
-        return {"status": "error", "error": str(error_detail)}
+        return {"status": "error", "error": str(e.response.json() if e.response else e)}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
 def get_checkout_status() -> dict:
-    """
-    Get the current status and details of the checkout session.
-    Use this to check what needs to be resolved before completion.
-
-    Returns:
-    - checkout_status: Current status (incomplete, ready_for_complete, requires_escalation, completed)
-    - messages: Any pending error/warning messages
-    - missing_fields: What information is still needed
-    - can_complete: Whether the checkout is ready to complete
-    """
+    """Get the current status of the checkout session."""
     global _current_checkout, _current_client
-
     if not _current_checkout:
         return {"error": "No active checkout"}
-
     try:
         checkout = _current_client.get_checkout(_current_checkout.get("id"))
         _current_checkout = checkout
-
         messages = checkout.get("messages") or []
         status = checkout.get("status")
-
         # Analyze what's missing
         missing = []
         for msg in messages:
@@ -519,11 +322,6 @@ def get_checkout_status() -> dict:
                 missing.append("buyer_info")
             if "fulfillment" in code or "shipping" in code:
                 missing.append("fulfillment")
-
-        next_action = "complete_checkout" if status == "ready_for_complete" else "resolve issues from messages"
-        if status == "requires_escalation":
-            next_action = "report_escalation"
-
         return {
             "status": "success",
             "checkout_status": status,
@@ -532,248 +330,100 @@ def get_checkout_status() -> dict:
             "can_complete": status == "ready_for_complete",
             "requires_escalation": status == "requires_escalation",
             "continue_url": checkout.get("continue_url") if status == "requires_escalation" else None,
-            "NEXT_ACTION": next_action,
+            "NEXT_ACTION": _get_next_action(status),
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
-def update_checkout_fulfillment(
-    street1: str,
-    city: str,
-    region: str,
-    postal_code: str,
-    country: str,
-    street2: str = "",
-) -> dict:
-    """
-    Update the checkout with shipping fulfillment information.
-    Use this when the checkout requires fulfillment/shipping address.
-
-    Args:
-        street1: Primary street address
-        city: City name
-        region: State/province code (e.g., "CA")
-        postal_code: Postal/ZIP code
-        country: Country code (e.g., "US")
-        street2: Optional secondary address line
-
-    Returns the updated checkout status.
-    """
+def update_checkout_fulfillment(street1: str, city: str, region: str, postal_code: str, country: str, street2: str = "") -> dict:
+    """Update checkout with shipping address."""
     global _current_checkout, _current_client, _messages_seen
-
     if not _current_checkout:
         return {"error": "No active checkout"}
-
     try:
-        dest_id = f"dest_{uuid.uuid4().hex[:8]}"
-        method_id = f"method_{uuid.uuid4().hex[:8]}"
-        group_id = f"group_{uuid.uuid4().hex[:8]}"
-
-        fulfillment = {
-            "methods": [{
-                "id": method_id,
-                "type": "shipping",
-                "groups": [{"id": group_id, "selected_option_id": "std-ship"}],
-                "destinations": [{
-                    "id": dest_id,
-                    "address": {
-                        "street1": street1,
-                        "street2": street2,
-                        "city": city,
-                        "region": region,
-                        "postal_code": postal_code,
-                        "country": country,
-                    },
-                }],
-                "selected_destination_id": dest_id,
-            }]
-        }
-
-        updates = {
-            "currency": _current_checkout.get("currency", "USD"),
-            "line_items": _current_checkout.get("line_items", []),
-            "fulfillment": fulfillment,
-        }
+        dest_id, method_id, group_id = [f"{t}_{uuid.uuid4().hex[:8]}" for t in ("dest", "method", "group")]
+        fulfillment = {"methods": [{
+            "id": method_id, "type": "shipping",
+            "groups": [{"id": group_id, "selected_option_id": "std-ship"}],
+            "destinations": [{"id": dest_id, "address": {"street1": street1, "street2": street2, "city": city, "region": region, "postal_code": postal_code, "country": country}}],
+            "selected_destination_id": dest_id,
+        }]}
+        updates = {"currency": _current_checkout.get("currency", "USD"), "line_items": _current_checkout.get("line_items", []), "fulfillment": fulfillment}
         if _current_checkout.get("buyer"):
             updates["buyer"] = _current_checkout["buyer"]
         if _current_checkout.get("discounts"):
             updates["discounts"] = _current_checkout["discounts"]
-
         checkout = _current_client.update_checkout(_current_checkout.get("id"), updates)
         _current_checkout = checkout
-
-        for msg in checkout.get("messages") or []:
-            _messages_seen.append(msg)
-
-        checkout_status = checkout.get("status")
-        _transcript.append({"role": "tool", "content": f"Updated fulfillment, status: {checkout_status}"})
-
-        next_action = "complete_checkout" if checkout_status == "ready_for_complete" else "resolve remaining issues"
-        if checkout_status == "requires_escalation":
-            next_action = "report_escalation"
-
-        return {
-            "status": "success",
-            "checkout_status": checkout_status,
-            "messages": checkout.get("messages") or [],
-            "NEXT_ACTION": next_action,
-        }
+        _messages_seen.extend(checkout.get("messages") or [])
+        status = checkout.get("status")
+        _transcript.append({"role": "tool", "content": f"Updated fulfillment, status: {status}"})
+        return {"status": "success", "checkout_status": status, "messages": checkout.get("messages") or [], "NEXT_ACTION": _get_next_action(status)}
     except requests.HTTPError as e:
-        error_detail = e.response.json() if e.response else str(e)
-        return {"status": "error", "error": str(error_detail)}
+        return {"status": "error", "error": str(e.response.json() if e.response else e)}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
 def update_checkout_buyer(email: str, given_name: str = "", family_name: str = "") -> dict:
-    """
-    Update the checkout with buyer information.
-    Use this when the checkout requires buyer email or name.
-
-    Args:
-        email: Buyer's email address
-        given_name: Buyer's first name (optional)
-        family_name: Buyer's last name (optional)
-
-    Returns the updated checkout status.
-    """
+    """Update checkout with buyer email/name."""
     global _current_checkout, _current_client, _messages_seen
-
     if not _current_checkout:
         return {"error": "No active checkout"}
-
     try:
         buyer = {"email": email}
         if given_name or family_name:
-            buyer["name"] = {}
-            if given_name:
-                buyer["name"]["given"] = given_name
-            if family_name:
-                buyer["name"]["family"] = family_name
-
-        updates = {
-            "currency": _current_checkout.get("currency", "USD"),
-            "line_items": _current_checkout.get("line_items", []),
-            "buyer": buyer,
-        }
+            buyer["name"] = {k: v for k, v in [("given", given_name), ("family", family_name)] if v}
+        updates = {"currency": _current_checkout.get("currency", "USD"), "line_items": _current_checkout.get("line_items", []), "buyer": buyer}
         if _current_checkout.get("fulfillment"):
             updates["fulfillment"] = _current_checkout["fulfillment"]
         if _current_checkout.get("discounts"):
             updates["discounts"] = _current_checkout["discounts"]
-
         checkout = _current_client.update_checkout(_current_checkout.get("id"), updates)
         _current_checkout = checkout
-
-        for msg in checkout.get("messages") or []:
-            _messages_seen.append(msg)
-
-        checkout_status = checkout.get("status")
-        _transcript.append({"role": "tool", "content": f"Updated buyer info, status: {checkout_status}"})
-
-        next_action = "complete_checkout" if checkout_status == "ready_for_complete" else "resolve remaining issues"
-        if checkout_status == "requires_escalation":
-            next_action = "report_escalation"
-
-        return {
-            "status": "success",
-            "checkout_status": checkout_status,
-            "messages": checkout.get("messages") or [],
-            "NEXT_ACTION": next_action,
-        }
+        _messages_seen.extend(checkout.get("messages") or [])
+        status = checkout.get("status")
+        _transcript.append({"role": "tool", "content": f"Updated buyer info, status: {status}"})
+        return {"status": "success", "checkout_status": status, "messages": checkout.get("messages") or [], "NEXT_ACTION": _get_next_action(status)}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
 def complete_checkout() -> dict:
-    """
-    Complete the checkout and place the order.
-    Only call this when checkout_status is 'ready_for_complete'.
-
-    Returns:
-    - success: Whether the order was placed
-    - order_id: The ID of the placed order (if successful)
-    - final_status: The final checkout status
-    """
+    """Complete the checkout. Only call when status is 'ready_for_complete'."""
     global _current_checkout, _current_client, _messages_seen
-
     if not _current_checkout:
         return {"error": "No active checkout"}
-
     try:
         checkout = _current_client.complete_checkout(_current_checkout.get("id"))
         _current_checkout = checkout
-
-        for msg in checkout.get("messages") or []:
-            _messages_seen.append(msg)
-
+        _messages_seen.extend(checkout.get("messages") or [])
         order = checkout.get("order", {})
         success = checkout.get("status") == "completed"
-
-        _transcript.append({
-            "role": "tool",
-            "content": f"Checkout {'completed' if success else 'failed'}, order: {order.get('id', 'none')}"
-        })
-
-        return {
-            "status": "success" if success else "failed",
-            "checkout_status": checkout.get("status"),
-            "order_id": order.get("id"),
-            "completed": success,
-        }
+        _transcript.append({"role": "tool", "content": f"Checkout {'completed' if success else 'failed'}, order: {order.get('id', 'none')}"})
+        return {"status": "success" if success else "failed", "checkout_status": checkout.get("status"), "order_id": order.get("id"), "completed": success}
     except requests.HTTPError as e:
-        # Detailed debugging for the HTTPError
         resp = e.response
-        logger.warning(f"Complete checkout HTTPError: resp_type={type(resp)}, resp_status={getattr(resp, 'status_code', 'NO_ATTR')}, resp_text={getattr(resp, 'text', 'NO_ATTR')[:200] if hasattr(resp, 'text') else 'NO_TEXT'}")
-
-        raw_text = resp.text if resp else ""
+        logger.warning(f"Complete checkout HTTPError: status={getattr(resp, 'status_code', None)}, text={getattr(resp, 'text', '')[:200]}")
         try:
             error_detail = resp.json() if resp else {}
         except Exception:
-            error_detail = {"raw": raw_text}
-
-        # Handle completion failure - may need to resolve issues first
-        if "messages" in error_detail:
-            for msg in error_detail["messages"]:
-                _messages_seen.append(msg)
+            error_detail = {"raw": resp.text if resp else ""}
+        _messages_seen.extend(error_detail.get("messages") or [])
         if "detail" in error_detail:
-            _messages_seen.append({
-                "type": "error",
-                "code": error_detail.get("code", "COMPLETION_FAILED"),
-                "content": error_detail["detail"],
-            })
-        return {
-            "status": "error",
-            "error": str(error_detail) if error_detail else raw_text,
-            "messages": error_detail.get("messages") or [],
-            "http_status": e.response.status_code if e.response else None,
-        }
+            _messages_seen.append({"type": "error", "code": error_detail.get("code", "COMPLETION_FAILED"), "content": error_detail["detail"]})
+        return {"status": "error", "error": str(error_detail), "messages": error_detail.get("messages") or [], "http_status": resp.status_code if resp else None}
     except Exception as e:
         logger.warning(f"Complete checkout exception: {type(e).__name__}: {e}")
         return {"status": "error", "error": str(e)}
 
 
 def report_escalation(continue_url: str) -> dict:
-    """
-    Report that the checkout requires escalation to the business UI.
-    Call this when checkout_status is 'requires_escalation'.
-
-    Args:
-        continue_url: The URL to redirect the user to
-
-    Returns confirmation of the escalation.
-    """
+    """Report escalation when checkout requires user handoff to business UI."""
     _transcript.append({"role": "tool", "content": f"Escalation required: {continue_url}"})
-    return {
-        "status": "success",
-        "escalation_reported": True,
-        "continue_url": continue_url,
-    }
+    return {"status": "success", "escalation_reported": True, "continue_url": continue_url}
 
-
-# =============================================================================
-# UCP Agent Instruction (System Prompt)
-# =============================================================================
 
 UCP_AGENT_INSTRUCTION = """You are a UCP checkout agent. Your job is to complete commerce checkouts.
 
@@ -804,31 +454,8 @@ update_checkout_buyer("test@example.com", "Test", "User")
 """
 
 
-# =============================================================================
-# Main Agent Runner
-# =============================================================================
-
-
-def run_ucp_scenario(
-    scenario: dict,
-    business_url: str = "http://localhost:8182",
-    platform_profile: Optional[dict] = None,
-    transport: str = "rest",
-    traceparent: Optional[str] = None,
-) -> dict:
-    """
-    Main entry point for running a UCP scenario with the AI agent.
-
-    Args:
-        scenario: Scenario configuration dict
-        business_url: URL of the UCP merchant server
-        platform_profile: Platform profile dict (uses default if not provided)
-        transport: "rest" (MCP not yet supported)
-        traceparent: Optional W3C Trace Context traceparent header
-
-    Returns:
-        Result artifact dict suitable for promptfoo assertions
-    """
+def run_ucp_scenario(scenario: dict, business_url: str = "http://localhost:8182", platform_profile: Optional[dict] = None, transport: str = "rest", traceparent: Optional[str] = None) -> dict:
+    """Run a UCP scenario with the AI agent, returning a result artifact for promptfoo."""
     global _current_client, _current_checkout, _current_scenario, _messages_seen, _transcript
 
     # Reset global state
@@ -1047,22 +674,4 @@ def run_ucp_scenario(
     result.transcript = _transcript
     result.messages_seen = _messages_seen
 
-    return result.to_dict()
-
-
-if __name__ == "__main__":
-    import sys
-
-    test_scenario = {
-        "scenario_id": "test_happy_path",
-        "line_items": [{"merchant_item_id": "bouquet_roses", "quantity": 2}],
-        "buyer": {
-            "email": "test@example.com",
-            "name": {"given": "Test", "family": "User"},
-        },
-        "currency": "USD",
-    }
-
-    business_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8182"
-    result = run_ucp_scenario(test_scenario, business_url=business_url)
-    print(json.dumps(result, indent=2))
+    return asdict(result)
