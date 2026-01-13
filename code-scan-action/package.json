@@ -8,7 +8,9 @@
     "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
     "package": "npm run build && git add dist/",
     "test": "echo \"Action tests run via parent jest config\" && exit 0",
-    "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64"
+    "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64",
+    "release": "./scripts/release.sh",
+    "release:staging": "./scripts/release.sh --staging"
   },
   "engines": {
     "node": ">=20.0.0"
