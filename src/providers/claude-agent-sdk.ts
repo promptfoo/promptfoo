@@ -130,10 +130,21 @@ export interface ClaudeCodeOptions {
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
 
   /**
-   * User can set more dangerous 'acceptEdits' or 'bypassPermissions' if they know what they're doing,
-   * - 'dontAsk' mode denies permissions that aren't pre-approved without prompting
+   * Permission mode for controlling how tool executions are handled:
+   * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'plan' - Planning mode, no actual tool execution
+   * - 'acceptEdits' - Auto-accept file edit operations
+   * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
+   * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
+   * - 'delegate' - Delegate mode, restricts team leader to only Teammate and Task tools
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  permission_mode?:
+    | 'default'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'delegate';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -237,6 +248,24 @@ export interface ClaudeCodeOptions {
    * When enabled, commands are executed in a sandboxed environment that restricts
    * filesystem and network access. This provides an additional security layer.
    *
+   * Available options:
+   * - `enabled` - Enable/disable sandboxing
+   * - `autoAllowBashIfSandboxed` - Auto-allow bash commands when sandboxed
+   * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
+   * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
+   * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `ignoreViolations` - Map of command patterns to violation types to ignore
+   * - `network` - Network configuration:
+   *   - `allowedDomains` - Domains the sandbox can access
+   *   - `allowLocalBinding` - Allow binding to localhost
+   *   - `allowUnixSockets` - Specific Unix sockets to allow
+   *   - `allowAllUnixSockets` - Allow all Unix socket connections
+   *   - `httpProxyPort` - HTTP proxy port for network access
+   *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `ripgrep` - Custom ripgrep configuration:
+   *   - `command` - Path to ripgrep executable
+   *   - `args` - Additional arguments for ripgrep
+   *
    * @example Enable sandboxing with auto-allow
    * ```yaml
    * sandbox:
@@ -244,7 +273,7 @@ export interface ClaudeCodeOptions {
    *   autoAllowBashIfSandboxed: true
    * ```
    *
-   * @example Configure network options
+   * @example Configure network options with proxy
    * ```yaml
    * sandbox:
    *   enabled: true
@@ -252,6 +281,20 @@ export interface ClaudeCodeOptions {
    *     allowLocalBinding: true
    *     allowedDomains:
    *       - api.example.com
+   *     httpProxyPort: 8080
+   *     socksProxyPort: 1080
+   * ```
+   *
+   * @example Exclude specific commands and configure ripgrep
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   excludedCommands:
+   *     - docker
+   *     - podman
+   *   ripgrep:
+   *     command: /usr/local/bin/rg
+   *     args: ['--hidden']
    * ```
    *
    * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
