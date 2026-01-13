@@ -14,6 +14,7 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
@@ -22,6 +23,7 @@ import {
   isFanoutStrategy,
   isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
@@ -816,6 +818,17 @@ export async function synthesize({
     // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
     // with user-defined input variable names
     injectVar = MULTI_INPUT_VAR;
+
+    // Some plugins don't support multi-input mode; skip them
+    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+    const before = plugins.length;
+    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
+    const removed = before - plugins.length;
+    if (removed > 0) {
+      logger.info(
+        `Skipping ${removed} plugin${removed > 1 ? 's' : ''} in multi-input mode: ${multiInputExcluded.join(', ')}`,
+      );
+    }
   }
 
   // Determine injectVar if not explicitly set (only applies to single-input mode)

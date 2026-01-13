@@ -375,6 +375,10 @@ export const DATASET_EXEMPT_PLUGINS = [
   'vlguard',
 ] as const;
 
+// Plugins excluded from multi-input mode (in addition to dataset plugins)
+export const MULTI_INPUT_EXCLUDED_PLUGINS = ['ascii-smuggling'] as const;
+export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
+
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
