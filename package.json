@@ -107,7 +107,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.77",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.4",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.966.0",
     "@aws-sdk/client-bedrock-runtime": "^3.966.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.966.0",
@@ -166,7 +166,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.77",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.4",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.966.0",
     "@aws-sdk/client-bedrock-runtime": "^3.966.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.966.0",
