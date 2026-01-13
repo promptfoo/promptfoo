@@ -19,6 +19,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import {
   createIterationContext,
   getTargetResponse,
@@ -152,6 +153,9 @@ export async function runMetaAgentRedteam({
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
+  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+  let lastTransformDisplayVars: Record<string, string> | undefined;
+
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
       iteration: i + 1,
@@ -279,6 +283,11 @@ export async function runMetaAgentRedteam({
         hasAudio: !!lastTransformResult.audio,
         hasImage: !!lastTransformResult.image,
       });
+
+      // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+      if (lastTransformResult.displayVars) {
+        lastTransformDisplayVars = lastTransformResult.displayVars;
+      }
     }
 
     // Render the actual prompt with the agent's attack
@@ -400,6 +409,61 @@ export async function runMetaAgentRedteam({
           ...test,
           vars: iterationVars,
         };
+
+        // Build grading context with exfil tracking data
+        let gradingContext:
+          | {
+              traceContext?: TraceContextData | null;
+              traceSummary?: string;
+              wasExfiltrated?: boolean;
+              exfilCount?: number;
+              exfilRecords?: Array<{
+                timestamp: string;
+                ip: string;
+                userAgent: string;
+                queryParams: Record<string, string>;
+              }>;
+            }
+          | undefined;
+
+        // First try to get exfil data from provider response metadata (Playwright provider)
+        if (targetResponse.metadata?.wasExfiltrated !== undefined) {
+          logger.debug('[IterativeMeta] Using exfil data from provider response metadata');
+          gradingContext = {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
+            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
+            // Note: Full exfilRecords with all fields come from server API, not provider metadata
+            exfilRecords: [],
+          };
+        } else {
+          // Try to fetch exfil tracking from server API via webPageUuid
+          const webPageUuid =
+            (test.metadata?.webPageUuid as string) ||
+            (iterationTest.metadata?.webPageUuid as string);
+          if (webPageUuid) {
+            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', { webPageUuid });
+            const exfilData = await checkExfilTracking(webPageUuid);
+            if (exfilData) {
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: exfilData.wasExfiltrated,
+                exfilCount: exfilData.exfilCount,
+                exfilRecords: exfilData.exfilRecords,
+              };
+            }
+          }
+        }
+
+        // Fallback to just tracing context if no exfil data found
+        if (!gradingContext && tracingOptions.includeInGrading) {
+          gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+        }
+
         const { grade, rubric } = await grader.getResult(
           attackPrompt,
           targetResponse.output,
@@ -408,12 +472,7 @@ export async function runMetaAgentRedteam({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined, // skipRefusalCheck
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: gradingTraceSummary,
-              }
-            : undefined,
+          gradingContext,
         );
         graderResult = {
           ...grade,
@@ -485,6 +544,8 @@ export async function runMetaAgentRedteam({
         traceSnapshots.length > 0
           ? traceSnapshots.map((t) => formatTraceForMetadata(t))
           : undefined,
+      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
     },
     tokenUsage: totalTokenUsage,
   };
