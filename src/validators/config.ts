@@ -1,20 +1,21 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
-import { PromptSchema, type PromptFunction } from './prompts';
+import { isJavascriptFile } from '../util/fileExtensions';
+import { type PromptFunction, PromptSchema } from './prompts';
 import { ApiProviderSchema, ProvidersSchema } from './providers';
+import { RedteamConfigSchema } from './redteam';
+import { NunjucksFilterMapSchema } from './shared';
 import {
+  DerivedMetricSchema,
+  MetadataSchema,
+  ScenarioSchema,
+  TestCaseConfigSchema,
   TestCaseSchema,
   TestGeneratorConfigSchema,
-  DerivedMetricSchema,
-  ScenarioSchema,
-  MetadataSchema,
 } from './test_cases';
-import { NunjucksFilterMapSchema } from './shared';
-import { RedteamConfigSchema } from './redteam';
-import type { RedteamFileConfig } from '../redteam/types';
+
 import type { RunEvalOptions } from '../types/eval';
 import type { PromptMetrics } from './results';
-import { isJavascriptFile } from '../util/fileExtensions';
 
 // Type synchronization helper
 type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
@@ -63,6 +64,7 @@ export const CommandLineOptionsSchema = z.object({
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
+  resume: z.union([z.string(), z.boolean()]).optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
 
@@ -76,7 +78,7 @@ assert<AssertEqual<CommandLineOptions, z.infer<typeof CommandLineOptionsSchema>>
 
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
-  delay: z.number().optional(),
+  delay: z.coerce.number().int().nonnegative().optional(),
   eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
   /**
@@ -85,7 +87,7 @@ export const EvaluateOptionsSchema = z.object({
    * @author mldangelo
    */
   interactiveProviders: z.boolean().optional(),
-  maxConcurrency: z.number().optional(),
+  maxConcurrency: z.coerce.number().int().positive().optional(),
   progressCallback: z
     .custom<
       (
@@ -97,20 +99,20 @@ export const EvaluateOptionsSchema = z.object({
       ) => void
     >((v) => typeof v === 'function')
     .optional(),
-  repeat: z.number().optional(),
+  repeat: z.coerce.number().int().positive().optional(),
   showProgressBar: z.boolean().optional(),
   /**
    * Timeout in milliseconds for each individual test case/provider API call.
    * When reached, that specific test is marked as an error.
    * Default is 0 (no timeout).
    */
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.coerce.number().int().nonnegative().optional(),
   /**
    * Maximum total runtime in milliseconds for the entire evaluation process.
    * When reached, all remaining tests are marked as errors and the evaluation ends.
    * Default is 0 (no limit).
    */
-  maxEvalTimeMs: z.number().optional(),
+  maxEvalTimeMs: z.coerce.number().int().nonnegative().optional(),
   isRedteam: z.boolean().optional(),
   /**
    * When true, suppresses informational output like "Starting evaluation" messages.
@@ -202,7 +204,7 @@ export const TestSuiteSchema = z.object({
     .optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamFileConfig>().optional(),
+  redteam: RedteamConfigSchema.optional(),
 
   // Tracing configuration (simplified version for parsed TestSuite)
   tracing: z
@@ -274,10 +276,11 @@ export const TestSuiteConfigSchema = z.object({
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
+  // Uses TestCaseConfigSchema to accept $ref assertions in config files
   tests: z
     .union([
       z.string(),
-      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      z.array(z.union([z.string(), TestCaseConfigSchema, TestGeneratorConfigSchema])),
       TestGeneratorConfigSchema,
     ])
     .optional(),
@@ -286,12 +289,13 @@ export const TestSuiteConfigSchema = z.object({
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
+  // Uses TestCaseConfigSchema to accept $ref assertions in config files
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
         error: 'defaultTest string must start with file://',
       }),
-      TestCaseSchema.omit({ description: true }),
+      TestCaseConfigSchema.omit({ description: true }),
     ])
     .optional(),
 
@@ -409,45 +413,43 @@ export interface UnifiedConfig extends Omit<TestSuiteConfig, 'providers'> {
   strategies?: any;
 }
 
-export const UnifiedConfigSchema: z.ZodType<UnifiedConfig> = BaseUnifiedConfigSchema
-  .refine(
-    (data) => {
-      const hasTargets = data.targets !== undefined;
-      const hasProviders = data.providers !== undefined;
-      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-    },
-    {
-      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-    },
-  )
-  .transform((data) => {
-    if (data.targets && !data.providers) {
-      data.providers = data.targets;
-      delete data.targets;
-    }
+export const UnifiedConfigSchema: z.ZodType<UnifiedConfig> = BaseUnifiedConfigSchema.refine(
+  (data) => {
+    const hasTargets = data.targets !== undefined;
+    const hasProviders = data.providers !== undefined;
+    return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+  },
+  {
+    message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+  },
+).transform((data) => {
+  if (data.targets && !data.providers) {
+    data.providers = data.targets;
+    delete data.targets;
+  }
 
-    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
-    if (
-      data.extensions === null ||
-      data.extensions === undefined ||
-      (Array.isArray(data.extensions) && data.extensions.length === 0)
-    ) {
-      delete data.extensions;
-    }
+  // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+  if (
+    data.extensions === null ||
+    data.extensions === undefined ||
+    (Array.isArray(data.extensions) && data.extensions.length === 0)
+  ) {
+    delete data.extensions;
+  }
 
-    if (data.plugins) {
-      data.redteam = data.redteam || {};
-      data.redteam.plugins = data.plugins as any;
-      delete data.plugins;
-    }
-    if (data.strategies) {
-      data.redteam = data.redteam || {};
-      data.redteam.strategies = data.strategies as any;
-      delete data.strategies;
-    }
+  if (data.plugins) {
+    data.redteam = data.redteam || {};
+    data.redteam.plugins = data.plugins as any;
+    delete data.plugins;
+  }
+  if (data.strategies) {
+    data.redteam = data.redteam || {};
+    data.redteam.strategies = data.strategies as any;
+    delete data.strategies;
+  }
 
-    return data;
-  });
+  return data;
+});
 
 assert<AssertEqual<UnifiedConfig, z.infer<typeof UnifiedConfigSchema>>>();
 

@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { MODEL_GRADED_ASSERTION_TYPES } from '../../assertions/index';
 import logger from '../../logger';
+import { isAssertion } from '../../validators/assertions';
 
 import type { TestCase, TestSuite } from '../../types/index';
 
@@ -29,7 +30,7 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
     const modelGradedAsserts = tests.flatMap((t) =>
       (t.assert || []).filter(
         (a) =>
-          a.type !== 'assert-set' &&
+          isAssertion(a) &&
           MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
           !a.provider &&
           !t.options?.provider,

@@ -98,6 +98,7 @@ import type {
   ProviderResponse,
   ScoringFunction,
 } from '../types/index';
+import { isAssertionSet } from '../validators/assertions';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -536,7 +537,7 @@ export async function runAssertions({
     index: number;
   }[] = test.assert
     .map((assertion, i) => {
-      if (assertion.type === 'assert-set') {
+      if (isAssertionSet(assertion)) {
         const subAssertResult = new AssertionsResult({
           threshold: assertion.threshold,
           parentAssertionSet: {

@@ -20,6 +20,7 @@ import { Strategies } from './redteam/strategies/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { maybeLoadFromExternalFile } from './util/file';
+import { isAssertionSet } from './validators/assertions';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
@@ -108,7 +109,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+        if (isAssertionSet(assertion) || typeof assertion.provider === 'function') {
           continue;
         }
 

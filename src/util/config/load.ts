@@ -468,7 +468,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    // Use a lenient type for merging since configs may have $ref assertions that get resolved later
+    defaultTest: configs.reduce((prev: UnifiedConfig['defaultTest'], curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
         return curr.defaultTest;
