@@ -36,10 +36,6 @@ inputs:
     description: 'Enable scanning PRs from forked repositories'
     required: false
     default: 'false'
-  promptfoo-source:
-    description: 'Source to install promptfoo from (npm package name or git URL like github:promptfoo/promptfoo#branch)'
-    required: false
-    default: 'promptfoo'
 
 runs:
   using: 'node20'

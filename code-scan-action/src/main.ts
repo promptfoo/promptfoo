@@ -182,9 +182,8 @@ async function run(): Promise<void> {
       core.info('✅ Mock scan completed successfully');
     } else {
       // Run real scan in production
-      const promptfooSource = core.getInput('promptfoo-source') || 'promptfoo';
-      core.info(`📦 Installing promptfoo from ${promptfooSource}...`);
-      await exec.exec('npm', ['install', '-g', promptfooSource]);
+      core.info('📦 Installing promptfoo...');
+      await exec.exec('npm', ['install', '-g', 'promptfoo']);
       core.info('✅ Promptfoo installed successfully');
 
       core.info(`🚀 Running promptfoo code-scans run...`);
@@ -206,6 +205,11 @@ async function run(): Promise<void> {
       });
 
       if (exitCode !== 0) {
+        // Fork PR auth rejection is expected - server posts helpful comment to PR
+        if (scanError.includes('Fork PR scanning not authorized')) {
+          core.info('🔀 Fork PR detected - see PR comment for scan options');
+          return;
+        }
         core.error(`CLI exited with code ${exitCode}`);
         core.error(`Error output: ${scanError}`);
         throw new Error(`Code scan failed with exit code ${exitCode}`);
