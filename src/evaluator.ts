@@ -75,6 +75,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
+  VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
 
@@ -304,6 +305,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  evalId,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -535,6 +537,7 @@ export async function runEval({
 
       // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
       const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        evalId,
         testIdx,
         promptIdx,
       });
@@ -731,9 +734,9 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
-): Record<string, string | object>[] {
+): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | object>[] = [{}];
+  const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
     let values: Array<string | object> = [];
@@ -764,7 +767,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, string | object>[] = [];
+    const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -986,7 +989,7 @@ class Evaluator {
       }
     }
 
-    this.evalRecord.addPrompts(prompts);
+    await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1247,6 +1250,7 @@ class Evaluator {
                 isRedteam: testSuite.redteam != null,
                 concurrency,
                 abortSignal: options.abortSignal,
+                evalId: this.evalRecord.id,
               });
               promptIdx++;
             }

@@ -31,7 +31,6 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import yaml from 'js-yaml';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
@@ -39,6 +38,7 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
+import { ProviderDisplay } from './ProviderDisplay';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -218,6 +218,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  hasMinimalScrollRoom,
   zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
@@ -227,11 +228,19 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
   'use no memo';
   return (
-    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
+    <div
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
+    >
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button
           type="button"
@@ -1047,51 +1056,26 @@ function ResultsTable({
                   ) : null}
                 </div>
               ) : null;
-              const providerConfig = Array.isArray(config?.providers)
-                ? config.providers[idx]
-                : undefined;
+              // Get provider string, handling both string and object formats
+              const providerString =
+                typeof prompt.provider === 'string'
+                  ? prompt.provider
+                  : typeof prompt.provider === 'object' && prompt.provider !== null
+                    ? (prompt.provider as any).id || JSON.stringify(prompt.provider)
+                    : String(prompt.provider || 'Unknown provider');
 
-              let providerParts: string[] = [];
-              try {
-                if (prompt.provider && typeof prompt.provider === 'string') {
-                  providerParts = prompt.provider.split(':');
-                } else if (prompt.provider) {
-                  const providerObj = prompt.provider as any; // Use any for flexible typing
-                  const providerId =
-                    typeof providerObj === 'object' && providerObj !== null
-                      ? providerObj.id || JSON.stringify(providerObj)
-                      : String(providerObj);
-                  providerParts = [providerId];
-                }
-              } catch (error) {
-                console.error('Error parsing provider:', error);
-                providerParts = ['Error parsing provider'];
-              }
-
-              const providerDisplay = (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      {providerParts.length > 1 ? (
-                        <>
-                          {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                        </>
-                      ) : (
-                        <strong>{providerParts[0] || 'Unknown provider'}</strong>
-                      )}
-                    </span>
-                  </TooltipTrigger>
-                  {providerConfig && (
-                    <TooltipContent>
-                      <pre>{yaml.dump(providerConfig)}</pre>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              );
               return (
                 <div className="output-header">
                   <div className="pills collapse-font-small">
-                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
+                    {prompt.provider ? (
+                      <div className="provider">
+                        <ProviderDisplay
+                          providerString={providerString}
+                          providersArray={config?.providers as any[] | undefined}
+                          fallbackIndex={idx}
+                        />
+                      </div>
+                    ) : null}
                     <div className="summary">
                       <div
                         className={`highlight ${
@@ -1374,6 +1358,33 @@ function ResultsTable({
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
+
+  useEffect(() => {
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
+
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
       return;
@@ -1433,6 +1444,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
         zoom={zoom}
       />
       <div

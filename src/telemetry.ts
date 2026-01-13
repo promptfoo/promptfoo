@@ -25,8 +25,11 @@ export const TelemetryEventSchema = z.object({
     'webui_api',
     'webui_page_view',
   ]),
-  packageVersion: z.string().optional().default(VERSION),
-  properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+  packageVersion: z.string().optional().prefault(VERSION),
+  properties: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  ),
 });
 type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
@@ -69,9 +72,7 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify().then(() => {
-      // Intentionally empty - fire and forget
-    });
+    void this.identify();
   }
 
   async identify() {

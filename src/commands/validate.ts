@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
@@ -419,14 +419,14 @@ export async function doValidate(
       logger.error(
         dedent`Configuration validation error:
 Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
-${fromError(configParse.error).message}`,
+${z.prettifyError(configParse.error)}`,
       );
       process.exitCode = 1;
       return;
     }
     const suiteParse = TestSuiteSchema.safeParse(testSuite);
     if (!suiteParse.success) {
-      logger.error(dedent`Test suite validation error:\n${fromError(suiteParse.error).message}`);
+      logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
       process.exitCode = 1;
       return;
     }

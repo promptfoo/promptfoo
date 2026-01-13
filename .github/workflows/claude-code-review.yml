@@ -37,23 +37,38 @@ jobs:
       REPOSITORY: ${{ github.repository }}
 
     steps:
+      # Checkout main branch to get workflow helper files (script, prompt template)
+      # We use the default ref (main) because pull_request_target runs workflow from base
+      # but the base.sha might be older than when helper files were added
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0 # Need full history for incremental diffs
           persist-credentials: false
 
-      - name: Fetch PR head for diff comparison
+      - name: Fetch PR commits for diff comparison
         run: |
-          # Validate SHA format before using in git command
-          if [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Invalid PR head SHA format"
+          # Validate SHA format before using in git commands
+          validate_sha() {
+            local sha="$1"
+            local name="$2"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Invalid $name SHA format"
+              exit 1
+            fi
+          }
+
+          validate_sha "$PR_BASE_SHA" "base"
+          validate_sha "$PR_HEAD_SHA" "head"
+
+          # Fetch both base and head SHAs
+          git fetch origin "$PR_BASE_SHA" "$PR_HEAD_SHA"
+
+          # Verify the fetches succeeded
+          if ! git rev-parse --verify "$PR_BASE_SHA^{commit}" >/dev/null 2>&1; then
+            echo "::error::Failed to fetch PR base SHA"
             exit 1
           fi
-          git fetch origin "$PR_HEAD_SHA"
-
-          # Verify the fetch succeeded by checking the SHA exists
           if ! git rev-parse --verify "$PR_HEAD_SHA^{commit}" >/dev/null 2>&1; then
             echo "::error::Failed to fetch PR head SHA"
             exit 1
@@ -92,6 +107,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ env.REVIEW_PROMPT }}
-          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'
+          show_full_output: true
+          claude_args: '--model opus --max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'

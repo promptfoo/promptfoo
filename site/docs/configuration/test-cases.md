@@ -106,19 +106,11 @@ Variables are automatically mapped from column headers.
 
 Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
 
-1. Install the `xlsx` package as a peer dependency:
+1. Install the `read-excel-file` package as a peer dependency:
 
    ```bash
-   # Install latest version from npm (recommended)
-   npm install xlsx
-
-   # OR install specific version from SheetJS CDN
-   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
+   npm install read-excel-file
    ```
-
-   **Why two options?**
-   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
-   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
 
 2. Use Excel files just like CSV files:
    ```yaml title="promptfooconfig.yaml"

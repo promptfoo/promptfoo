@@ -70,6 +70,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -1621,6 +1622,33 @@ assert:
   - type: select-best
     value: 'choose the most engaging response'
     provider: openai:gpt-5-mini
+```
+
+### Word Count
+
+The `word-count` assertion checks if the LLM output has a specific number of words or falls within a range.
+
+```yaml
+assert:
+  # Exact count
+  - type: word-count
+    value: 50
+
+  # Range (inclusive)
+  - type: word-count
+    value:
+      min: 20
+      max: 100
+
+  # Minimum only
+  - type: word-count
+    value:
+      min: 50
+
+  # Maximum only
+  - type: word-count
+    value:
+      max: 200
 ```
 
 ## See Also
