@@ -2,6 +2,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
+import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -98,7 +99,7 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
   return obj;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;

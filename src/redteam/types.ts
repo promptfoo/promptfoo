@@ -16,9 +16,9 @@ export type Intent = string | string[];
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
-  id: z
-    .string()
-    .refine(isValidPolicyId, { message: 'ID must be either a UUID or a 12-character hex string' }),
+  id: z.string().refine(isValidPolicyId, {
+    message: 'ID must be either a UUID or a 12-character hex string',
+  }),
   text: z.string().optional(),
   name: z.string().optional(),
 });
@@ -69,7 +69,7 @@ export const PluginConfigSchema = z.object({
   prompt: z.string().optional(),
   purpose: z.string().optional(),
   // TODO: should be z.record(Modifier, z.unknown())
-  modifiers: z.record(z.unknown()).optional(),
+  modifiers: z.record(z.string(), z.unknown()).optional(),
   // BOLA
   targetIdentifiers: z.array(z.string()).optional(),
   // BFLA

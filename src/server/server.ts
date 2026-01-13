@@ -10,7 +10,7 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -278,7 +278,7 @@ export function createApp() {
       if (!result.success) {
         res
           .status(400)
-          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
+          .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
         return;
       }
       const { event, properties } = result.data;
