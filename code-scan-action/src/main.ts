@@ -96,9 +96,26 @@ async function run(): Promise<void> {
       core.info(`📝 Generated temporary config at ${finalConfigPath}`);
     }
 
+    // Determine base branch for git diff
+    // GITHUB_BASE_REF is set for pull_request events, but not for workflow_dispatch
+    let baseBranch: string;
+    if (process.env.GITHUB_BASE_REF) {
+      baseBranch = process.env.GITHUB_BASE_REF;
+    } else {
+      // For workflow_dispatch, fetch PR details to get actual base branch
+      core.info('📥 Fetching PR details to determine base branch...');
+      const octokit = github.getOctokit(githubToken);
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner: context.owner,
+        repo: context.repo,
+        pull_number: context.number,
+      });
+      baseBranch = pr.base.ref;
+      core.info(`✅ PR targets base branch: ${baseBranch}`);
+    }
+
     // Fetch base branch to ensure it exists for git diff
     // In GitHub Actions, even with fetch-depth: 0, the base branch might not exist as a local ref
-    const baseBranch = process.env.GITHUB_BASE_REF || 'main';
     core.info(`📥 Fetching base branch: ${baseBranch}...`);
     try {
       await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
@@ -119,6 +136,8 @@ async function run(): Promise<void> {
       ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath!,
+      '--base',
+      baseBranch, // Use determined base branch (from GITHUB_BASE_REF or PR API)
       '--compare',
       'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
       '--json', // JSON output for parsing
