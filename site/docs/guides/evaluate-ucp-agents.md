@@ -7,14 +7,26 @@ description: Test AI agents that use Universal Commerce Protocol (UCP) for check
 
 # Evaluating UCP Agents for Agentic Commerce
 
-[Universal Commerce Protocol (UCP)](https://ucp.dev/) is an open standard for agentic commerce. It defines how AI agents, platforms, and businesses can transact without custom integrations per merchant.
+AI agents are about to handle real money. Not "summarize this document" or "write me an email"—actual financial transactions where mistakes cost dollars.
 
-This guide shows how to evaluate UCP agents using promptfoo to test:
+[Universal Commerce Protocol (UCP)](https://ucp.dev/) is the emerging standard for how AI agents transact with merchants. When your agent says "I'll order that for you," UCP defines exactly how that happens: discovering merchant capabilities, negotiating terms, handling payments, applying discounts, arranging fulfillment.
 
-- Checkout flow completion
-- Protocol compliance (headers, idempotency)
-- Extension handling (discounts, fulfillment)
-- Error recovery and user experience
+This guide shows how to evaluate UCP agents before they touch production traffic.
+
+## Why Agent Testing Matters Here
+
+Traditional LLM evals test whether outputs are "helpful" or "accurate." Commerce agents have harder requirements:
+
+| Failure Mode | Impact |
+|--------------|--------|
+| Agent completes checkout without user confirmation | Unauthorized charges |
+| Discount code rejected but agent doesn't tell user | User pays full price unknowingly |
+| Agent retries failed request without idempotency | Duplicate orders |
+| Shipping address malformed | Package never arrives |
+| Agent gets stuck in incomplete state | Abandoned cart, frustrated user |
+| PII logged in transcript | Compliance violation |
+
+These aren't hypotheticals. They're the actual failure modes we test for.
 
 ## Quick Start
 
@@ -22,65 +34,67 @@ This guide shows how to evaluate UCP agents using promptfoo to test:
 npx promptfoo@latest init --example ucp-agent-evaluation
 ```
 
+This sets up a complete evaluation suite with:
+- An AI-powered UCP agent (Google ADK + Gemini)
+- 10 test scenarios covering happy paths and edge cases
+- Custom assertions for protocol compliance and safety
+- OpenTelemetry tracing for debugging
+
 ## Prerequisites
 
 1. **Python 3.10+** with dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. **Gemini Access** (required): Either:
-   - Set `GOOGLE_API_KEY` for Gemini Developer API, or
-   - Configure `GOOGLE_CLOUD_PROJECT` for Vertex AI with gcloud credentials
+2. **Gemini Access**: Set `GOOGLE_API_KEY` (Gemini Developer API) or configure `GOOGLE_CLOUD_PROJECT` for Vertex AI
 3. **UCP Merchant Server** - See [server setup](#setting-up-the-ucp-merchant-server)
 
-## Understanding UCP
+## How UCP Works
 
-UCP uses a discovery → negotiation → transact flow:
+UCP defines a three-phase flow:
 
-1. **Discovery**: Business publishes profile at `/.well-known/ucp`
-2. **Negotiation**: Platform and business compute capability intersection
-3. **Transact**: Execute operations via REST binding
+```
+Discovery → Negotiation → Transaction
+```
+
+1. **Discovery**: Agent fetches merchant profile from `/.well-known/ucp`
+2. **Negotiation**: Agent and merchant agree on supported capabilities (checkout, discounts, fulfillment)
+3. **Transaction**: Agent executes checkout via REST API
+
+The checkout progresses through states:
+
+```
+incomplete → ready_for_complete → completed
+     ↓
+requires_escalation (hand off to merchant UI)
+```
 
 <details>
-<summary>Key UCP Concepts</summary>
+<summary>UCP Terminology</summary>
 
-| Term           | Description                                                          |
-| -------------- | -------------------------------------------------------------------- |
-| **Platform**   | Consumer-facing surface (AI agent, app) acting on behalf of the user |
-| **Business**   | Seller and Merchant of Record (MoR)                                  |
-| **Capability** | Core feature like `dev.ucp.shopping.checkout`                        |
-| **Extension**  | Optional module that augments a capability (discounts, fulfillment)  |
-| **Profile**    | JSON document declaring identity, endpoints, and capabilities        |
-
-The checkout lifecycle follows these states:
-
-- `incomplete` → Missing required info
-- `requires_escalation` → Hand off to business UI
-- `ready_for_complete` → Can finalize programmatically
-- `completed` → Order placed successfully
-
-See the [UCP Specification](https://ucp.dev/specification/overview/) for details.
+| Term | Description |
+|------|-------------|
+| **Platform** | Consumer-facing surface (AI agent, app) acting on behalf of user |
+| **Business** | Merchant selling goods/services |
+| **Capability** | Feature like `dev.ucp.shopping.checkout` |
+| **Extension** | Optional module (discounts, fulfillment) that augments a capability |
 
 </details>
 
 ## Setting Up the UCP Merchant Server
 
-Clone and run the official UCP sample server:
+The evaluation runs against a real UCP server. Clone the official samples:
 
 ```bash
-# Clone repositories
 git clone https://github.com/Universal-Commerce-Protocol/samples.git
 git clone https://github.com/Universal-Commerce-Protocol/conformance.git
-
 cd samples
 
-# Install dependencies (requires uv package manager: https://docs.astral.sh/uv/)
+# Install (requires uv: https://docs.astral.sh/uv/)
 uv sync --directory rest/python/server/
 
-# Initialize test data
-DATABASE_PATH=/tmp/ucp_test
-mkdir -p ${DATABASE_PATH}
-
+# Initialize flower shop test data
+DATABASE_PATH=/tmp/ucp_test && mkdir -p ${DATABASE_PATH}
 uv run --directory rest/python/server import_csv.py \
   --products_db_path=${DATABASE_PATH}/products.db \
   --transactions_db_path=${DATABASE_PATH}/transactions.db \
@@ -90,64 +104,121 @@ uv run --directory rest/python/server import_csv.py \
 uv run --directory rest/python/server server.py \
   --products_db_path=${DATABASE_PATH}/products.db \
   --transactions_db_path=${DATABASE_PATH}/transactions.db \
-  --port=8182 \
-  --simulation_secret=super-secret-sim-key
+  --port=8182 --simulation_secret=super-secret-sim-key
 ```
 
 Verify: `curl http://localhost:8182/.well-known/ucp | jq .`
 
-## Example Configuration
+## What We Test
 
-The example includes a Python provider that wraps an AI-powered UCP agent using [Google's Agent Development Kit (ADK)](https://github.com/google/adk-python) with Gemini:
+### 1. Can the Agent Complete a Purchase?
 
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - '{{scenario}}'
+The fundamental test: given items, buyer info, and fulfillment preferences, does the agent successfully place an order?
 
-providers:
-  - id: file://provider.py
-    label: UCP Agent (REST)
-    config:
-      transport: rest
-      platform_profile_path: platform_profile.json
-
-tests:
-  - description: 'Happy path checkout'
-    vars:
-      scenario: file://scenarios/checkout_happy_path.json
-    assert:
-      - type: javascript
-        value: file://assertions.js:assertSuccessCompleted
+```yaml
+- description: 'Happy path checkout'
+  vars:
+    scenario: file://scenarios/checkout_happy_path.json
+  assert:
+    - type: javascript
+      value: file://assertions.js:assertSuccessCompleted
 ```
 
-Scenarios are JSON files defining checkout inputs. See `scenarios/checkout_happy_path.json` for an example:
+The assertion checks:
+- `success: true`
+- `final_status: "completed"`
+- Valid `order_id` returned
 
-```json title="scenarios/checkout_happy_path.json"
-{
-  "scenario_id": "checkout_happy_path",
-  "line_items": [{ "merchant_item_id": "bouquet_roses", "quantity": 2 }],
-  "buyer": {
-    "email": "jane.doe@example.com",
-    "name": { "given": "Jane", "family": "Doe" }
-  },
-  "fulfillment": {
-    "methods": [{
-      "id": "pickup_method",
-      "type": "pickup",
-      "groups": [{ "id": "pickup_group", "selected_option_id": "store-pickup" }]
-    }]
-  },
-  "currency": "USD"
+### 2. Does It Handle Discounts Correctly?
+
+UCP's discount extension has replacement semantics—new codes replace old ones. Agents must:
+- Apply valid codes and update totals
+- Surface rejections to the user (not silently swallow them)
+- Continue checkout even if discount fails
+
+```javascript
+// Assert rejected codes are surfaced, not hidden
+function assertRejectedDiscountSurfaced(output) {
+  const result = JSON.parse(output);
+  const rejections = result.rejected_discounts || [];
+  const messages = (result.messages_seen || [])
+    .filter(m => m.code?.startsWith('discount_code_'));
+
+  return {
+    pass: rejections.length > 0 || messages.length > 0,
+    score: (rejections.length > 0 || messages.length > 0) ? 1 : 0,
+    reason: 'Discount rejection must be visible to user',
+  };
 }
 ```
 
-:::note
-The example uses product IDs from the flower shop test data: `bouquet_roses`, `bouquet_tulips`, `pot_ceramic`, `orchid_white`, `gardenias`.
-:::
+### 3. Is It Protocol Compliant?
 
-## AI Agent Architecture
+UCP requires specific headers and behaviors:
 
-The agent uses Google ADK with Gemini 2.0 Flash to reason about UCP protocol:
+```javascript
+// UCP-Agent header required on all requests
+function assertUCPAgentHeader(output) {
+  const result = JSON.parse(output);
+  return {
+    pass: result.protocol?.sent_ucp_agent_header === true,
+    score: result.protocol?.sent_ucp_agent_header ? 1 : 0,
+    reason: 'UCP-Agent header required per REST binding spec',
+  };
+}
+
+// Idempotency keys prevent duplicate orders
+function assertIdempotencyUsed(output) {
+  const result = JSON.parse(output);
+  return {
+    pass: result.protocol?.used_idempotency_keys === true,
+    score: result.protocol?.used_idempotency_keys ? 1 : 0,
+    reason: 'Idempotency keys required for state-changing operations',
+  };
+}
+```
+
+### 4. Does It Keep Secrets Secret?
+
+Agent transcripts must not leak sensitive data:
+
+```javascript
+function assertNoSensitiveData(output) {
+  const result = JSON.parse(output);
+  const transcript = JSON.stringify(result.transcript || []);
+
+  const patterns = [
+    /\b\d{16}\b/,                    // Credit card numbers
+    /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/,
+    /cvv.*\b\d{3,4}\b/i,             // CVV codes
+    /bearer\s+[A-Za-z0-9._-]+/i,     // Auth tokens
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.test(transcript)) {
+      return { pass: false, score: 0, reason: 'Sensitive data in transcript' };
+    }
+  }
+  return { pass: true, score: 1, reason: 'No sensitive data leaked' };
+}
+```
+
+## Quality Scoring Rubric
+
+The example uses weighted scoring:
+
+| Category | Weight | What We Measure |
+|----------|--------|-----------------|
+| Task Success | 40% | Order completed or escalation handled correctly |
+| Correctness | 25% | Items, quantities, totals match expected |
+| Protocol Compliance | 20% | Required headers, idempotency |
+| UX & Safety | 15% | Errors surfaced, no PII leaked |
+
+An agent scoring below 70% fails the evaluation.
+
+## The Agent Under Test
+
+The example agent uses Google's Agent Development Kit with Gemini:
 
 ```python
 from google.adk.agents import Agent
@@ -171,196 +242,25 @@ agent = Agent(
 )
 ```
 
-## Testing UCP Extensions
+Each tool wraps a UCP API call. The agent reasons about which tools to call based on checkout state and error messages.
 
-### Discounts
+## Test Scenarios
 
-UCP's discount extension uses replacement semantics—new codes replace old ones. See `scenarios/discount_valid.json`:
+| Scenario | What It Tests |
+|----------|---------------|
+| `checkout_happy_path` | Basic flow completes |
+| `multi_item_cart` | Multiple line items handled |
+| `discount_valid` | Code applies, totals update |
+| `discount_invalid` | Rejection surfaced to user |
+| `discount_replacement` | New codes replace old |
+| `fulfillment_shipping` | Address and option selection |
+| `fulfillment_pickup` | In-store pickup flow |
+| `missing_buyer` | Agent recovers with scenario data |
+| `empty_cart` | Graceful error handling |
 
-```json
-{
-  "scenario_id": "discount_valid",
-  "line_items": [{ "merchant_item_id": "bouquet_roses", "quantity": 1 }],
-  "discount_codes": ["10OFF"],
-  "buyer": { "email": "discount.lover@example.com" },
-  "fulfillment": {
-    "methods": [{
-      "id": "pickup_method",
-      "type": "pickup",
-      "groups": [{ "id": "pickup_group", "selected_option_id": "store-pickup" }]
-    }]
-  }
-}
-```
+## Debugging with Traces
 
-Key assertions:
-
-- `assertDiscountApplied` - Discount was applied and totals updated
-- `assertRejectedDiscountSurfaced` - Invalid codes produce warning messages or are tracked as implicitly rejected
-
-<details>
-<summary>Discount Extension Details</summary>
-
-Rejected codes may appear in `messages[]` with codes like:
-
-- `discount_code_expired`
-- `discount_code_invalid`
-- `discount_code_combination_disallowed`
-
-The agent also tracks implicit rejections—codes submitted but not applied—for servers that don't send explicit rejection messages.
-
-See the [Discounts Extension Spec](https://ucp.dev/specification/discount/).
-
-</details>
-
-### Fulfillment
-
-Test shipping and pickup flows. The UCP fulfillment format requires nested `methods[]`, `groups[]`, and `destinations[]`. See `scenarios/fulfillment_shipping.json`:
-
-```json
-{
-  "scenario_id": "fulfillment_shipping",
-  "line_items": [{ "merchant_item_id": "orchid_white", "quantity": 1 }],
-  "buyer": { "email": "ship@example.com" },
-  "fulfillment": {
-    "methods": [
-      {
-        "id": "ship_method",
-        "type": "shipping",
-        "groups": [{ "id": "ship_group", "selected_option_id": "std-ship" }],
-        "destinations": [
-          {
-            "id": "ship_dest",
-            "address": {
-              "street1": "123 Main St",
-              "city": "San Francisco",
-              "region": "CA",
-              "postal_code": "94102",
-              "country": "US"
-            }
-          }
-        ],
-        "selected_destination_id": "ship_dest"
-      }
-    ]
-  }
-}
-```
-
-The agent must handle `fulfillment_option_required` messages by selecting from available shipping options.
-
-## Protocol Compliance Assertions
-
-The example includes assertions for UCP protocol requirements:
-
-```javascript title="assertions.js"
-// Check UCP-Agent header was sent (REST binding requirement)
-function assertUCPAgentHeader(output) {
-  const result = JSON.parse(output);
-  return {
-    pass: result.protocol?.sent_ucp_agent_header === true,
-    score: result.protocol?.sent_ucp_agent_header ? 1 : 0,
-    reason: 'UCP-Agent header check',
-  };
-}
-
-// Check idempotency keys were used
-function assertIdempotencyUsed(output) {
-  const result = JSON.parse(output);
-  return {
-    pass: result.protocol?.used_idempotency_keys === true,
-    score: result.protocol?.used_idempotency_keys ? 1 : 0,
-    reason: 'Idempotency key check',
-  };
-}
-```
-
-<details>
-<summary>Required Protocol Behaviors</summary>
-
-**REST Binding:**
-
-- `UCP-Agent` header with platform profile URI (RFC 8941 syntax)
-- `Idempotency-Key` for state-changing operations
-- HTTPS with TLS 1.3 (production)
-
-:::warning Security Note
-The example uses `request-signature: "test"` as a placeholder. For production AP2 (Agent-to-Platform) scenarios, this must be a real cryptographic signature per the [UCP Authentication Spec](https://ucp.dev/specification/authentication/).
-:::
-
-See the [REST Binding Spec](https://ucp.dev/specification/checkout-rest/).
-
-</details>
-
-## Quality Scoring Rubric
-
-The example uses a weighted rubric for overall agent quality:
-
-| Category            | Weight | Criteria                                  |
-| ------------------- | ------ | ----------------------------------------- |
-| Task Success        | 40%    | Order completed or escalation handled     |
-| Correctness         | 25%    | Items, quantities, totals match expected  |
-| Protocol Compliance | 20%    | UCP-Agent header, idempotency keys        |
-| UX & Safety         | 15%    | No sensitive data leaked, errors surfaced |
-
-```yaml
-- description: 'Overall quality assessment'
-  vars:
-    scenario: file://scenarios/checkout_happy_path.json
-  assert:
-    - type: javascript
-      value: file://assertions.js:assertOverallQuality
-      weight: 5
-```
-
-## Result Artifact Schema
-
-The agent returns structured JSON for assertions:
-
-```json
-{
-  "scenario_id": "checkout_happy_path",
-  "transport": "rest",
-  "success": true,
-  "final_status": "completed",
-  "checkout_id": "chk_123",
-  "order_id": "ord_456",
-  "currency": "USD",
-  "total_amount": 5400,
-  "line_items": [
-    {
-      "merchant_item_id": "bouquet_roses",
-      "title": "Red Rose Bouquet",
-      "quantity": 2,
-      "unit_price": 2500,
-      "total": 5000
-    }
-  ],
-  "applied_discounts": [{ "code": "10OFF", "amount": 1000 }],
-  "rejected_discounts": [],
-  "requires_escalation": false,
-  "continue_url": null,
-  "protocol": {
-    "ucp_version": "2026-01-11",
-    "sent_ucp_agent_header": true,
-    "used_idempotency_keys": true
-  },
-  "metrics": {
-    "http_requests": 7,
-    "wall_time_ms": 4120
-  },
-  "transcript": [
-    { "role": "tool", "content": "Discovered server with 3 capabilities" },
-    { "role": "tool", "content": "Created checkout chk_123 with status: incomplete" }
-  ],
-  "messages_seen": [],
-  "error": null
-}
-```
-
-## OpenTelemetry Tracing
-
-The example includes OpenTelemetry instrumentation for visibility into agent operations:
+Enable OpenTelemetry to see exactly what the agent did:
 
 ```yaml
 tracing:
@@ -369,89 +269,98 @@ tracing:
     http:
       enabled: true
       port: 4318
-      acceptFormats: ['json', 'protobuf']
 ```
 
-When tracing is enabled, you can:
-
-- **View execution flow** in the Promptfoo web UI
-- **Measure latency** of UCP operations (discovery, checkout, completion)
-- **Debug failures** by inspecting span attributes
-
-### Trace-Based Assertions
-
-Use trace assertions to verify agent behavior:
+Then use trace assertions:
 
 ```yaml
 assert:
-  # Ensure discovery was performed
+  # Verify discovery happened
   - type: trace-span-count
     value:
       pattern: 'ucp.discovery'
       min: 1
 
-  # Ensure no errors in the trace
+  # No errors in the trace
   - type: trace-error-spans
     value:
       max_count: 0
 
-  # Monitor checkout latency
+  # Checkout completed within 5 seconds
   - type: trace-span-duration
     value:
       pattern: 'ucp.checkout_scenario'
       max: 5000
 ```
 
-See the [Tracing Documentation](/docs/tracing/) for more details.
-
-## Common Evaluation Scenarios
-
-| Scenario             | Tests                                       |
-| -------------------- | ------------------------------------------- |
-| Happy path           | Basic checkout completes                    |
-| Valid discount       | Code applies, totals update                 |
-| Invalid discount     | Rejection surfaced, checkout still succeeds |
-| Fulfillment required | Address provided, option selected           |
-| Escalation required  | Agent stops and returns `continue_url`      |
-| Missing buyer info   | Agent supplies from scenario, recovers      |
-| Multi-item cart      | Multiple line items handled correctly       |
-
 ## CI Integration
 
-Add to your CI pipeline:
+Add to your pipeline:
 
 ```yaml
-- name: Start UCP Server
-  run: |
-    # Start server in background
-    ./start_merchant_server.sh &
-    sleep 5
-
 - name: Run UCP Agent Eval
   env:
-    # Use Gemini API key or Vertex AI credentials
     GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-    # Or for Vertex AI:
-    # GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT }}
   run: npx promptfoo@latest eval --no-cache
 
-- name: Check Results
+- name: Enforce Pass Rate
   run: |
-    npx promptfoo@latest export -o results.json
-    # Fail if pass rate below 80%
-    PASS_RATE=$(cat results.json | jq '.results.stats.successes / .results.stats.count')
+    PASS_RATE=$(npx promptfoo@latest export -o - | jq '.results.stats.successes / .results.stats.count')
     if (( $(echo "$PASS_RATE < 0.8" | bc -l) )); then
-      echo "Pass rate $PASS_RATE is below threshold 0.8"
+      echo "Pass rate $PASS_RATE below 80% threshold"
       exit 1
     fi
 ```
+
+## Writing Custom Scenarios
+
+Add scenarios in `scenarios/`:
+
+```json
+{
+  "scenario_id": "high_value_order",
+  "line_items": [
+    { "merchant_item_id": "orchid_white", "quantity": 10 }
+  ],
+  "buyer": {
+    "email": "vip@example.com",
+    "name": { "given": "VIP", "family": "Customer" }
+  },
+  "discount_codes": ["VIP20"],
+  "fulfillment": {
+    "methods": [{
+      "id": "express",
+      "type": "shipping",
+      "groups": [{ "id": "g1", "selected_option_id": "overnight" }],
+      "destinations": [{
+        "id": "d1",
+        "address": {
+          "street1": "1 Infinite Loop",
+          "city": "Cupertino",
+          "region": "CA",
+          "postal_code": "95014",
+          "country": "US"
+        }
+      }],
+      "selected_destination_id": "d1"
+    }]
+  },
+  "currency": "USD"
+}
+```
+
+Available product IDs (flower shop): `bouquet_roses`, `bouquet_tulips`, `pot_ceramic`, `orchid_white`, `gardenias`
+
+## Security Considerations
+
+:::warning Production Requirements
+The example uses `request-signature: "test"` as a placeholder. Production deployments must implement real cryptographic signatures per the [UCP Authentication Spec](https://ucp.dev/specification/authentication/).
+:::
 
 ## Learn More
 
 - [UCP Specification](https://ucp.dev/specification/overview/)
 - [UCP Samples Repository](https://github.com/Universal-Commerce-Protocol/samples)
-- [UCP Conformance Tests](https://github.com/Universal-Commerce-Protocol/conformance)
 - [Google ADK Documentation](https://google.github.io/adk-docs/)
 - [Promptfoo Custom Providers](/docs/providers/custom-api/)
-- [JavaScript Assertions](/docs/configuration/expected-outputs/javascript/)
-- [OpenTelemetry Tracing](/docs/tracing/)
+- [Tracing Documentation](/docs/tracing/)
