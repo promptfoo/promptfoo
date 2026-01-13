@@ -14,7 +14,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@actions/core": "^2.0.0",
+    "@actions/core": "^2.0.2",
     "@actions/exec": "^2.0.0",
     "@actions/github": "^6.0.1",
     "@octokit/auth-app": "^8.1.2",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.10.8",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
   }
