@@ -1,7 +1,9 @@
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -10,7 +12,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { EnvOverrides } from '../types/env';
 import type { TokenUsage } from '../types/shared';
 
 const DEFAULT_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
@@ -50,6 +51,82 @@ export interface VercelAiConfig {
 interface VercelProviderOptions extends ProviderOptions {
   config?: VercelAiConfig;
   env?: EnvOverrides;
+}
+
+/**
+ * Resolves the API key from config, environment variables, or defaults.
+ */
+function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | undefined {
+  // 1. Explicit apiKey in config
+  if (config.apiKey) {
+    return config.apiKey;
+  }
+
+  // 2. Custom env var name from config
+  if (config.apiKeyEnvar) {
+    return (
+      (env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
+      getEnvString(config.apiKeyEnvar) ??
+      undefined
+    );
+  }
+
+  // 3. Default env vars
+  return (
+    (env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
+    getEnvString('VERCEL_AI_GATEWAY_API_KEY') ??
+    (env?.AI_GATEWAY_API_KEY as string | undefined) ??
+    getEnvString('AI_GATEWAY_API_KEY') ??
+    undefined
+  );
+}
+
+/**
+ * Resolves the base URL from config or environment variables.
+ */
+function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | undefined {
+  return (
+    config.baseUrl ??
+    (env?.VERCEL_AI_GATEWAY_BASE_URL as string | undefined) ??
+    getEnvString('VERCEL_AI_GATEWAY_BASE_URL') ??
+    undefined
+  );
+}
+
+/**
+ * Creates a Vercel AI Gateway instance.
+ */
+async function createGatewayInstance(
+  config: VercelAiConfig,
+  env?: EnvOverrides,
+): Promise<ReturnType<typeof import('ai').createGateway>> {
+  try {
+    const { createGateway } = await import('ai');
+    const apiKey = resolveApiKey(config, env);
+    const baseUrl = resolveBaseUrl(config, env);
+
+    const gatewayOptions: {
+      apiKey?: string;
+      baseURL?: string;
+      headers?: Record<string, string>;
+    } = {};
+
+    if (apiKey) {
+      gatewayOptions.apiKey = apiKey;
+    }
+    if (baseUrl) {
+      gatewayOptions.baseURL = baseUrl;
+    }
+    if (config.headers) {
+      gatewayOptions.headers = config.headers;
+    }
+
+    return createGateway(gatewayOptions);
+  } catch (error) {
+    throw new Error(
+      `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**
@@ -98,69 +175,6 @@ export class VercelAiProvider implements ApiProvider {
     return `[Vercel AI Gateway Provider ${this.modelName}]`;
   }
 
-  /**
-   * Resolves the API key from config, environment variables, or defaults.
-   */
-  private getApiKey(): string | undefined {
-    // 1. Explicit apiKey in config
-    if (this.config.apiKey) {
-      return this.config.apiKey;
-    }
-
-    // 2. Custom env var name from config
-    if (this.config.apiKeyEnvar) {
-      return (
-        this.env?.[this.config.apiKeyEnvar] ?? process.env[this.config.apiKeyEnvar] ?? undefined
-      );
-    }
-
-    // 3. Default env var (VERCEL_AI_GATEWAY_API_KEY or AI_GATEWAY_API_KEY)
-    return (
-      this.env?.VERCEL_AI_GATEWAY_API_KEY ??
-      process.env.VERCEL_AI_GATEWAY_API_KEY ??
-      this.env?.AI_GATEWAY_API_KEY ??
-      process.env.AI_GATEWAY_API_KEY ??
-      undefined
-    );
-  }
-
-  /**
-   * Dynamically imports the AI SDK and creates a gateway instance.
-   */
-  private async getGateway() {
-    try {
-      const { createGateway } = await import('ai');
-      const apiKey = this.getApiKey();
-
-      const gatewayOptions: {
-        apiKey?: string;
-        baseURL?: string;
-        headers?: Record<string, string>;
-      } = {};
-
-      if (apiKey) {
-        gatewayOptions.apiKey = apiKey;
-      }
-
-      if (this.config.baseUrl) {
-        gatewayOptions.baseURL = this.config.baseUrl;
-      }
-
-      if (this.config.headers) {
-        gatewayOptions.headers = this.config.headers;
-      }
-
-      return createGateway(gatewayOptions);
-    } catch (error) {
-      throw new Error(
-        `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  /**
-   * Generates a cache key for the request.
-   */
   private getCacheKey(prompt: string): string {
     return `vercel:${this.modelName}:${JSON.stringify({
       prompt,
@@ -183,7 +197,7 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiStreaming(prompt: string): Promise<ProviderResponse> {
     try {
-      const gateway = await this.getGateway();
+      const gateway = await createGatewayInstance(this.config, this.env);
       const { streamText } = await import('ai');
 
       const model = gateway(this.modelName);
@@ -287,7 +301,7 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiStructured(prompt: string): Promise<ProviderResponse> {
     try {
-      const gateway = await this.getGateway();
+      const gateway = await createGatewayInstance(this.config, this.env);
       const { generateObject } = await import('ai');
       const { jsonSchema } = await import('ai');
 
@@ -426,7 +440,7 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiNonStreaming(prompt: string): Promise<ProviderResponse> {
     try {
-      const gateway = await this.getGateway();
+      const gateway = await createGatewayInstance(this.config, this.env);
       const { generateText } = await import('ai');
 
       const model = gateway(this.modelName);
@@ -542,53 +556,6 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     return `[Vercel AI Gateway Embedding Provider ${this.modelName}]`;
   }
 
-  private getApiKey(): string | undefined {
-    if (this.config.apiKey) {
-      return this.config.apiKey;
-    }
-    if (this.config.apiKeyEnvar) {
-      return (
-        this.env?.[this.config.apiKeyEnvar] ?? process.env[this.config.apiKeyEnvar] ?? undefined
-      );
-    }
-    return (
-      this.env?.VERCEL_AI_GATEWAY_API_KEY ??
-      process.env.VERCEL_AI_GATEWAY_API_KEY ??
-      this.env?.AI_GATEWAY_API_KEY ??
-      process.env.AI_GATEWAY_API_KEY ??
-      undefined
-    );
-  }
-
-  private async getGateway() {
-    try {
-      const { createGateway } = await import('ai');
-      const apiKey = this.getApiKey();
-
-      const gatewayOptions: {
-        apiKey?: string;
-        baseURL?: string;
-        headers?: Record<string, string>;
-      } = {};
-
-      if (apiKey) {
-        gatewayOptions.apiKey = apiKey;
-      }
-      if (this.config.baseUrl) {
-        gatewayOptions.baseURL = this.config.baseUrl;
-      }
-      if (this.config.headers) {
-        gatewayOptions.headers = this.config.headers;
-      }
-
-      return createGateway(gatewayOptions);
-    } catch (error) {
-      throw new Error(
-        `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
   async callApi(_prompt: string): Promise<ProviderResponse> {
     return {
       error: 'Use callEmbeddingApi for embedding models',
@@ -614,7 +581,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     }
 
     try {
-      const gateway = await this.getGateway();
+      const gateway = await createGatewayInstance(this.config, this.env);
       const { embed } = await import('ai');
 
       const model = gateway.textEmbeddingModel(this.modelName);

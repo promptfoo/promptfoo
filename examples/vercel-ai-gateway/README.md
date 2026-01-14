@@ -1,6 +1,6 @@
 # vercel-ai-gateway (Vercel AI Gateway Example)
 
-This example demonstrates how to use [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) to access multiple AI providers through a unified API with 0% markup on token pricing.
+This example demonstrates how to use [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) to access multiple AI providers through a unified API.
 
 ## Prerequisites
 
@@ -37,14 +37,6 @@ The configuration compares responses from three different providers, all accesse
 - **Google** (gemini-2.0-flash)
 
 Each provider answers questions about technical topics, and the assertions verify that responses contain relevant keywords.
-
-## Benefits of Vercel AI Gateway
-
-- **Unified API**: Single interface to 20+ providers
-- **0% Markup**: Pay only what providers charge
-- **Built-in Failover**: Automatic failover for reliability
-- **Single API Key**: Manage all providers with one key
-- **Streaming Support**: Full support for streaming responses
 
 ## Documentation
 

@@ -1,20 +1,11 @@
 ---
 sidebar_label: Vercel AI Gateway
-description: Access 20+ AI providers through Vercel's unified AI Gateway with built-in failover, 0% markup pricing, and single API key management
+description: Access 20+ AI providers through Vercel's unified AI Gateway
 ---
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. The provider uses the official [Vercel AI SDK](https://ai-sdk.dev/) for seamless integration.
-
-## Benefits
-
-- **Unified Interface**: Access OpenAI, Anthropic, Google, and more through a single API
-- **0% Markup**: Pay only what the underlying providers charge
-- **Built-in Failover**: Automatic failover between providers for reliability
-- **Single API Key**: Manage all providers with one Vercel AI Gateway API key
-- **Streaming Support**: Full support for streaming responses
-- **Structured Output**: Generate JSON objects conforming to schemas
+[Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 ## Setup
 
