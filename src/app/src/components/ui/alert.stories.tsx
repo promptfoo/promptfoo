@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { AlertCircle, CheckCircle, Info as InfoIcon, Terminal, TriangleAlert } from 'lucide-react';
 import { Alert, AlertContent, AlertDescription, AlertTitle } from './alert';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -156,4 +158,91 @@ export const DescriptionOnly: Story = {
       </AlertContent>
     </Alert>
   ),
+};
+
+// Dismissible alert
+export const Dismissible: Story = {
+  render: function DismissibleStory() {
+    const [visible, setVisible] = useState(true);
+
+    if (!visible) {
+      return (
+        <button
+          type="button"
+          onClick={() => setVisible(true)}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Show alert again
+        </button>
+      );
+    }
+
+    return (
+      <Alert variant="info" onDismiss={() => setVisible(false)}>
+        <InfoIcon className="size-4" />
+        <AlertContent>
+          <AlertTitle>Dismissible Alert</AlertTitle>
+          <AlertDescription>
+            Click the X button to dismiss this alert. It will disappear and show a reset link.
+          </AlertDescription>
+        </AlertContent>
+      </Alert>
+    );
+  },
+};
+
+// All variants dismissible
+export const AllVariantsDismissible: Story = {
+  render: function AllVariantsDismissibleStory() {
+    const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+
+    const handleDismiss = (key: string) => {
+      setDismissed((prev) => ({ ...prev, [key]: true }));
+    };
+
+    const handleReset = () => {
+      setDismissed({});
+    };
+
+    const variants = [
+      { key: 'default', variant: undefined, icon: Terminal, title: 'Default' },
+      {
+        key: 'destructive',
+        variant: 'destructive' as const,
+        icon: AlertCircle,
+        title: 'Destructive',
+      },
+      { key: 'warning', variant: 'warning' as const, icon: TriangleAlert, title: 'Warning' },
+      { key: 'success', variant: 'success' as const, icon: CheckCircle, title: 'Success' },
+      { key: 'info', variant: 'info' as const, icon: InfoIcon, title: 'Info' },
+    ];
+
+    const visibleAlerts = variants.filter((v) => !dismissed[v.key]);
+
+    return (
+      <div className="space-y-4">
+        {visibleAlerts.length === 0 ? (
+          <button
+            type="button"
+            onClick={handleReset}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Reset all alerts
+          </button>
+        ) : (
+          visibleAlerts.map(({ key, variant, icon: Icon, title }) => (
+            <Alert key={key} variant={variant} onDismiss={() => handleDismiss(key)}>
+              <Icon className="size-4" />
+              <AlertContent>
+                <AlertTitle>{title}</AlertTitle>
+                <AlertDescription>
+                  This is a dismissible {title.toLowerCase()} alert.
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))
+        )}
+      </div>
+    );
+  },
 };

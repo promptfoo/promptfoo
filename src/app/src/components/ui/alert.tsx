@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { X } from 'lucide-react';
 
 const alertVariants = cva(
   'relative w-full rounded-lg border p-4 flex items-center gap-3 [&>svg]:shrink-0',
@@ -24,15 +25,36 @@ const alertVariants = cva(
   },
 );
 
+interface AlertProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof alertVariants> {
+  ref?: React.Ref<HTMLDivElement>;
+  onDismiss?: () => void;
+  dismissLabel?: string;
+}
+
 function Alert({
   className,
   variant,
   ref,
+  onDismiss,
+  dismissLabel = 'Dismiss',
   ...props
-}: React.HTMLAttributes<HTMLDivElement> &
-  VariantProps<typeof alertVariants> & { ref?: React.Ref<HTMLDivElement> }) {
+}: AlertProps) {
   return (
-    <div ref={ref} role="alert" className={cn(alertVariants({ variant }), className)} {...props} />
+    <div ref={ref} role="alert" className={cn(alertVariants({ variant }), className)} {...props}>
+      {props.children}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 cursor-pointer rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2"
+          aria-label={dismissLabel}
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
   );
 }
 
