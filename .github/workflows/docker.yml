@@ -229,7 +229,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.platforms.digest-suffix }}
           path: ${{ runner.temp }}/digests/*
@@ -243,7 +243,7 @@ jobs:
       manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
