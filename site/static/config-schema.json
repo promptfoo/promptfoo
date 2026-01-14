@@ -170,6 +170,9 @@
         "AI21_API_KEY": {
           "type": "string"
         },
+        "AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
         "AIML_API_KEY": {
           "type": "string"
         },
@@ -428,6 +431,12 @@
         "SHAREPOINT_TENANT_ID": {
           "type": "string"
         },
+        "VERCEL_AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_BASE_URL": {
+          "type": "string"
+        },
         "VERTEX_API_HOST": {
           "type": "string"
         },
@@ -438,15 +447,6 @@
           "type": "string"
         },
         "VERTEX_PROJECT_ID": {
-          "type": "string"
-        },
-        "VERCEL_AI_GATEWAY_API_KEY": {
-          "type": "string"
-        },
-        "VERCEL_AI_GATEWAY_BASE_URL": {
-          "type": "string"
-        },
-        "AI_GATEWAY_API_KEY": {
           "type": "string"
         },
         "VERTEX_PUBLISHER": {
@@ -1444,6 +1444,9 @@
                     "AI21_API_KEY": {
                       "type": "string"
                     },
+                    "AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
                     "AIML_API_KEY": {
                       "type": "string"
                     },
@@ -1702,6 +1705,12 @@
                     "SHAREPOINT_TENANT_ID": {
                       "type": "string"
                     },
+                    "VERCEL_AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_BASE_URL": {
+                      "type": "string"
+                    },
                     "VERTEX_API_HOST": {
                       "type": "string"
                     },
@@ -1712,15 +1721,6 @@
                       "type": "string"
                     },
                     "VERTEX_PROJECT_ID": {
-                      "type": "string"
-                    },
-                    "VERCEL_AI_GATEWAY_API_KEY": {
-                      "type": "string"
-                    },
-                    "VERCEL_AI_GATEWAY_BASE_URL": {
-                      "type": "string"
-                    },
-                    "AI_GATEWAY_API_KEY": {
                       "type": "string"
                     },
                     "VERTEX_PUBLISHER": {

@@ -158,7 +158,7 @@ describe('VercelAiProvider', () => {
 
       expect(vi.mocked(generateText)).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: 'Test',
+          messages: [{ role: 'user', content: 'Test' }],
           temperature: 0.8,
           maxTokens: 500,
           topP: 0.9,
@@ -253,7 +253,7 @@ describe('VercelAiProvider', () => {
 
       expect(vi.mocked(streamText)).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: 'Test',
+          messages: [{ role: 'user', content: 'Test' }],
           temperature: 0.5,
           maxTokens: 1000,
         }),
@@ -429,7 +429,7 @@ describe('VercelAiProvider', () => {
 
       expect(vi.mocked(generateObject)).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: 'Generate data',
+          messages: [{ role: 'user', content: 'Generate data' }],
           schema: testSchema,
           temperature: 0.5,
         }),

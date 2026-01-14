@@ -1,7 +1,7 @@
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -15,6 +15,14 @@ import type {
 import type { TokenUsage } from '../types/shared';
 
 const DEFAULT_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
+
+/**
+ * Message format for chat completions.
+ */
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
 
 /**
  * Configuration options for the Vercel AI Gateway provider.
@@ -195,7 +203,7 @@ export class VercelAiProvider implements ApiProvider {
   /**
    * Handles streaming API calls using streamText().
    */
-  private async callApiStreaming(prompt: string): Promise<ProviderResponse> {
+  private async callApiStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { streamText } = await import('ai');
@@ -204,7 +212,7 @@ export class VercelAiProvider implements ApiProvider {
 
       const streamOptions: {
         model: ReturnType<typeof gateway>;
-        prompt: string;
+        messages: ChatMessage[];
         temperature?: number;
         maxTokens?: number;
         topP?: number;
@@ -215,7 +223,7 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal?: AbortSignal;
       } = {
         model,
-        prompt,
+        messages,
       };
 
       // Add optional parameters
@@ -299,7 +307,7 @@ export class VercelAiProvider implements ApiProvider {
    * Handles structured output API calls using generateObject().
    * Uses the AI SDK's generateObject to get JSON output conforming to a schema.
    */
-  private async callApiStructured(prompt: string): Promise<ProviderResponse> {
+  private async callApiStructured(messages: ChatMessage[]): Promise<ProviderResponse> {
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { generateObject } = await import('ai');
@@ -314,7 +322,7 @@ export class VercelAiProvider implements ApiProvider {
 
       const generateOptions: {
         model: ReturnType<typeof gateway>;
-        prompt: string;
+        messages: ChatMessage[];
         schema: ReturnType<typeof jsonSchema>;
         temperature?: number;
         maxTokens?: number;
@@ -325,7 +333,7 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal?: AbortSignal;
       } = {
         model,
-        prompt,
+        messages,
         schema,
       };
 
@@ -399,7 +407,7 @@ export class VercelAiProvider implements ApiProvider {
     const cacheKey = this.getCacheKey(prompt);
 
     // Check cache first
-    if (isCacheEnabled() && !context?.bustCache) {
+    if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for Vercel AI Gateway: ${this.modelName}`);
@@ -413,14 +421,17 @@ export class VercelAiProvider implements ApiProvider {
       }
     }
 
+    // Parse prompt as chat messages if it's in JSON/YAML format
+    const messages = parseChatPrompt<ChatMessage[]>(prompt, [{ role: 'user', content: prompt }]);
+
     // Dispatch to appropriate method based on config
     let response: ProviderResponse;
     if (this.config.responseSchema) {
-      response = await this.callApiStructured(prompt);
+      response = await this.callApiStructured(messages);
     } else if (this.config.streaming) {
-      response = await this.callApiStreaming(prompt);
+      response = await this.callApiStreaming(messages);
     } else {
-      response = await this.callApiNonStreaming(prompt);
+      response = await this.callApiNonStreaming(messages);
     }
 
     // Cache the response if successful
@@ -438,7 +449,7 @@ export class VercelAiProvider implements ApiProvider {
   /**
    * Handles non-streaming API calls using generateText().
    */
-  private async callApiNonStreaming(prompt: string): Promise<ProviderResponse> {
+  private async callApiNonStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { generateText } = await import('ai');
@@ -447,7 +458,7 @@ export class VercelAiProvider implements ApiProvider {
 
       const generateOptions: {
         model: ReturnType<typeof gateway>;
-        prompt: string;
+        messages: ChatMessage[];
         temperature?: number;
         maxTokens?: number;
         topP?: number;
@@ -458,7 +469,7 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal?: AbortSignal;
       } = {
         model,
-        prompt,
+        messages,
       };
 
       // Add optional parameters
@@ -562,12 +573,15 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     };
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const cache = await getCache();
     const cacheKey = `vercel:embedding:${this.modelName}:${input}`;
 
     // Check cache first
-    if (isCacheEnabled()) {
+    if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached embedding for Vercel AI Gateway: ${this.modelName}`);
