@@ -440,6 +440,15 @@
         "VERTEX_PROJECT_ID": {
           "type": "string"
         },
+        "VERCEL_AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_BASE_URL": {
+          "type": "string"
+        },
+        "AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
         "VERTEX_PUBLISHER": {
           "type": "string"
         },
@@ -1703,6 +1712,15 @@
                       "type": "string"
                     },
                     "VERTEX_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AI_GATEWAY_API_KEY": {
                       "type": "string"
                     },
                     "VERTEX_PUBLISHER": {

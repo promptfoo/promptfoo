@@ -1,0 +1,51 @@
+# vercel-ai-gateway (Vercel AI Gateway Example)
+
+This example demonstrates how to use [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) to access multiple AI providers through a unified API with 0% markup on token pricing.
+
+## Prerequisites
+
+1. A Vercel account with AI Gateway enabled
+2. Your Vercel AI Gateway API key
+
+## Setup
+
+Set the required environment variable:
+
+```bash
+export VERCEL_AI_GATEWAY_API_KEY=your_api_key
+```
+
+## Running the Example
+
+```bash
+npx promptfoo@latest init --example vercel-ai-gateway
+npx promptfoo eval
+```
+
+Or run directly:
+
+```bash
+npx promptfoo eval -c examples/vercel-ai-gateway/promptfooconfig.yaml
+```
+
+## What This Example Does
+
+The configuration compares responses from three different providers, all accessed through Vercel AI Gateway:
+
+- **OpenAI** (gpt-4o-mini)
+- **Anthropic** (claude-3-5-haiku-latest)
+- **Google** (gemini-2.0-flash)
+
+Each provider answers questions about technical topics, and the assertions verify that responses contain relevant keywords.
+
+## Benefits of Vercel AI Gateway
+
+- **Unified API**: Single interface to 20+ providers
+- **0% Markup**: Pay only what providers charge
+- **Built-in Failover**: Automatic failover for reliability
+- **Single API Key**: Manage all providers with one key
+- **Streaming Support**: Full support for streaming responses
+
+## Documentation
+
+See the [Vercel AI Gateway provider documentation](https://www.promptfoo.dev/docs/providers/vercel) for more details.

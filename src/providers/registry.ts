@@ -107,6 +107,7 @@ import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { createTrueFoundryProvider } from './truefoundry';
+import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -1070,6 +1071,19 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createDockerProvider } = await import('./docker');
       return createDockerProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('vercel:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVercelProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });
