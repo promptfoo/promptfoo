@@ -364,40 +364,40 @@ async function applyStrategies(
 
     newTestCases.push(
       ...resultTestCases.map((t) => {
-          // Re-extract individual keys from transformed JSON if inputs was used
-          const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
-          let updatedVars = t.vars;
-          if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
-            try {
-              const parsed = JSON.parse(String(t.vars[injectVar]));
-              updatedVars = { ...t.vars };
-              Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
-            } catch {
-              // If parsing fails, keep original vars
-            }
+        // Re-extract individual keys from transformed JSON if inputs was used
+        const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+        let updatedVars = t.vars;
+        if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
+          try {
+            const parsed = JSON.parse(String(t.vars[injectVar]));
+            updatedVars = { ...t.vars };
+            Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
+          } catch {
+            // If parsing fails, keep original vars
           }
-          return {
-            ...t,
-            vars: updatedVars,
-            metadata: {
-              ...(t?.metadata || {}),
-              // Don't set strategyId for retry strategy (it's not user-facing)
-              ...(strategy.id !== 'retry' && {
-                strategyId: t?.metadata?.strategyId || strategy.id,
-              }),
-              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-              ...(t?.metadata?.pluginConfig && {
-                pluginConfig: t.metadata.pluginConfig,
-              }),
-              ...(strategy.config && {
-                strategyConfig: {
-                  ...strategy.config,
-                  ...(t?.metadata?.strategyConfig || {}),
-                },
-              }),
-            },
-          };
-        }),
+        }
+        return {
+          ...t,
+          vars: updatedVars,
+          metadata: {
+            ...(t?.metadata || {}),
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
+            ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
+            ...(strategy.config && {
+              strategyConfig: {
+                ...strategy.config,
+                ...(t?.metadata?.strategyConfig || {}),
+              },
+            }),
+          },
+        };
+      }),
     );
 
     // Compute a display id for reporting (helpful for layered strategies)
