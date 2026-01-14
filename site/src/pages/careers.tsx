@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 
+import Head from '@docusaurus/Head';
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 
@@ -13,7 +14,30 @@ export default function Careers(): React.ReactElement {
   }, []);
 
   return (
-    <Layout title="Careers at Promptfoo" description="Shape the future of LLM Security">
+    <Layout
+      title="Careers at Promptfoo"
+      description="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
+    >
+      <Head>
+        <meta property="og:title" content="Careers at Promptfoo - Build the Future of AI Security" />
+        <meta
+          property="og:description"
+          content="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
+        />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/careers.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.promptfoo.dev/careers" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Careers at Promptfoo - Build the Future of AI Security" />
+        <meta
+          name="twitter:description"
+          content="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
+        />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/meta/careers.png" />
+        <link rel="canonical" href="https://www.promptfoo.dev/careers" />
+      </Head>
       <h1 className={styles.careersTitle}>Careers at Promptfoo</h1>
       <div id="ashby_embed" />
     </Layout>
