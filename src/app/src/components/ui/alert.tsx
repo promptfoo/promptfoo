@@ -4,7 +4,7 @@ import { cn } from '@app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const alertVariants = cva(
-  'relative w-full rounded-lg border p-4 flex items-start gap-3 [&>svg]:shrink-0 [&>svg]:mt-0.5',
+  'relative w-full rounded-lg border p-4 flex items-center gap-3 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -64,4 +64,12 @@ function AlertDescription({
   );
 }
 
-export { Alert, AlertTitle, AlertDescription };
+function AlertContent({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) {
+  return <div ref={ref} className={cn('flex-1', className)} {...props} />;
+}
+
+export { Alert, AlertTitle, AlertDescription, AlertContent };

@@ -1,10 +1,11 @@
 import * as React from 'react';
+
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
-import { DataTable } from './data-table';
 import { Download, Plus, Trash2 } from 'lucide-react';
-import type { ColumnDef } from '@tanstack/react-table';
+import { DataTable } from './data-table';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { ColumnDef } from '@tanstack/react-table';
 
 // Sample data type
 interface Evaluation {
@@ -259,9 +260,7 @@ export const WithRowClick: Story = {
     return (
       <div className="space-y-4">
         <DataTable columns={columns} data={sampleData} onRowClick={(row) => setClicked(row.name)} />
-        {clicked && (
-          <div className="text-sm text-muted-foreground">Last clicked: {clicked}</div>
-        )}
+        {clicked && <div className="text-sm text-muted-foreground">Last clicked: {clicked}</div>}
       </div>
     );
   },
@@ -270,11 +269,7 @@ export const WithRowClick: Story = {
 // With initial sorting
 export const WithSorting: Story = {
   render: () => (
-    <DataTable
-      columns={columns}
-      data={sampleData}
-      initialSorting={[{ id: 'score', desc: true }]}
-    />
+    <DataTable columns={columns} data={sampleData} initialSorting={[{ id: 'score', desc: true }]} />
   ),
 };
 
@@ -347,12 +342,7 @@ export const WithPagination: Story = {
 // With max height (scrollable)
 export const WithMaxHeight: Story = {
   render: () => (
-    <DataTable
-      columns={columns}
-      data={largeDataset}
-      maxHeight="400px"
-      showPagination={false}
-    />
+    <DataTable columns={columns} data={largeDataset} maxHeight="400px" showPagination={false} />
   ),
 };
 
