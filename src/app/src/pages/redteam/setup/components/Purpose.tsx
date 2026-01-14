@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Code } from '@app/components/ui/code';
 import {
@@ -347,34 +347,42 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     {isDiscovering && showSlowDiscoveryMessage && (
                       <Alert variant="info">
                         <Info className="size-4" />
-                        <AlertDescription>
-                          Discovery is taking a little while. This is normal for complex
-                          applications.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            Discovery is taking a little while. This is normal for complex
+                            applications.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {!hasTargetConfigured && (
                       <Alert variant="warning">
                         <AlertTriangle className="size-4" />
-                        <AlertDescription>
-                          You must configure a target to run auto-discovery.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            You must configure a target to run auto-discovery.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                       <Alert variant="destructive">
                         <AlertTriangle className="size-4" />
-                        <AlertDescription>
-                          Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                          connection.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                            connection.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {discoveryError && (
                       <>
                         <Alert variant="destructive">
                           <AlertTriangle className="size-4" />
-                          <AlertDescription>{discoveryError}</AlertDescription>
+                          <AlertContent>
+                            <AlertDescription>{discoveryError}</AlertDescription>
+                          </AlertContent>
                         </Alert>
                         <div className="rounded-lg border border-border bg-background/80 p-4">
                           <p className="mb-3 text-[13px] text-muted-foreground">
@@ -872,10 +880,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             <div>
               <Alert variant="info">
                 <Info className="size-4" />
-                <AlertDescription>
-                  When testing a model directly, you don't need to provide application details. You
-                  can proceed to configure the model and test scenarios in the next steps.
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription>
+                    When testing a model directly, you don't need to provide application details.
+                    You can proceed to configure the model and test scenarios in the next steps.
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </div>
           )}
