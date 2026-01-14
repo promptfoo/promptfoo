@@ -183,7 +183,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: 40,
+      size: 48,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -232,7 +232,7 @@ export function DataTable<TData, TValue = unknown>({
         setPagination(updater);
       });
     },
-    getRowId: (row, index) => (getRowId ? `${getRowId(row)}-${index}` : String(index)),
+    getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -325,7 +325,8 @@ export function DataTable<TData, TValue = unknown>({
                     <th
                       key={header.id}
                       className={cn(
-                        'px-4 py-3 text-left text-sm font-semibold relative overflow-hidden',
+                        'py-3 text-left text-sm font-semibold relative',
+                        header.column.id === 'select' ? 'px-3' : 'px-4 overflow-hidden',
                         canSort && 'cursor-pointer select-none hover:bg-muted/80',
                       )}
                       style={{
@@ -385,10 +386,10 @@ export function DataTable<TData, TValue = unknown>({
                     <td
                       key={cell.id}
                       className={cn(
-                        'px-4 py-3 text-sm',
+                        'py-3 text-sm',
                         cell.column.id === 'select'
-                          ? 'cursor-pointer'
-                          : 'overflow-hidden text-ellipsis',
+                          ? 'px-3 cursor-pointer'
+                          : 'px-4 overflow-hidden text-ellipsis',
                       )}
                       style={{ width: cell.column.getSize() }}
                       onClick={

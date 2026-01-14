@@ -51,6 +51,7 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../types/index';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -124,7 +125,7 @@ export async function runRedteamConversation({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Record<string, string>;
@@ -343,7 +344,7 @@ export async function runRedteamConversation({
     const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
 
     // Build updated vars - handle multi-input mode
-    const updatedVars: Record<string, string | object> = {
+    const updatedVars: Record<string, VarValue> = {
       ...iterationVars,
       [injectVar]: finalInjectVar,
       ...(currentInputVars || {}),
@@ -690,7 +691,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly perTurnLayers: LayerConfig[];
   readonly inputs?: Record<string, string>;
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
@@ -719,7 +720,15 @@ class RedteamIterativeProvider implements ApiProvider {
         inputs: this.inputs,
       });
     } else {
-      this.redteamProvider = config.redteamProvider;
+      invariant(
+        config.redteamProvider === undefined ||
+          typeof config.redteamProvider === 'string' ||
+          (typeof config.redteamProvider === 'object' &&
+            config.redteamProvider !== null &&
+            !Array.isArray(config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
+      this.redteamProvider = config.redteamProvider as RedteamFileConfig['provider'];
     }
   }
 

@@ -13,6 +13,7 @@ import { loadCredentials } from './auth';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
+import type { VarValue } from '../../types/shared';
 import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 const ajv = getAjv();
@@ -508,7 +509,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
 
 export function loadFile(
   config_var: Tool[] | string | undefined,
-  context_vars: Record<string, string | object> | undefined,
+  context_vars: Record<string, VarValue> | undefined,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
@@ -597,7 +598,7 @@ function getMimeTypeFromBase64(base64DataOrUrl: string): string {
 
 function processImagesInContents(
   contents: GeminiFormat,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
@@ -707,7 +708,7 @@ function processImagesInContents(
  */
 function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
 ): Content | undefined {
   if (!configSystemInstruction) {
     return undefined;
@@ -745,7 +746,7 @@ function parseConfigSystemInstruction(
 
 export function geminiFormatAndSystemInstructions(
   prompt: string,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
   configSystemInstruction?: Content | string,
   options?: { useAssistantRole?: boolean },
 ): {
@@ -854,7 +855,7 @@ export function parseStringObject(input: string | any) {
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ) {
   let functionCalls: FunctionCall[];
   try {

@@ -2,6 +2,7 @@
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
+  "postUpdateOptions": ["npmDedupe"],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -9,12 +10,11 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "includePaths": [
-    "package.json",
-    "site/package.json",
-    "src/app/package.json",
-    "code-scan-action/package.json",
-    "examples/**/package.json"
+  "ignorePaths": [
+    "examples/**/requirements.txt",
+    "examples/**/pyproject.toml",
+    "examples/**/go.mod",
+    "test/**/go.mod"
   ],
   "packageRules": [
     {

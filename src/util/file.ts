@@ -15,7 +15,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 
-import type { NunjucksFilterMap, OutputFile } from '../types';
+import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -386,7 +386,7 @@ export async function readFilters(
  */
 export function maybeLoadFromExternalFileWithVars(
   config: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   const rendered = renderVarsInObject(config, vars);
   return maybeLoadFromExternalFile(rendered);
@@ -407,7 +407,7 @@ export function maybeLoadFromExternalFileWithVars(
  */
 export function maybeLoadResponseFormatFromExternalFile(
   responseFormat: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   if (responseFormat === undefined || responseFormat === null) {
     return responseFormat;
@@ -458,7 +458,7 @@ export function maybeLoadResponseFormatFromExternalFile(
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): Promise<any> {
   const rendered = renderVarsInObject(tools, vars);
 
