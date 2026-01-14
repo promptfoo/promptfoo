@@ -83,8 +83,6 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
   return (
     (env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
     getEnvString('VERCEL_AI_GATEWAY_API_KEY') ??
-    (env?.AI_GATEWAY_API_KEY as string | undefined) ??
-    getEnvString('AI_GATEWAY_API_KEY') ??
     undefined
   );
 }

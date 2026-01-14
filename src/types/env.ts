@@ -3,7 +3,6 @@ import { z } from 'zod';
 export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
-  AI_GATEWAY_API_KEY: z.string().optional(),
   AIML_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().optional(),

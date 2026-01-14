@@ -170,9 +170,6 @@
         "AI21_API_KEY": {
           "type": "string"
         },
-        "AI_GATEWAY_API_KEY": {
-          "type": "string"
-        },
         "AIML_API_KEY": {
           "type": "string"
         },
@@ -1442,9 +1439,6 @@
                       "type": "string"
                     },
                     "AI21_API_KEY": {
-                      "type": "string"
-                    },
-                    "AI_GATEWAY_API_KEY": {
                       "type": "string"
                     },
                     "AIML_API_KEY": {

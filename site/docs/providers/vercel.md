@@ -249,10 +249,10 @@ tests:
 
 ## Environment Variables
 
-| Variable                    | Description                          |
-| --------------------------- | ------------------------------------ |
-| `VERCEL_AI_GATEWAY_API_KEY` | Primary API key for AI Gateway       |
-| `AI_GATEWAY_API_KEY`        | Alternative API key (fallback)       |
+| Variable                      | Description                     |
+| ----------------------------- | ------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`   | API key for AI Gateway          |
+| `VERCEL_AI_GATEWAY_BASE_URL`  | Override the AI Gateway URL     |
 
 ## Troubleshooting
 
