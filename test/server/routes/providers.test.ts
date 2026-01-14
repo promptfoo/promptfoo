@@ -199,11 +199,11 @@ describe('Providers Routes', () => {
         },
       });
 
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(
-        mockProvider,
-        testPrompt,
-        undefined,
-      );
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: testPrompt,
+        inputs: undefined,
+      });
     });
 
     it('should handle valid request without prompt (optional)', async () => {
@@ -224,11 +224,11 @@ describe('Providers Routes', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(
-        mockProvider,
-        undefined,
-        undefined,
-      );
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: undefined,
+        inputs: undefined,
+      });
     });
 
     it('should return 400 for missing providerOptions', async () => {
