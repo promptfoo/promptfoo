@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM --platform=${BUILDPLATFORM} node:24.7.0-alpine
+FROM --platform=${BUILDPLATFORM} node:24.12.0-alpine
 
-FROM node:24.7.0-alpine AS base
+FROM node:24.12.0-alpine AS base
+
+# Update Alpine packages to get latest security patches
+RUN apk update && apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 # Make Python version configurable with a default of 3.12
@@ -11,13 +14,10 @@ ARG PYTHON_VERSION=3.12
 RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
     ln -sf python3 /usr/bin/python
 
-# Node 24 ships with npm 11.5.1, but the repo requires >=11.6.4
-RUN npm install -g npm@11.6.4
-
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+RUN apk update && apk add --no-cache libc6-compat
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
