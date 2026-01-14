@@ -8,7 +8,7 @@ export const tracesRouter = Router();
 // Get traces for a specific evaluation
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
   try {
-    const { evaluationId } = req.params;
+    const evaluationId = req.params.evaluationId as string;
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
@@ -25,7 +25,7 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 // Get a specific trace by ID
 tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
   try {
-    const { traceId } = req.params;
+    const traceId = req.params.traceId as string;
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();
