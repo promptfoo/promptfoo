@@ -315,7 +315,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
           subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'
