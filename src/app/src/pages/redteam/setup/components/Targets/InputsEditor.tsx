@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -11,13 +11,6 @@ import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
-
-interface InputVariable {
-  id: string;
-  name: string;
-  description: string;
-  nameError?: string;
-}
 
 interface InputsEditorProps {
   inputs?: Record<string, string>;
@@ -37,72 +30,29 @@ export default function InputsEditor({
   disabled = false,
   disabledReason,
 }: InputsEditorProps) {
-  const [variables, setVariables] = useState<InputVariable[]>([]);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const isUpdatingFromProps = useRef(false);
-  const idCounterRef = useRef(0);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    return inputs ? Object.keys(inputs).length > 0 : false;
+  });
 
-  // Initialize local state from props
-  useEffect(() => {
-    if (!isUpdatingFromProps.current) {
-      const inputEntries = inputs ? Object.entries(inputs) : [];
-      if (inputEntries.length > 0) {
-        const variableList = inputEntries.map(([name, description]) => ({
-          id: `input-${Date.now()}-${idCounterRef.current++}`,
-          name,
-          description,
-        }));
-        setVariables(variableList);
-        setIsExpanded(true);
-      } else {
-        setVariables([]);
-      }
+  // Derive variables from inputs prop
+  const variables = useMemo(() => {
+    if (!inputs) {
+      return [];
     }
-    isUpdatingFromProps.current = false;
+    return Object.entries(inputs).map(([name, description]) => ({ name, description }));
   }, [inputs]);
 
-  // Sync local state back to parent
-  const syncToParent = useCallback(() => {
-    const validVariables = variables.filter((v) => v.name.trim() && !v.nameError);
-    if (validVariables.length === 0) {
-      onChange(undefined);
-    } else {
-      const inputsObj: Record<string, string> = {};
-      validVariables.forEach((v) => {
-        inputsObj[v.name.trim()] = v.description;
-      });
-      onChange(inputsObj);
-    }
-  }, [variables, onChange]);
-
-  // Debounced sync to parent
-  useEffect(() => {
-    isUpdatingFromProps.current = true;
-    const timeoutId = setTimeout(() => {
-      syncToParent();
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [syncToParent]);
-
-  // Validate variable names for duplicates
-  const validateVariableNames = useCallback((updatedVariables: InputVariable[]) => {
+  // Check for duplicate names
+  const duplicateNames = useMemo(() => {
     const nameCount = new Map<string, number>();
-    updatedVariables.forEach((variable) => {
-      const trimmedName = variable.name.trim();
-      if (trimmedName) {
-        nameCount.set(trimmedName, (nameCount.get(trimmedName) || 0) + 1);
+    variables.forEach(({ name }) => {
+      const trimmed = name.trim();
+      if (trimmed) {
+        nameCount.set(trimmed, (nameCount.get(trimmed) || 0) + 1);
       }
     });
-
-    return updatedVariables.map((variable) => {
-      const trimmedName = variable.name.trim();
-      const isDuplicate = trimmedName && nameCount.get(trimmedName)! > 1;
-      return {
-        ...variable,
-        nameError: isDuplicate ? 'Duplicate variable name' : undefined,
-      };
-    });
-  }, []);
+    return new Set([...nameCount.entries()].filter(([, count]) => count > 1).map(([name]) => name));
+  }, [variables]);
 
   const addVariable = () => {
     const existingNames = variables.map((v) => v.name);
@@ -113,36 +63,40 @@ export default function InputsEditor({
       counter++;
     }
 
-    const newVariable: InputVariable = {
-      id: `input-${Date.now()}-${idCounterRef.current++}`,
-      name: newName,
-      description: '',
-    };
-
-    const updatedVariables = validateVariableNames([...variables, newVariable]);
-    setVariables(updatedVariables);
+    const newInputs = { ...inputs, [newName]: '' };
+    onChange(newInputs);
     setIsExpanded(true);
   };
 
-  const updateVariableName = (id: string, name: string) => {
-    const updatedVariables = variables.map((variable) =>
-      variable.id === id ? { ...variable, name } : variable,
-    );
-    const validatedVariables = validateVariableNames(updatedVariables);
-    setVariables(validatedVariables);
+  const updateVariableName = (oldName: string, newName: string) => {
+    if (!inputs) {
+      return;
+    }
+    // Build new object preserving order, replacing the old key with new key
+    const newInputs: Record<string, string> = {};
+    for (const [key, value] of Object.entries(inputs)) {
+      if (key === oldName) {
+        newInputs[newName] = value;
+      } else {
+        newInputs[key] = value;
+      }
+    }
+    onChange(newInputs);
   };
 
-  const updateVariableDescription = (id: string, description: string) => {
-    const updatedVariables = variables.map((variable) =>
-      variable.id === id ? { ...variable, description } : variable,
-    );
-    setVariables(updatedVariables);
+  const updateVariableDescription = (name: string, description: string) => {
+    if (!inputs) {
+      return;
+    }
+    onChange({ ...inputs, [name]: description });
   };
 
-  const removeVariable = (id: string) => {
-    const updatedVariables = variables.filter((variable) => variable.id !== id);
-    const validatedVariables = validateVariableNames(updatedVariables);
-    setVariables(validatedVariables);
+  const removeVariable = (name: string) => {
+    if (!inputs) {
+      return;
+    }
+    const { [name]: _, ...rest } = inputs;
+    onChange(Object.keys(rest).length > 0 ? rest : undefined);
   };
 
   const addVariableButton = disabled ? (
@@ -168,47 +122,51 @@ export default function InputsEditor({
     <>
       {variables.length > 0 ? (
         <div className="flex flex-col gap-3">
-          {variables.map((variable) => (
-            <div key={variable.id} className="flex items-start gap-3 rounded-lg border p-3">
-              <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-                <div className="sm:w-48">
-                  <Label htmlFor={`${variable.id}-name`} className="mb-1.5 block text-sm">
-                    Variable Name
-                  </Label>
-                  <Input
-                    id={`${variable.id}-name`}
-                    placeholder="e.g., user_id"
-                    value={variable.name}
-                    onChange={(e) => updateVariableName(variable.id, e.target.value)}
-                    className={cn('font-mono', variable.nameError && 'border-destructive')}
-                  />
-                  {variable.nameError && (
-                    <p className="mt-1 text-xs text-destructive">{variable.nameError}</p>
-                  )}
+          {variables.map((variable, index) => {
+            const isDuplicate = duplicateNames.has(variable.name.trim());
+            const inputId = `input-${index}`;
+            return (
+              <div key={index} className="flex items-start gap-3 rounded-lg border p-3">
+                <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+                  <div className="sm:w-48">
+                    <Label htmlFor={`${inputId}-name`} className="mb-1.5 block text-sm">
+                      Variable Name
+                    </Label>
+                    <Input
+                      id={`${inputId}-name`}
+                      placeholder="e.g., user_id"
+                      value={variable.name}
+                      onChange={(e) => updateVariableName(variable.name, e.target.value)}
+                      className={cn('font-mono', isDuplicate && 'border-destructive')}
+                    />
+                    {isDuplicate && (
+                      <p className="mt-1 text-xs text-destructive">Duplicate variable name</p>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor={`${inputId}-desc`} className="mb-1.5 block text-sm">
+                      Instructions
+                    </Label>
+                    <Input
+                      id={`${inputId}-desc`}
+                      placeholder="e.g., A realistic user ID in UUID format"
+                      value={variable.description}
+                      onChange={(e) => updateVariableDescription(variable.name, e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor={`${variable.id}-desc`} className="mb-1.5 block text-sm">
-                    Description
-                  </Label>
-                  <Input
-                    id={`${variable.id}-desc`}
-                    placeholder="e.g., A realistic user ID in UUID format"
-                    value={variable.description}
-                    onChange={(e) => updateVariableDescription(variable.id, e.target.value)}
-                  />
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeVariable(variable.name)}
+                  aria-label={`Delete variable ${variable.name}`}
+                  className="mt-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="size-4" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeVariable(variable.id)}
-                aria-label={`Delete variable ${variable.name}`}
-                className="mt-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
           {addVariableButton}
         </div>
       ) : (
