@@ -34,7 +34,7 @@ export function useApiHealth() {
         };
       }
     },
-    refetchInterval: 30000, // Poll every 3 seconds
+    refetchInterval: 3000, // Poll every 3 seconds
     retry: false, // Failed queries will not be retried until the next poll
     staleTime: 2000, // Data is fresh for 2 seconds
     initialData: {

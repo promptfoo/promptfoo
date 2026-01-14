@@ -193,7 +193,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                           )}
 
                         {selectedTarget.config.body &&
-                          !testResult?.providerResponse?.metadata?.renderedBody &&
+                          !testResult?.providerResponse?.metadata?.finalRequestBody &&
                           !testResult?.transformedRequest && (
                             <CodeBlock label="Body" maxHeight="300px">
                               {typeof selectedTarget.config.body === 'string'
@@ -209,17 +209,17 @@ const TestSection: React.FC<TestSectionProps> = ({
                         )}
 
                         {/* Show rendered body with template variables resolved */}
-                        {(testResult?.providerResponse?.metadata?.renderedBody ||
+                        {(testResult?.providerResponse?.metadata?.finalRequestBody ||
                           testResult?.transformedRequest) && (
                           <CodeBlock label="Rendered Body">
                             {typeof (
-                              testResult?.providerResponse?.metadata?.renderedBody ||
+                              testResult?.providerResponse?.metadata?.finalRequestBody ||
                               testResult?.transformedRequest
                             ) === 'string'
-                              ? testResult?.providerResponse?.metadata?.renderedBody ||
+                              ? testResult?.providerResponse?.metadata?.finalRequestBody ||
                                 testResult?.transformedRequest
                               : JSON.stringify(
-                                  testResult?.providerResponse?.metadata?.renderedBody ||
+                                  testResult?.providerResponse?.metadata?.finalRequestBody ||
                                     testResult?.transformedRequest,
                                   null,
                                   2,

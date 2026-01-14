@@ -76,8 +76,7 @@ function ProviderConfigEditor({
     } else if (field === 'body') {
       updatedTarget.config.body = value;
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      const hasInputs =
-        (updatedTarget as any).inputs && Object.keys((updatedTarget as any).inputs).length > 0;
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
       if (bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
@@ -99,8 +98,7 @@ function ProviderConfigEditor({
       }
     } else if (field === 'request') {
       updatedTarget.config.request = value;
-      const hasInputs =
-        (updatedTarget as any).inputs && Object.keys((updatedTarget as any).inputs).length > 0;
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
       if (value && !value.includes('{{prompt}}') && !hasInputs) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
@@ -117,9 +115,9 @@ function ProviderConfigEditor({
     } else if (field === 'inputs') {
       // Handle top-level inputs field for multi-variable input configuration
       if (value === undefined) {
-        delete (updatedTarget as any).inputs;
+        delete updatedTarget.inputs;
       } else {
-        (updatedTarget as any).inputs = value;
+        updatedTarget.inputs = value;
         // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
         if (Object.keys(value).length > 0) {
           setBodyError(null);

@@ -2049,9 +2049,6 @@ export class HttpProvider implements ApiProvider {
           requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
         }),
       },
-      // Always include renderedBody to show the request body with template variables resolved
-      // This is useful for debugging and testing, especially with multi-input configurations
-      renderedBody: renderedConfig.body,
     };
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;

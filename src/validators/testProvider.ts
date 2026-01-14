@@ -57,14 +57,19 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
 /**
  * Tests basic provider connectivity with a prompt.
  * Extracted from POST /providers/test endpoint
- * @param provider The provider to test
- * @param prompt An optional prompt to test w/
  */
-export async function testProviderConnectivity(
-  provider: ApiProvider,
-  prompt: string = 'Hello World!',
-  inputs?: Record<string, string>,
-): Promise<ProviderTestResult> {
+export async function testProviderConnectivity({
+  provider,
+  prompt = 'Hello World!',
+  inputs,
+}: {
+  /** The provider to test */
+  provider: ApiProvider;
+  /** An optional prompt to test with */
+  prompt?: string;
+  /** Input variable definitions for multi-input configurations */
+  inputs?: Record<string, string>;
+}): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
   // Generate a session ID for testing (works for both client sessions)
@@ -418,16 +423,28 @@ function buildTroubleshootingAdvice({
  * Tests multi-turn session functionality by making two sequential requests
  * For server-sourced sessions, extracts sessionId from first response and uses it in second request
  * For client-sourced sessions, generates a sessionId and uses it in both requests
- * @param mainInputVariable - For multi-input configurations, specifies which variable to use for
- *   the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.
  */
-export async function testProviderSession(
-  provider: ApiProvider,
-  sessionConfig?: { sessionSource?: string; sessionParser?: string },
-  options?: { skipConfigValidation?: boolean },
-  inputs?: Record<string, string>,
-  mainInputVariable?: string,
-): Promise<SessionTestResult> {
+export async function testProviderSession({
+  provider,
+  sessionConfig,
+  options,
+  inputs,
+  mainInputVariable,
+}: {
+  /** The provider to test */
+  provider: ApiProvider;
+  /** Session configuration overrides */
+  sessionConfig?: { sessionSource?: string; sessionParser?: string };
+  /** Test options */
+  options?: { skipConfigValidation?: boolean };
+  /** Input variable definitions for multi-input configurations */
+  inputs?: Record<string, string>;
+  /**
+   * For multi-input configurations, specifies which variable to use for
+   * the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.
+   */
+  mainInputVariable?: string;
+}): Promise<SessionTestResult> {
   try {
     // Validate sessions config
     const sessionValidation = validateAndConfigureSessions({
