@@ -598,6 +598,11 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       const model = gateway.textEmbeddingModel(this.modelName);
 
+      // Set up timeout using AbortController
+      const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
       logger.debug('Calling Vercel AI Gateway for embedding', {
         model: this.modelName,
       });
@@ -605,7 +610,10 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       const result = await embed({
         model,
         value: input,
+        abortSignal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       logger.debug('Vercel AI Gateway embedding response received', {
         model: this.modelName,
@@ -631,6 +639,14 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Handle abort/timeout errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          error: `Embedding request timed out after ${this.config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
+        };
+      }
+
       logger.error(`Vercel AI Gateway embedding error: ${errorMessage}`);
       return {
         error: `Embedding API call error: ${errorMessage}`,

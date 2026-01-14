@@ -1,6 +1,8 @@
 ---
+title: Vercel AI Gateway
 sidebar_label: Vercel AI Gateway
-description: Access 20+ AI providers through Vercel's unified AI Gateway
+sidebar_position: 48
+description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Vercel's unified AI Gateway. Supports text generation, streaming, structured output, and embeddings.
 ---
 
 # Vercel AI Gateway
@@ -82,22 +84,22 @@ providers:
 
 ### Configuration Parameters
 
-| Parameter          | Type     | Description                                         |
-| ------------------ | -------- | --------------------------------------------------- |
-| `apiKey`           | string   | Vercel AI Gateway API key                           |
-| `apiKeyEnvar`      | string   | Custom environment variable name for API key        |
-| `temperature`      | number   | Controls randomness (0.0 to 1.0)                    |
-| `maxTokens`        | number   | Maximum number of tokens to generate                |
-| `topP`             | number   | Nucleus sampling parameter                          |
-| `topK`             | number   | Top-k sampling parameter                            |
-| `frequencyPenalty` | number   | Penalizes frequent tokens                           |
-| `presencePenalty`  | number   | Penalizes tokens based on presence                  |
-| `stopSequences`    | string[] | Sequences where generation stops                    |
-| `timeout`          | number   | Request timeout in milliseconds                     |
-| `headers`          | object   | Additional HTTP headers                             |
-| `streaming`        | boolean  | Enable streaming responses                          |
-| `responseSchema`   | object   | JSON schema for structured output                   |
-| `baseUrl`          | string   | Override the AI Gateway base URL                    |
+| Parameter          | Type     | Description                                  |
+| ------------------ | -------- | -------------------------------------------- |
+| `apiKey`           | string   | Vercel AI Gateway API key                    |
+| `apiKeyEnvar`      | string   | Custom environment variable name for API key |
+| `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
+| `maxTokens`        | number   | Maximum number of tokens to generate         |
+| `topP`             | number   | Nucleus sampling parameter                   |
+| `topK`             | number   | Top-k sampling parameter                     |
+| `frequencyPenalty` | number   | Penalizes frequent tokens                    |
+| `presencePenalty`  | number   | Penalizes tokens based on presence           |
+| `stopSequences`    | string[] | Sequences where generation stops             |
+| `timeout`          | number   | Request timeout in milliseconds              |
+| `headers`          | object   | Additional HTTP headers                      |
+| `streaming`        | boolean  | Enable streaming responses                   |
+| `responseSchema`   | object   | JSON schema for structured output            |
+| `baseUrl`          | string   | Override the AI Gateway base URL             |
 
 ## Structured Output
 
@@ -151,15 +153,15 @@ providers:
 
 The Vercel AI Gateway supports models from these providers:
 
-| Provider   | Example Models                                              |
-| ---------- | ----------------------------------------------------------- |
-| OpenAI     | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview`  |
+| Provider   | Example Models                                                   |
+| ---------- | ---------------------------------------------------------------- |
+| OpenAI     | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview`       |
 | Anthropic  | `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-haiku` |
-| Google     | `google/gemini-2.0-flash`, `google/gemini-1.5-pro`          |
-| Mistral    | `mistral/mistral-large`, `mistral/mistral-small`            |
-| Cohere     | `cohere/command-r-plus`, `cohere/command-r`                 |
-| Groq       | `groq/llama-3.1-70b-versatile`                              |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar`                  |
+| Google     | `google/gemini-2.0-flash`, `google/gemini-1.5-pro`               |
+| Mistral    | `mistral/mistral-large`, `mistral/mistral-small`                 |
+| Cohere     | `cohere/command-r-plus`, `cohere/command-r`                      |
+| Groq       | `groq/llama-3.1-70b-versatile`                                   |
+| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar`                       |
 
 For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers).
 
@@ -183,10 +185,10 @@ tests:
 
 Supported embedding models:
 
-| Provider | Example Models                                                       |
-| -------- | -------------------------------------------------------------------- |
-| OpenAI   | `openai/text-embedding-3-small`, `openai/text-embedding-3-large`     |
-| Cohere   | `cohere/embed-english-v3.0`, `cohere/embed-multilingual-v3.0`        |
+| Provider | Example Models                                                   |
+| -------- | ---------------------------------------------------------------- |
+| OpenAI   | `openai/text-embedding-3-small`, `openai/text-embedding-3-large` |
+| Cohere   | `cohere/embed-english-v3.0`, `cohere/embed-multilingual-v3.0`    |
 
 ## Examples
 
@@ -249,10 +251,10 @@ tests:
 
 ## Environment Variables
 
-| Variable                      | Description                     |
-| ----------------------------- | ------------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`   | API key for AI Gateway          |
-| `VERCEL_AI_GATEWAY_BASE_URL`  | Override the AI Gateway URL     |
+| Variable                     | Description                 |
+| ---------------------------- | --------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
 
 ## Troubleshooting
 
