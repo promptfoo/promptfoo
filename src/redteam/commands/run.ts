@@ -90,6 +90,9 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
+        if (opts.maxConcurrency !== undefined) {
+          cliState.maxConcurrency = opts.maxConcurrency;
+        }
         await doRedteamRun(opts);
       } catch (error) {
         if (error instanceof z.ZodError) {

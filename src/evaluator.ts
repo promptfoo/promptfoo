@@ -2185,6 +2185,9 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Reset cliState.maxConcurrency to prevent stale state between evaluations
+      cliState.maxConcurrency = undefined;
     }
   }
 }

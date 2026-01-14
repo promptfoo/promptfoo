@@ -346,6 +346,9 @@ export async function doEval(
       );
     }
 
+    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+    cliState.maxConcurrency = maxConcurrency;
+
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
       const filterOptions: FilterOptions = {

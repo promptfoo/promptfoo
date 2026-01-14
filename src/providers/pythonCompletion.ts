@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -113,33 +114,33 @@ export class PythonProvider implements ApiProvider {
 
   /**
    * Determine worker count based on config and environment
-   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
+   * Priority: config.workers > cliState.maxConcurrency (-j flag) > PROMPTFOO_PYTHON_WORKERS env > default 1
    */
   private getWorkerCount(): number {
-    let count: number;
-
-    // 1. Explicit config.workers
+    // 1. Explicit config.workers (highest priority - user knows their script's requirements)
     if (this.config.workers !== undefined) {
-      count = this.config.workers;
-    }
-    // 2. Environment variable
-    else {
-      const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-      if (envWorkers !== undefined) {
-        count = envWorkers;
-      } else {
-        // 3. Default: 1 worker (memory-efficient)
-        count = 1;
-      }
+      const count = Math.max(1, this.config.workers);
+      logger.debug(`Python provider using ${count} workers (from config.workers)`);
+      return count;
     }
 
-    // Validate: must be at least 1
-    if (count < 1) {
-      logger.warn(`Invalid worker count ${count}, using minimum of 1`);
-      return 1;
+    // 2. CLI -j flag via cliState (runtime intent)
+    if (cliState.maxConcurrency !== undefined) {
+      const count = Math.max(1, cliState.maxConcurrency);
+      logger.debug(`Python provider using ${count} workers (from -j flag)`);
+      return count;
     }
 
-    return count;
+    // 3. Environment variable (legacy/automation)
+    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+    if (envWorkers !== undefined) {
+      const count = Math.max(1, envWorkers);
+      logger.debug(`Python provider using ${count} workers (from PROMPTFOO_PYTHON_WORKERS)`);
+      return count;
+    }
+
+    // 4. Default: 1 worker (memory-efficient, backward compatible)
+    return 1;
   }
 
   /**
