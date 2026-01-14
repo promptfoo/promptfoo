@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # For PR review events: use base SHA; for issue_comment/issues: use default branch HEAD
           # Note: github.event.pull_request is only populated for PR review events
