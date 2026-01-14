@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
+      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
         with:
