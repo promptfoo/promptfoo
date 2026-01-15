@@ -148,7 +148,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     );
   });
 
-  it('should prioritize cliState.maxConcurrency over PROMPTFOO_PYTHON_WORKERS env', async () => {
+  it('should prioritize PROMPTFOO_PYTHON_WORKERS over cliState.maxConcurrency', async () => {
     cliState.maxConcurrency = 12;
     mockGetEnvInt.mockReturnValue(5);
 
@@ -158,15 +158,15 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     expect(mockPythonWorkerPool).toHaveBeenCalledWith(
       expect.any(String),
       'call_api',
-      12, // cliState takes priority over env
+      5, // env var takes priority over cliState (Python-specific setting over general -j flag)
       undefined,
       undefined,
     );
   });
 
-  it('should fall back to PROMPTFOO_PYTHON_WORKERS when cliState.maxConcurrency is undefined', async () => {
-    cliState.maxConcurrency = undefined;
-    mockGetEnvInt.mockReturnValue(6);
+  it('should fall back to cliState.maxConcurrency when PROMPTFOO_PYTHON_WORKERS is undefined', async () => {
+    cliState.maxConcurrency = 6;
+    mockGetEnvInt.mockReturnValue(undefined);
 
     const provider = new PythonProvider('script.py');
     await provider.initialize();
@@ -174,7 +174,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     expect(mockPythonWorkerPool).toHaveBeenCalledWith(
       expect.any(String),
       'call_api',
-      6, // from PROMPTFOO_PYTHON_WORKERS
+      6, // from cliState.maxConcurrency when env var not set
       undefined,
       undefined,
     );
