@@ -85,10 +85,10 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -383,10 +383,10 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       - name: Install Dependencies
         run: |
@@ -418,10 +418,10 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       - name: Install Dependencies
         run: npm ci
@@ -577,7 +577,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ['3.0', '3.3']
+        ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6

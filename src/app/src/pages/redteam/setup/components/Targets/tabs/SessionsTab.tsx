@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -23,6 +23,7 @@ import {
   Play,
   Send,
 } from 'lucide-react';
+import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -58,8 +59,31 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
   const [detailsExpanded, setDetailsExpanded] = React.useState(false);
+  const [showVariableDialog, setShowVariableDialog] = React.useState(false);
+  const [selectedMainVariable, setSelectedMainVariable] = React.useState<string>('');
 
-  const runSessionTest = async () => {
+  // Get input variables from the provider config
+  const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
+  const hasMultipleInputs = inputVariables.length > 0;
+
+  const handleTestSessionClick = () => {
+    if (hasMultipleInputs) {
+      // Pre-select first variable if none selected
+      if (!selectedMainVariable && inputVariables.length > 0) {
+        setSelectedMainVariable(inputVariables[0]);
+      }
+      setShowVariableDialog(true);
+    } else {
+      runSessionTest();
+    }
+  };
+
+  const handleDialogConfirm = () => {
+    setShowVariableDialog(false);
+    runSessionTest(selectedMainVariable);
+  };
+
+  const runSessionTest = async (mainInputVariable?: string) => {
     setIsTestRunning(true);
     setTestResult(null);
 
@@ -74,6 +98,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             sessionSource: selectedTarget.config.sessionSource,
             sessionParser: selectedTarget.config.sessionParser,
           },
+          // Pass the main input variable for multi-input configurations
+          mainInputVariable,
         }),
       });
 
@@ -161,11 +187,13 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         {selectedTarget.config.stateful === false && (
           <Alert variant="info" className="mt-3">
             <Info className="size-4" />
-            <AlertDescription className="text-sm">
-              Since your system doesn't maintain conversation history, the full context will be
-              included in each request during multi-turn testing. Session management configuration
-              is not needed for non-stateful systems.
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription className="text-sm">
+                Since your system doesn't maintain conversation history, the full context will be
+                included in each request during multi-turn testing. Session management configuration
+                is not needed for non-stateful systems.
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
       </div>
@@ -259,52 +287,58 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Alert variant="info">
                 <Info className="size-4" />
-                <AlertDescription className="text-sm">
-                  <p className="mb-1.5 font-medium">Common patterns:</p>
-                  <ul className="list-inside list-disc space-y-0.5">
-                    <li>
-                      <strong>Header:</strong>{' '}
-                      <code className="font-mono text-xs">data.headers['x-session-id']</code>
-                    </li>
-                    <li>
-                      <strong>Cookie:</strong>{' '}
-                      <code className="font-mono text-xs">
-                        data.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]
-                      </code>
-                    </li>
-                    <li>
-                      <strong>JSON body:</strong>{' '}
-                      <code className="font-mono text-xs">JSON.parse(data.body).session.id</code>
-                    </li>
-                  </ul>
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription className="text-sm">
+                    <p className="mb-1.5 font-medium">Common patterns:</p>
+                    <ul className="list-inside list-disc space-y-0.5">
+                      <li>
+                        <strong>Header:</strong>{' '}
+                        <code className="font-mono text-xs">data.headers['x-session-id']</code>
+                      </li>
+                      <li>
+                        <strong>Cookie:</strong>{' '}
+                        <code className="font-mono text-xs">
+                          data.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]
+                        </code>
+                      </li>
+                      <li>
+                        <strong>JSON body:</strong>{' '}
+                        <code className="font-mono text-xs">JSON.parse(data.body).session.id</code>
+                      </li>
+                    </ul>
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </>
           ) : (
             <Alert variant="info">
               <Info className="size-4" />
-              <AlertDescription className="text-sm">
-                <p className="mb-2 font-medium">Client-generated sessions enabled</p>
-                <p className="mb-2">
-                  A unique UUID will be generated for each conversation and stored in the{' '}
-                  <code className="rounded bg-muted px-1 font-mono text-xs">sessionId</code>{' '}
-                  variable. Include{' '}
-                  <code className="rounded bg-muted px-1 font-mono text-xs">{'{{sessionId}}'}</code>{' '}
-                  in your request headers or body where needed.
-                </p>
-                <div className="space-y-1 text-muted-foreground">
-                  <p>
-                    <span className="font-medium text-foreground">Header:</span>{' '}
-                    <code className="font-mono text-xs">X-Session-ID: {'{{sessionId}}'}</code>
+              <AlertContent>
+                <AlertDescription className="text-sm">
+                  <p className="mb-2 font-medium">Client-generated sessions enabled</p>
+                  <p className="mb-2">
+                    A unique UUID will be generated for each conversation and stored in the{' '}
+                    <code className="rounded bg-muted px-1 font-mono text-xs">sessionId</code>{' '}
+                    variable. Include{' '}
+                    <code className="rounded bg-muted px-1 font-mono text-xs">
+                      {'{{sessionId}}'}
+                    </code>{' '}
+                    in your request headers or body where needed.
                   </p>
-                  <p>
-                    <span className="font-medium text-foreground">Body:</span>{' '}
-                    <code className="font-mono text-xs">
-                      {'{"session_id": "{{sessionId}}", "message": "{{prompt}}"}'}
-                    </code>
-                  </p>
-                </div>
-              </AlertDescription>
+                  <div className="space-y-1 text-muted-foreground">
+                    <p>
+                      <span className="font-medium text-foreground">Header:</span>{' '}
+                      <code className="font-mono text-xs">X-Session-ID: {'{{sessionId}}'}</code>
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Body:</span>{' '}
+                      <code className="font-mono text-xs">
+                        {'{"session_id": "{{sessionId}}", "message": "{{prompt}}"}'}
+                      </code>
+                    </p>
+                  </div>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 
@@ -327,7 +361,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               </p>
 
               <Button
-                onClick={runSessionTest}
+                onClick={handleTestSessionClick}
                 disabled={isTestRunning || !selectedTarget.config.url}
                 size="sm"
                 className="mb-3"
@@ -343,10 +377,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               {!selectedTarget.config.url && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
-                  <AlertDescription className="text-sm">
-                    Please configure the target URL in the endpoint configuration before testing
-                    sessions.
-                  </AlertDescription>
+                  <AlertContent>
+                    <AlertDescription className="text-sm">
+                      Please configure the target URL in the endpoint configuration before testing
+                      sessions.
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
               )}
 
@@ -359,12 +395,14 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                     ) : (
                       <AlertCircle className="size-4" />
                     )}
-                    <AlertDescription className="text-sm">
-                      <p className="font-medium">
-                        {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
-                      </p>
-                      <p className="mt-1">{testResult.message}</p>
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription className="text-sm">
+                        <p className="font-medium">
+                          {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
+                        </p>
+                        <p className="mt-1">{testResult.message}</p>
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
 
                   {/* Details Collapsible */}
@@ -389,24 +427,26 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                           {!testResult.success && (
                             <Alert variant="warning">
                               <AlertTriangle className="size-4" />
-                              <AlertDescription className="text-sm">
-                                <p className="mb-1.5 font-medium">Troubleshooting</p>
-                                <ul className="m-0 list-disc space-y-0.5 pl-4">
-                                  <li>
-                                    Verify your session configuration matches your target's
-                                    requirements
-                                  </li>
-                                  <li>
-                                    For server sessions: Check the session parser extracts the
-                                    correct ID
-                                  </li>
-                                  <li>
-                                    For client sessions: Ensure {'{{sessionId}}'} is in the right
-                                    place
-                                  </li>
-                                  <li>Confirm your target supports stateful conversations</li>
-                                </ul>
-                              </AlertDescription>
+                              <AlertContent>
+                                <AlertDescription className="text-sm">
+                                  <p className="mb-1.5 font-medium">Troubleshooting</p>
+                                  <ul className="m-0 list-disc space-y-0.5 pl-4">
+                                    <li>
+                                      Verify your session configuration matches your target's
+                                      requirements
+                                    </li>
+                                    <li>
+                                      For server sessions: Check the session parser extracts the
+                                      correct ID
+                                    </li>
+                                    <li>
+                                      For client sessions: Ensure {'{{sessionId}}'} is in the right
+                                      place
+                                    </li>
+                                    <li>Confirm your target supports stateful conversations</li>
+                                  </ul>
+                                </AlertDescription>
+                              </AlertContent>
                             </Alert>
                           )}
 
@@ -468,10 +508,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                               ) : (
                                 <AlertTriangle className="size-4" />
                               )}
-                              <AlertDescription className="text-sm">
-                                <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
-                                {testResult.reason}
-                              </AlertDescription>
+                              <AlertContent>
+                                <AlertDescription className="text-sm">
+                                  <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
+                                  {testResult.reason}
+                                </AlertDescription>
+                              </AlertContent>
                             </Alert>
                           )}
 
@@ -549,6 +591,16 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         </a>
         .
       </p>
+
+      <VariableSelectionDialog
+        open={showVariableDialog}
+        onOpenChange={setShowVariableDialog}
+        variables={inputVariables}
+        variableDescriptions={selectedTarget.inputs}
+        selectedVariable={selectedMainVariable}
+        onSelectedVariableChange={setSelectedMainVariable}
+        onConfirm={handleDialogConfirm}
+      />
     </div>
   );
 };

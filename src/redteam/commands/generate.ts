@@ -114,7 +114,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
@@ -170,7 +169,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    resolvedConfigMetadata = resolved.config.metadata;
     commandLineOptions = resolved.commandLineOptions;
     resolvedConfig = resolved.config;
 
@@ -327,11 +325,13 @@ export async function doGenerateRedteam(
     (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
   );
   if (policyPluginsWithRefs.length > 0) {
-    // Load the calling user's team id; all policies must belong to the same team.
-    const teamId =
-      resolvedConfigMetadata?.teamId ??
-      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
-      (await resolveTeamId()).id;
+    // Always use the calling user's team id for fetching policies.
+    // The server will return:
+    // 1. Policies owned by the user's team
+    // 2. Org-scoped policies (accessible to all teams in the org)
+    // This allows users to run scans with org-scoped templates that reference
+    // org-scoped policies, even if those policies are owned by a different team.
+    const teamId = (await resolveTeamId()).id;
 
     const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 

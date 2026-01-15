@@ -165,6 +165,369 @@ function getPageTypeLabel(routePath) {
   return 'Documentation';
 }
 
+// Read site constants from TypeScript file
+async function getSiteConstants() {
+  try {
+    // Try site/src path first (when running from repo root), then src path (when running from site dir)
+    const cwd = process.cwd();
+    const inSiteDir = path.basename(cwd) === 'site';
+    const constantsPath = inSiteDir
+      ? path.join(cwd, 'src/constants.ts')
+      : path.join(cwd, 'site/src/constants.ts');
+    const content = await fs.readFile(constantsPath, 'utf8');
+
+    // Parse the constants from the TypeScript file
+    const userCountMatch = content.match(/USER_COUNT_DISPLAY:\s*['"]([^'"]+)['"]/);
+    const userCountShortMatch = content.match(/USER_COUNT_SHORT:\s*['"]([^'"]+)['"]/);
+    const fortune500Match = content.match(/FORTUNE_500_COUNT:\s*(\d+)/);
+    const githubStarsMatch = content.match(/GITHUB_STARS_DISPLAY:\s*['"]([^'"]+)['"]/);
+
+    return {
+      userCountDisplay: userCountMatch ? userCountMatch[1] : '300,000',
+      userCountShort: userCountShortMatch ? userCountShortMatch[1] : '300k',
+      fortune500Count: fortune500Match ? parseInt(fortune500Match[1], 10) : 127,
+      githubStarsDisplay: githubStarsMatch ? githubStarsMatch[1] : '9.9k',
+    };
+  } catch (error) {
+    console.warn('Could not read site constants, using defaults:', error.message);
+    return {
+      userCountDisplay: '300,000',
+      userCountShort: '300k',
+      fortune500Count: 127,
+      githubStarsDisplay: '9.9k',
+    };
+  }
+}
+
+// Generate Satori JSX template for Careers page OG image
+async function generateCareersTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+  const constants = await getSiteConstants();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+      },
+      children: [
+        // Top accent bar
+        {
+          type: 'div',
+          props: {
+            style: {
+              width: '100%',
+              height: 4,
+              background: 'linear-gradient(90deg, #e53a3a 0%, #cb3434 100%)',
+            },
+          },
+        },
+        // Main content card
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              margin: 40,
+              padding: 40,
+              borderRadius: 12,
+              backgroundColor: 'rgba(23, 37, 43, 0.4)',
+              borderLeft: '6px solid #e53a3a',
+              flex: 1,
+            },
+            children: [
+              // Header section (logo + brand + badge)
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: 30,
+                  },
+                  children: [
+                    // Logo
+                    logoBase64
+                      ? {
+                          type: 'img',
+                          props: {
+                            src: logoBase64,
+                            width: 56,
+                            height: 56,
+                            style: { marginRight: 16 },
+                          },
+                        }
+                      : null,
+                    // Brand name
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 24,
+                          fontWeight: 600,
+                          color: '#ff7a7a',
+                          marginRight: 'auto',
+                        },
+                        children: 'promptfoo',
+                      },
+                    },
+                    // Careers badge
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          padding: '8px 20px',
+                          borderRadius: 16,
+                          backgroundColor: 'rgba(229, 58, 58, 0.15)',
+                          border: '1px solid #e53a3a',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: '#ff7a7a',
+                        },
+                        children: 'Careers',
+                      },
+                    },
+                  ].filter(Boolean),
+                },
+              },
+              // Main headline
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 48,
+                    fontWeight: 600,
+                    color: 'white',
+                    lineHeight: 1.2,
+                    marginBottom: 16,
+                  },
+                  children: 'Build the Future',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 48,
+                    fontWeight: 600,
+                    color: 'white',
+                    lineHeight: 1.2,
+                    marginBottom: 24,
+                  },
+                  children: 'of AI Security',
+                },
+              },
+              // Subtitle
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    marginBottom: 30,
+                  },
+                  children: "Join the team protecting AI at the world's leading companies",
+                },
+              },
+              // Divider
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    width: 60,
+                    height: 4,
+                    backgroundColor: '#e53a3a',
+                    marginBottom: 30,
+                  },
+                },
+              },
+              // Stats row
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    gap: 60,
+                    marginBottom: 30,
+                  },
+                  children: [
+                    // Fortune 500
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          flexDirection: 'column',
+                        },
+                        children: [
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 36,
+                                fontWeight: 600,
+                                color: 'white',
+                              },
+                              children: String(constants.fortune500Count),
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 14,
+                                color: 'rgba(255, 255, 255, 0.6)',
+                              },
+                              children: 'of the Fortune 500',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                    // GitHub Stars
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          flexDirection: 'column',
+                        },
+                        children: [
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 36,
+                                fontWeight: 600,
+                                color: 'white',
+                              },
+                              children: `${constants.githubStarsDisplay}+`,
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 14,
+                                color: 'rgba(255, 255, 255, 0.6)',
+                              },
+                              children: 'GitHub Stars',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                    // OSS Users
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          flexDirection: 'column',
+                        },
+                        children: [
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 36,
+                                fontWeight: 600,
+                                color: 'white',
+                              },
+                              children: `${constants.userCountShort}+`,
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 14,
+                                color: 'rgba(255, 255, 255, 0.6)',
+                              },
+                              children: 'OSS Users',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                    // Trust badges section
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          gap: 12,
+                          marginLeft: 'auto',
+                          alignItems: 'center',
+                        },
+                        children: ['SOC2', 'ISO 27001', 'HIPAA'].map((badge) => ({
+                          type: 'div',
+                          props: {
+                            style: {
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: 'rgba(255, 255, 255, 0.8)',
+                            },
+                            children: badge,
+                          },
+                        })),
+                      },
+                    },
+                  ],
+                },
+              },
+              // Footer section
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    marginTop: 'auto',
+                  },
+                  children: [
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 16,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                        },
+                        children: 'Secure and reliable LLM applications',
+                      },
+                    },
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 14,
+                          color: 'rgba(255, 122, 122, 0.8)',
+                        },
+                        children: 'promptfoo.dev/careers',
+                      },
+                    },
+                  ],
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+      ],
+    },
+  };
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -410,6 +773,38 @@ async function generateOgImage(metadata, outputPath) {
       `❌ Failed to generate OG image for "${metadata.title || 'untitled'}" (${metadata.routePath}):`,
       error.message,
     );
+    return false;
+  }
+}
+
+// Generate Careers OG image using custom template
+async function generateCareersOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateCareersTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Careers OG image:', error.message);
     return false;
   }
 }
@@ -804,6 +1199,18 @@ module.exports = function (context, options) {
             }
           }),
         );
+      }
+
+      // Generate careers page OG image
+      console.log('🎨 Generating Careers page OG image...');
+      const careersImagePath = path.join(outDir, 'img', 'og', 'careers-og.png');
+      const careersSuccess = await generateCareersOgImage(careersImagePath);
+      if (careersSuccess) {
+        generatedImages.set('/careers/', '/img/og/careers-og.png');
+        successCount++;
+        console.log('  ✅ Careers OG image generated');
+      } else {
+        failureCount++;
       }
 
       // Create a manifest file for the generated images

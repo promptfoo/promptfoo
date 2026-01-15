@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -117,18 +117,20 @@ export default function LauncherPage() {
         )}
       >
         <Alert variant="warning">
-          <AlertDescription>
-            Connection lost. Try visiting{' '}
-            <a
-              href="https://local.promptfoo.app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline hover:no-underline"
-            >
-              local.promptfoo.app
-            </a>{' '}
-            instead
-          </AlertDescription>
+          <AlertContent>
+            <AlertDescription>
+              Connection lost. Try visiting{' '}
+              <a
+                href="https://local.promptfoo.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline hover:no-underline"
+              >
+                local.promptfoo.app
+              </a>{' '}
+              instead
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       </div>
 
