@@ -60,8 +60,8 @@ module.exports = class OpenAIProvider {
         body: JSON.stringify({
           model: this.config?.model || 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: this.config?.max_tokens || 1024,
-          temperature: this.config?.temperature || 0,
+          max_completion_tokens: this.config?.max_tokens || 1024,
+          temperature: this.config?.temperature || 1,
         }),
       },
     );
