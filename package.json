@@ -48,6 +48,7 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
+    "storybook": "npm run storybook --prefix src/app",
     "dev:server": "tsx --watch src/server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome check --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
