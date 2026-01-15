@@ -210,6 +210,110 @@ describe('eval routes', () => {
     });
   });
 
+  describe('post("/:evalId/assertions")', () => {
+    it('adds assertions to a single result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0] as EvalResult;
+      invariant(result.id, 'Result ID is required');
+
+      const res = await request(app)
+        .post(`/api/eval/${eval_.id}/assertions`)
+        .send({
+          assertions: [{ type: 'contains', value: 'denver' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.updatedResults).toBe(1);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.testCase.assert).toHaveLength(2);
+      expect(updatedResult?.gradingResult?.componentResults).toHaveLength(2);
+      expect(updatedResult?.success).toBe(true);
+    });
+
+    it('skips duplicate assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0] as EvalResult;
+      invariant(result.id, 'Result ID is required');
+
+      await request(app)
+        .post(`/api/eval/${eval_.id}/assertions`)
+        .send({
+          assertions: [{ type: 'contains', value: 'denver' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+      const res = await request(app)
+        .post(`/api/eval/${eval_.id}/assertions`)
+        .send({
+          assertions: [{ type: 'contains', value: 'denver' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.updatedResults).toBe(0);
+      expect(res.body.data.skippedResults).toBe(1);
+      expect(res.body.data.skippedAssertions).toBe(1);
+    });
+
+    it('skips ERROR results', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0] as EvalResult;
+      invariant(result.id, 'Result ID is required');
+
+      const res = await request(app)
+        .post(`/api/eval/${eval_.id}/assertions`)
+        .send({
+          assertions: [{ type: 'contains', value: 'anything' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.updatedResults).toBe(0);
+      expect(res.body.data.skippedResults).toBe(1);
+      expect(res.body.data.skippedAssertions).toBe(0);
+    });
+
+    it('applies assertions to filtered results using searchText', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0] as EvalResult;
+      invariant(result.id, 'Result ID is required');
+
+      const res = await request(app)
+        .post(`/api/eval/${eval_.id}/assertions`)
+        .send({
+          assertions: [{ type: 'contains', value: 'denver' }],
+          scope: {
+            type: 'filtered',
+            searchText: 'denver',
+            filterMode: 'all',
+            filters: [],
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.updatedResults).toBe(1);
+      expect(res.body.data.matchedTestCount).toBe(1);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.testCase.assert).toHaveLength(2);
+    });
+  });
+
   describe('GET /:id/metadata-keys', () => {
     it('should return metadata keys for valid eval', async () => {
       const eval_ = await EvalFactory.create();
