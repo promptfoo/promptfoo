@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -68,14 +68,14 @@ class ErrorBoundary extends React.Component<Props, State> {
         <div className="p-4 max-w-full">
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
-            <div className="flex-1">
+            <AlertContent>
               <AlertTitle>
                 Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
               </AlertTitle>
               <AlertDescription className="text-muted-foreground">
                 Please try reloading the page.
               </AlertDescription>
-            </div>
+            </AlertContent>
             <Button
               variant="outline"
               size="sm"

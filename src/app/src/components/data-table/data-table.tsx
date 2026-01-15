@@ -241,19 +241,45 @@ export function DataTable<TData, TValue = unknown>({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3">
-        <Spinner className="size-8" />
-        <p className="text-sm text-muted-foreground">Loading data...</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3">
+          <Spinner className="size-8" />
+          <p className="text-sm text-muted-foreground">Loading data...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
-        <AlertTriangle className="size-12 text-destructive" />
-        <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
-        <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+          <AlertTriangle className="size-12 text-destructive" />
+          <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+        </div>
       </div>
     );
   }
