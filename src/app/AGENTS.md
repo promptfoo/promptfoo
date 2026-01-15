@@ -91,7 +91,7 @@ See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mock
 
 ## Key Patterns
 
-- **Zustand stores**: See `src/app/src/store/` for patterns
+- **Zustand stores**: See `src/app/src/store/` for implementation patterns; see `test/AGENTS.md` "Zustand Store Testing" section for testing patterns
 - **Custom hooks**: See `src/app/src/hooks/` for patterns
 - **New components**: Use `components/ui/` primitives, compose with Tailwind
 - **Icons**: Use Lucide React
