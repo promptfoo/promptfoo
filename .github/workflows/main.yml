@@ -85,7 +85,7 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.4
@@ -383,7 +383,7 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.4
@@ -418,7 +418,7 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.4
@@ -577,7 +577,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ['3.0', '3.3']
+        ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
