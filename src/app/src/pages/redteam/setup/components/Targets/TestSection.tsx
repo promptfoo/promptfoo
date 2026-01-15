@@ -196,13 +196,15 @@ const TestSection: React.FC<TestSectionProps> = ({
                             </CodeBlock>
                           )}
 
-                        {selectedTarget.config.body && !testResult?.transformedRequest && (
-                          <CodeBlock label="Body" maxHeight="300px">
-                            {typeof selectedTarget.config.body === 'string'
-                              ? selectedTarget.config.body
-                              : JSON.stringify(selectedTarget.config.body, null, 2)}
-                          </CodeBlock>
-                        )}
+                        {selectedTarget.config.body &&
+                          !testResult?.providerResponse?.metadata?.finalRequestBody &&
+                          !testResult?.transformedRequest && (
+                            <CodeBlock label="Body" maxHeight="300px">
+                              {typeof selectedTarget.config.body === 'string'
+                                ? selectedTarget.config.body
+                                : JSON.stringify(selectedTarget.config.body, null, 2)}
+                            </CodeBlock>
+                          )}
 
                         {selectedTarget.config.request && (
                           <CodeBlock label="Raw Request" maxHeight="300px">
@@ -210,11 +212,22 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </CodeBlock>
                         )}
 
-                        {testResult?.transformedRequest && (
-                          <CodeBlock label="Transformed Body">
-                            {typeof testResult.transformedRequest === 'string'
-                              ? testResult.transformedRequest
-                              : JSON.stringify(testResult.transformedRequest, null, 2)}
+                        {/* Show rendered body with template variables resolved */}
+                        {(testResult?.providerResponse?.metadata?.finalRequestBody ||
+                          testResult?.transformedRequest) && (
+                          <CodeBlock label="Rendered Body">
+                            {typeof (
+                              testResult?.providerResponse?.metadata?.finalRequestBody ||
+                              testResult?.transformedRequest
+                            ) === 'string'
+                              ? testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                testResult?.transformedRequest
+                              : JSON.stringify(
+                                  testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                    testResult?.transformedRequest,
+                                  null,
+                                  2,
+                                )}
                           </CodeBlock>
                         )}
                       </div>
@@ -234,9 +247,20 @@ const TestSection: React.FC<TestSectionProps> = ({
                             )}
 
                             <CodeBlock label="Raw Response">
-                              {typeof testResult.providerResponse?.raw === 'string'
-                                ? testResult.providerResponse?.raw
-                                : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                              {(() => {
+                                const raw = testResult.providerResponse?.raw;
+                                if (typeof raw === 'string') {
+                                  // Try to parse and format as JSON
+                                  try {
+                                    const parsed = JSON.parse(raw);
+                                    return JSON.stringify(parsed, null, 2);
+                                  } catch {
+                                    // Not valid JSON, return as-is
+                                    return raw;
+                                  }
+                                }
+                                return JSON.stringify(raw, null, 2);
+                              })()}
                             </CodeBlock>
 
                             {testResult.providerResponse?.sessionId && (

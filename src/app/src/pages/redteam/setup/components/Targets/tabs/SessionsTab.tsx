@@ -23,6 +23,7 @@ import {
   Play,
   Send,
 } from 'lucide-react';
+import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -58,8 +59,31 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
   const [detailsExpanded, setDetailsExpanded] = React.useState(false);
+  const [showVariableDialog, setShowVariableDialog] = React.useState(false);
+  const [selectedMainVariable, setSelectedMainVariable] = React.useState<string>('');
 
-  const runSessionTest = async () => {
+  // Get input variables from the provider config
+  const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
+  const hasMultipleInputs = inputVariables.length > 0;
+
+  const handleTestSessionClick = () => {
+    if (hasMultipleInputs) {
+      // Pre-select first variable if none selected
+      if (!selectedMainVariable && inputVariables.length > 0) {
+        setSelectedMainVariable(inputVariables[0]);
+      }
+      setShowVariableDialog(true);
+    } else {
+      runSessionTest();
+    }
+  };
+
+  const handleDialogConfirm = () => {
+    setShowVariableDialog(false);
+    runSessionTest(selectedMainVariable);
+  };
+
+  const runSessionTest = async (mainInputVariable?: string) => {
     setIsTestRunning(true);
     setTestResult(null);
 
@@ -74,6 +98,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             sessionSource: selectedTarget.config.sessionSource,
             sessionParser: selectedTarget.config.sessionParser,
           },
+          // Pass the main input variable for multi-input configurations
+          mainInputVariable,
         }),
       });
 
@@ -335,7 +361,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               </p>
 
               <Button
-                onClick={runSessionTest}
+                onClick={handleTestSessionClick}
                 disabled={isTestRunning || !selectedTarget.config.url}
                 size="sm"
                 className="mb-3"
@@ -565,6 +591,16 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         </a>
         .
       </p>
+
+      <VariableSelectionDialog
+        open={showVariableDialog}
+        onOpenChange={setShowVariableDialog}
+        variables={inputVariables}
+        variableDescriptions={selectedTarget.inputs}
+        selectedVariable={selectedMainVariable}
+        onSelectedVariableChange={setSelectedMainVariable}
+        onConfirm={handleDialogConfirm}
+      />
     </div>
   );
 };
