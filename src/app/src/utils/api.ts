@@ -64,3 +64,39 @@ export async function updateEvalAuthor(evalId: string, author: string) {
 
   return response.json();
 }
+
+export async function addEvalAssertions(
+  evalId: string,
+  payload: {
+    assertions: unknown[];
+    scope: {
+      type: 'results' | 'tests' | 'filtered';
+      resultIds?: string[];
+      testIndices?: number[];
+      filters?: {
+        type: string;
+        operator: string;
+        value?: string;
+        field?: string;
+        logicOperator?: 'and' | 'or';
+      }[];
+      filterMode?: string;
+      searchText?: string;
+    };
+  },
+) {
+  const response = await callApi(`/eval/${evalId}/assertions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Failed to add assertions');
+  }
+
+  return response.json();
+}

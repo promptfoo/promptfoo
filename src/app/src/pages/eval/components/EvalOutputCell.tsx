@@ -88,6 +88,7 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  testIdx?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -119,6 +120,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  testIdx,
   promptIndex,
   onRating,
   firstOutput,
@@ -867,8 +869,9 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
+              testIndex={testIdx}
               promptIndex={promptIndex}
+              resultId={output.id}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
