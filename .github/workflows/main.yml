@@ -88,7 +88,7 @@ jobs:
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -386,7 +386,7 @@ jobs:
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       - name: Install Dependencies
         run: |
@@ -421,7 +421,7 @@ jobs:
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.4
 
       - name: Install Dependencies
         run: npm ci
