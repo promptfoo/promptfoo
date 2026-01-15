@@ -108,6 +108,10 @@ export function redteamRunCommand(program: Command) {
           );
         }
         process.exitCode = 1;
+      } finally {
+        // Reset cliState to prevent stale state leaking to later commands
+        cliState.remote = false;
+        cliState.maxConcurrency = undefined;
       }
     });
 

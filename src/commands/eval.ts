@@ -341,10 +341,13 @@ export async function doEval(
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
-    // For resume mode, include persisted value as "explicit"
+    // For resume mode, include persisted value as "explicit", with fallback to config when
+    // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
     const explicitMaxConcurrency = resumeRaw
       ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
-        cmdObj.maxConcurrency)
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency)
       : (cmdObj.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? evaluateOptions.maxConcurrency);
 
     if (delay > 0) {
