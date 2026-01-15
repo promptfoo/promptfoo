@@ -339,18 +339,22 @@ export async function doEval(
       disableCache();
     }
 
+    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+    // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
+    // For resume mode, include persisted value as "explicit"
+    const explicitMaxConcurrency = resumeRaw
+      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+        cmdObj.maxConcurrency)
+      : (cmdObj.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? evaluateOptions.maxConcurrency);
+
     if (delay > 0) {
       maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
-    }
-
-    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
-    // Only set when explicitly provided, not when using DEFAULT_MAX_CONCURRENCY
-    const explicitMaxConcurrency =
-      cmdObj.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? evaluateOptions.maxConcurrency;
-    if (explicitMaxConcurrency !== undefined) {
+    } else if (explicitMaxConcurrency !== undefined) {
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 

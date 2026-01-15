@@ -229,16 +229,25 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable resume mode so only the missing (deleted) results will be evaluated
   cliState.resume = true;
 
+  // Calculate effective maxConcurrency from CLI or config
+  const effectiveMaxConcurrency = cmdObj.maxConcurrency ?? (config as any).maxConcurrency;
+  const effectiveDelay = cmdObj.delay ?? (config as any).delay;
+
   // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
-  // Only set when explicitly provided via CLI
-  if (cmdObj.maxConcurrency !== undefined) {
-    cliState.maxConcurrency = cmdObj.maxConcurrency;
+  // Handle delay mode: force concurrency to 1 when delay is set
+  if (effectiveDelay && effectiveDelay > 0) {
+    cliState.maxConcurrency = 1;
+    logger.info(
+      `Running at concurrency=1 because ${effectiveDelay}ms delay was requested between API calls`,
+    );
+  } else if (effectiveMaxConcurrency !== undefined) {
+    cliState.maxConcurrency = effectiveMaxConcurrency;
   }
 
   // Set up evaluation options
   const evaluateOptions: EvaluateOptions = {
-    maxConcurrency: cmdObj.maxConcurrency || (config as any).maxConcurrency,
-    delay: cmdObj.delay || (config as any).delay,
+    maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
+    delay: effectiveDelay,
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
