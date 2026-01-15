@@ -123,8 +123,14 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
   });
 
-  // Use refactored function with optional prompt
-  const result = await testProviderConnectivity(loadedProvider, payload.prompt);
+  // Use refactored function with optional prompt and inputs
+  // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+  // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+  const result = await testProviderConnectivity({
+    provider: loadedProvider,
+    prompt: payload.prompt,
+    inputs: providerOptions.inputs || providerOptions.config?.inputs,
+  });
 
   res.status(200).json({
     testResult: {
@@ -362,7 +368,7 @@ providersRouter.post(
 // Test multi-turn session functionality
 providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
-  const { provider: providerOptions, sessionConfig } = body;
+  const { provider: providerOptions, sessionConfig, mainInputVariable } = body;
 
   try {
     const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
@@ -380,8 +386,15 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       },
     });
 
-    // Use refactored function
-    const result = await testProviderSession(loadedProvider, sessionConfig);
+    // Use refactored function with inputs passed explicitly
+    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
+    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+    const result = await testProviderSession({
+      provider: loadedProvider,
+      sessionConfig,
+      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+      mainInputVariable,
+    });
 
     res.json(result);
   } catch (error) {
