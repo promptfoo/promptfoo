@@ -250,6 +250,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  yes?: boolean;
   description?: string;
 
   // Used by webui

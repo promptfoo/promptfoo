@@ -227,7 +227,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
 
         // Generate test cases with timeout protection
         const startTime = Date.now();
-        const result = await withTimeout(
+        const { config: result } = await withTimeout(
           doGenerateRedteam(optionsParse.data),
           DEFAULT_TOOL_TIMEOUT_MS,
           'Redteam test generation timed out. This may indicate provider connectivity issues, missing API credentials, or too many tests requested.',

@@ -131,7 +131,11 @@ describe('doRedteamRun', () => {
     vi.mocked(yaml.dump).mockImplementation(function () {
       return 'mocked-yaml-content';
     });
-    vi.mocked(doGenerateRedteam).mockResolvedValue({});
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {},
+      strategyResults: {},
+    });
   });
 
   afterEach(() => {
@@ -362,7 +366,7 @@ describe('doRedteamRun', () => {
     it('should call cleanup function when no test cases are generated', async () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
-      vi.mocked(doGenerateRedteam).mockResolvedValue(null);
+      vi.mocked(doGenerateRedteam).mockResolvedValue({ config: null });
 
       await doRedteamRun({});
 

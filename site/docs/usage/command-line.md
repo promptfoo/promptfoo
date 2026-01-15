@@ -693,6 +693,7 @@ Run the complete red teaming process (init, generate, and evaluate).
 | `--remote`                                         | Force remote inference wherever possible          | false                |
 | `--force`                                          | Force generation even if no changes are detected  | false                |
 | `--no-progress-bar`                                | Do not show progress bar                          |
+| `-y, --yes`                                        | Automatically answer yes to all CLI prompts       | false                |
 | `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |
 | `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |
 
