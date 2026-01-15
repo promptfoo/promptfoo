@@ -1,20 +1,32 @@
+import async from 'async';
 import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
+import { AssertionsResult } from '../../assertions/assertionsResult';
+import { renderMetricName, runAssertions } from '../../assertions/index';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalResultsFilterMode } from '../../types/index';
+import {
+  AssertionOrSetSchema,
+  EvalResultsFilterMode,
+  ResultFailureReason,
+} from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { recalculatePromptMetrics } from '../../util/recalculatePromptMetrics';
 import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
+  AssertionOrSet,
+  AtomicTestCase,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -28,6 +40,75 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+const PosthocResultsFilterSchema = z.object({
+  type: z.string(),
+  operator: z.string(),
+  value: z.string().optional(),
+  field: z.string().optional(),
+  logicOperator: z.enum(['and', 'or']).optional(),
+});
+
+const PosthocAssertionsScopeSchema = z.object({
+  type: z.enum(['results', 'tests', 'filtered']),
+  resultIds: z.array(z.string()).optional(),
+  testIndices: z.array(z.number()).optional(),
+  filters: z.array(PosthocResultsFilterSchema).optional(),
+  filterMode: EvalResultsFilterMode.optional(),
+  searchText: z.string().optional(),
+});
+
+const PosthocAssertionsSchema = z.object({
+  assertions: z.array(AssertionOrSetSchema).min(1),
+  scope: PosthocAssertionsScopeSchema,
+});
+
+function assertionKey(assertion: AssertionOrSet): string {
+  return safeJsonStringify(assertion) ?? JSON.stringify(assertion);
+}
+
+function getTopLevelComponentResults(componentResults: GradingResult[]): GradingResult[] {
+  const nestedResults = new Set<string>();
+
+  for (const result of componentResults) {
+    if (result.componentResults && result.componentResults.length > 0) {
+      for (const subResult of result.componentResults) {
+        const serialized = safeJsonStringify(subResult);
+        if (serialized) {
+          nestedResults.add(serialized);
+        }
+      }
+    }
+  }
+
+  return componentResults.filter((result) => {
+    const serialized = safeJsonStringify(result);
+    return !serialized || !nestedResults.has(serialized);
+  });
+}
+
+async function recomputeAggregateGradingResult(
+  componentResults: GradingResult[],
+  testCase: AtomicTestCase,
+): Promise<GradingResult> {
+  const assertionResults = new AssertionsResult({ threshold: testCase.threshold });
+  const topLevelResults = getTopLevelComponentResults(componentResults);
+
+  topLevelResults.forEach((result, index) => {
+    if (!result.assertion) {
+      return;
+    }
+    const metric = renderMetricName(result.assertion.metric, testCase.vars || {});
+    assertionResults.addResult({
+      index,
+      result,
+      metric,
+      weight: result.assertion.weight,
+    });
+  });
+
+  return assertionResults.testResult();
+}
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
@@ -613,6 +694,222 @@ evalRouter.post(
     res.json(result);
   },
 );
+
+evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Promise<void> => {
+  const evalId = req.params.evalId;
+  const parsed = PosthocAssertionsSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.message });
+    return;
+  }
+
+  const { assertions, scope } = parsed.data;
+
+  if (scope.type === 'results' && (!scope.resultIds || scope.resultIds.length === 0)) {
+    res.status(400).json({ success: false, error: 'resultIds are required for results scope' });
+    return;
+  }
+
+  if (scope.type === 'tests' && (!scope.testIndices || scope.testIndices.length === 0)) {
+    res.status(400).json({ success: false, error: 'testIndices are required for tests scope' });
+    return;
+  }
+
+  const eval_ = await Eval.findById(evalId);
+  if (!eval_) {
+    res.status(404).json({ success: false, error: 'Eval not found' });
+    return;
+  }
+
+  const normalizedAssertions: AssertionOrSet[] = [];
+  const seenAssertionKeys = new Set<string>();
+  for (const assertion of assertions) {
+    const key = assertionKey(assertion as AssertionOrSet);
+    if (!seenAssertionKeys.has(key)) {
+      normalizedAssertions.push(assertion as AssertionOrSet);
+      seenAssertionKeys.add(key);
+    }
+  }
+
+  if (normalizedAssertions.length === 0) {
+    res.json({
+      success: true,
+      data: {
+        updatedResults: 0,
+        skippedResults: 0,
+        skippedAssertions: assertions.length,
+        errors: [],
+      },
+    });
+    return;
+  }
+
+  let targetResults: EvalResult[] = [];
+  let matchedTestCount = 0;
+
+  if (scope.type === 'results') {
+    const results: EvalResult[] = [];
+    for (const resultId of scope.resultIds || []) {
+      const result = await EvalResult.findById(resultId);
+      if (!result || result.evalId !== evalId) {
+        res.status(404).json({ success: false, error: `Result not found: ${resultId}` });
+        return;
+      }
+      results.push(result);
+    }
+    targetResults = results;
+    matchedTestCount = results.length;
+  } else if (scope.type === 'tests') {
+    targetResults = await EvalResult.findManyByEvalIdAndTestIndices(
+      evalId,
+      scope.testIndices || [],
+    );
+    matchedTestCount = scope.testIndices?.length || 0;
+  } else if (scope.type === 'filtered') {
+    const filters =
+      scope.filters?.map((filter) =>
+        JSON.stringify({
+          logicOperator: filter.logicOperator ?? 'and',
+          type: filter.type,
+          operator: filter.operator,
+          value: filter.value,
+          field: filter.field,
+        }),
+      ) || [];
+
+    const { testIndices, filteredCount } = await eval_.getFilteredTestIndices({
+      filterMode: scope.filterMode ?? 'all',
+      searchQuery: scope.searchText ?? '',
+      filters,
+    });
+    matchedTestCount = filteredCount;
+
+    if (testIndices.length === 0) {
+      res.json({
+        success: true,
+        data: {
+          updatedResults: 0,
+          skippedResults: 0,
+          skippedAssertions: 0,
+          errors: [],
+          matchedTestCount,
+        },
+      });
+      return;
+    }
+
+    targetResults = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
+  }
+
+  const existingDefaultOptions =
+    typeof eval_.config?.defaultTest === 'object' ? eval_.config.defaultTest?.options : undefined;
+
+  const maxConcurrency = Math.max(
+    1,
+    eval_.runtimeOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+  );
+
+  let updatedResults = 0;
+  let skippedResults = 0;
+  let skippedAssertions = 0;
+  const errors: { resultId: string; error: string }[] = [];
+
+  await async.forEachLimit(targetResults, maxConcurrency, async (result) => {
+    if (result.failureReason === ResultFailureReason.ERROR) {
+      skippedResults++;
+      return;
+    }
+
+    const existingAssertions = result.testCase.assert || [];
+    const existingKeys = new Set(existingAssertions.map(assertionKey));
+    const assertionsToAdd = normalizedAssertions.filter(
+      (assertion) => !existingKeys.has(assertionKey(assertion)),
+    );
+
+    skippedAssertions += normalizedAssertions.length - assertionsToAdd.length;
+
+    if (assertionsToAdd.length === 0) {
+      skippedResults++;
+      return;
+    }
+
+    const testCaseForNewAssertions: AtomicTestCase = {
+      ...result.testCase,
+      options: {
+        ...(existingDefaultOptions || {}),
+        ...(result.testCase.options || {}),
+      },
+      assert: assertionsToAdd,
+    };
+
+    try {
+      const providerResponse = result.response ?? { output: result.error ?? '' };
+      const promptText = typeof result.prompt === 'string' ? result.prompt : result.prompt.raw;
+      const newGradingResult = await runAssertions({
+        prompt: promptText,
+        providerResponse,
+        test: testCaseForNewAssertions,
+        latencyMs: result.latencyMs,
+      });
+
+      const newComponentResults = newGradingResult.componentResults || [];
+      const existingComponentResults = result.gradingResult?.componentResults || [];
+      const combinedComponentResults = [...existingComponentResults, ...newComponentResults];
+
+      const aggregated = await recomputeAggregateGradingResult(
+        combinedComponentResults,
+        result.testCase,
+      );
+
+      result.gradingResult = {
+        ...result.gradingResult,
+        ...aggregated,
+        componentResults: combinedComponentResults,
+        comment: result.gradingResult?.comment,
+      };
+
+      result.namedScores = aggregated.namedScores || {};
+      result.success = aggregated.pass;
+      result.score = aggregated.score;
+
+      if (result.failureReason !== ResultFailureReason.ERROR) {
+        result.failureReason = aggregated.pass
+          ? ResultFailureReason.NONE
+          : ResultFailureReason.ASSERT;
+      }
+
+      result.testCase = {
+        ...result.testCase,
+        assert: [...existingAssertions, ...assertionsToAdd],
+      };
+
+      await result.save();
+      updatedResults++;
+    } catch (error) {
+      errors.push({
+        resultId: result.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      skippedResults++;
+    }
+  });
+
+  if (updatedResults > 0) {
+    await recalculatePromptMetrics(eval_);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      updatedResults,
+      skippedResults,
+      skippedAssertions,
+      errors,
+      matchedTestCount,
+    },
+  });
+});
 
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
