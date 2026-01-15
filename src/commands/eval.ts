@@ -347,7 +347,12 @@ export async function doEval(
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
-    cliState.maxConcurrency = maxConcurrency;
+    // Only set when explicitly provided, not when using DEFAULT_MAX_CONCURRENCY
+    const explicitMaxConcurrency =
+      cmdObj.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? evaluateOptions.maxConcurrency;
+    if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
+    }
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {

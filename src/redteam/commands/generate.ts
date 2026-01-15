@@ -877,6 +877,9 @@ export function redteamGenerateCommand(
         }
         process.exitCode = 1;
         return;
+      } finally {
+        // Reset cliState.maxConcurrency to prevent stale state
+        cliState.maxConcurrency = undefined;
       }
     });
 }

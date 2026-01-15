@@ -114,32 +114,48 @@ export class PythonProvider implements ApiProvider {
 
   /**
    * Determine worker count based on config and environment
-   * Priority: config.workers > cliState.maxConcurrency (-j flag) > PROMPTFOO_PYTHON_WORKERS env > default 1
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > cliState.maxConcurrency (-j flag) > default 1
+   *
+   * Explicit Python-specific settings (config.workers, env var) take precedence over
+   * general concurrency hints (-j flag) because users may limit Python workers due to
+   * memory constraints or non-thread-safe scripts.
    */
   private getWorkerCount(): number {
     // 1. Explicit config.workers (highest priority - user knows their script's requirements)
     if (this.config.workers !== undefined) {
-      const count = Math.max(1, this.config.workers);
-      logger.debug(`Python provider using ${count} workers (from config.workers)`);
-      return count;
+      if (this.config.workers < 1) {
+        logger.warn(`Invalid worker count ${this.config.workers} in config, using minimum of 1`);
+        return 1;
+      }
+      logger.debug(`Python provider using ${this.config.workers} workers (from config.workers)`);
+      return this.config.workers;
     }
 
-    // 2. CLI -j flag via cliState (runtime intent)
-    if (cliState.maxConcurrency !== undefined) {
-      const count = Math.max(1, cliState.maxConcurrency);
-      logger.debug(`Python provider using ${count} workers (from -j flag)`);
-      return count;
-    }
-
-    // 3. Environment variable (legacy/automation)
+    // 2. Environment variable (explicit Python-specific setting)
     const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
     if (envWorkers !== undefined) {
-      const count = Math.max(1, envWorkers);
-      logger.debug(`Python provider using ${count} workers (from PROMPTFOO_PYTHON_WORKERS)`);
-      return count;
+      if (envWorkers < 1) {
+        logger.warn(
+          `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${envWorkers} workers (from PROMPTFOO_PYTHON_WORKERS)`);
+      return envWorkers;
+    }
+
+    // 3. CLI -j flag via cliState (general concurrency hint, only when explicitly set)
+    if (cliState.maxConcurrency !== undefined) {
+      if (cliState.maxConcurrency < 1) {
+        logger.warn(`Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`);
+        return 1;
+      }
+      logger.debug(`Python provider using ${cliState.maxConcurrency} workers (from -j flag)`);
+      return cliState.maxConcurrency;
     }
 
     // 4. Default: 1 worker (memory-efficient, backward compatible)
+    logger.debug('Python provider using 1 worker (default)');
     return 1;
   }
 

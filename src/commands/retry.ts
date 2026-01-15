@@ -229,6 +229,12 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable resume mode so only the missing (deleted) results will be evaluated
   cliState.resume = true;
 
+  // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+  // Only set when explicitly provided via CLI
+  if (cmdObj.maxConcurrency !== undefined) {
+    cliState.maxConcurrency = cmdObj.maxConcurrency;
+  }
+
   // Set up evaluation options
   const evaluateOptions: EvaluateOptions = {
     maxConcurrency: cmdObj.maxConcurrency || (config as any).maxConcurrency,
@@ -244,8 +250,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     logger.info(`✅ Retry completed for evaluation: ${chalk.cyan(evalId)}`);
     return retriedEval;
   } finally {
-    // Always clear the resume state
+    // Always clear the resume state and maxConcurrency to prevent stale state
     cliState.resume = false;
+    cliState.maxConcurrency = undefined;
   }
 }
 
