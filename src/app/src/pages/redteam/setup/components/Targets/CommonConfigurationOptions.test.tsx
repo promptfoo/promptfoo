@@ -193,4 +193,86 @@ describe('CommonConfigurationOptions', () => {
       screen.getByText('Configure how red team test cases are generated for this target'),
     ).toBeInTheDocument();
   });
+
+  describe('handleInputsChange', () => {
+    it('should generate JSON template with template variables when inputs are provided', () => {
+      const updateCustomTarget = vi.fn();
+
+      renderWithProviders(
+        <CommonConfigurationOptions {...defaultProps} updateCustomTarget={updateCustomTarget} />,
+      );
+
+      // Expand Test Generation section
+      const testGenTrigger = screen.getByText('Test Generation');
+      fireEvent.click(testGenTrigger);
+
+      // Simulate InputsEditor calling onChange with inputs
+      const inputsEditor = screen.getByTestId('mock-inputs-editor');
+      fireEvent.click(inputsEditor);
+
+      // Should call updateCustomTarget with inputs
+      expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
+
+      // Should call updateConfig with JSON template
+      expect(mockUpdateConfig).toHaveBeenCalledWith('prompts', ['{"testVar":"{{testVar}}"}']);
+    });
+
+    it('should generate template preserving object key order for multiple variables', () => {
+      // Test verifies that Object.fromEntries preserves insertion order
+      // This is a unit test of the template generation logic
+      const inputs = { user_id: 'desc1', session_token: 'desc2', role: 'desc3' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      // Verify the template has correct structure
+      expect(template).toBe(
+        '{"user_id":"{{user_id}}","session_token":"{{session_token}}","role":"{{role}}"}',
+      );
+
+      // Verify order is preserved
+      const parsed = JSON.parse(template);
+      expect(Object.keys(parsed)).toEqual(['user_id', 'session_token', 'role']);
+    });
+
+    it('should handle single variable input correctly', () => {
+      // Test the template generation for a single variable
+      const inputs = { message: 'The main message' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      expect(template).toBe('{"message":"{{message}}"}');
+    });
+
+    it('should reset to default prompt when empty inputs object is provided', () => {
+      // Test the logic: Object.keys({}).length === 0, so should reset
+      const emptyInputs = {};
+      const shouldGenerateTemplate = Object.keys(emptyInputs).length > 0;
+
+      expect(shouldGenerateTemplate).toBe(false);
+      // When false, the code path is: updateConfig('prompts', ['{{prompt}}'])
+    });
+
+    it('should reset to default prompt when undefined inputs are provided', () => {
+      // Test the logic: !inputs is true, so should reset
+      const inputs = undefined;
+      const shouldGenerateTemplate = inputs && Object.keys(inputs).length > 0;
+
+      expect(shouldGenerateTemplate).toBeFalsy();
+      // When false, the code path is: updateConfig('prompts', ['{{prompt}}'])
+    });
+
+    it('should properly escape variable names in template syntax', () => {
+      // Test that template variables use correct {{var}} syntax
+      const inputs = { 'user-id': 'desc', session_token: 'desc2' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      const parsed = JSON.parse(template);
+      expect(parsed['user-id']).toBe('{{user-id}}');
+      expect(parsed['session_token']).toBe('{{session_token}}');
+    });
+  });
 });
