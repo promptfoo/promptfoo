@@ -23,23 +23,29 @@ export default function Careers(): React.ReactElement {
       description="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
     >
       <Head>
-        <meta property="og:title" content="Careers at Promptfoo - Build the Future of AI Security" />
+        <meta
+          property="og:title"
+          content="Careers at Promptfoo - Build the Future of AI Security"
+        />
         <meta
           property="og:description"
           content="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
         />
-        <meta property="og:image" content={`${siteUrl}/img/meta/careers.png`} />
+        <meta property="og:image" content={`${siteUrl}/img/og/careers-og.png`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content={`${siteUrl}/careers`} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Careers at Promptfoo - Build the Future of AI Security" />
+        <meta
+          name="twitter:title"
+          content="Careers at Promptfoo - Build the Future of AI Security"
+        />
         <meta
           name="twitter:description"
           content="Join the team securing AI for the Fortune 500. We're hiring engineers who want to solve hard problems in AI security."
         />
-        <meta name="twitter:image" content={`${siteUrl}/img/meta/careers.png`} />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/careers-og.png`} />
         <link rel="canonical" href={`${siteUrl}/careers`} />
       </Head>
       <h1 className={styles.careersTitle}>Careers at Promptfoo</h1>
