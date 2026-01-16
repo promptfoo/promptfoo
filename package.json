@@ -178,7 +178,7 @@
     "@fal-ai/client": "~1.7.2",
     "@ibm-cloud/watsonx-ai": "^1.7.6",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.80.0",
+    "@openai/codex-sdk": "^0.81.0",
     "@playwright/browser-chromium": "^1.57.0",
     "@rollup/rollup-linux-x64-gnu": "^4.55.1",
     "@slack/web-api": "^7.13.0",
