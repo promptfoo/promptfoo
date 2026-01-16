@@ -105,7 +105,7 @@ export const StrategyConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
     plugins: z.array(z.string()).optional(),
-    numTests: z.number().int().min(0).finite().optional(),
+    // Note: numTests is now at strategy object level (like plugins), not inside config
     // Allow arbitrary extra fields for strategy configs
     // Use .catchall to accept any additional unknown properties
     // See: https://github.com/colinhacks/zod#catchall
@@ -148,6 +148,7 @@ export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = {
   id: string;
+  numTests?: number;
   config?: StrategyConfig;
 };
 export type RedteamStrategy = string | RedteamStrategyObject;

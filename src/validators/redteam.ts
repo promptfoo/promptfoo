@@ -181,6 +181,11 @@ export const RedteamStrategySchema = z.union([
   strategyIdSchema,
   z.object({
     id: strategyIdSchema,
+    numTests: z
+      .int()
+      .min(0)
+      .optional()
+      .describe('Number of tests to generate for this strategy (at object level, like plugins)'),
     config: z
       .record(z.string(), z.unknown())
       .optional()

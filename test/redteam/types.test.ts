@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { StrategyConfigSchema } from '../../src/redteam/types';
+import { RedteamStrategySchema } from '../../src/validators/redteam';
 
 import type {
   BaseRedteamMetadata,
@@ -274,81 +275,93 @@ describe('redteam types', () => {
     expect(partialOptions.testGenerationInstructions).toBe('test instructions');
   });
 
-  describe('StrategyConfigSchema numTests validation', () => {
+  describe('RedteamStrategySchema numTests validation', () => {
+    // Note: numTests is now at the strategy object level, not inside config
     it('should accept valid positive numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: 5 });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: 5 });
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && typeof result.data === 'object') {
         expect(result.data.numTests).toBe(5);
       }
     });
 
     it('should accept numTests: 0', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: 0 });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: 0 });
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && typeof result.data === 'object') {
         expect(result.data.numTests).toBe(0);
       }
     });
 
     it('should accept missing numTests (undefined)', () => {
-      const result = StrategyConfigSchema.safeParse({});
+      const result = RedteamStrategySchema.safeParse({ id: 'base64' });
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && typeof result.data === 'object') {
         expect(result.data.numTests).toBeUndefined();
       }
     });
 
     it('should reject negative numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: -1 });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: -1 });
       expect(result.success).toBe(false);
     });
 
     it('should reject non-integer numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: 1.5 });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: 1.5 });
       expect(result.success).toBe(false);
     });
 
     it('should reject string numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: '5' });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: '5' });
       expect(result.success).toBe(false);
     });
 
-    it('should accept numTests with other strategy config fields', () => {
-      const result = StrategyConfigSchema.safeParse({
-        enabled: true,
-        plugins: ['plugin1', 'plugin2'],
+    it('should accept numTests with config fields', () => {
+      const result = RedteamStrategySchema.safeParse({
+        id: 'base64',
         numTests: 10,
-        customField: 'value',
+        config: {
+          enabled: true,
+          plugins: ['plugin1', 'plugin2'],
+          customField: 'value',
+        },
       });
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && typeof result.data === 'object') {
         expect(result.data.numTests).toBe(10);
-        expect(result.data.enabled).toBe(true);
-        expect(result.data.plugins).toEqual(['plugin1', 'plugin2']);
+        expect(result.data.config?.enabled).toBe(true);
+        expect(result.data.config?.plugins).toEqual(['plugin1', 'plugin2']);
       }
     });
 
     it('should reject Infinity numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: Infinity });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: Infinity });
       expect(result.success).toBe(false);
     });
 
     it('should reject -Infinity numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: -Infinity });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: -Infinity });
       expect(result.success).toBe(false);
     });
 
     it('should reject NaN numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: NaN });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: NaN });
       expect(result.success).toBe(false);
     });
 
     it('should accept large but finite numTests', () => {
-      const result = StrategyConfigSchema.safeParse({ numTests: 10000 });
+      const result = RedteamStrategySchema.safeParse({ id: 'base64', numTests: 10000 });
+      expect(result.success).toBe(true);
+      if (result.success && typeof result.data === 'object') {
+        expect(result.data.numTests).toBe(10000);
+      }
+    });
+
+    it('should accept strategy as simple string', () => {
+      const result = RedteamStrategySchema.safeParse('base64');
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.numTests).toBe(10000);
+        expect(result.data).toBe('base64');
       }
     });
   });
