@@ -142,8 +142,8 @@ describe('handleModeration', () => {
     });
 
     const chatMessages = [
-      { role: 'system', content: 'You are helpful' },
-      { role: 'user', content: 'Hello world' },
+      { role: 'system' as const, content: 'You are helpful' },
+      { role: 'user' as const, content: 'Hello world' },
     ];
 
     await handleModeration({

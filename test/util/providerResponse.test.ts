@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getActualPrompt, getActualPromptWithFallback } from '../../src/util/providerResponse';
+
 import type { ProviderResponse } from '../../src/types/providers';
 
 describe('getActualPrompt', () => {
