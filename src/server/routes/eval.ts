@@ -696,7 +696,7 @@ evalRouter.post(
 );
 
 evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Promise<void> => {
-  const evalId = req.params.evalId;
+  const evalId = req.params.evalId as string;
   const parsed = PosthocAssertionsSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -873,11 +873,10 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
       result.success = aggregated.pass;
       result.score = aggregated.score;
 
-      if (result.failureReason !== ResultFailureReason.ERROR) {
-        result.failureReason = aggregated.pass
-          ? ResultFailureReason.NONE
-          : ResultFailureReason.ASSERT;
-      }
+      // ERROR results are already skipped at the start of this loop
+      result.failureReason = aggregated.pass
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT;
 
       result.testCase = {
         ...result.testCase,

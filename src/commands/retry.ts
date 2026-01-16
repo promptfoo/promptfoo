@@ -9,6 +9,8 @@ import Eval from '../models/eval';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
 import { recalculatePromptMetrics } from '../util/recalculatePromptMetrics';
+export { recalculatePromptMetrics };
+
 import type { Command } from 'commander';
 
 import type { EvaluateOptions } from '../types/index';
@@ -52,7 +54,6 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
 }
-
 
 /**
  * Main retry function

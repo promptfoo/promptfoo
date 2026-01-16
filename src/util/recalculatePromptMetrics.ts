@@ -1,4 +1,5 @@
 import { renderMetricName } from '../assertions/index';
+import logger from '../logger';
 import Eval from '../models/eval';
 import { ResultFailureReason } from '../types/index';
 import {
@@ -7,7 +8,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import logger from '../logger';
+
 import type { TokenUsage } from '../types/index';
 
 /**
@@ -98,8 +99,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     // Update assertion counts
     if (result.gradingResult?.componentResults) {
       metrics.assertPassCount += result.gradingResult.componentResults.filter((r) => r.pass).length;
-      metrics.assertFailCount += result.gradingResult.componentResults.filter((r) => !r.pass)
-        .length;
+      metrics.assertFailCount += result.gradingResult.componentResults.filter(
+        (r) => !r.pass,
+      ).length;
     }
 
     // Update token usage
