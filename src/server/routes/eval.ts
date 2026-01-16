@@ -970,7 +970,7 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
 evalRouter.get(
   '/:evalId/assertions/job/:jobId',
   async (req: Request, res: Response): Promise<void> => {
-    const { jobId } = req.params;
+    const jobId = req.params.jobId as string;
     const job = assertionJobs.get(jobId);
 
     if (!job) {
