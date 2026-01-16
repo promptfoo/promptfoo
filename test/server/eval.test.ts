@@ -11,6 +11,31 @@ describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;
   const testEvalIds = new Set<string>();
 
+  // Helper to poll assertion job until completion
+  async function waitForAssertionJob(
+    evalId: string,
+    jobId: string,
+    maxWaitMs = 10000,
+  ): Promise<{ updatedResults: number; skippedResults: number; skippedAssertions: number }> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      const statusRes = await request(app).get(`/api/eval/${evalId}/assertions/job/${jobId}`);
+      expect(statusRes.status).toBe(200);
+
+      const { status, updatedResults, skippedResults, skippedAssertions } = statusRes.body.data;
+      if (status === 'complete') {
+        return { updatedResults, skippedResults, skippedAssertions };
+      }
+      if (status === 'error') {
+        throw new Error('Assertion job failed');
+      }
+
+      // Wait a bit before polling again
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('Assertion job timed out');
+  }
+
   beforeAll(async () => {
     await runDbMigrations();
   });
@@ -228,7 +253,10 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.updatedResults).toBe(1);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(1);
 
       const updatedResult = await EvalResult.findById(result.id);
       expect(updatedResult?.testCase.assert).toHaveLength(2);
@@ -244,13 +272,17 @@ describe('eval routes', () => {
       const result = results[0] as EvalResult;
       invariant(result.id, 'Result ID is required');
 
-      await request(app)
+      // First request - add the assertion
+      const firstRes = await request(app)
         .post(`/api/eval/${eval_.id}/assertions`)
         .send({
           assertions: [{ type: 'contains', value: 'denver' }],
           scope: { type: 'results', resultIds: [result.id] },
         });
+      invariant(firstRes.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, firstRes.body.data.jobId);
 
+      // Second request - should be a duplicate
       const res = await request(app)
         .post(`/api/eval/${eval_.id}/assertions`)
         .send({
@@ -259,9 +291,12 @@ describe('eval routes', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.updatedResults).toBe(0);
-      expect(res.body.data.skippedResults).toBe(1);
-      expect(res.body.data.skippedAssertions).toBe(1);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(0);
+      expect(jobResult.skippedResults).toBe(1);
+      expect(jobResult.skippedAssertions).toBe(1);
     });
 
     it('skips ERROR results', async () => {
@@ -280,9 +315,12 @@ describe('eval routes', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.updatedResults).toBe(0);
-      expect(res.body.data.skippedResults).toBe(1);
-      expect(res.body.data.skippedAssertions).toBe(0);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(0);
+      expect(jobResult.skippedResults).toBe(1);
+      expect(jobResult.skippedAssertions).toBe(0);
     });
 
     it('applies assertions to filtered results using searchText', async () => {
@@ -306,8 +344,11 @@ describe('eval routes', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.updatedResults).toBe(1);
+      invariant(res.body.data.jobId, 'Job ID is required');
       expect(res.body.data.matchedTestCount).toBe(1);
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(1);
 
       const updatedResult = await EvalResult.findById(result.id);
       expect(updatedResult?.testCase.assert).toHaveLength(2);

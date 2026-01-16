@@ -65,6 +65,36 @@ export async function updateEvalAuthor(evalId: string, author: string) {
   return response.json();
 }
 
+export interface AssertionJobResult {
+  resultId: string;
+  pass: boolean;
+  score: number;
+  error?: string;
+}
+
+export interface AssertionJobStatus {
+  status: 'in-progress' | 'complete' | 'error';
+  progress: number;
+  total: number;
+  completedResults: AssertionJobResult[];
+  updatedResults: number;
+  skippedResults: number;
+  skippedAssertions: number;
+  errors: { resultId: string; error: string }[];
+  matchedTestCount?: number;
+}
+
+export interface AddAssertionsResponse {
+  jobId: string | null;
+  total?: number;
+  matchedTestCount?: number;
+  // Returned when no job is needed (e.g., no assertions to add)
+  updatedResults?: number;
+  skippedResults?: number;
+  skippedAssertions?: number;
+  errors?: { resultId: string; error: string }[];
+}
+
 export async function addEvalAssertions(
   evalId: string,
   payload: {
@@ -84,7 +114,7 @@ export async function addEvalAssertions(
       searchText?: string;
     };
   },
-) {
+): Promise<{ data: AddAssertionsResponse }> {
   const response = await callApi(`/eval/${evalId}/assertions`, {
     method: 'POST',
     headers: {
@@ -96,6 +126,20 @@ export async function addEvalAssertions(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || 'Failed to add assertions');
+  }
+
+  return response.json();
+}
+
+export async function getAssertionJobStatus(
+  evalId: string,
+  jobId: string,
+): Promise<{ data: AssertionJobStatus }> {
+  const response = await callApi(`/eval/${evalId}/assertions/job/${jobId}`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Failed to get job status');
   }
 
   return response.json();

@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import async from 'async';
 import dedent from 'dedent';
 import { Router } from 'express';
@@ -40,6 +42,29 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+// Assertion job types
+export interface AssertionJobResult {
+  resultId: string;
+  pass: boolean;
+  score: number;
+  error?: string;
+}
+
+export interface AssertionJob {
+  evalId: string;
+  status: 'in-progress' | 'complete' | 'error';
+  progress: number;
+  total: number;
+  completedResults: AssertionJobResult[];
+  updatedResults: number;
+  skippedResults: number;
+  skippedAssertions: number;
+  errors: { resultId: string; error: string }[];
+  matchedTestCount?: number;
+}
+
+export const assertionJobs = new Map<string, AssertionJob>();
 
 const PosthocResultsFilterSchema = z.object({
   type: z.string(),
@@ -736,6 +761,7 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
     res.json({
       success: true,
       data: {
+        jobId: null,
         updatedResults: 0,
         skippedResults: 0,
         skippedAssertions: assertions.length,
@@ -789,6 +815,7 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
       res.json({
         success: true,
         data: {
+          jobId: null,
           updatedResults: 0,
           skippedResults: 0,
           skippedAssertions: 0,
@@ -802,6 +829,33 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
     targetResults = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
   }
 
+  // Create job and return immediately
+  const jobId = crypto.randomUUID();
+  const job: AssertionJob = {
+    evalId,
+    status: 'in-progress',
+    progress: 0,
+    total: targetResults.length,
+    completedResults: [],
+    updatedResults: 0,
+    skippedResults: 0,
+    skippedAssertions: 0,
+    errors: [],
+    matchedTestCount,
+  };
+  assertionJobs.set(jobId, job);
+
+  // Return job ID immediately
+  res.json({
+    success: true,
+    data: {
+      jobId,
+      total: targetResults.length,
+      matchedTestCount,
+    },
+  });
+
+  // Process assertions in background
   const existingDefaultOptions =
     typeof eval_.config?.defaultTest === 'object' ? eval_.config.defaultTest?.options : undefined;
 
@@ -810,105 +864,147 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
     eval_.runtimeOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
   );
 
-  let updatedResults = 0;
-  let skippedResults = 0;
-  let skippedAssertions = 0;
-  const errors: { resultId: string; error: string }[] = [];
-
-  await async.forEachLimit(targetResults, maxConcurrency, async (result) => {
-    if (result.failureReason === ResultFailureReason.ERROR) {
-      skippedResults++;
-      return;
-    }
-
-    const existingAssertions = result.testCase.assert || [];
-    const existingKeys = new Set(existingAssertions.map(assertionKey));
-    const assertionsToAdd = normalizedAssertions.filter(
-      (assertion) => !existingKeys.has(assertionKey(assertion)),
-    );
-
-    skippedAssertions += normalizedAssertions.length - assertionsToAdd.length;
-
-    if (assertionsToAdd.length === 0) {
-      skippedResults++;
-      return;
-    }
-
-    const testCaseForNewAssertions: AtomicTestCase = {
-      ...result.testCase,
-      options: {
-        ...(existingDefaultOptions || {}),
-        ...(result.testCase.options || {}),
-      },
-      assert: assertionsToAdd,
-    };
-
+  // Run assertions asynchronously (intentionally not awaited)
+  void (async () => {
     try {
-      const providerResponse = result.response ?? { output: result.error ?? '' };
-      const promptText = typeof result.prompt === 'string' ? result.prompt : result.prompt.raw;
-      const newGradingResult = await runAssertions({
-        prompt: promptText,
-        providerResponse,
-        test: testCaseForNewAssertions,
-        latencyMs: result.latencyMs,
+      await async.forEachLimit(targetResults, maxConcurrency, async (result) => {
+        if (result.failureReason === ResultFailureReason.ERROR) {
+          job.skippedResults++;
+          job.progress++;
+          return;
+        }
+
+        const existingAssertions = result.testCase.assert || [];
+        const existingKeys = new Set(existingAssertions.map(assertionKey));
+        const assertionsToAdd = normalizedAssertions.filter(
+          (assertion) => !existingKeys.has(assertionKey(assertion)),
+        );
+
+        job.skippedAssertions += normalizedAssertions.length - assertionsToAdd.length;
+
+        if (assertionsToAdd.length === 0) {
+          job.skippedResults++;
+          job.progress++;
+          return;
+        }
+
+        const testCaseForNewAssertions: AtomicTestCase = {
+          ...result.testCase,
+          options: {
+            ...(existingDefaultOptions || {}),
+            ...(result.testCase.options || {}),
+          },
+          assert: assertionsToAdd,
+        };
+
+        try {
+          const providerResponse = result.response ?? { output: result.error ?? '' };
+          const promptText = typeof result.prompt === 'string' ? result.prompt : result.prompt.raw;
+          const newGradingResult = await runAssertions({
+            prompt: promptText,
+            providerResponse,
+            test: testCaseForNewAssertions,
+            latencyMs: result.latencyMs,
+          });
+
+          const newComponentResults = newGradingResult.componentResults || [];
+          const existingComponentResults = result.gradingResult?.componentResults || [];
+          const combinedComponentResults = [...existingComponentResults, ...newComponentResults];
+
+          const aggregated = await recomputeAggregateGradingResult(
+            combinedComponentResults,
+            result.testCase,
+          );
+
+          result.gradingResult = {
+            ...result.gradingResult,
+            ...aggregated,
+            componentResults: combinedComponentResults,
+            comment: result.gradingResult?.comment,
+          };
+
+          result.namedScores = aggregated.namedScores || {};
+          result.success = aggregated.pass;
+          result.score = aggregated.score;
+
+          result.failureReason = aggregated.pass
+            ? ResultFailureReason.NONE
+            : ResultFailureReason.ASSERT;
+
+          result.testCase = {
+            ...result.testCase,
+            assert: [...existingAssertions, ...assertionsToAdd],
+          };
+
+          await result.save();
+          job.updatedResults++;
+          job.completedResults.push({
+            resultId: result.id,
+            pass: aggregated.pass,
+            score: aggregated.score,
+          });
+        } catch (error) {
+          job.errors.push({
+            resultId: result.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          job.skippedResults++;
+        }
+
+        job.progress++;
       });
 
-      const newComponentResults = newGradingResult.componentResults || [];
-      const existingComponentResults = result.gradingResult?.componentResults || [];
-      const combinedComponentResults = [...existingComponentResults, ...newComponentResults];
+      if (job.updatedResults > 0) {
+        await recalculatePromptMetrics(eval_);
+      }
 
-      const aggregated = await recomputeAggregateGradingResult(
-        combinedComponentResults,
-        result.testCase,
-      );
-
-      result.gradingResult = {
-        ...result.gradingResult,
-        ...aggregated,
-        componentResults: combinedComponentResults,
-        comment: result.gradingResult?.comment,
-      };
-
-      result.namedScores = aggregated.namedScores || {};
-      result.success = aggregated.pass;
-      result.score = aggregated.score;
-
-      // ERROR results are already skipped at the start of this loop
-      result.failureReason = aggregated.pass
-        ? ResultFailureReason.NONE
-        : ResultFailureReason.ASSERT;
-
-      result.testCase = {
-        ...result.testCase,
-        assert: [...existingAssertions, ...assertionsToAdd],
-      };
-
-      await result.save();
-      updatedResults++;
+      job.status = 'complete';
     } catch (error) {
-      errors.push({
-        resultId: result.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      skippedResults++;
+      job.status = 'error';
+      logger.error(`[Assertion Job ${jobId}] Error: ${error}`);
     }
-  });
-
-  if (updatedResults > 0) {
-    await recalculatePromptMetrics(eval_);
-  }
-
-  res.json({
-    success: true,
-    data: {
-      updatedResults,
-      skippedResults,
-      skippedAssertions,
-      errors,
-      matchedTestCount,
-    },
-  });
+  })();
 });
+
+// Get assertion job status
+evalRouter.get(
+  '/:evalId/assertions/job/:jobId',
+  async (req: Request, res: Response): Promise<void> => {
+    const { jobId } = req.params;
+    const job = assertionJobs.get(jobId);
+
+    if (!job) {
+      res.status(404).json({ success: false, error: 'Job not found' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        status: job.status,
+        progress: job.progress,
+        total: job.total,
+        completedResults: job.completedResults,
+        updatedResults: job.updatedResults,
+        skippedResults: job.skippedResults,
+        skippedAssertions: job.skippedAssertions,
+        errors: job.errors,
+        matchedTestCount: job.matchedTestCount,
+      },
+    });
+
+    // Clean up completed jobs after fetching
+    if (job.status === 'complete' || job.status === 'error') {
+      // Keep jobs for 5 minutes after completion for polling
+      setTimeout(
+        () => {
+          assertionJobs.delete(jobId);
+        },
+        5 * 60 * 1000,
+      );
+    }
+  },
+);
 
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
