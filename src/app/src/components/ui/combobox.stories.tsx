@@ -190,3 +190,39 @@ export const ManyOptions: Story = {
     );
   },
 };
+
+// With label
+export const WithLabel: Story = {
+  render: function LabeledCombobox() {
+    const [value, setValue] = useState('');
+    return (
+      <div className="w-[350px]">
+        <Combobox
+          label="AI Model"
+          options={modelOptions}
+          value={value}
+          onChange={setValue}
+          placeholder="Select a model..."
+        />
+      </div>
+    );
+  },
+};
+
+// Not clearable
+export const NotClearable: Story = {
+  render: function NotClearableCombobox() {
+    const [value, setValue] = useState('gpt-4');
+    return (
+      <div className="w-[350px]">
+        <Combobox
+          options={modelOptions}
+          value={value}
+          onChange={setValue}
+          placeholder="Select a model..."
+          clearable={false}
+        />
+      </div>
+    );
+  },
+};

@@ -1,3 +1,4 @@
+import { Home, Settings, User } from 'lucide-react';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card';
 import { Input } from './input';
@@ -163,11 +164,11 @@ export const DisabledTab: Story = {
   ),
 };
 
-// Full width tabs
+// Full width tabs using fullWidth prop
 export const FullWidth: Story = {
   render: () => (
     <Tabs defaultValue="all" className="w-full">
-      <TabsList className="w-full">
+      <TabsList fullWidth>
         <TabsTrigger value="all" className="flex-1">
           All
         </TabsTrigger>
@@ -186,6 +187,195 @@ export const FullWidth: Story = {
       </TabsContent>
       <TabsContent value="failed">
         <p className="text-sm text-muted-foreground p-4">Showing failed results</p>
+      </TabsContent>
+    </Tabs>
+  ),
+};
+
+// Line variant
+export const LineVariant: Story = {
+  render: () => (
+    <Tabs defaultValue="overview" className="w-full">
+      <TabsList variant="line">
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        <TabsTrigger value="reports">Reports</TabsTrigger>
+      </TabsList>
+      <TabsContent value="overview">
+        <div className="p-4">
+          <h3 className="font-medium">Overview</h3>
+          <p className="text-sm text-muted-foreground mt-2">
+            View your dashboard overview and key metrics.
+          </p>
+        </div>
+      </TabsContent>
+      <TabsContent value="analytics">
+        <div className="p-4">
+          <h3 className="font-medium">Analytics</h3>
+          <p className="text-sm text-muted-foreground mt-2">Analyze your data and trends.</p>
+        </div>
+      </TabsContent>
+      <TabsContent value="reports">
+        <div className="p-4">
+          <h3 className="font-medium">Reports</h3>
+          <p className="text-sm text-muted-foreground mt-2">Generate and view reports.</p>
+        </div>
+      </TabsContent>
+    </Tabs>
+  ),
+};
+
+// Vertical orientation with pill variant
+export const VerticalPill: Story = {
+  render: () => (
+    <Tabs defaultValue="home" orientation="vertical" className="flex gap-4 w-full">
+      <TabsList>
+        <TabsTrigger value="home">Home</TabsTrigger>
+        <TabsTrigger value="profile">Profile</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
+      </TabsList>
+      <div className="flex-1">
+        <TabsContent value="home">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Home</h3>
+            <p className="text-sm text-muted-foreground mt-2">Welcome to your dashboard.</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="profile">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Profile</h3>
+            <p className="text-sm text-muted-foreground mt-2">Manage your profile settings.</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="settings">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Settings</h3>
+            <p className="text-sm text-muted-foreground mt-2">Configure your application.</p>
+          </div>
+        </TabsContent>
+      </div>
+    </Tabs>
+  ),
+};
+
+// Vertical orientation with line variant
+export const VerticalLine: Story = {
+  render: () => (
+    <Tabs defaultValue="home" orientation="vertical" className="flex gap-4 w-full">
+      <TabsList variant="line">
+        <TabsTrigger value="home">Home</TabsTrigger>
+        <TabsTrigger value="profile">Profile</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
+      </TabsList>
+      <div className="flex-1">
+        <TabsContent value="home">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Home</h3>
+            <p className="text-sm text-muted-foreground mt-2">Welcome to your dashboard.</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="profile">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Profile</h3>
+            <p className="text-sm text-muted-foreground mt-2">Manage your profile settings.</p>
+          </div>
+        </TabsContent>
+        <TabsContent value="settings">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium">Settings</h3>
+            <p className="text-sm text-muted-foreground mt-2">Configure your application.</p>
+          </div>
+        </TabsContent>
+      </div>
+    </Tabs>
+  ),
+};
+
+// With icons
+export const WithIcons: Story = {
+  render: () => (
+    <Tabs defaultValue="home" className="w-[400px]">
+      <TabsList>
+        <TabsTrigger value="home" icon={<Home />}>
+          Home
+        </TabsTrigger>
+        <TabsTrigger value="profile" icon={<User />}>
+          Profile
+        </TabsTrigger>
+        <TabsTrigger value="settings" icon={<Settings />}>
+          Settings
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="home">
+        <p className="text-sm text-muted-foreground">Home content</p>
+      </TabsContent>
+      <TabsContent value="profile">
+        <p className="text-sm text-muted-foreground">Profile content</p>
+      </TabsContent>
+      <TabsContent value="settings">
+        <p className="text-sm text-muted-foreground">Settings content</p>
+      </TabsContent>
+    </Tabs>
+  ),
+};
+
+// With icons at end
+export const WithIconsEnd: Story = {
+  render: () => (
+    <Tabs defaultValue="home" className="w-[400px]">
+      <TabsList>
+        <TabsTrigger value="home" icon={<Home />} iconPosition="end">
+          Home
+        </TabsTrigger>
+        <TabsTrigger value="profile" icon={<User />} iconPosition="end">
+          Profile
+        </TabsTrigger>
+        <TabsTrigger value="settings" icon={<Settings />} iconPosition="end">
+          Settings
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="home">
+        <p className="text-sm text-muted-foreground">Home content</p>
+      </TabsContent>
+      <TabsContent value="profile">
+        <p className="text-sm text-muted-foreground">Profile content</p>
+      </TabsContent>
+      <TabsContent value="settings">
+        <p className="text-sm text-muted-foreground">Settings content</p>
+      </TabsContent>
+    </Tabs>
+  ),
+};
+
+// Line variant with icons
+export const LineWithIcons: Story = {
+  render: () => (
+    <Tabs defaultValue="home" className="w-full">
+      <TabsList variant="line">
+        <TabsTrigger value="home" icon={<Home />}>
+          Home
+        </TabsTrigger>
+        <TabsTrigger value="profile" icon={<User />}>
+          Profile
+        </TabsTrigger>
+        <TabsTrigger value="settings" icon={<Settings />}>
+          Settings
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="home">
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground">Home content</p>
+        </div>
+      </TabsContent>
+      <TabsContent value="profile">
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground">Profile content</p>
+        </div>
+      </TabsContent>
+      <TabsContent value="settings">
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground">Settings content</p>
+        </div>
       </TabsContent>
     </Tabs>
   ),
