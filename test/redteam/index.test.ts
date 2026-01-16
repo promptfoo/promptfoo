@@ -1394,7 +1394,7 @@ describe('calculateTotalTests', () => {
   });
 
   it('should handle retry strategy with custom numTests', () => {
-    const strategies = [{ id: 'retry', numTests: 3 }];
+    const strategies = [{ id: 'retry', config: { numTests: 3 } }];
     const result = calculateTotalTests(mockPlugins, strategies);
     expect(result).toEqual({
       totalTests: 8,
@@ -1479,7 +1479,7 @@ describe('getTestCount', () => {
   });
 
   it('should add configured number of tests for retry strategy', () => {
-    const strategy = { id: 'retry', numTests: 5 };
+    const strategy = { id: 'retry', config: { numTests: 5 } };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(15);
   });
@@ -1510,26 +1510,26 @@ describe('getTestCount', () => {
   describe('numTests cap', () => {
     it('should cap test count when numTests is less than calculated count', () => {
       // Fan-out strategy with default n=5 would produce 50 tests
-      const strategy = { id: 'jailbreak', numTests: 10 };
+      const strategy = { id: 'jailbreak', config: { numTests: 10 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(10);
     });
 
     it('should return 0 when numTests is 0', () => {
-      const strategy = { id: 'base64', numTests: 0 };
+      const strategy = { id: 'base64', config: { numTests: 0 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(0);
     });
 
     it('should not affect count when numTests is larger than calculated', () => {
       // Non-fanout strategy produces 10 tests (1:1)
-      const strategy = { id: 'morse', numTests: 100 };
+      const strategy = { id: 'morse', config: { numTests: 100 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(10);
     });
 
     it('should cap basic strategy tests', () => {
-      const strategy = { id: 'basic', numTests: 5 };
+      const strategy = { id: 'basic', config: { numTests: 5 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(5);
     });
@@ -1537,8 +1537,8 @@ describe('getTestCount', () => {
     it('should cap layer strategy tests', () => {
       const strategy = {
         id: 'layer',
-        numTests: 3,
         config: {
+          numTests: 3,
           steps: ['base64', 'rot13'],
         },
       };
@@ -1548,7 +1548,7 @@ describe('getTestCount', () => {
 
     it('should not apply numTests cap to retry strategy (different semantics)', () => {
       // Retry has additive semantics: totalPluginTests + numTests
-      const strategy = { id: 'retry', numTests: 5 };
+      const strategy = { id: 'retry', config: { numTests: 5 } };
       const result = getTestCount(strategy, 10, []);
       // Should be 10 + 5 = 15, not capped
       expect(result).toBe(15);
@@ -1556,28 +1556,28 @@ describe('getTestCount', () => {
 
     it('should cap fan-out strategy with custom n and numTests', () => {
       // n=3 would produce 30 tests, but numTests caps at 15
-      const strategy = { id: 'jailbreak', numTests: 15, config: { n: 3 } };
+      const strategy = { id: 'jailbreak', config: { numTests: 15, n: 3 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(15);
     });
 
     it('should handle numTests equal to calculated count (no-op)', () => {
       // Non-fanout strategy produces 10 tests (1:1), numTests also set to 10
-      const strategy = { id: 'morse', numTests: 10 };
+      const strategy = { id: 'morse', config: { numTests: 10 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(10);
     });
 
     it('should handle numTests equal to fan-out calculated count (no-op)', () => {
       // Fan-out with explicit n=5 produces 50 tests, numTests also set to 50
-      const strategy = { id: 'jailbreak', numTests: 50, config: { n: 5 } };
+      const strategy = { id: 'jailbreak', config: { numTests: 50, n: 5 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(50);
     });
 
     it('should ignore invalid numTests values at runtime (NaN)', () => {
       // Defensive check should skip NaN
-      const strategy = { id: 'base64', numTests: NaN };
+      const strategy = { id: 'base64', config: { numTests: NaN } };
       const result = getTestCount(strategy, 10, []);
       // Should return uncapped count (10 for non-fanout)
       expect(result).toBe(10);
@@ -1585,7 +1585,7 @@ describe('getTestCount', () => {
 
     it('should ignore invalid numTests values at runtime (Infinity)', () => {
       // Defensive check should skip Infinity
-      const strategy = { id: 'base64', numTests: Infinity };
+      const strategy = { id: 'base64', config: { numTests: Infinity } };
       const result = getTestCount(strategy, 10, []);
       // Should return uncapped count (10 for non-fanout)
       expect(result).toBe(10);
@@ -1593,7 +1593,7 @@ describe('getTestCount', () => {
 
     it('should ignore invalid numTests values at runtime (negative)', () => {
       // Defensive check should skip negative values
-      const strategy = { id: 'base64', numTests: -5 };
+      const strategy = { id: 'base64', config: { numTests: -5 } };
       const result = getTestCount(strategy, 10, []);
       // Should return uncapped count (10 for non-fanout)
       expect(result).toBe(10);
@@ -1735,7 +1735,7 @@ describe('Language configuration', () => {
 
     it('should handle retry strategy with multiple languages', () => {
       const plugins = [{ id: 'plugin1', numTests: 2 }];
-      const strategies = [{ id: 'retry', numTests: 2 }];
+      const strategies = [{ id: 'retry', config: { numTests: 2 } }];
       // With 3 languages: 2 * 3 = 6 base tests
       // Retry adds 2 tests per base test: 6 + 2 = 8
       const result = calculateTotalTests(plugins, strategies, ['en', 'fr', 'de']);
@@ -2413,7 +2413,7 @@ describe('Language configuration', () => {
         numTests: 10,
         plugins: [{ id: 'test-plugin', numTests: 10 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'base64', numTests: 3 }],
+        strategies: [{ id: 'base64', config: { numTests: 3 } }],
         targetIds: ['test-provider'],
       });
 
@@ -2444,7 +2444,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'base64', numTests: 0 }],
+        strategies: [{ id: 'base64', config: { numTests: 0 } }],
         targetIds: ['test-provider'],
       });
 
@@ -2484,7 +2484,7 @@ describe('Language configuration', () => {
         numTests: 5,
         plugins: [{ id: 'test-plugin', numTests: 5 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'base64', numTests: 2 }],
+        strategies: [{ id: 'base64', config: { numTests: 2 } }],
         targetIds: ['test-provider'],
       });
 
@@ -2556,7 +2556,7 @@ describe('Language configuration', () => {
         numTests: 10,
         plugins: [{ id: 'test-plugin', numTests: 10 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'base64', numTests: 3 }],
+        strategies: [{ id: 'base64', config: { numTests: 3 } }],
         targetIds: ['test-provider'],
       });
 
@@ -2589,7 +2589,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'base64', numTests: 0 }],
+        strategies: [{ id: 'base64', config: { numTests: 0 } }],
         targetIds: ['test-provider'],
       });
 
@@ -2624,7 +2624,7 @@ describe('Language configuration', () => {
         numTests: 5,
         plugins: [{ id: 'test-plugin', numTests: 5 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'multilingual', numTests: 3 }],
+        strategies: [{ id: 'multilingual', config: { numTests: 3 } }],
         targetIds: ['test-provider'],
       });
 

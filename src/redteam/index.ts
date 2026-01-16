@@ -332,8 +332,7 @@ async function applyStrategies(
     });
 
     // Apply numTests pre-limit if configured (with defensive check for NaN/Infinity)
-    // numTests is at strategy object level (consistent with plugins), not inside config
-    const numTestsLimit = strategy.numTests;
+    const numTestsLimit = strategy.config?.numTests;
     if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit >= 0) {
       // Early exit for numTests=0 - skip strategy entirely
       if (numTestsLimit === 0) {
@@ -437,7 +436,7 @@ async function applyStrategies(
 
     // Helper to apply numTests cap to requested count (with defensive check for NaN/Infinity)
     const applyNumTestsCap = (calculatedRequested: number): number => {
-      const numTestsCap = strategy.numTests;
+      const numTestsCap = strategy.config?.numTests;
       if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
         return Math.min(calculatedRequested, numTestsCap);
       }
@@ -520,7 +519,7 @@ export function getTestCount(
     count = totalPluginTests;
   } else if (strategy.id === 'retry') {
     // Retry strategy has its own numTests handling (additive semantics)
-    const configuredNumTests = strategy.numTests;
+    const configuredNumTests = strategy.config?.numTests as number | undefined;
     const additionalTests = configuredNumTests ?? totalPluginTests;
     return totalPluginTests + additionalTests;
   } else {
@@ -535,7 +534,7 @@ export function getTestCount(
   }
 
   // Apply numTests cap if configured (for non-retry strategies, with defensive check)
-  const numTestsCap = strategy.numTests;
+  const numTestsCap = strategy.config?.numTests;
   if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
     count = Math.min(count, numTestsCap);
   }
@@ -777,7 +776,7 @@ export async function synthesize({
             }
             testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
-            const numTestsCap = s.numTests;
+            const numTestsCap = s.config?.numTests;
             if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
               testCount = Math.min(testCount, numTestsCap);
             }

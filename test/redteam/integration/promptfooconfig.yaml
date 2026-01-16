@@ -32,4 +32,5 @@ redteam:
     #     maxTurns: 1
     #     maxBacktrack: 0
     - id: jailbreak:composite # Finds novel jailbreak prompts by chaining together individual techniques
-      numTests: 1
+      config:
+        numTests: 1
