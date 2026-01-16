@@ -18,9 +18,8 @@ import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
-import { AnthropicCompletionProvider } from './anthropic/completion';
-import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS } from './anthropic/util';
+// Anthropic providers are dynamically imported to avoid requiring @anthropic-ai/sdk
+// in environments that don't need it (e.g., code-scan-action)
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
@@ -218,6 +217,11 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
+      // Dynamic imports to avoid requiring @anthropic-ai/sdk in environments that don't need it
+      const { AnthropicMessagesProvider } = await import('./anthropic/messages');
+      const { AnthropicCompletionProvider } = await import('./anthropic/completion');
+      const { ANTHROPIC_MODELS } = await import('./anthropic/util');
+
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits[2];
