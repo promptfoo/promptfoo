@@ -1,16 +1,19 @@
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
 import dedent from 'dedent';
+import ora from 'ora';
+import { io, type Socket } from 'socket.io-client';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
-import logger from '../../logger';
+import logger, { isDebugEnabled } from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
@@ -273,6 +276,366 @@ export async function doTargetPurposeDiscovery(
 }
 
 // ========================================================
+// Socket-based Discovery (for cloud targets)
+// ========================================================
+
+/**
+ * Event payloads for discovery socket communication
+ */
+interface DiscoveryProbePayload {
+  requestId: string;
+  prompt: string;
+}
+
+interface DiscoverySessionJoinedPayload {
+  sessionId: string;
+  targetId: string;
+}
+
+interface DiscoveryCompletedPayload {
+  output?: {
+    applicationDescription: Record<string, string>;
+    plugins: Array<{ id: string; reason: string }>;
+    strategies: Array<{ id: string; reason: string }>;
+  };
+}
+
+interface DiscoveryErrorPayload {
+  error: string;
+}
+
+interface DiscoveryCancelledPayload {
+  source: 'ui' | 'cli';
+}
+
+
+/**
+ * Create socket connection to the /suggest namespace
+ */
+async function createDiscoverySocket(apiHost: string, apiKey: string): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    logger.debug(`[Discovery] Connecting to ${apiHost}/suggest...`);
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.io.reconnection(false);
+      socket.removeAllListeners();
+      socket.close();
+    };
+
+    const socket = io(`${apiHost}/suggest`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 5,
+      auth: { apiKey },
+    });
+
+    socket.on('connect', () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      logger.debug(`[Discovery] Socket connected (id: ${socket.id})`);
+      resolve(socket);
+    });
+
+    socket.on('connect_error', (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      logger.debug(`[Discovery] Socket connection error: ${error.message}`);
+      cleanup();
+      reject(new Error(`Failed to connect to server: ${error.message}`));
+    });
+
+    socket.on('disconnect', (reason) => {
+      logger.debug(`[Discovery] Socket disconnected: ${reason}`);
+    });
+
+    socket.on('error', (error) => {
+      logger.debug(`[Discovery] Socket error: ${String(error)}`);
+    });
+
+    const timeoutId = setTimeout(() => {
+      if (!socket.connected && !settled) {
+        settled = true;
+        cleanup();
+        reject(new Error('Connection timeout after 5 seconds'));
+      }
+    }, 5000);
+  });
+}
+
+/**
+ * Run socket-based discovery for a cloud-defined target
+ *
+ * This function connects to the cloud server via Socket.IO and acts as a
+ * bridge between the server and the local target. The server sends probe
+ * requests, the CLI executes them locally, and sends results back.
+ *
+ * @param target - The loaded API provider for the target
+ * @param targetId - The cloud target ID
+ * @param showProgress - Whether to show progress messages
+ * @returns Discovery result or undefined if cancelled/failed
+ */
+export async function doSocketBasedDiscovery(
+  target: ApiProvider,
+  targetId: string,
+  showProgress: boolean = true,
+): Promise<{ success: boolean; error?: string } | undefined> {
+  const apiHost = cloudConfig.getApiHost();
+  const apiKey = cloudConfig.getApiKey();
+
+  if (!apiKey) {
+    logger.error('[Discovery] API key not configured. Run `promptfoo auth login` first.');
+    return { success: false, error: 'API key not configured' };
+  }
+
+  // When showing progress and NOT in verbose mode, use a spinner for connection
+  // When verbose (debug logging enabled), skip spinner so logs are visible
+  const useSpinner = showProgress && !isDebugEnabled();
+  const connectSpinner = useSpinner ? ora({ text: 'Connecting...', color: 'cyan' }).start() : null;
+
+  let socket: Socket | null = null;
+  const abortController = new AbortController();
+  let probeCount = 0;
+  let currentSessionId: string | null = null;
+
+  // Register cleanup on signals
+  const signalHandler = () => {
+    if (showProgress) {
+      logger.info(chalk.yellow('\n\nCancelling discovery...'));
+    }
+    abortController.abort();
+    if (socket && socket.connected) {
+      // Emit cancel event to server with sessionId for direct lookup
+      socket.emit('suggest:cancel', { source: 'cli', sessionId: currentSessionId });
+      // Give the event time to be sent before disconnecting
+      setTimeout(() => {
+        socket?.disconnect();
+        process.exit(0);
+      }, 300);
+    } else {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGINT', signalHandler);
+  process.on('SIGTERM', signalHandler);
+
+  try {
+    // Connect to socket
+    socket = await createDiscoverySocket(apiHost, apiKey);
+
+    // Emit discovery:connect to associate with a session
+    socket.emit('discovery:connect', { targetId });
+
+    // Wait for session association or error
+    const sessionResult = await new Promise<DiscoverySessionJoinedPayload | DiscoveryErrorPayload>(
+      (resolve) => {
+        socket!.once('discovery:session_joined', (payload: DiscoverySessionJoinedPayload) => {
+          resolve(payload);
+        });
+
+        socket!.once('discovery:error', (payload: DiscoveryErrorPayload) => {
+          resolve(payload);
+        });
+
+        // Timeout waiting for session
+        setTimeout(() => {
+          resolve({ error: 'Timeout waiting for session association. Please start discovery from the UI first.' });
+        }, 10000);
+      },
+    );
+
+    // Stop connection spinner before handling result
+    if (connectSpinner) {
+      connectSpinner.stop();
+    }
+
+    if ('error' in sessionResult) {
+      if (showProgress) {
+        logger.info(chalk.red(`✗ ${sessionResult.error}`));
+      }
+      return { success: false, error: sessionResult.error };
+    }
+
+    // Store sessionId for cancel handler to use
+    currentSessionId = sessionResult.sessionId;
+
+    if (showProgress) {
+      logger.info(chalk.bold('Ready to start auto-discovery.'));
+      logger.info('This will probe your target to suggest relevant security plugins and strategies.');
+      logger.info('');
+    }
+
+    // Prompt user for confirmation using consistent @inquirer/confirm pattern
+    const confirmed = await confirm({
+      message: 'Start auto-discovery?',
+      default: true,
+    });
+    if (!confirmed) {
+      if (showProgress) {
+        logger.info(chalk.yellow('Discovery cancelled.'));
+      }
+      socket.disconnect();
+      return undefined;
+    }
+
+    // Start discovery
+    socket.emit('discovery:start', { suggestionSessionId: sessionResult.sessionId });
+
+    if (showProgress) {
+      logger.info('');
+      logger.info(chalk.green('✓ Discovery started'));
+      logger.info(chalk.dim('  Follow detailed progress in the UI'));
+      logger.info('');
+    }
+
+    // Create spinner for probing (similar to code scan command)
+    // Skip spinner when verbose/debug logging is enabled so logs are visible
+    const spinner = useSpinner ? ora({ text: 'Probing target...', color: 'green' }).start() : null;
+
+    // Handle probe requests from server
+    socket.on('discovery:probe', async (payload: DiscoveryProbePayload) => {
+      const { requestId, prompt } = payload;
+      probeCount++;
+
+      logger.debug(
+        `[Discovery] Received probe request from server (routing through CLI) requestId=${requestId} probeCount=${probeCount} promptLength=${prompt.length}`,
+      );
+
+      if (spinner) {
+        spinner.text = 'Probing target...';
+      }
+
+      try {
+        const response = await target.callApi(prompt, {
+          prompt: { raw: prompt, label: 'Discovery Probe' },
+          vars: {},
+        });
+
+        const output = response.output || '';
+        const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+
+        const tokenUsage = response.tokenUsage
+          ? {
+              input: response.tokenUsage.prompt || 0,
+              output: response.tokenUsage.completion || 0,
+              total: response.tokenUsage.total || 0,
+            }
+          : undefined;
+
+        logger.debug(
+          `[Discovery] Sending probe result back to server requestId=${requestId} outputLength=${outputStr.length} hasTokenUsage=${!!tokenUsage}`,
+        );
+
+        socket!.emit('discovery:probe_result', {
+          requestId,
+          output: outputStr,
+          tokenUsage,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.debug(`[Discovery] Probe error requestId=${requestId} error=${errorMessage}`);
+
+        socket!.emit('discovery:probe_result', {
+          requestId,
+          error: errorMessage,
+        });
+      }
+    });
+
+    // Wait for completion, cancellation, or error
+    const result = await new Promise<
+      DiscoveryCompletedPayload | DiscoveryErrorPayload | { cancelled: true; source?: 'ui' | 'cli' }
+    >((resolve) => {
+      socket!.on('suggest:complete', (payload: { output?: DiscoveryCompletedPayload['output'] }) => {
+        resolve({ output: payload.output });
+      });
+
+      socket!.on('suggest:cancelled', (payload: DiscoveryCancelledPayload) => {
+        resolve({ cancelled: true, source: payload.source });
+      });
+
+      socket!.on('suggest:error', (payload: DiscoveryErrorPayload) => {
+        resolve(payload);
+      });
+
+      socket!.on('discovery:error', (payload: DiscoveryErrorPayload) => {
+        resolve(payload);
+      });
+
+      socket!.on('disconnect', (reason) => {
+        if (!abortController.signal.aborted) {
+          resolve({ error: `Disconnected: ${reason}` });
+        }
+      });
+
+      // Listen for abort signal (local Ctrl+C)
+      abortController.signal.addEventListener('abort', () => {
+        resolve({ cancelled: true, source: 'cli' });
+      });
+    });
+
+    // Stop spinner
+    if (spinner) {
+      spinner.stop();
+    }
+
+    socket.disconnect();
+
+    if ('cancelled' in result) {
+      if (showProgress) {
+        if (result.source === 'ui') {
+          logger.info(chalk.yellow('Auto-discovery was cancelled from the UI.'));
+        } else {
+          logger.info(chalk.yellow('Discovery cancelled.'));
+        }
+      }
+      return undefined;
+    }
+
+    if ('error' in result) {
+      if (showProgress) {
+        logger.info('');
+        logger.info(chalk.red(`✗ Discovery failed: ${result.error}`));
+      }
+      return { success: false, error: result.error };
+    }
+
+    if (showProgress) {
+      logger.info('');
+      logger.info(chalk.green('✓ Discovery complete'));
+      if (result.output) {
+        logger.info(chalk.dim(`  Found ${result.output.plugins?.length || 0} plugins, ${result.output.strategies?.length || 0} strategies`));
+      }
+      logger.info('');
+      logger.info(chalk.bold('Return to the UI to see detailed results.'));
+    }
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`[Discovery] Error: ${errorMessage}`);
+
+    if (socket) {
+      socket.disconnect();
+    }
+
+    return { success: false, error: errorMessage };
+  } finally {
+    process.removeListener('SIGINT', signalHandler);
+    process.removeListener('SIGTERM', signalHandler);
+  }
+}
+
+// ========================================================
 // Command
 // ========================================================
 
@@ -349,11 +712,36 @@ export function discoverCommand(
 
         target = providers[0];
       }
-      // If the target flag is provided, load it from Cloud:
+      // If the target flag is provided, load it from Cloud and use socket-based discovery:
       else if (args.target) {
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+
+        // Use socket-based discovery for cloud targets
+        // This allows the server to orchestrate the discovery while CLI handles local probes
+        try {
+          const result = await doSocketBasedDiscovery(target, args.target);
+
+          if (result === undefined) {
+            // User cancelled
+            process.exit(0);
+          }
+
+          if (!result.success) {
+            logger.error(`Discovery failed: ${result.error}`);
+            process.exit(1);
+          }
+
+          // Socket-based discovery completed successfully
+          // Results are shown in the UI
+          process.exit(0);
+        } catch (error) {
+          logger.error(
+            `An unexpected error occurred during discovery: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          process.exit(1);
+        }
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
