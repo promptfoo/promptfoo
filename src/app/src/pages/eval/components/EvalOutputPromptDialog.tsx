@@ -11,18 +11,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Check, Copy, X } from 'lucide-react';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import AddAssertionsDialog from './AddAssertionsDialog';
+import { useTableStore } from './store';
 import type { GradingResult } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
-import { useTableStore } from './store';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
@@ -359,10 +359,9 @@ export default function EvalOutputPromptDialog({
     metadata &&
     Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
-  const availableScopes = [
-    resultId ? 'results' : null,
-    testIndex != null ? 'tests' : null,
-  ].filter(Boolean) as Array<'results' | 'tests'>;
+  const availableScopes = [resultId ? 'results' : null, testIndex != null ? 'tests' : null].filter(
+    Boolean,
+  ) as Array<'results' | 'tests'>;
 
   const defaultScope = availableScopes[0] || 'results';
 

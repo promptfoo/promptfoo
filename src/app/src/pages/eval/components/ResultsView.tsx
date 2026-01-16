@@ -38,8 +38,8 @@ import {
   Copy,
   Edit,
   Eye,
-  Plus,
   Play,
+  Plus,
   Settings,
   Share,
   Trash2,
@@ -47,8 +47,8 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
-import { AuthorChip } from './AuthorChip';
 import AddAssertionsDialog from './AddAssertionsDialog';
+import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
