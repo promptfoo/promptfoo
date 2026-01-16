@@ -219,6 +219,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  hasMinimalScrollRoom,
   zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
@@ -228,11 +229,19 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
   'use no memo';
   return (
-    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
+    <div
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
+    >
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button
           type="button"
@@ -1349,6 +1358,33 @@ function ResultsTable({
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
+
+  useEffect(() => {
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
+
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
       return;
@@ -1408,6 +1444,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
         zoom={zoom}
       />
       <div

@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -22,13 +22,17 @@ import { loadApiProviders, resolveProviderConfigs } from '../../providers/index'
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
+  CommandLineOptionsSchema,
+  EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
+  ProvidersSchema,
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
   type TestSuite,
+  TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
@@ -175,13 +179,27 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const renderedConfig = renderEnvOnlyInObject(dereferencedConfig);
 
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
-      .innerType()
-      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
+    // We create a relaxed schema for validation that makes prompts optional
+    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
+      evaluateOptions: EvaluateOptionsSchema.optional(),
+      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+      providers: ProvidersSchema.optional(),
+      targets: ProvidersSchema.optional(),
+      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+    }).refine(
+      (data) => {
+        const hasTargets = data.targets !== undefined;
+        const hasProviders = data.providers !== undefined;
+        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+      },
+      {
+        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      },
+    );
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
     ret = renderedConfig;
@@ -196,7 +214,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
     ret = renderedConfig;

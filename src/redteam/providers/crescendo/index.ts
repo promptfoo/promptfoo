@@ -56,6 +56,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
@@ -264,7 +265,7 @@ export class CrescendoProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -787,7 +788,7 @@ export class CrescendoProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     _roundNum: number,
@@ -812,7 +813,7 @@ export class CrescendoProvider implements ApiProvider {
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
 
     // Build updated vars - handle multi-input mode
-    const updatedVars: Record<string, string | object> = {
+    const updatedVars: Record<string, VarValue> = {
       ...vars,
       [this.config.injectVar]: processedPrompt,
       ...(currentInputVars || {}),

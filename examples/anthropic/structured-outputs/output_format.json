@@ -1,0 +1,55 @@
+{
+  "type": "json_schema",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "customer_name": {
+        "type": "string"
+      },
+      "customer_email": {
+        "type": "string"
+      },
+      "company": {
+        "type": "string"
+      },
+      "current_plan": {
+        "type": "string"
+      },
+      "requested_plan": {
+        "type": "string"
+      },
+      "current_users": {
+        "type": "integer"
+      },
+      "requested_users": {
+        "type": "integer"
+      },
+      "demo_requested": {
+        "type": "boolean"
+      },
+      "demo_datetime": {
+        "type": "string"
+      },
+      "features_of_interest": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "customer_name",
+      "customer_email",
+      "current_plan",
+      "requested_plan",
+      "demo_requested"
+    ],
+    "additionalProperties": false
+  }
+}

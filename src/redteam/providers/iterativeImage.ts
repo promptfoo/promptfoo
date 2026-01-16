@@ -26,6 +26,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../types/index';
 
 interface ImageGenerationOutput {
@@ -212,7 +213,7 @@ async function runRedteamConversation({
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
@@ -525,9 +526,17 @@ async function runRedteamConversation({
 class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     // Redteam provider can be set from the config.
-    this.redteamProvider = config.redteamProvider;
+    invariant(
+      config.redteamProvider === undefined ||
+        typeof config.redteamProvider === 'string' ||
+        (typeof config.redteamProvider === 'object' &&
+          config.redteamProvider !== null &&
+          !Array.isArray(config.redteamProvider)),
+      'Expected redteamProvider to be a provider id string or provider config object',
+    );
+    this.redteamProvider = config.redteamProvider as RedteamFileConfig['provider'];
   }
 
   id() {
