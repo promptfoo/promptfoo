@@ -124,7 +124,8 @@ describe('EvalOutputCell', () => {
 
   it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
+    // Click "View details" button directly (now a standalone button, not in dropdown)
+    await userEvent.click(screen.getByRole('button', { name: /view details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     expect(dialogComponent).toBeInTheDocument();
@@ -136,9 +137,10 @@ describe('EvalOutputCell', () => {
 
   it('handles enter key press to open dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
-    expect(promptButton).toBeInTheDocument();
-    promptButton.focus();
+    // Focus and press enter on "View details" button
+    const viewDetailsButton = screen.getByRole('button', { name: /view details/i });
+    expect(viewDetailsButton).toBeInTheDocument();
+    viewDetailsButton.focus();
     await userEvent.keyboard('{enter}');
 
     const dialogComponent = screen.getByTestId('dialog-component');
@@ -152,8 +154,6 @@ describe('EvalOutputCell', () => {
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
     // Start from "Mark test passed" button and tab through the remaining buttons
-    // Note: Search button is intentionally at the end to prevent position shifts
-    // when hover-only actions appear
     const passButton = screen.getByRole('button', { name: /mark test passed/i });
     expect(passButton).toBeInTheDocument();
     passButton.focus();
@@ -165,7 +165,9 @@ describe('EvalOutputCell', () => {
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
     await userEvent.tab();
-    expect(screen.getByRole('button', { name: /view output and test details/i })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /view details/i })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: /more actions/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -181,7 +183,8 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
-    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
+    // Click "View details" button directly (now a standalone button, not in dropdown)
+    await userEvent.click(screen.getByRole('button', { name: /view details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
@@ -1648,10 +1651,9 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(actionsArea).toBeInTheDocument();
 
     // Extra actions should be visible because shift key is mocked as pressed
+    // Note: Copy is now in the dropdown menu, not as a standalone icon button
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Share output')).toBeInTheDocument();
-    // Copy button exists (no aria-label, so check by icon class)
-    expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
@@ -15,15 +22,20 @@ import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
   ClipboardCopy,
+  FileCode,
   Hash,
   Link,
+  MoreHorizontal,
   Pencil,
+  Play,
+  Plus,
   Search,
   Star,
   ThumbsDown,
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -150,6 +162,7 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [openAssertions, setOpenAssertions] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
       ?.pass ?? null,
@@ -486,6 +499,41 @@ function EvalOutputCell({
       });
   };
 
+  const [copiedAssertion, setCopiedAssertion] = React.useState(false);
+  const handleCopyAsAssertion = () => {
+    const assertion = `- type: equals\n  value: ${JSON.stringify(text)}`;
+    navigator.clipboard
+      .writeText(assertion)
+      .then(() => {
+        setCopiedAssertion(true);
+        setTimeout(() => setCopiedAssertion(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy assertion to clipboard:', error);
+      });
+  };
+
+  const [isReplaying, setIsReplaying] = React.useState(false);
+  const handleRerun = async () => {
+    if (!evaluationId || !output.prompt) {
+      return;
+    }
+    setIsReplaying(true);
+    try {
+      const result = await replayEvaluation({
+        evaluationId,
+        testIndex: rowIndex,
+        prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
+        variables: output.metadata?.inputVars || output.testCase?.vars,
+      });
+      if (result.error) {
+        console.error('Re-run failed:', result.error);
+      }
+    } finally {
+      setIsReplaying(false);
+    }
+  };
+
   let tokenUsageDisplay;
   let latencyDisplay;
   let tokPerSecDisplay;
@@ -741,19 +789,6 @@ function EvalOutputCell({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleCopy}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy output to clipboard</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
                 className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
@@ -849,16 +884,45 @@ function EvalOutputCell({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action inline-flex items-center gap-1 px-2 py-1 rounded bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handlePromptOpen}
-                aria-label="View output and test details"
+                aria-label="View details"
               >
                 <Search className="size-4" />
-                <span className="text-xs font-medium">Details</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent>View output and test details</TooltipContent>
+            <TooltipContent>View details</TooltipContent>
           </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={handleRerun} disabled={isReplaying}>
+                <Play className="size-4" />
+                {isReplaying ? 'Re-running...' : 'Re-run cell'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setOpenAssertions(true)}>
+                <Plus className="size-4" />
+                Add assertion
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopy}>
+                <ClipboardCopy className="size-4" />
+                {copied ? 'Copied!' : 'Copy output'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCopyAsAssertion}>
+                <FileCode className="size-4" />
+                {copiedAssertion ? 'Copied!' : 'Copy as assertion'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {openPrompt && (
             <EvalOutputPromptDialog
               open={openPrompt}
@@ -879,6 +943,17 @@ function EvalOutputCell({
               onReplay={replayEvaluation}
               fetchTraces={fetchTraces}
               cloudConfig={cloudConfig}
+            />
+          )}
+          {openAssertions && (
+            <AddAssertionsDialog
+              open={openAssertions}
+              onClose={() => setOpenAssertions(false)}
+              evalId={evaluationId}
+              availableScopes={testIdx != null ? ['results', 'tests'] : ['results']}
+              defaultScope="results"
+              resultId={output.id}
+              testIndex={testIdx}
             />
           )}
         </>

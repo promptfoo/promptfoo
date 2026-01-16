@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import {
@@ -22,17 +21,7 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import {
-  AlertCircle,
-  Braces,
-  ChevronDown,
-  FileCode,
-  Plus,
-  Regex,
-  Search,
-  Sparkles,
-  XCircle,
-} from 'lucide-react';
+import { Braces, ChevronDown, FileCode, Plus, Search, Sparkles } from 'lucide-react';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface PosthocAssertionsFormProps {
@@ -59,18 +48,24 @@ const QUICK_ACTIONS: QuickAction[] = [
     placeholder: 'Text to search for...',
   },
   {
+    type: 'equals',
+    label: 'Equals exactly',
+    description: 'Output must match exactly',
+    icon: <FileCode className="size-4" />,
+    placeholder: 'Expected exact output...',
+  },
+  {
+    type: 'starts-with',
+    label: 'Starts with',
+    description: 'Output begins with this text',
+    icon: <FileCode className="size-4" />,
+    placeholder: 'Text the output should start with...',
+  },
+  {
     type: 'is-json',
     label: 'Is valid JSON',
     description: 'Validate JSON format',
     icon: <Braces className="size-4" />,
-  },
-  {
-    type: 'similar',
-    label: 'Semantically similar',
-    description: 'Compare meaning using embeddings',
-    icon: <Sparkles className="size-4" />,
-    placeholder: 'Expected output to compare against...',
-    isLLM: true,
   },
   {
     type: 'llm-rubric',
@@ -81,18 +76,12 @@ const QUICK_ACTIONS: QuickAction[] = [
     isLLM: true,
   },
   {
-    type: 'regex',
-    label: 'Matches pattern',
-    description: 'Test against regex pattern',
-    icon: <Regex className="size-4" />,
-    placeholder: 'Regular expression pattern...',
-  },
-  {
-    type: 'not-icontains',
-    label: 'Does NOT contain',
-    description: 'Ensure text is absent',
-    icon: <XCircle className="size-4" />,
-    placeholder: 'Text that should NOT appear...',
+    type: 'similar',
+    label: 'Semantically similar',
+    description: 'Compare meaning using embeddings',
+    icon: <Sparkles className="size-4" />,
+    placeholder: 'Expected output to compare against...',
+    isLLM: true,
   },
 ];
 
@@ -275,21 +264,14 @@ export default function PosthocAssertionsForm({
             <Card key={index} className="p-4">
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
-                      Type
-                    </Label>
-                    {LLM_ASSERTION_TYPES.has(assertion.type) && (
-                      <Badge variant="secondary" className="text-xs">
-                        LLM
-                      </Badge>
-                    )}
-                  </div>
+                  <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
+                    Type
+                  </Label>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => handleRemove(index)}
-                    className="shrink-0"
+                    className="shrink-0 h-8 w-8"
                     aria-label="Remove assertion"
                   >
                     <DeleteIcon className="size-4" />
@@ -312,9 +294,7 @@ export default function PosthocAssertionsForm({
                           <span className="font-medium">
                             {type}
                             {LLM_ASSERTION_TYPES.has(type) && (
-                              <span className="ml-1.5 text-xs text-amber-600 dark:text-amber-400">
-                                LLM
-                              </span>
+                              <span className="ml-1.5 text-xs text-muted-foreground">(LLM)</span>
                             )}
                           </span>
                           <span className="text-xs text-muted-foreground">
@@ -327,14 +307,9 @@ export default function PosthocAssertionsForm({
                 </Select>
 
                 {LLM_ASSERTION_TYPES.has(assertion.type) && (
-                  <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 p-3 text-sm">
-                    <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                    <div className="text-amber-700 dark:text-amber-300">
-                      <span className="font-medium">LLM-based assertion:</span> This will make API
-                      calls to evaluate each result, which may incur additional costs and take
-                      longer to process.
-                    </div>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This assertion makes API calls per result
+                  </p>
                 )}
 
                 {(() => {
@@ -364,12 +339,10 @@ export default function PosthocAssertionsForm({
                         placeholder={getPlaceholder(assertion.type)}
                         value={currentValue}
                         onChange={(e) => updateAssertion(index, { value: e.target.value })}
-                        className={`min-h-20 resize-y ${showWarning ? 'border-amber-500 dark:border-amber-500 ring-amber-500/20 ring-2' : ''}`}
+                        className="min-h-20 resize-y"
                       />
                       {showWarning && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">
-                          This assertion type requires a value
-                        </p>
+                        <p className="text-xs text-muted-foreground">Value required</p>
                       )}
                     </div>
                   );
@@ -453,70 +426,49 @@ export default function PosthocAssertionsForm({
 
       {/* Quick Action Picker */}
       {showPicker ? (
-        <Card className="p-4">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">What do you want to check?</h4>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowPicker(false)}
-                className="text-muted-foreground"
-              >
-                Cancel
-              </Button>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              {QUICK_ACTIONS.map((action) => (
-                <button
-                  key={action.type}
-                  type="button"
-                  onClick={() => handleQuickAction(action)}
-                  className={cn(
-                    'flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors',
-                    'hover:bg-muted/50 hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20',
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'mt-0.5 rounded-md p-1.5',
-                      action.isLLM
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {action.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{action.label}</span>
-                      {action.isLLM && (
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                        >
-                          LLM
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{action.description}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3 pt-2 border-t border-border">
-              <Button variant="outline" size="sm" onClick={handleCustomAssertion} className="gap-2">
-                <FileCode className="size-4" />
-                All assertion types
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                40+ assertion types for advanced use cases
-              </span>
-            </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Select assertion type</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPicker(false)}
+              className="h-7 px-2 text-muted-foreground"
+            >
+              Cancel
+            </Button>
           </div>
-        </Card>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {QUICK_ACTIONS.map((action) => (
+              <button
+                key={action.type}
+                type="button"
+                onClick={() => handleQuickAction(action)}
+                className={cn(
+                  'flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left transition-colors',
+                  'hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                )}
+              >
+                <span className="text-muted-foreground">{action.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{action.label}</span>
+                  {action.isLLM && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">(LLM)</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCustomAssertion}
+            className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+          >
+            Browse all 40+ assertion types →
+          </button>
+        </div>
       ) : (
         <Button variant="outline" onClick={() => setShowPicker(true)} className="gap-2">
           <Plus className="size-4" />
