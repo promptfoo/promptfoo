@@ -849,11 +849,12 @@ function EvalOutputCell({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className="action inline-flex items-center gap-1 px-2 py-1 rounded bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                 onClick={handlePromptOpen}
                 aria-label="View output and test details"
               >
                 <Search className="size-4" />
+                <span className="text-xs font-medium">Details</span>
               </button>
             </TooltipTrigger>
             <TooltipContent>View output and test details</TooltipContent>

@@ -1,10 +1,10 @@
 import type { ComponentProps } from 'react';
 
+import { ToastContext } from '@app/contexts/ToastContextDef';
+import { addEvalAssertions } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ToastContext } from '@app/contexts/ToastContextDef';
-import { addEvalAssertions } from '@app/utils/api';
 import AddAssertionsDialog from './AddAssertionsDialog';
 
 // Mock APIs needed for Radix Select
@@ -53,13 +53,21 @@ describe('AddAssertionsDialog', () => {
       onApplied: mockOnApplied,
     });
 
+    // Click Add Assertion to show quick action picker
     await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "Contains text" quick action
+    await user.click(screen.getByText('Contains text'));
+
+    // Fill in the value
     await user.type(screen.getByRole('textbox', { name: 'Value' }), 'denver');
+
+    // Submit
     await user.click(screen.getByRole('button', { name: 'Add assertions' }));
 
     await waitFor(() => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-1', {
-        assertions: [{ type: 'equals', value: 'denver' }],
+        assertions: [{ type: 'icontains', value: 'denver' }],
         scope: { type: 'results', resultIds: ['result-1'] },
       });
     });
@@ -82,20 +90,91 @@ describe('AddAssertionsDialog', () => {
       onApplied: mockOnApplied,
     });
 
+    // Switch scope
     await user.click(screen.getByRole('combobox'));
     const testScopeOption = await screen.findByRole('option', {
       name: 'All prompts in this test case',
     });
     await user.click(testScopeOption);
 
+    // Click Add Assertion to show quick action picker
     await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "Contains text" quick action
+    await user.click(screen.getByText('Contains text'));
+
+    // Fill in the value
     await user.type(screen.getByRole('textbox', { name: 'Value' }), 'sacramento');
+
+    // Submit
     await user.click(screen.getByRole('button', { name: 'Add assertions' }));
 
     await waitFor(() => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-2', {
-        assertions: [{ type: 'equals', value: 'sacramento' }],
+        assertions: [{ type: 'icontains', value: 'sacramento' }],
         scope: { type: 'tests', testIndices: [3] },
+      });
+    });
+  });
+
+  it('disables submit when assertion value is empty', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-3',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-3',
+      onApplied: mockOnApplied,
+    });
+
+    // Click Add Assertion to show quick action picker
+    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "Contains text" quick action (requires a value)
+    await user.click(screen.getByText('Contains text'));
+
+    // Submit button should be disabled because value is empty
+    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeDisabled();
+
+    // Type a value
+    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'test');
+
+    // Submit button should now be enabled
+    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeEnabled();
+  });
+
+  it('allows submission for assertion types that do not require values', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-4',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-4',
+      onApplied: mockOnApplied,
+    });
+
+    // Click Add Assertion to show quick action picker
+    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "Is valid JSON" quick action (does not require a value)
+    await user.click(screen.getByText('Is valid JSON'));
+
+    // Submit button should be enabled even without a value
+    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeEnabled();
+
+    // Submit
+    await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+
+    await waitFor(() => {
+      expect(addEvalAssertions).toHaveBeenCalledWith('eval-4', {
+        assertions: [{ type: 'is-json', value: '' }],
+        scope: { type: 'results', resultIds: ['result-4'] },
       });
     });
   });

@@ -18,9 +18,23 @@ import {
 } from '@app/components/ui/select';
 import { useToast } from '@app/hooks/useToast';
 import { addEvalAssertions } from '@app/utils/api';
-import type { Assertion, EvalResultsFilterMode } from '@promptfoo/types';
-import type { ResultsFilter } from './store';
 import PosthocAssertionsForm from './PosthocAssertionsForm';
+import type { Assertion, AssertionType, EvalResultsFilterMode } from '@promptfoo/types';
+
+// Assertion types that don't require a value (they check format/structure only)
+const NO_VALUE_REQUIRED: Set<AssertionType> = new Set([
+  'is-json',
+  'is-xml',
+  'is-sql',
+  'not-is-json',
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'moderation',
+  'pi',
+]);
+
+import type { ResultsFilter } from './store';
 
 type AssertionScope = 'results' | 'tests' | 'filtered';
 
@@ -85,7 +99,16 @@ export default function AddAssertionsDialog({
     [availableScopes, filteredCount],
   );
 
-  const canSubmit = assertions.length > 0 && Boolean(evalId) && !readOnly;
+  // Check if all assertions that require values have non-empty values
+  const hasValidValues = assertions.every((assertion) => {
+    if (NO_VALUE_REQUIRED.has(assertion.type)) {
+      return true;
+    }
+    const value = assertion.value;
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  });
+
+  const canSubmit = assertions.length > 0 && Boolean(evalId) && !readOnly && hasValidValues;
 
   const handleSubmit = async () => {
     if (!evalId) {
@@ -93,8 +116,13 @@ export default function AddAssertionsDialog({
       return;
     }
 
-    if (!canSubmit) {
+    if (assertions.length === 0) {
       showToast('Add at least one assertion', 'warning');
+      return;
+    }
+
+    if (!hasValidValues) {
+      showToast('Please provide a value for all assertions that require one', 'warning');
       return;
     }
 
@@ -131,10 +159,7 @@ export default function AddAssertionsDialog({
       setAssertions([]);
       onClose();
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : 'Failed to add assertions',
-        'error',
-      );
+      showToast(error instanceof Error ? error.message : 'Failed to add assertions', 'error');
     } finally {
       setIsSubmitting(false);
     }

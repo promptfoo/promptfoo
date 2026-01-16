@@ -16,12 +16,39 @@ describe('PosthocAssertionsForm', () => {
     onChange = vi.fn();
   });
 
-  it('adds a new assertion when Add Assertion is clicked', () => {
+  it('shows quick action picker when Add Assertion is clicked', () => {
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
 
-    expect(onChange).toHaveBeenCalledWith([{ type: 'equals', value: '' }]);
+    // Quick action picker should appear
+    expect(screen.getByText('What do you want to check?')).toBeInTheDocument();
+    expect(screen.getByText('Contains text')).toBeInTheDocument();
+    expect(screen.getByText('Is valid JSON')).toBeInTheDocument();
+  });
+
+  it('adds assertion when quick action is clicked', () => {
+    render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
+
+    // Open quick action picker
+    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "Contains text" quick action
+    fireEvent.click(screen.getByText('Contains text'));
+
+    expect(onChange).toHaveBeenCalledWith([{ type: 'icontains', value: '' }]);
+  });
+
+  it('adds assertion via "All assertion types" button', () => {
+    render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
+
+    // Open quick action picker
+    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
+
+    // Click "All assertion types"
+    fireEvent.click(screen.getByRole('button', { name: /All assertion types/i }));
+
+    expect(onChange).toHaveBeenCalledWith([{ type: 'contains', value: '' }]);
   });
 
   it('updates the assertion value when edited', () => {
@@ -49,5 +76,20 @@ describe('PosthocAssertionsForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove assertion' }));
 
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('can cancel the quick action picker', () => {
+    render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
+
+    // Open quick action picker
+    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
+    expect(screen.getByText('What do you want to check?')).toBeInTheDocument();
+
+    // Cancel
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Picker should be hidden, Add Assertion button should be back
+    expect(screen.queryByText('What do you want to check?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Assertion' })).toBeInTheDocument();
   });
 });
