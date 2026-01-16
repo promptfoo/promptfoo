@@ -690,6 +690,393 @@ async function generatePricingTemplate() {
   };
 }
 
+// Generate Satori JSX template for About page OG image
+async function generateAboutTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+  const constants = await getSiteConstants();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+        padding: 60,
+      },
+      children: [
+        // Header row (logo + brand)
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: 50,
+            },
+            children: [
+              logoBase64
+                ? {
+                    type: 'img',
+                    props: {
+                      src: logoBase64,
+                      width: 56,
+                      height: 56,
+                      style: { marginRight: 16 },
+                    },
+                  }
+                : null,
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 28,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                  },
+                  children: 'promptfoo',
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+        // Main headline
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 56,
+              fontWeight: 600,
+              color: 'white',
+              lineHeight: 1.15,
+              marginBottom: 30,
+            },
+            children: 'Securing the Future of AI',
+          },
+        },
+        // Subtitle
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: 50,
+            },
+            children: 'Building tools to protect AI at scale',
+          },
+        },
+        // Investor line
+        {
+          type: 'div',
+          props: {
+            style: {
+              marginTop: 'auto',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: 'Backed by',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 24,
+                    fontWeight: 600,
+                    color: 'white',
+                  },
+                  children: 'Insight Partners, a16z',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: `& ${constants.userCountShort}+ developers`,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Generate Satori JSX template for Contact page OG image
+async function generateContactTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+  const constants = await getSiteConstants();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+        padding: 60,
+      },
+      children: [
+        // Header row (logo + brand)
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: 50,
+            },
+            children: [
+              logoBase64
+                ? {
+                    type: 'img',
+                    props: {
+                      src: logoBase64,
+                      width: 56,
+                      height: 56,
+                      style: { marginRight: 16 },
+                    },
+                  }
+                : null,
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 28,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                  },
+                  children: 'promptfoo',
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+        // Main headline
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 56,
+              fontWeight: 600,
+              color: 'white',
+              lineHeight: 1.15,
+              marginBottom: 30,
+            },
+            children: 'Book a Demo',
+          },
+        },
+        // Subtitle
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: 50,
+            },
+            children: 'See how Promptfoo can secure your AI infrastructure',
+          },
+        },
+        // Trust signal
+        {
+          type: 'div',
+          props: {
+            style: {
+              marginTop: 'auto',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: 'Trusted by',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 24,
+                    fontWeight: 600,
+                    color: 'white',
+                  },
+                  children: `${constants.fortune500Count} Fortune 500 companies`,
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: `and ${constants.userCountShort}+ developers`,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Generate Satori JSX template for Press page OG image
+async function generatePressTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+  const constants = await getSiteConstants();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+        padding: 60,
+      },
+      children: [
+        // Header row (logo + brand)
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: 50,
+            },
+            children: [
+              logoBase64
+                ? {
+                    type: 'img',
+                    props: {
+                      src: logoBase64,
+                      width: 56,
+                      height: 56,
+                      style: { marginRight: 16 },
+                    },
+                  }
+                : null,
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 28,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                  },
+                  children: 'promptfoo',
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+        // Main headline
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 56,
+              fontWeight: 600,
+              color: 'white',
+              lineHeight: 1.15,
+              marginBottom: 30,
+            },
+            children: 'Press Center',
+          },
+        },
+        // Subtitle
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: 50,
+            },
+            children: 'News, resources, and media information',
+          },
+        },
+        // Trust signal
+        {
+          type: 'div',
+          props: {
+            style: {
+              marginTop: 'auto',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: 'Leading AI security with',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 24,
+                    fontWeight: 600,
+                    color: 'white',
+                  },
+                  children: `${constants.userCountShort}+ developers`,
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 20,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  },
+                  children: 'worldwide',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -999,6 +1386,102 @@ async function generatePricingOgImage(outputPath) {
     return true;
   } catch (error) {
     console.error('❌ Failed to generate Pricing OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate About OG image using custom template
+async function generateAboutOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateAboutTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate About OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Contact OG image using custom template
+async function generateContactOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateContactTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Contact OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Press OG image using custom template
+async function generatePressOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generatePressTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Press OG image:', error.message);
     return false;
   }
 }
@@ -1415,6 +1898,42 @@ module.exports = function (context, options) {
         generatedImages.set('/pricing/', '/img/og/pricing-og.png');
         successCount++;
         console.log('  ✅ Pricing OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Generate about page OG image
+      console.log('🎨 Generating About page OG image...');
+      const aboutImagePath = path.join(outDir, 'img', 'og', 'about-og.png');
+      const aboutSuccess = await generateAboutOgImage(aboutImagePath);
+      if (aboutSuccess) {
+        generatedImages.set('/about/', '/img/og/about-og.png');
+        successCount++;
+        console.log('  ✅ About OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Generate contact page OG image
+      console.log('🎨 Generating Contact page OG image...');
+      const contactImagePath = path.join(outDir, 'img', 'og', 'contact-og.png');
+      const contactSuccess = await generateContactOgImage(contactImagePath);
+      if (contactSuccess) {
+        generatedImages.set('/contact/', '/img/og/contact-og.png');
+        successCount++;
+        console.log('  ✅ Contact OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Generate press page OG image
+      console.log('🎨 Generating Press page OG image...');
+      const pressImagePath = path.join(outDir, 'img', 'og', 'press-og.png');
+      const pressSuccess = await generatePressOgImage(pressImagePath);
+      if (pressSuccess) {
+        generatedImages.set('/press/', '/img/og/press-og.png');
+        successCount++;
+        console.log('  ✅ Press OG image generated');
       } else {
         failureCount++;
       }
