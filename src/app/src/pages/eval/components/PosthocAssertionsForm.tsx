@@ -21,7 +21,7 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import { Braces, ChevronDown, FileCode, Plus, Search, Sparkles } from 'lucide-react';
+import { Braces, ChevronDown, Equal, MoveRight, Plus, Search, Sparkles } from 'lucide-react';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface PosthocAssertionsFormProps {
@@ -51,14 +51,14 @@ const QUICK_ACTIONS: QuickAction[] = [
     type: 'equals',
     label: 'Equals exactly',
     description: 'Output must match exactly',
-    icon: <FileCode className="size-4" />,
+    icon: <Equal className="size-4" />,
     placeholder: 'Expected exact output...',
   },
   {
     type: 'starts-with',
     label: 'Starts with',
     description: 'Output begins with this text',
-    icon: <FileCode className="size-4" />,
+    icon: <MoveRight className="size-4" />,
     placeholder: 'Text the output should start with...',
   },
   {
@@ -446,11 +446,12 @@ export default function PosthocAssertionsForm({
                 type="button"
                 onClick={() => handleQuickAction(action)}
                 className={cn(
-                  'flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left transition-colors',
-                  'hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                  'flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left',
+                  'transition-all hover:bg-muted hover:border-muted-foreground/25',
+                  'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
                 )}
               >
-                <span className="text-muted-foreground">{action.icon}</span>
+                <span className="text-foreground/70">{action.icon}</span>
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-medium">{action.label}</span>
                   {action.isLLM && (
