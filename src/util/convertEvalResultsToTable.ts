@@ -45,7 +45,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     };
 
     // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
-    const actualPrompt = getActualPrompt(result.response);
+    // Check both result.response.metadata and result.metadata for legacy compatibility
+    const actualPrompt =
+      getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
 
     if (result.vars && actualPrompt) {
       const varKeys = Object.keys(result.vars);
