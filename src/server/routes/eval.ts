@@ -543,6 +543,88 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
+/**
+ * Re-run all providers for a single test case (row).
+ * This allows re-running an entire row across all prompts/providers.
+ */
+evalRouter.post('/replay-row', async (req: Request, res: Response): Promise<void> => {
+  const { evaluationId, testIndex, variables } = req.body;
+
+  if (!evaluationId || testIndex === undefined) {
+    res.status(400).json({ error: 'Missing required parameters: evaluationId, testIndex' });
+    return;
+  }
+
+  try {
+    const eval_ = await Eval.findById(evaluationId);
+    if (!eval_) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
+    const providers = eval_.config.providers;
+    if (!providers || (Array.isArray(providers) && providers.length === 0)) {
+      res.status(400).json({ error: 'No providers found in evaluation' });
+      return;
+    }
+
+    const prompts = eval_.prompts;
+    if (!prompts || prompts.length === 0) {
+      res.status(400).json({ error: 'No prompts found in evaluation' });
+      return;
+    }
+
+    // Build prompts array for evaluate
+    const promptsForEval = prompts.map((p) => ({
+      raw: p.raw,
+      label: p.label || 'Row Replay',
+    }));
+
+    // Normalize providers to array
+    const providersArray = Array.isArray(providers) ? providers : [providers];
+
+    // Run evaluation for all prompts × providers with the single test case
+    const result = await promptfoo.evaluate(
+      {
+        prompts: promptsForEval,
+        providers: providersArray,
+        tests: [
+          {
+            vars: variables || {},
+          },
+        ],
+      },
+      {
+        maxConcurrency: providersArray.length, // Run all providers in parallel
+        showProgressBar: false,
+        eventSource: 'web',
+        cache: false, // Always disable cache for replays
+      },
+    );
+
+    const summary = await result.toEvaluateSummary();
+
+    // Return results organized by prompt/provider
+    const outputs = summary.results.map((r) => ({
+      promptIndex: r.prompt?.id ? prompts.findIndex((p) => p.id === r.prompt?.id) : undefined,
+      output: r.response?.output || '',
+      error: r.response?.error,
+      pass: r.success,
+      score: r.score,
+    }));
+
+    res.json({
+      success: true,
+      testIndex,
+      outputs,
+      resultCount: outputs.length,
+    });
+  } catch (error) {
+    logger.error(`Failed to replay row: ${error}`);
+    res.status(500).json({ error: 'Failed to replay row' });
+  }
+});
+
 evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {

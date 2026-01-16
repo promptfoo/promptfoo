@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useToast } from '@app/hooks/useToast';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -24,6 +25,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { CellActionMenu } from './CellActionMenu';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -146,6 +148,59 @@ function EvalOutputCell({
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
+  const { showToast } = useToast();
+
+  // Cell action state
+  const [isReplayLoading, setIsReplayLoading] = useState(false);
+
+  // Cell action handlers
+  const handleCellRerun = useCallback(async () => {
+    if (!evaluationId || !output.prompt) {
+      return;
+    }
+    setIsReplayLoading(true);
+    try {
+      const result = await replayEvaluation({
+        evaluationId,
+        testIndex: rowIndex,
+        prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
+        variables: output.metadata?.inputVars || output.testCase?.vars,
+      });
+      if (result.error) {
+        showToast(`Re-run failed: ${result.error}`, 'error');
+      } else {
+        showToast('Cell re-run completed', 'success');
+        // Note: Results will update via the EvalOutputPromptDialog when it's open
+      }
+    } finally {
+      setIsReplayLoading(false);
+    }
+  }, [evaluationId, rowIndex, output, replayEvaluation, showToast]);
+
+  const handleMarkGolden = useCallback(
+    (outputText: string, assertionType: string) => {
+      // Copy as assertion YAML to clipboard
+      const assertion = `- type: ${assertionType}\n  value: ${JSON.stringify(outputText)}`;
+      navigator.clipboard.writeText(assertion).then(() => {
+        showToast('Golden output assertion copied to clipboard', 'success');
+      });
+    },
+    [showToast],
+  );
+
+  const handleAddAssertion = useCallback(
+    (assertion: { type: string; value: string; metric?: string }) => {
+      // Copy assertion to clipboard as YAML
+      let assertionYaml = `- type: ${assertion.type}\n  value: ${JSON.stringify(assertion.value)}`;
+      if (assertion.metric) {
+        assertionYaml += `\n  metric: ${assertion.metric}`;
+      }
+      navigator.clipboard.writeText(assertionYaml).then(() => {
+        showToast('Assertion copied to clipboard', 'success');
+      });
+    },
+    [showToast],
+  );
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -879,6 +934,18 @@ function EvalOutputCell({
           )}
         </>
       )}
+      {/* Advanced cell actions menu */}
+      <CellActionMenu
+        output={output}
+        rowIndex={rowIndex}
+        promptIndex={promptIndex}
+        evaluationId={evaluationId}
+        onRerun={output.prompt ? handleCellRerun : undefined}
+        onMarkGolden={handleMarkGolden}
+        onAddAssertion={handleAddAssertion}
+        isReplayLoading={isReplayLoading}
+        compact
+      />
     </div>
   );
 

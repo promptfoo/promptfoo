@@ -13,6 +13,7 @@ import {
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { ROUTES } from '@app/constants/routes';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
@@ -39,6 +40,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
+import { RowActionMenu, type TriageStatus } from './RowActionMenu';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -362,6 +364,107 @@ function ResultsTable({
     setLightboxImage(url || null);
     setLightboxOpen(!lightboxOpen);
   };
+
+  // Row action state
+  const { replayRow } = useEvalOperations();
+  const [rerunningRows, setRerunningRows] = React.useState<Set<number>>(new Set());
+  const [triageStatuses, setTriageStatuses] = React.useState<Record<number, TriageStatus>>({});
+
+  // Row action handlers
+  const handleRerunRow = React.useCallback(
+    async (rowIndex: number) => {
+      if (!evalId) {
+        return;
+      }
+      const row = body[rowIndex];
+      if (!row) {
+        return;
+      }
+
+      setRerunningRows((prev) => new Set(prev).add(rowIndex));
+      try {
+        const result = await replayRow({
+          evaluationId: evalId,
+          testIndex: rowIndex,
+          variables: row.test?.vars as Record<string, unknown>,
+        });
+
+        if (result.error) {
+          showToast(`Re-run failed: ${result.error}`, 'error');
+        } else {
+          showToast(
+            `Re-ran test case ${rowIndex + 1} with ${result.resultCount} providers`,
+            'success',
+          );
+          // Refresh data to show updated results
+          if (evalId) {
+            fetchEvalData(evalId, {
+              pageIndex: pagination.pageIndex,
+              pageSize: pagination.pageSize,
+              filterMode,
+            });
+          }
+        }
+      } finally {
+        setRerunningRows((prev) => {
+          const next = new Set(prev);
+          next.delete(rowIndex);
+          return next;
+        });
+      }
+    },
+    [evalId, body, replayRow, showToast, fetchEvalData, pagination, filterMode],
+  );
+
+  const handleTriageStatusChange = React.useCallback((rowIndex: number, status: TriageStatus) => {
+    setTriageStatuses((prev) => ({ ...prev, [rowIndex]: status }));
+    // TODO: Persist triage status to backend when API is available
+  }, []);
+
+  const handleExportRow = React.useCallback(
+    (rowIndex: number, format: 'json' | 'yaml') => {
+      const row = body[rowIndex];
+      if (!row) {
+        return;
+      }
+
+      const rowData = {
+        vars: row.vars,
+        test: row.test,
+        outputs: row.outputs.map((o) => ({
+          text: o.text,
+          pass: o.pass,
+          score: o.score,
+        })),
+      };
+
+      let content: string;
+      let filename: string;
+      let mimeType: string;
+
+      if (format === 'json') {
+        content = JSON.stringify(rowData, null, 2);
+        filename = `row-${rowIndex + 1}.json`;
+        mimeType = 'application/json';
+      } else {
+        // Simple YAML serialization
+        content = `# Test case ${rowIndex + 1}\nvars: ${JSON.stringify(row.vars)}\ntest: ${JSON.stringify(row.test, null, 2)}\noutputs:\n${row.outputs.map((o) => `  - text: ${JSON.stringify(o.text)}\n    pass: ${o.pass}\n    score: ${o.score}`).join('\n')}`;
+        filename = `row-${rowIndex + 1}.yaml`;
+        mimeType = 'text/yaml';
+      }
+
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported row ${rowIndex + 1} as ${format.toUpperCase()}`, 'success');
+    },
+    [body, showToast],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
@@ -1234,14 +1337,56 @@ function ResultsTable({
     return null;
   }, [body, maxTextLength]);
 
+  // Row actions column - displays action menu for each row
+  const rowActionsColumn = React.useMemo(
+    (): ColumnDef<EvaluateTableRow, unknown> => ({
+      id: 'row-actions',
+      header: () => null, // No header for the actions column
+      cell: (info: CellContext<EvaluateTableRow, unknown>) => {
+        const rowIndex = info.row.index;
+        const row = info.row.original;
+        // Calculate actual row index accounting for pagination
+        const actualRowIndex = pagination.pageIndex * pagination.pageSize + rowIndex;
+
+        return (
+          <div className="cell group flex items-center justify-center">
+            <RowActionMenu
+              row={row}
+              rowIndex={actualRowIndex}
+              evaluationId={evalId}
+              triageStatus={triageStatuses[actualRowIndex]}
+              onRerunRow={handleRerunRow}
+              onTriageStatusChange={handleTriageStatusChange}
+              onExportRow={handleExportRow}
+              isRerunning={rerunningRows.has(actualRowIndex)}
+              promptCount={head.prompts.length}
+            />
+          </div>
+        );
+      },
+      size: 40, // Small fixed width for the action button
+      enableResizing: false,
+    }),
+    [
+      evalId,
+      pagination,
+      triageStatuses,
+      handleRerunRow,
+      handleTriageStatusChange,
+      handleExportRow,
+      rerunningRows,
+      head.prompts.length,
+    ],
+  );
+
   const columns = React.useMemo(() => {
-    const cols: ColumnDef<EvaluateTableRow, unknown>[] = [];
+    const cols: ColumnDef<EvaluateTableRow, unknown>[] = [rowActionsColumn];
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
     cols.push(...variableColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [rowActionsColumn, descriptionColumn, variableColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
 
