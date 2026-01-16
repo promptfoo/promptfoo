@@ -32,7 +32,7 @@ describe('AddAssertionsDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(addEvalAssertions).mockResolvedValue({
-      data: { updatedResults: 1, skippedResults: 0, skippedAssertions: 0 },
+      data: { jobId: null, updatedResults: 1, skippedResults: 0, skippedAssertions: 0 },
     });
   });
 
