@@ -15,6 +15,7 @@ HTMLElement.prototype.scrollIntoView = vi.fn();
 
 vi.mock('@app/utils/api', () => ({
   addEvalAssertions: vi.fn(),
+  getAssertionJobStatus: vi.fn(),
 }));
 
 const renderDialog = (props: ComponentProps<typeof AddAssertionsDialog>) => {
@@ -163,6 +164,92 @@ describe('AddAssertionsDialog', () => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-4', {
         assertions: [{ type: 'is-json', value: '' }],
         scope: { type: 'results', resultIds: ['result-4'] },
+      });
+    });
+  });
+
+  describe('handleSubmit', () => {
+    it('constructs filtered scope payload correctly', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(addEvalAssertions).mockResolvedValue({
+        data: { jobId: null, updatedResults: 5, skippedResults: 0, skippedAssertions: 0 },
+      });
+
+      renderDialog({
+        open: true,
+        onClose: mockOnClose,
+        evalId: 'eval-filtered',
+        availableScopes: ['filtered'],
+        defaultScope: 'filtered',
+        filters: [
+          {
+            id: 'filter-1',
+            type: 'metric',
+            operator: 'eq',
+            value: 'failed',
+            logicOperator: 'and',
+            sortIndex: 0,
+          },
+        ],
+        filterMode: 'all',
+        searchText: 'error',
+        filteredCount: 5,
+        onApplied: mockOnApplied,
+      });
+
+      await user.click(screen.getByText('Contains text'));
+      await user.type(screen.getByRole('textbox', { name: 'Value' }), 'debug');
+      await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+
+      await waitFor(() => {
+        expect(addEvalAssertions).toHaveBeenCalled();
+      });
+
+      // Check that the call included filtered scope
+      const callArgs = vi.mocked(addEvalAssertions).mock.calls[0];
+      expect(callArgs[0]).toBe('eval-filtered');
+      expect(callArgs[1].scope.type).toBe('filtered');
+    });
+
+    it('handles immediate completion when no job is created', async () => {
+      const user = userEvent.setup();
+      const mockShowToast = vi.fn();
+
+      vi.mocked(addEvalAssertions).mockResolvedValue({
+        data: {
+          jobId: null,
+          updatedResults: 0,
+          skippedResults: 1,
+          skippedAssertions: 2,
+        },
+      });
+
+      render(
+        <ToastContext.Provider value={{ showToast: mockShowToast }}>
+          <AddAssertionsDialog
+            open={true}
+            onClose={mockOnClose}
+            evalId="eval-1"
+            availableScopes={['results']}
+            defaultScope="results"
+            resultId="result-1"
+            onApplied={mockOnApplied}
+          />
+        </ToastContext.Provider>,
+      );
+
+      await user.click(screen.getByText('Contains text'));
+      await user.type(screen.getByRole('textbox', { name: 'Value' }), 'test');
+      await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Added assertions to 0 results (1 skipped), 2 duplicate assertions skipped.',
+          'warning',
+        );
+        expect(mockOnApplied).toHaveBeenCalled();
+        expect(mockOnClose).toHaveBeenCalled();
       });
     });
   });
