@@ -140,7 +140,7 @@ The reported prompt is used for:
 - **Assertions**: Prompt-based assertions like `moderation` check this value
 - **Debugging**: Helps understand what was actually sent to the LLM
 
-See the [provider-prompt-reporting example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-prompt-reporting) for a complete working example.
+See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/vercel-ai-sdk) for a complete working example.
 
 ### Two-Stage Provider
 

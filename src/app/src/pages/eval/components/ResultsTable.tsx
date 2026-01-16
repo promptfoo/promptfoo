@@ -17,6 +17,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -688,17 +689,9 @@ function ResultsTable({
                 if (varName === injectVarName) {
                   // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
                   for (const output of row.outputs || []) {
-                    // Check response.prompt first (provider-reported actual prompt)
-                    if (output?.response?.prompt) {
-                      value =
-                        typeof output.response.prompt === 'string'
-                          ? output.response.prompt
-                          : JSON.stringify(output.response.prompt);
-                      break;
-                    }
-                    // Fall back to legacy redteamFinalPrompt
-                    if (output?.metadata?.redteamFinalPrompt) {
-                      value = output.metadata.redteamFinalPrompt;
+                    const actualPrompt = getActualPrompt(output?.response);
+                    if (actualPrompt) {
+                      value = actualPrompt;
                       break;
                     }
                   }

@@ -1,6 +1,7 @@
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
 import invariant from '../util/invariant';
+import { getActualPromptWithFallback } from '../util/providerResponse';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -13,14 +14,7 @@ export const handleModeration = async ({
 }: AssertionParams): Promise<GradingResult> => {
   // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy), 3) original prompt
   // This allows providers to report the actual prompt they sent (e.g., GenAIScript, dynamic prompts)
-  const promptToModerate =
-    (typeof providerResponse.prompt === 'string'
-      ? providerResponse.prompt
-      : providerResponse.prompt
-        ? JSON.stringify(providerResponse.prompt)
-        : null) ||
-    providerResponse.metadata?.redteamFinalPrompt ||
-    prompt;
+  const promptToModerate = getActualPromptWithFallback(providerResponse, prompt || '');
   invariant(promptToModerate, 'moderation assertion type must have a prompt');
   invariant(
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),

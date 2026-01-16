@@ -1,5 +1,6 @@
 import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
+import { getActualPrompt } from '../util/providerResponse';
 
 /**
  * Converts evaluation results from a ResultsFile into a table format for display.
@@ -44,11 +45,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     };
 
     // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
-    const actualPrompt = result.response?.prompt
-      ? typeof result.response.prompt === 'string'
-        ? result.response.prompt
-        : JSON.stringify(result.response.prompt)
-      : result.metadata?.redteamFinalPrompt;
+    const actualPrompt = getActualPrompt(result.response);
 
     if (result.vars && actualPrompt) {
       const varKeys = Object.keys(result.vars);

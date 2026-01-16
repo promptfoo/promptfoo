@@ -13,6 +13,14 @@ export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
+/**
+ * Chat message type for provider-reported prompts and other multi-turn interactions.
+ */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
+  content: string;
+}
+
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts
@@ -168,7 +176,7 @@ export interface ProviderResponse {
    *
    * Can be a simple string or an array of chat messages.
    */
-  prompt?: string | Array<{ role: string; content: string }>;
+  prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
   /**

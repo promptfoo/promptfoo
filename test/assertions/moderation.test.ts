@@ -221,4 +221,60 @@ describe('handleModeration', () => {
       {},
     );
   });
+
+  it('should fall back to original prompt when response.prompt is empty string', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: '',
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // Empty string prompt is not useful, should fall back to original
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should fall back to original prompt when response.prompt is empty array', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: [],
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // Empty array prompt is not useful, should fall back to original
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
 });
