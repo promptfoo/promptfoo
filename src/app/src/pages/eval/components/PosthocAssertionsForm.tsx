@@ -41,11 +41,25 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
+    type: 'llm-rubric',
+    label: 'LLM evaluates',
+    description: 'AI grades against your criteria',
+    icon: <Sparkles className="size-4" />,
+    placeholder: 'Describe what makes a good response...',
+    isLLM: true,
+  },
+  {
     type: 'icontains',
     label: 'Contains text',
     description: 'Check if output contains a substring',
     icon: <Search className="size-4" />,
     placeholder: 'Text to search for...',
+  },
+  {
+    type: 'is-json',
+    label: 'Is valid JSON',
+    description: 'Validate JSON format',
+    icon: <Braces className="size-4" />,
   },
   {
     type: 'equals',
@@ -60,20 +74,6 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Output begins with this text',
     icon: <MoveRight className="size-4" />,
     placeholder: 'Text the output should start with...',
-  },
-  {
-    type: 'is-json',
-    label: 'Is valid JSON',
-    description: 'Validate JSON format',
-    icon: <Braces className="size-4" />,
-  },
-  {
-    type: 'llm-rubric',
-    label: 'LLM evaluates',
-    description: 'AI grades against your criteria',
-    icon: <Sparkles className="size-4" />,
-    placeholder: 'Describe what makes a good response...',
-    isLLM: true,
   },
   {
     type: 'similar',
