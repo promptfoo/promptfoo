@@ -464,6 +464,12 @@
         "WATSONX_AI_PROJECT_ID": {
           "type": "string"
         },
+        "XAI_API_BASE_URL": {
+          "type": "string"
+        },
+        "XAI_API_KEY": {
+          "type": "string"
+        },
         "AZURE_CONTENT_SAFETY_ENDPOINT": {
           "type": "string"
         },
@@ -1727,6 +1733,12 @@
                       "type": "string"
                     },
                     "WATSONX_AI_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "XAI_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "XAI_API_KEY": {
                       "type": "string"
                     },
                     "AZURE_CONTENT_SAFETY_ENDPOINT": {
