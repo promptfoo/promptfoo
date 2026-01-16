@@ -2461,6 +2461,12 @@
                       }
                     ]
                   },
+                  "numTests": {
+                    "description": "Number of tests to generate for this strategy (at object level, like plugins)",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "config": {
                     "description": "Strategy-specific configuration",
                     "type": "object",
