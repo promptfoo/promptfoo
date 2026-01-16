@@ -2,6 +2,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
+import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -42,10 +43,8 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
     }
 
     const nunjucks = getNunjucksEngine();
-    const baseEnvGlobals = nunjucks.getGlobal('env') as Record<
-      string,
-      string | number | boolean | undefined
-    >;
+    // process.env values are always strings or undefined, never numbers or booleans
+    const baseEnvGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
     const envGlobals = envOverrides ? { ...baseEnvGlobals, ...envOverrides } : baseEnvGlobals;
 
     // Match ALL Nunjucks templates {{ ... }}
@@ -71,8 +70,11 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
         try {
           // Use Nunjucks to render the template (supports filters, expressions, etc.)
           return nunjucks.renderString(match, { env: envGlobals });
-        } catch (_error) {
-          // On render error, preserve the template
+        } catch (error) {
+          // On render error, log the issue and preserve the template
+          logger.debug(
+            `Failed to render env template "${match}": ${error instanceof Error ? error.message : String(error)}`,
+          );
           return match;
         }
       }
@@ -97,7 +99,7 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
   return obj;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;

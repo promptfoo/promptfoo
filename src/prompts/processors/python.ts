@@ -8,7 +8,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
+import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
 /**
  * Python prompt function. Runs a specific function from the python file.
@@ -21,7 +21,7 @@ export const pythonPromptFunction = async (
   filePath: string,
   functionName: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
     config?: unknown;
   },
@@ -49,7 +49,7 @@ export const pythonPromptFunction = async (
 export const pythonPromptFunctionLegacy = async (
   filePath: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
     config?: Record<string, unknown>;
   },

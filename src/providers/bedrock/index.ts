@@ -17,7 +17,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
-import type { TokenUsage } from '../../types/shared';
+import type { TokenUsage, VarValue } from '../../types/shared';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -419,7 +419,7 @@ export interface IBedrockModel {
     prompt: string,
     stop: string[],
     modelName?: string,
-    vars?: Record<string, string | object>,
+    vars?: Record<string, VarValue>,
   ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
@@ -1244,7 +1244,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       _stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       let messages;
       let systemPrompt;
@@ -1495,7 +1495,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
@@ -1868,7 +1868,7 @@ ${prompt}
       prompt: string,
       stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 

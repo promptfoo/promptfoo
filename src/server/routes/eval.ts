@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -84,7 +83,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
 });
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
+  const id = req.params.id as string;
   const job = evalJobs.get(id);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
@@ -112,8 +111,8 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 });
 
-evalRouter.patch('/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
+evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
+  const id = req.params.id as string;
   const { table, config } = req.body;
 
   if (!id) {
@@ -122,7 +121,7 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    await updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
@@ -159,8 +158,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const validationError = fromZodError(error);
-      res.status(400).json({ error: validationError.message });
+      res.status(400).json({ error: z.prettifyError(error) });
     } else {
       logger.error(`Failed to update eval author: ${error}`);
       res.status(500).json({ error: 'Failed to update eval author' });
@@ -171,30 +169,29 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 // Query parameter schemas
 const evalTableQuerySchema = z.object({
   format: z.string().optional(),
-  limit: z.coerce.number().positive().default(50),
-  offset: z.coerce.number().nonnegative().default(0),
-  filterMode: EvalResultsFilterMode.default('all'),
-  search: z.string().default(''),
+  limit: z.coerce.number().positive().prefault(50),
+  offset: z.coerce.number().nonnegative().prefault(0),
+  filterMode: EvalResultsFilterMode.prefault('all'),
+  search: z.string().prefault(''),
   filter: z
     .union([z.string(), z.array(z.string())])
     .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
+    .prefault([]),
   comparisonEvalIds: z
     .union([z.string(), z.array(z.string())])
     .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
+    .prefault([]),
 });
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   // Parse and validate query parameters
   const queryResult = evalTableQuerySchema.safeParse(req.query);
 
   if (!queryResult.success) {
-    const validationError = fromZodError(queryResult.error);
-    res.status(400).json({ error: validationError.message });
+    res.status(400).json({ error: z.prettifyError(queryResult.error) });
     return;
   }
 
@@ -396,7 +393,7 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromZodError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 
@@ -424,7 +421,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromZodError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 
@@ -437,7 +434,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const results = req.body as unknown as EvalResult[];
 
   if (!Array.isArray(results)) {
@@ -549,7 +546,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
 evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const gradingResult = req.body as GradingResult;
     const result = await EvalResult.findById(id);
     invariant(result, 'Result not found');
@@ -652,7 +649,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     await deleteEval(id);
     res.json({ message: 'Eval deleted successfully' });
@@ -723,8 +720,7 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
     res.status(201).json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const validationError = fromZodError(error);
-      res.status(400).json({ error: validationError.message });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 

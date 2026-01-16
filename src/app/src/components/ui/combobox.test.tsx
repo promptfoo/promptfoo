@@ -322,6 +322,35 @@ describe('Combobox', () => {
       const input = screen.getByRole('combobox');
       expect(input).toHaveFocus();
     });
+
+    it('does not show clear button when clearable is false', () => {
+      render(<Combobox options={mockOptions} value="apple" onChange={vi.fn()} clearable={false} />);
+      expect(screen.queryByLabelText('Clear selection')).not.toBeInTheDocument();
+    });
+
+    it('shows clear button by default (clearable=true)', () => {
+      render(<Combobox options={mockOptions} value="apple" onChange={vi.fn()} />);
+      expect(screen.getByLabelText('Clear selection')).toBeInTheDocument();
+    });
+  });
+
+  describe('label prop', () => {
+    it('renders label when provided', () => {
+      render(<Combobox options={mockOptions} onChange={vi.fn()} label="Select a fruit" />);
+      expect(screen.getByText('Select a fruit')).toBeInTheDocument();
+    });
+
+    it('does not render label when not provided', () => {
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+      expect(screen.queryByText('Select a fruit')).not.toBeInTheDocument();
+    });
+
+    it('label is associated with input via htmlFor', () => {
+      render(<Combobox options={mockOptions} onChange={vi.fn()} label="Select a fruit" />);
+      const label = screen.getByText('Select a fruit');
+      const input = screen.getByRole('combobox');
+      expect(label).toHaveAttribute('for', input.id);
+    });
   });
 
   describe('keyboard navigation', () => {

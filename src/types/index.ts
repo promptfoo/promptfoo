@@ -6,6 +6,8 @@ import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+export { ProvidersSchema };
+
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
@@ -24,7 +26,10 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+
+export type { VarValue } from './shared';
+
 import type { TraceData } from './tracing';
 
 export * from '../redteam/types';
@@ -45,7 +50,7 @@ export const CommandLineOptionsSchema = z.object({
   // Shared with EvaluateOptions
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
-  delay: z.coerce.number().int().nonnegative().default(0),
+  delay: z.coerce.number().int().nonnegative().prefault(0),
 
   // Command line only
   vars: z.string().optional(),
@@ -72,7 +77,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
-  var: z.record(z.string()).optional(),
+  var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
@@ -141,7 +146,7 @@ export type EvalConversations = Record<
   { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
-export type EvalRegisters = Record<string, string | object>;
+export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
   provider: ApiProvider;
@@ -176,7 +181,7 @@ export interface RunEvalOptions {
   abortSignal?: AbortSignal;
 }
 
-const EvaluateOptionsSchema = z.object({
+export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
   eventSource: z.string().optional(),
@@ -189,16 +194,15 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(
-      z.tuple([
-        z.number(),
-        z.number(),
-        z.number(),
-        z.custom<RunEvalOptions>(),
-        z.custom<PromptMetrics>(),
-      ]),
-      z.void(),
-    )
+    .custom<
+      (
+        completed: number,
+        total: number,
+        index: number,
+        evalStep: RunEvalOptions,
+        metrics: PromptMetrics,
+      ) => void
+    >((v) => typeof v === 'function')
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -534,6 +538,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-span-duration',
   'search-rubric',
   'webhook',
+  'word-count',
 ]);
 
 export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
@@ -625,7 +630,7 @@ export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;
@@ -681,18 +686,34 @@ const ProviderPromptMapSchema = z.record(
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-export const VarsSchema = z.record(
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.union([z.string(), z.number(), z.boolean()])),
-    z.record(z.string(), z.any()),
-    z.array(z.any()),
-  ]),
-);
+// Vars represents template variables - allowing primitives, arrays, and objects
+export type Vars = Record<string, VarValue>;
 
-export type Vars = z.infer<typeof VarsSchema>;
+// Helper to check if a value is a valid VarValue (string, number, boolean, object, or array)
+// Rejects null, undefined, symbols, and functions
+function isValidVarValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const type = typeof value;
+  if (type === 'symbol' || type === 'function') {
+    return false;
+  }
+  return type === 'string' || type === 'number' || type === 'boolean' || type === 'object';
+}
+
+// VarsSchema uses z.custom to match the Vars type with runtime validation
+// Enforces plain objects only (no arrays, Maps, Dates, etc.)
+export const VarsSchema = z.custom<Vars>((data) => {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return false;
+  }
+  // Ensure it's a plain object (not Map, Date, Set, etc.)
+  if (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null) {
+    return false;
+  }
+  return Object.values(data as Record<string, unknown>).every(isValidVarValue);
+});
 
 export type ScoringFunction = (
   namedScores: Record<string, number>,
@@ -724,7 +745,7 @@ export const TestCaseSchema = z.object({
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  providerOutput: z.union([z.string(), z.object({})]).optional(),
+  providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
@@ -807,7 +828,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.union([z.string(), z.object({})])).optional(),
+  vars: VarsSchema.optional(),
 }).strict();
 
 export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
@@ -865,10 +886,10 @@ export const DerivedMetricSchema = z.object({
   // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
   value: z.union([
     z.string(),
-    z
-      .function()
-      .args(z.record(z.string(), z.number()), z.custom<RunEvalOptions>())
-      .returns(z.number()),
+    z.function({
+      input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()],
+      output: z.number(),
+    }),
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
@@ -900,7 +921,7 @@ export const TestSuiteSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        message: 'defaultTest string must start with file://',
+        error: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
@@ -921,7 +942,7 @@ export const TestSuiteSchema = z.object({
       z
         .string()
         .refine((value) => value.startsWith('file://'), {
-          message: 'Extension must start with file://',
+          error: 'Extension must start with file://',
         })
         .refine(
           (value) => {
@@ -929,7 +950,7 @@ export const TestSuiteSchema = z.object({
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
-            message: 'Extension must be of the form file://path/to/file.py:function_name',
+            error: 'Extension must be of the form file://path/to/file.py:function_name',
           },
         )
         .refine(
@@ -941,7 +962,7 @@ export const TestSuiteSchema = z.object({
             );
           },
           {
-            message:
+            error:
               'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
           },
         ),
@@ -984,7 +1005,7 @@ export const TestSuiteSchema = z.object({
         .object({
           enabled: z.boolean(),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })
@@ -1037,7 +1058,7 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        message: 'defaultTest string must start with file://',
+        error: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
@@ -1093,23 +1114,23 @@ export const TestSuiteConfigSchema = z.object({
   // Tracing configuration
   tracing: z
     .object({
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().prefault(false),
 
       // OTLP receiver configuration
       otlp: z
         .object({
           http: z
             .object({
-              enabled: z.boolean().default(true),
-              port: z.number().default(4318),
-              host: z.string().default('0.0.0.0'),
-              acceptFormats: z.array(z.enum(['protobuf', 'json'])).default(['json']),
+              enabled: z.boolean().prefault(true),
+              port: z.number().prefault(4318),
+              host: z.string().prefault('0.0.0.0'),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json']),
             })
             .optional(),
           grpc: z
             .object({
-              enabled: z.boolean().default(false),
-              port: z.number().default(4317),
+              enabled: z.boolean().prefault(false),
+              port: z.number().prefault(4317),
             })
             .optional(),
         })
@@ -1118,17 +1139,17 @@ export const TestSuiteConfigSchema = z.object({
       // Storage configuration
       storage: z
         .object({
-          type: z.enum(['sqlite']).default('sqlite'),
-          retentionDays: z.number().default(30),
+          type: z.enum(['sqlite']).prefault('sqlite'),
+          retentionDays: z.number().prefault(30),
         })
         .optional(),
 
       // Optional: Forward traces to another collector
       forwarding: z
         .object({
-          enabled: z.boolean().default(false),
+          enabled: z.boolean().prefault(false),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })
@@ -1145,8 +1166,8 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
 })
   .refine(
     (data) => {
-      const hasTargets = Boolean(data.targets);
-      const hasProviders = Boolean(data.providers);
+      const hasTargets = data.targets !== undefined;
+      const hasProviders = data.providers !== undefined;
       return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
     },
     {

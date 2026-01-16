@@ -341,44 +341,63 @@ async function applyStrategies(
       strategy.id,
     );
 
+    // Filter out null/undefined
+    let resultTestCases = strategyTestCases.filter(
+      (t): t is NonNullable<typeof t> => t !== null && t !== undefined,
+    );
+
+    // Apply numTests cap if configured (with defensive check for NaN/Infinity)
+    const numTestsCap = strategy.config?.numTests;
+    if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+      if (numTestsCap === 0) {
+        logger.warn(
+          `[Strategy] ${strategy.id}: numTests=0 configured, skipping all tests for this strategy`,
+        );
+        resultTestCases = [];
+      } else if (resultTestCases.length > numTestsCap) {
+        logger.debug(
+          `[Strategy] ${strategy.id}: Capping ${resultTestCases.length} tests to numTests=${numTestsCap}`,
+        );
+        resultTestCases = resultTestCases.slice(0, numTestsCap);
+      }
+    }
+
     newTestCases.push(
-      ...strategyTestCases
-        .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-        .map((t) => {
-          // Re-extract individual keys from transformed JSON if inputs was used
-          const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
-          let updatedVars = t.vars;
-          if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
-            try {
-              const parsed = JSON.parse(String(t.vars[injectVar]));
-              updatedVars = { ...t.vars };
-              Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
-            } catch {
-              // If parsing fails, keep original vars
-            }
+      ...resultTestCases.map((t) => {
+        // Re-extract individual keys from transformed JSON if inputs was used
+        const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+        let updatedVars = t.vars;
+        if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
+          try {
+            const parsed = JSON.parse(String(t.vars[injectVar]));
+            updatedVars = { ...t.vars };
+            Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
+          } catch {
+            // If parsing fails, keep original vars
           }
-          return {
-            ...t,
-            vars: updatedVars,
-            metadata: {
-              ...(t?.metadata || {}),
-              // Don't set strategyId for retry strategy (it's not user-facing)
-              ...(strategy.id !== 'retry' && {
-                strategyId: t?.metadata?.strategyId || strategy.id,
-              }),
-              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-              ...(t?.metadata?.pluginConfig && {
-                pluginConfig: t.metadata.pluginConfig,
-              }),
-              ...(strategy.config && {
-                strategyConfig: {
-                  ...strategy.config,
-                  ...(t?.metadata?.strategyConfig || {}),
-                },
-              }),
-            },
-          };
-        }),
+        }
+        return {
+          ...t,
+          vars: updatedVars,
+          metadata: {
+            ...(t?.metadata || {}),
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
+            ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
+            ...(strategy.config && {
+              strategyConfig: {
+                ...strategy.config,
+                ...(t?.metadata?.strategyConfig || {}),
+              },
+            }),
+          },
+        };
+      }),
     );
 
     // Compute a display id for reporting (helpful for layered strategies)
@@ -398,13 +417,22 @@ async function applyStrategies(
         .filter((lang): lang is string => lang !== undefined),
     );
 
+    // Helper to apply numTests cap to requested count (with defensive check for NaN/Infinity)
+    const applyNumTestsCap = (calculatedRequested: number): number => {
+      const numTestsCap = strategy.config?.numTests;
+      if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+        return Math.min(calculatedRequested, numTestsCap);
+      }
+      return calculatedRequested;
+    };
+
     if (languagesInResults.size > 1) {
       // Strategy was applied to multilingual tests - break down by language
       // Don't show language suffix for English (en) - it's the default
       const resultsByLanguage: Record<string, { requested: number; generated: number }> = {};
 
       for (const lang of languagesInResults) {
-        const testsForLang = strategyTestCases.filter((t) => getLanguageForTestCase(t) === lang);
+        const testsForLang = resultTestCases.filter((t) => getLanguageForTestCase(t) === lang);
         const applicableForLang = applicableTestCases.filter(
           (t) => getLanguageForTestCase(t) === lang,
         );
@@ -417,7 +445,7 @@ async function applyStrategies(
         }
 
         resultsByLanguage[lang] = {
-          requested: applicableForLang.length * n,
+          requested: applyNumTestsCap(applicableForLang.length * n),
           generated: testsForLang.length,
         };
       }
@@ -429,8 +457,8 @@ async function applyStrategies(
     } else if (strategy.id === 'layer') {
       // Layer strategy: requested count is same as applicable test cases
       strategyResults[displayId] = {
-        requested: applicableTestCases.length,
-        generated: strategyTestCases.length,
+        requested: applyNumTestsCap(applicableTestCases.length),
+        generated: resultTestCases.length,
       };
     } else {
       // get an accurate 'Requested' count for strategies that add additional tests during generation
@@ -442,8 +470,8 @@ async function applyStrategies(
       }
 
       strategyResults[displayId] = {
-        requested: applicableTestCases.length * n,
-        generated: strategyTestCases.length,
+        requested: applyNumTestsCap(applicableTestCases.length * n),
+        generated: resultTestCases.length,
       };
     }
   }
@@ -463,32 +491,38 @@ export function getTestCount(
   totalPluginTests: number,
   _strategies: RedteamStrategyObject[],
 ): number {
+  let count: number;
+
   // Basic strategy either keeps original count or removes all tests
   if (strategy.id === 'basic') {
-    return strategy.config?.enabled === false ? 0 : totalPluginTests;
-  }
-
-  // Layer strategy: returns the same count as plugin tests
-  // (plugins already account for language multipliers)
-  if (strategy.id === 'layer') {
-    return totalPluginTests;
-  }
-
-  // Retry strategy doubles the plugin tests
-  if (strategy.id === 'retry') {
+    count = strategy.config?.enabled === false ? 0 : totalPluginTests;
+  } else if (strategy.id === 'layer') {
+    // Layer strategy: returns the same count as plugin tests
+    // (plugins already account for language multipliers)
+    count = totalPluginTests;
+  } else if (strategy.id === 'retry') {
+    // Retry strategy has its own numTests handling (additive semantics)
     const configuredNumTests = strategy.config?.numTests as number | undefined;
     const additionalTests = configuredNumTests ?? totalPluginTests;
     return totalPluginTests + additionalTests;
+  } else {
+    // Apply fan-out multiplier if this is a fan-out strategy
+    let n = 1;
+    if (typeof strategy.config?.n === 'number') {
+      n = strategy.config.n;
+    } else if (isFanoutStrategy(strategy.id)) {
+      n = getDefaultNFanout(strategy.id);
+    }
+    count = totalPluginTests * n;
   }
 
-  // Apply fan-out multiplier if this is a fan-out strategy
-  let n = 1;
-  if (typeof strategy.config?.n === 'number') {
-    n = strategy.config.n;
-  } else if (isFanoutStrategy(strategy.id)) {
-    n = getDefaultNFanout(strategy.id);
+  // Apply numTests cap if configured (for non-retry strategies, with defensive check)
+  const numTestsCap = strategy.config?.numTests;
+  if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+    count = Math.min(count, numTestsCap);
   }
-  return totalPluginTests * n;
+
+  return count;
 }
 
 /**
@@ -671,7 +705,7 @@ export async function synthesize({
     return true;
   });
 
-  validateStrategies(strategies);
+  await validateStrategies(strategies);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));

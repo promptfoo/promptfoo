@@ -256,6 +256,7 @@ export default function EvalsTable({
             </Tooltip>
           );
         },
+        size: 250,
       },
       {
         accessorKey: 'passRate',

@@ -181,6 +181,23 @@ Example `response-schema.json`:
 }
 ```
 
+You can also use nested file references for the schema itself:
+
+```json
+{
+  "type": "json_schema",
+  "name": "structured_output",
+  "schema": "file://./schemas/output-schema.json"
+}
+```
+
+Variable rendering is supported in file paths:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
+```
+
 #### Advanced Configuration
 
 **Instructions**: Provide system-level instructions to guide model behavior:

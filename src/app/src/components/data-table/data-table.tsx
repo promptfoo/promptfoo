@@ -183,7 +183,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: 40,
+      size: 48,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -232,7 +232,7 @@ export function DataTable<TData, TValue = unknown>({
         setPagination(updater);
       });
     },
-    getRowId: (row, index) => (getRowId ? `${getRowId(row)}-${index}` : String(index)),
+    getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -241,19 +241,45 @@ export function DataTable<TData, TValue = unknown>({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3">
-        <Spinner className="size-8" />
-        <p className="text-sm text-muted-foreground">Loading data...</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3">
+          <Spinner className="size-8" />
+          <p className="text-sm text-muted-foreground">Loading data...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
-        <AlertTriangle className="size-12 text-destructive" />
-        <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
-        <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+          <AlertTriangle className="size-12 text-destructive" />
+          <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+        </div>
       </div>
     );
   }
@@ -313,7 +339,7 @@ export function DataTable<TData, TValue = unknown>({
         style={maxHeight ? { maxHeight } : undefined}
       >
         <table className="w-full" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-muted/50 sticky top-0 z-10">
+          <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
@@ -325,7 +351,8 @@ export function DataTable<TData, TValue = unknown>({
                     <th
                       key={header.id}
                       className={cn(
-                        'px-4 py-3 text-left text-sm font-semibold relative',
+                        'py-3 text-left text-sm font-semibold relative',
+                        header.column.id === 'select' ? 'px-3' : 'px-4 overflow-hidden',
                         canSort && 'cursor-pointer select-none hover:bg-muted/80',
                       )}
                       style={{
@@ -334,10 +361,12 @@ export function DataTable<TData, TValue = unknown>({
                       onClick={header.column.getToggleSortingHandler()}
                     >
                       {header.isPlaceholder ? null : (
-                        <div className="flex items-center gap-1">
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="truncate">
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </span>
                           {canSort && (
-                            <span className="ml-1">
+                            <span className="shrink-0">
                               {sortDirection === 'asc' ? (
                                 <ArrowUp className="size-4" />
                               ) : sortDirection === 'desc' ? (
@@ -383,10 +412,10 @@ export function DataTable<TData, TValue = unknown>({
                     <td
                       key={cell.id}
                       className={cn(
-                        'px-4 py-3 text-sm',
+                        'py-3 text-sm',
                         cell.column.id === 'select'
-                          ? 'cursor-pointer'
-                          : 'overflow-hidden text-ellipsis',
+                          ? 'px-3 cursor-pointer'
+                          : 'px-4 overflow-hidden text-ellipsis',
                       )}
                       style={{ width: cell.column.getSize() }}
                       onClick={

@@ -1,0 +1,4 @@
+{
+  "type": "json_schema",
+  "schema": "file://customer_schema.json"
+}
