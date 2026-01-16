@@ -776,6 +776,11 @@ export async function synthesize({
               n = getDefaultNFanout(s.id);
             }
             testCount = totalPluginTests * n;
+            // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
+            const numTestsCap = s.numTests;
+            if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+              testCount = Math.min(testCount, numTestsCap);
+            }
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()

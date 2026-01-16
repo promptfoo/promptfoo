@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import { StrategyConfigSchema } from '../../src/redteam/types';
 import { RedteamStrategySchema } from '../../src/validators/redteam';
 
 import type {
