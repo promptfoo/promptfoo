@@ -53,9 +53,6 @@ describe('AddAssertionsDialog', () => {
       onApplied: mockOnApplied,
     });
 
-    // Click Add Assertion to show quick action picker
-    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
     // Click "Contains text" quick action
     await user.click(screen.getByText('Contains text'));
 
@@ -97,9 +94,6 @@ describe('AddAssertionsDialog', () => {
     });
     await user.click(testScopeOption);
 
-    // Click Add Assertion to show quick action picker
-    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
     // Click "Contains text" quick action
     await user.click(screen.getByText('Contains text'));
 
@@ -130,9 +124,6 @@ describe('AddAssertionsDialog', () => {
       onApplied: mockOnApplied,
     });
 
-    // Click Add Assertion to show quick action picker
-    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
     // Click "Contains text" quick action (requires a value)
     await user.click(screen.getByText('Contains text'));
 
@@ -158,9 +149,6 @@ describe('AddAssertionsDialog', () => {
       resultId: 'result-4',
       onApplied: mockOnApplied,
     });
-
-    // Click Add Assertion to show quick action picker
-    await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
 
     // Click "Is valid JSON" quick action (does not require a value)
     await user.click(screen.getByText('Is valid JSON'));

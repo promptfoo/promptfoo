@@ -21,7 +21,7 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import { Braces, ChevronDown, Equal, MoveRight, Plus, Search, Sparkles } from 'lucide-react';
+import { Braces, ChevronDown, Equal, MoveRight, Search, Sparkles } from 'lucide-react';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface PosthocAssertionsFormProps {
@@ -211,7 +211,6 @@ export default function PosthocAssertionsForm({
   onChange,
 }: PosthocAssertionsFormProps) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
-  const [showPicker, setShowPicker] = useState(false);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
@@ -227,7 +226,6 @@ export default function PosthocAssertionsForm({
     const newIndex = assertions.length;
     const next = [...assertions, { type: action.type, value: '' }];
     onChange(next);
-    setShowPicker(false);
 
     // Focus textarea for types that need a value
     if (!NO_VALUE_REQUIRED.has(action.type)) {
@@ -239,7 +237,6 @@ export default function PosthocAssertionsForm({
     const newIndex = assertions.length;
     const next = [...assertions, { type: 'contains' as AssertionType, value: '' }];
     onChange(next);
-    setShowPicker(false);
     setFocusIndex(newIndex);
   };
 
@@ -287,20 +284,16 @@ export default function PosthocAssertionsForm({
                   <SelectTrigger id={`assert-type-${index}`}>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px] w-[400px]">
+                  <SelectContent className="max-h-[300px]">
                     {ASSERT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type} textValue={type} className="py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            {type}
-                            {LLM_ASSERTION_TYPES.has(type) && (
-                              <span className="ml-1.5 text-xs text-muted-foreground">(LLM)</span>
-                            )}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {ASSERT_TYPE_DESCRIPTIONS.get(type)}
-                          </span>
-                        </div>
+                      <SelectItem key={type} value={type} textValue={type}>
+                        <span className="font-medium">{type}</span>
+                        {LLM_ASSERTION_TYPES.has(type) && (
+                          <span className="ml-1 text-xs text-muted-foreground">(LLM)</span>
+                        )}
+                        <span className="ml-2 text-muted-foreground">
+                          {ASSERT_TYPE_DESCRIPTIONS.get(type)}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -425,57 +418,40 @@ export default function PosthocAssertionsForm({
       )}
 
       {/* Quick Action Picker */}
-      {showPicker ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Select assertion type</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowPicker(false)}
-              className="h-7 px-2 text-muted-foreground"
+      <div className="space-y-3">
+        <span className="text-sm text-muted-foreground">Add assertion</span>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.type}
+              type="button"
+              onClick={() => handleQuickAction(action)}
+              className={cn(
+                'flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left',
+                'transition-all hover:bg-muted hover:border-muted-foreground/25',
+                'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+              )}
             >
-              Cancel
-            </Button>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.type}
-                type="button"
-                onClick={() => handleQuickAction(action)}
-                className={cn(
-                  'flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left',
-                  'transition-all hover:bg-muted hover:border-muted-foreground/25',
-                  'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+              <span className="text-foreground/70">{action.icon}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium">{action.label}</span>
+                {action.isLLM && (
+                  <span className="ml-1.5 text-xs text-muted-foreground">(LLM)</span>
                 )}
-              >
-                <span className="text-foreground/70">{action.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{action.label}</span>
-                  {action.isLLM && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">(LLM)</span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleCustomAssertion}
-            className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
-          >
-            Browse all 40+ assertion types →
-          </button>
+              </div>
+            </button>
+          ))}
         </div>
-      ) : (
-        <Button variant="outline" onClick={() => setShowPicker(true)} className="gap-2">
-          <Plus className="size-4" />
-          Add Assertion
-        </Button>
-      )}
+
+        <button
+          type="button"
+          onClick={handleCustomAssertion}
+          className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+        >
+          Browse all 40+ assertion types →
+        </button>
+      </div>
     </div>
   );
 }

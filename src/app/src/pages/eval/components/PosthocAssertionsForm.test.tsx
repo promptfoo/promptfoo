@@ -16,13 +16,11 @@ describe('PosthocAssertionsForm', () => {
     onChange = vi.fn();
   });
 
-  it('shows quick action picker when Add Assertion is clicked', () => {
+  it('shows quick action picker by default', () => {
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
-    // Quick action picker should appear
-    expect(screen.getByText('What do you want to check?')).toBeInTheDocument();
+    // Quick action picker should be visible by default
+    expect(screen.getByText('Add assertion')).toBeInTheDocument();
     expect(screen.getByText('Contains text')).toBeInTheDocument();
     expect(screen.getByText('Is valid JSON')).toBeInTheDocument();
   });
@@ -30,23 +28,17 @@ describe('PosthocAssertionsForm', () => {
   it('adds assertion when quick action is clicked', () => {
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
-    // Open quick action picker
-    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
     // Click "Contains text" quick action
     fireEvent.click(screen.getByText('Contains text'));
 
     expect(onChange).toHaveBeenCalledWith([{ type: 'icontains', value: '' }]);
   });
 
-  it('adds assertion via "All assertion types" button', () => {
+  it('adds assertion via "Browse all" button', () => {
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
-    // Open quick action picker
-    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
-
-    // Click "All assertion types"
-    fireEvent.click(screen.getByRole('button', { name: /All assertion types/i }));
+    // Click "Browse all 40+ assertion types"
+    fireEvent.click(screen.getByRole('button', { name: /Browse all 40\+ assertion types/i }));
 
     expect(onChange).toHaveBeenCalledWith([{ type: 'contains', value: '' }]);
   });
@@ -78,18 +70,14 @@ describe('PosthocAssertionsForm', () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('can cancel the quick action picker', () => {
+  it('keeps picker visible after adding an assertion', () => {
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
-    // Open quick action picker
-    fireEvent.click(screen.getByRole('button', { name: 'Add Assertion' }));
-    expect(screen.getByText('What do you want to check?')).toBeInTheDocument();
+    // Click "Is valid JSON" quick action
+    fireEvent.click(screen.getByText('Is valid JSON'));
 
-    // Cancel
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    // Picker should be hidden, Add Assertion button should be back
-    expect(screen.queryByText('What do you want to check?')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add Assertion' })).toBeInTheDocument();
+    // Picker should still be visible for adding more assertions
+    expect(screen.getByText('Add assertion')).toBeInTheDocument();
+    expect(screen.getByText('Contains text')).toBeInTheDocument();
   });
 });
