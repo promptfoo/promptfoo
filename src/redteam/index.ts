@@ -331,8 +331,31 @@ async function applyStrategies(
       return true;
     });
 
+    // Apply numTests pre-limit if configured (with defensive check for NaN/Infinity)
+    const numTestsLimit = strategy.config?.numTests;
+    if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit >= 0) {
+      // Early exit for numTests=0 - skip strategy entirely
+      if (numTestsLimit === 0) {
+        logger.warn(
+          `[Strategy] ${strategy.id}: numTests=0 configured, skipping strategy`,
+        );
+        continue;
+      }
+    }
+
+    // Pre-limit test cases before passing to strategy (avoids wasted computation)
+    let testCasesToProcess = applicableTestCases;
+    if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit > 0) {
+      if (applicableTestCases.length > numTestsLimit) {
+        logger.debug(
+          `[Strategy] ${strategy.id}: Pre-limiting ${applicableTestCases.length} tests to numTests=${numTestsLimit}`,
+        );
+        testCasesToProcess = applicableTestCases.slice(0, numTestsLimit);
+      }
+    }
+
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
-      applicableTestCases,
+      testCasesToProcess,
       injectVar,
       {
         ...(strategy.config || {}),
@@ -346,19 +369,13 @@ async function applyStrategies(
       (t): t is NonNullable<typeof t> => t !== null && t !== undefined,
     );
 
-    // Apply numTests cap if configured (with defensive check for NaN/Infinity)
-    const numTestsCap = strategy.config?.numTests;
-    if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
-      if (numTestsCap === 0) {
+    // Post-cap safety net for strategies that generate more outputs than inputs (1:N fan-out)
+    if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit > 0) {
+      if (resultTestCases.length > numTestsLimit) {
         logger.warn(
-          `[Strategy] ${strategy.id}: numTests=0 configured, skipping all tests for this strategy`,
+          `[Strategy] ${strategy.id}: Post-cap safety net applied (${resultTestCases.length} -> ${numTestsLimit}). Strategy generated more tests than input.`,
         );
-        resultTestCases = [];
-      } else if (resultTestCases.length > numTestsCap) {
-        logger.debug(
-          `[Strategy] ${strategy.id}: Capping ${resultTestCases.length} tests to numTests=${numTestsCap}`,
-        );
-        resultTestCases = resultTestCases.slice(0, numTestsCap);
+        resultTestCases = resultTestCases.slice(0, numTestsLimit);
       }
     }
 
@@ -758,6 +775,11 @@ export async function synthesize({
               n = getDefaultNFanout(s.id);
             }
             testCount = totalPluginTests * n;
+            // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
+            const numTestsCap = s.config?.numTests;
+            if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+              testCount = Math.min(testCount, numTestsCap);
+            }
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()

@@ -558,6 +558,29 @@ tools:
     max_num_results: 10
 ```
 
+#### Custom Endpoint Configuration
+
+You can configure a custom WebSocket endpoint for the Voice API, useful for proxies or regional endpoints:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Option 1: Full base URL (transforms https:// to wss://)
+      apiBaseUrl: 'https://my-proxy.example.com/v1'
+
+      # Option 2: Host only (builds https://{host}/v1)
+      # apiHost: 'my-proxy.example.com'
+```
+
+You can also use the `XAI_API_BASE_URL` environment variable:
+
+```sh
+export XAI_API_BASE_URL=https://my-proxy.example.com/v1
+```
+
+URL transformation: The provider automatically converts HTTP URLs to WebSocket URLs (`https://` → `wss://`, `http://` → `ws://`) and appends `/realtime` to reach the Voice API endpoint.
+
 #### Audio Configuration
 
 Configure input/output audio formats:
