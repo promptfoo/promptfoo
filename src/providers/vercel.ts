@@ -180,7 +180,7 @@ function handleApiError(error: unknown, timeoutMs: number, context: string): Pro
  * Vercel AI Gateway provider using the official Vercel AI SDK.
  *
  * Provider format: vercel:<provider>/<model>
- * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4
+ * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4.5
  */
 export class VercelAiProvider implements ApiProvider {
   public modelName: string;
