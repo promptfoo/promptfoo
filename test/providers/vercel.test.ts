@@ -665,7 +665,7 @@ describe('VercelAiEmbeddingProvider', () => {
       const result = await provider.callEmbeddingApi('Test text');
 
       expect(result).toEqual({
-        error: 'Embedding API call error: Embedding API error',
+        error: 'API call error: Embedding API error',
       });
     });
 
