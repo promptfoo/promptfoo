@@ -66,6 +66,13 @@
       "groupName": "GitHub Actions"
     },
     {
+      "description": "Use major.minor only for Ruby versions to auto-receive patches",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ruby"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "versioning": "ruby"
+    },
+    {
       "description": "Group IBM packages together across all dependency types",
       "matchPackagePatterns": ["^@ibm-cloud/", "^@ibm-generative-ai/", "^ibm-cloud-sdk-core$"],
       "matchDepTypes": [

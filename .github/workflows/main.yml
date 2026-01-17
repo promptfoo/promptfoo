@@ -578,7 +578,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ['3.0', '3.3']
+        ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -631,7 +631,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.23.6'
+          go-version: '1.25.6'
           check-latest: true
 
       - name: Run wrapper tests

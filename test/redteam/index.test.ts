@@ -1538,8 +1538,8 @@ describe('getTestCount', () => {
       const strategy = {
         id: 'layer',
         config: {
-          steps: ['base64', 'rot13'],
           numTests: 3,
+          steps: ['base64', 'rot13'],
         },
       };
       const result = getTestCount(strategy, 10, []);
@@ -1556,7 +1556,7 @@ describe('getTestCount', () => {
 
     it('should cap fan-out strategy with custom n and numTests', () => {
       // n=3 would produce 30 tests, but numTests caps at 15
-      const strategy = { id: 'jailbreak', config: { n: 3, numTests: 15 } };
+      const strategy = { id: 'jailbreak', config: { numTests: 15, n: 3 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(15);
     });
@@ -1570,7 +1570,7 @@ describe('getTestCount', () => {
 
     it('should handle numTests equal to fan-out calculated count (no-op)', () => {
       // Fan-out with explicit n=5 produces 50 tests, numTests also set to 50
-      const strategy = { id: 'jailbreak', config: { n: 5, numTests: 50 } };
+      const strategy = { id: 'jailbreak', config: { numTests: 50, n: 5 } };
       const result = getTestCount(strategy, 10, []);
       expect(result).toBe(50);
     });
@@ -2454,7 +2454,7 @@ describe('Language configuration', () => {
 
       // Should have logged warning
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('numTests=0 configured, skipping all tests'),
+        expect.stringContaining('numTests=0 configured, skipping strategy'),
       );
     });
 
@@ -2488,9 +2488,9 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Should have logged debug about capping
+      // Should have logged debug about pre-limiting
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Capping 5 tests to numTests=2'),
+        expect.stringContaining('Pre-limiting 5 tests to numTests=2'),
       );
     });
 
@@ -2527,6 +2527,117 @@ describe('Language configuration', () => {
       // All 5 strategy tests should be present (no capping)
       const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'base64');
       expect(strategyTests.length).toBe(5);
+    });
+
+    it('should pass pre-limited tests to strategy (not all tests)', async () => {
+      // This is the key test: verify strategy receives limited input, not all tests
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(10)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      await synthesize({
+        numTests: 10,
+        plugins: [{ id: 'test-plugin', numTests: 10 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 3 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // KEY ASSERTION: Strategy should receive only 3 tests, not all 10
+      // This verifies pre-limiting works (avoids wasted computation)
+      expect(mockStrategyAction).toHaveBeenCalled();
+      const receivedTests = mockStrategyAction.mock.calls[0][0];
+      expect(receivedTests.length).toBe(3);
+    });
+
+    it('should not call strategy when numTests is 0', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 0 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Strategy should NOT be called when numTests=0 (early exit)
+      expect(mockStrategyAction).not.toHaveBeenCalled();
+    });
+
+    it('should apply post-cap safety net for 1:N fan-out strategies', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(5)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      // Mock strategy that generates 2x the input (1:2 fan-out)
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.flatMap((tc: any) => [
+          { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'a' } },
+          { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'b' } },
+        ]),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'multilingual',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        numTests: 5,
+        plugins: [{ id: 'test-plugin', numTests: 5 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'multilingual', config: { numTests: 3 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Strategy receives 3 tests (pre-limit), generates 6 (2x fan-out), capped to 3 (post-cap)
+      const strategyTests = result.testCases.filter(
+        (tc) => tc.metadata?.strategyId === 'multilingual',
+      );
+      expect(strategyTests.length).toBe(3);
+
+      // Should have logged warning about post-cap safety net
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Post-cap safety net applied'),
+      );
     });
   });
 });
