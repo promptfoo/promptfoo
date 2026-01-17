@@ -7,7 +7,8 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-5.2-codex
+      model_reasoning_effort: high
 
 tests:
   - vars: {}
