@@ -327,6 +327,7 @@ export class VercelAiProvider implements ApiProvider {
         topK?: number;
         frequencyPenalty?: number;
         presencePenalty?: number;
+        stopSequences?: string[];
         abortSignal?: AbortSignal;
       } = {
         model,
@@ -352,6 +353,9 @@ export class VercelAiProvider implements ApiProvider {
       }
       if (this.config.presencePenalty !== undefined) {
         generateOptions.presencePenalty = this.config.presencePenalty;
+      }
+      if (this.config.stopSequences) {
+        generateOptions.stopSequences = this.config.stopSequences;
       }
 
       // Set up timeout using AbortController
