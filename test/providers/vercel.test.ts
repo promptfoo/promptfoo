@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
-  VercelAiProvider,
-  VercelAiEmbeddingProvider,
   createVercelProvider,
+  VercelAiEmbeddingProvider,
+  VercelAiProvider,
 } from '../../src/providers/vercel';
 
 // Mock the cache module
@@ -19,7 +19,7 @@ vi.mock('ai', () => {
     const gateway = Object.assign(
       vi.fn((modelName: string) => ({ modelName })),
       {
-        textEmbeddingModel: vi.fn((modelName: string) => ({ modelName, type: 'embedding' })),
+        embeddingModel: vi.fn((modelName: string) => ({ modelName, type: 'embedding' })),
       },
     );
     return gateway;
@@ -96,6 +96,66 @@ describe('VercelAiProvider', () => {
     });
   });
 
+  describe('configuration options', () => {
+    it('should store apiKeyEnvar in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { apiKeyEnvar: 'MY_CUSTOM_API_KEY' },
+      });
+      expect(provider.config.apiKeyEnvar).toBe('MY_CUSTOM_API_KEY');
+    });
+
+    it('should store headers in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { headers: { 'X-Custom-Header': 'test-value' } },
+      });
+      expect(provider.config.headers).toEqual({ 'X-Custom-Header': 'test-value' });
+    });
+
+    it('should store baseUrl in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { baseUrl: 'https://custom-gateway.example.com' },
+      });
+      expect(provider.config.baseUrl).toBe('https://custom-gateway.example.com');
+    });
+
+    it('should store all config options together', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          apiKeyEnvar: 'MY_API_KEY',
+          baseUrl: 'https://custom.example.com',
+          headers: { 'X-Test': 'value' },
+          temperature: 0.5,
+          maxTokens: 1000,
+          topP: 0.9,
+          topK: 40,
+          frequencyPenalty: 0.1,
+          presencePenalty: 0.2,
+          stopSequences: ['\n\n'],
+          timeout: 30000,
+          streaming: true,
+          responseSchema: { type: 'object' },
+        },
+      });
+      expect(provider.config).toEqual({
+        apiKey: 'test-key',
+        apiKeyEnvar: 'MY_API_KEY',
+        baseUrl: 'https://custom.example.com',
+        headers: { 'X-Test': 'value' },
+        temperature: 0.5,
+        maxTokens: 1000,
+        topP: 0.9,
+        topK: 40,
+        frequencyPenalty: 0.1,
+        presencePenalty: 0.2,
+        stopSequences: ['\n\n'],
+        timeout: 30000,
+        streaming: true,
+        responseSchema: { type: 'object' },
+      });
+    });
+  });
+
   describe('callApi() - non-streaming', () => {
     it('should return text response', async () => {
       const { generateText } = await import('ai');
@@ -137,6 +197,31 @@ describe('VercelAiProvider', () => {
         total: 20,
         numRequests: 1,
       });
+    });
+
+    it('should parse JSON chat messages from prompt', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        text: 'Response to chat',
+        usage: { promptTokens: 10, completionTokens: 15 },
+        finishReason: 'stop',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o');
+      const chatPrompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello!' },
+      ]);
+      await provider.callApi(chatPrompt);
+
+      expect(vi.mocked(generateText)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'Hello!' },
+          ],
+        }),
+      );
     });
 
     it('should pass config options to generateText', async () => {
