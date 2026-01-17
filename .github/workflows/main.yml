@@ -85,10 +85,11 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.1
+          ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -383,7 +384,7 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.1
@@ -418,7 +419,7 @@ jobs:
         with:
           python-version: 3.14
 
-      - name: Use Ruby 3.3
+      - name: Use Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.1
