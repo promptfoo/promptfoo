@@ -766,10 +766,10 @@ async function generateAboutTemplate() {
               color: 'rgba(255, 255, 255, 0.7)',
               marginBottom: 50,
             },
-            children: 'Building tools to protect AI at scale',
+            children: 'Helping developers and enterprises build secure AI applications',
           },
         },
-        // Investor line
+        // Trust signal - consistent with other pages
         {
           type: 'div',
           props: {
@@ -787,7 +787,7 @@ async function generateAboutTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: 'Backed by',
+                  children: 'Trusted by',
                 },
               },
               {
@@ -798,7 +798,7 @@ async function generateAboutTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: 'Insight Partners, a16z',
+                  children: `${constants.fortune500Count} Fortune 500 companies`,
                 },
               },
               {
@@ -808,7 +808,7 @@ async function generateAboutTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: `& ${constants.userCountShort}+ developers`,
+                  children: `and ${constants.userCountShort}+ developers`,
                 },
               },
             ],
@@ -1027,7 +1027,7 @@ async function generatePressTemplate() {
             children: 'News, resources, and media information',
           },
         },
-        // Trust signal
+        // Trust signal - consistent with other pages
         {
           type: 'div',
           props: {
@@ -1045,7 +1045,7 @@ async function generatePressTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: 'Leading AI security with',
+                  children: 'Trusted by',
                 },
               },
               {
@@ -1056,7 +1056,7 @@ async function generatePressTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: `${constants.userCountShort}+ developers`,
+                  children: `${constants.fortune500Count} Fortune 500 companies`,
                 },
               },
               {
@@ -1066,7 +1066,7 @@ async function generatePressTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: 'worldwide',
+                  children: `and ${constants.userCountShort}+ developers`,
                 },
               },
             ],
