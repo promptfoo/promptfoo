@@ -5,9 +5,13 @@ prompts:
   - 'Write a Python function that calculates the factorial of a number. Output only the code.'
 
 providers:
+  # gpt-5.2-codex is the default model as of SDK v0.81.0
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-5.2-codex
+      # Reasoning effort can be: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'
+      # Note: gpt-5.1-codex only supports 'low', 'medium', 'high'
+      model_reasoning_effort: high
 
 tests:
   - vars: {}

@@ -179,7 +179,27 @@ export interface OpenAICodexSDKConfig {
    * Default: false (only traces at provider level, not CLI internals)
    */
   deep_tracing?: boolean;
+
+  /**
+   * Local image paths to include with the prompt.
+   * Images are sent to the agent for visual analysis alongside the text prompt.
+   *
+   * Supports:
+   * - Absolute paths: /path/to/image.png
+   * - Config-relative paths: ./images/screenshot.png (resolved from config file directory)
+   * - file:// prefix: file://images/screenshot.png
+   *
+   * @since 0.81.0
+   */
+  images?: string[];
 }
+
+/**
+ * Input type for the Codex SDK - supports text and images
+ */
+type CodexUserInput = { type: 'text'; text: string } | { type: 'local_image'; path: string };
+
+type CodexInput = string | CodexUserInput[];
 
 /**
  * Helper to load the OpenAI Codex SDK ESM module
@@ -501,13 +521,67 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return thread;
   }
 
+  /**
+   * Resolve a file path, supporting file:// prefix and config-relative paths.
+   * Follows promptfoo conventions: paths are relative to the config file directory.
+   */
+  private resolveFilePath(filePath: string): string {
+    // Strip file:// prefix if present
+    const cleanPath = filePath.startsWith('file://') ? filePath.slice(7) : filePath;
+
+    // Absolute paths used as-is, relative paths resolved against config directory
+    if (path.isAbsolute(cleanPath)) {
+      return cleanPath;
+    }
+
+    return path.resolve(cliState.basePath || process.cwd(), cleanPath);
+  }
+
+  /**
+   * Build the input for the Codex SDK, optionally including images.
+   * Returns either a plain string (for text-only) or an array of UserInput objects.
+   *
+   * Image paths support:
+   * - Absolute paths: /path/to/image.png
+   * - Config-relative paths: ./images/screenshot.png
+   * - file:// prefix: file://images/screenshot.png
+   *
+   * @since 0.81.0 - Added support for images
+   */
+  private buildInput(prompt: string, config: OpenAICodexSDKConfig): CodexInput {
+    if (!config.images || config.images.length === 0) {
+      return prompt;
+    }
+
+    const inputs: CodexUserInput[] = [{ type: 'text', text: prompt }];
+
+    for (const imagePath of config.images) {
+      const resolvedPath = this.resolveFilePath(imagePath);
+
+      if (!fs.existsSync(resolvedPath)) {
+        logger.warn(`[CodexSDK] Image file not found: ${resolvedPath}`);
+        continue;
+      }
+
+      inputs.push({ type: 'local_image', path: resolvedPath });
+    }
+
+    if (inputs.length > 1) {
+      logger.debug('[CodexSDK] Built input with images', {
+        imageCount: inputs.length - 1,
+      });
+    }
+
+    return inputs;
+  }
+
   private async runStreaming(
     thread: any,
-    prompt: string,
+    input: CodexInput,
     runOptions: any,
     callOptions?: CallApiOptionsParams,
   ): Promise<any> {
-    const { events } = await thread.runStreamed(prompt, runOptions);
+    const { events } = await thread.runStreamed(input, runOptions);
     const items: any[] = [];
     let usage: any = undefined;
     const tracer = trace.getTracer('promptfoo.codex-sdk');
@@ -524,8 +598,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Track all prompts/messages in the conversation
     const conversationMessages: Array<{ role: string; content: string }> = [];
 
-    // Add the initial user prompt
-    conversationMessages.push({ role: 'user', content: prompt });
+    // Add the initial user prompt - handle both string and array input
+    const promptText =
+      typeof input === 'string' ? input : input.find((i) => i.type === 'text')?.text || '';
+    conversationMessages.push({ role: 'user', content: promptText });
 
     try {
       for await (const event of events) {
@@ -1080,11 +1156,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       runOptions.signal = callOptions.abortSignal;
     }
 
+    // Build input with optional images (v0.81.0+)
+    const input = this.buildInput(prompt, config);
+
     // Execute turn
     try {
       const turn = config.enable_streaming
-        ? await this.runStreaming(thread, prompt, runOptions, callOptions)
-        : await thread.run(prompt, runOptions);
+        ? await this.runStreaming(thread, input, runOptions, callOptions)
+        : await thread.run(input, runOptions);
 
       // Extract response
       const output = turn.finalResponse || '';

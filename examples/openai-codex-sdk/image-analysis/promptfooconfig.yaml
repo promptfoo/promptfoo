@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Codex SDK with image input'
+
+prompts:
+  - 'Describe what you see in the provided image.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2-codex
+      model_reasoning_effort: high
+      # Image paths are relative to this config file
+      images:
+        - ./test-image.png
+
+tests:
+  - vars: {}
+    assert:
+      - type: llm-rubric
+        value: 'Should describe the image content or mention that it is a simple/minimal image'

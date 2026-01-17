@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Comprehensive Codex SDK feature testing'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Basic provider with default settings
+  - id: openai:codex-sdk
+    label: codex-basic
+    config:
+      model: gpt-5.2-codex
+      model_reasoning_effort: high
+
+  # Provider with minimal reasoning (faster, cheaper)
+  - id: openai:codex-sdk
+    label: codex-fast
+    config:
+      model: gpt-5.2-codex
+      model_reasoning_effort: low
+
+  # Provider with maximum reasoning (more thorough)
+  - id: openai:codex-sdk
+    label: codex-thorough
+    config:
+      model: gpt-5.2-codex
+      model_reasoning_effort: xhigh
+
+tests:
+  # Test 1: Basic code generation
+  - vars:
+      prompt: 'Write a Python function that reverses a string. Output only the code.'
+    assert:
+      - type: contains
+        value: 'def'
+      - type: llm-rubric
+        value: 'Should generate working Python code that reverses a string'
+
+  # Test 2: Multi-file code understanding
+  - vars:
+      prompt: 'What is the primary purpose of this codebase? Summarize in one sentence.'
+    assert:
+      - type: is-json
+        metric: notJson
+        transform: try { JSON.parse(output); return "yes" } catch { return "no" }
+        threshold: 0
+      - type: llm-rubric
+        value: 'Should provide a reasonable summary of the codebase purpose'
+
+  # Test 3: Code analysis with reasoning
+  - vars:
+      prompt: 'Find any potential bugs or issues in the code and suggest fixes. If none found, say "No issues found".'
+    assert:
+      - type: llm-rubric
+        value: 'Should either identify specific issues or clearly state no issues were found'

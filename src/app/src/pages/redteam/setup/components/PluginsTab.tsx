@@ -52,10 +52,10 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
-const ErrorFallback = ({ error }: { error: Error }) => (
+const ErrorFallback = ({ error }: { error: unknown }) => (
   <div role="alert">
     <p>Something went wrong:</p>
-    <pre>{error.message}</pre>
+    <pre>{error instanceof Error ? error.message : String(error)}</pre>
   </div>
 );
 
