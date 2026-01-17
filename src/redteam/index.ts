@@ -336,9 +336,7 @@ async function applyStrategies(
     if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit >= 0) {
       // Early exit for numTests=0 - skip strategy entirely
       if (numTestsLimit === 0) {
-        logger.warn(
-          `[Strategy] ${strategy.id}: numTests=0 configured, skipping strategy`,
-        );
+        logger.warn(`[Strategy] ${strategy.id}: numTests=0 configured, skipping strategy`);
         continue;
       }
     }
@@ -777,7 +775,11 @@ export async function synthesize({
             testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
             const numTestsCap = s.config?.numTests;
-            if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
+            if (
+              typeof numTestsCap === 'number' &&
+              Number.isFinite(numTestsCap) &&
+              numTestsCap >= 0
+            ) {
               testCount = Math.min(testCount, numTestsCap);
             }
             return `${s.id} (${formatTestCount(testCount, true)})`;

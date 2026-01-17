@@ -1546,7 +1546,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     // If a refresh is already in progress, wait for it instead of making a new request
-    if (this.tokenRefreshPromise) {
+    if (this.tokenRefreshPromise != null) {
       logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
       try {
         await this.tokenRefreshPromise;
@@ -1725,7 +1725,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     // If agent creation is in progress, wait for it
-    if (this.httpsAgentPromise) {
+    if (this.httpsAgentPromise != null) {
       return this.httpsAgentPromise;
     }
 
