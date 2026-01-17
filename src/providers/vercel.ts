@@ -129,46 +129,22 @@ function mapTokenUsage(usage?: {
 }
 
 /**
- * Common generation options used by all API methods.
+ * Picks defined generation options from config.
  */
-interface CommonGenerateOptions {
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  topK?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  stopSequences?: string[];
-  abortSignal?: AbortSignal;
-}
-
-/**
- * Builds common generation options from config.
- */
-function buildGenerateOptions(config: VercelAiConfig): CommonGenerateOptions {
-  const options: CommonGenerateOptions = {};
-  if (config.temperature !== undefined) {
-    options.temperature = config.temperature;
-  }
-  if (config.maxTokens !== undefined) {
-    options.maxTokens = config.maxTokens;
-  }
-  if (config.topP !== undefined) {
-    options.topP = config.topP;
-  }
-  if (config.topK !== undefined) {
-    options.topK = config.topK;
-  }
-  if (config.frequencyPenalty !== undefined) {
-    options.frequencyPenalty = config.frequencyPenalty;
-  }
-  if (config.presencePenalty !== undefined) {
-    options.presencePenalty = config.presencePenalty;
-  }
-  if (config.stopSequences) {
-    options.stopSequences = config.stopSequences;
-  }
-  return options;
+function pickGenerateOptions(config: VercelAiConfig) {
+  const { temperature, maxTokens, topP, topK, frequencyPenalty, presencePenalty, stopSequences } =
+    config;
+  return Object.fromEntries(
+    Object.entries({
+      temperature,
+      maxTokens,
+      topP,
+      topK,
+      frequencyPenalty,
+      presencePenalty,
+      stopSequences,
+    }).filter(([, v]) => v !== undefined),
+  );
 }
 
 /**
@@ -204,7 +180,7 @@ function handleApiError(error: unknown, timeoutMs: number, context: string): Pro
  * Vercel AI Gateway provider using the official Vercel AI SDK.
  *
  * Provider format: vercel:<provider>/<model>
- * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4-20250514
+ * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4
  */
 export class VercelAiProvider implements ApiProvider {
   public modelName: string;
@@ -267,7 +243,7 @@ export class VercelAiProvider implements ApiProvider {
       const result = streamText({
         model: gateway(this.modelName),
         messages,
-        ...buildGenerateOptions(this.config),
+        ...pickGenerateOptions(this.config),
         abortSignal: signal,
       });
 
@@ -319,7 +295,7 @@ export class VercelAiProvider implements ApiProvider {
         model: gateway(this.modelName),
         messages,
         schema,
-        ...buildGenerateOptions(this.config),
+        ...pickGenerateOptions(this.config),
         abortSignal: signal,
       });
 
@@ -406,7 +382,7 @@ export class VercelAiProvider implements ApiProvider {
       const result = await generateText({
         model: gateway(this.modelName),
         messages,
-        ...buildGenerateOptions(this.config),
+        ...pickGenerateOptions(this.config),
         abortSignal: signal,
       });
 

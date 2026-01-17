@@ -28,7 +28,7 @@ The Vercel provider uses the format: `vercel:<provider>/<model>`
 ```yaml
 providers:
   - vercel:openai/gpt-4o-mini
-  - vercel:anthropic/claude-sonnet-4-20250514
+  - vercel:anthropic/claude-sonnet-4
   - vercel:google/gemini-2.0-flash
 ```
 
@@ -57,7 +57,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4
     config:
       # Authentication
       apiKey: ${VERCEL_AI_GATEWAY_API_KEY}
@@ -142,7 +142,7 @@ Enable streaming for real-time responses:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4
     config:
       streaming: true
       maxTokens: 2000
@@ -152,15 +152,15 @@ providers:
 
 The Vercel AI Gateway supports models from these providers:
 
-| Provider   | Example Models                                                   |
-| ---------- | ---------------------------------------------------------------- |
-| OpenAI     | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview`       |
-| Anthropic  | `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-haiku` |
-| Google     | `google/gemini-2.0-flash`, `google/gemini-1.5-pro`               |
-| Mistral    | `mistral/mistral-large`, `mistral/mistral-small`                 |
-| Cohere     | `cohere/command-r-plus`, `cohere/command-r`                      |
-| Groq       | `groq/llama-3.1-70b-versatile`                                   |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar`                       |
+| Provider   | Example Models                                             |
+| ---------- | ---------------------------------------------------------- |
+| OpenAI     | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview` |
+| Anthropic  | `anthropic/claude-sonnet-4`, `anthropic/claude-3-haiku`    |
+| Google     | `google/gemini-2.0-flash`, `google/gemini-1.5-pro`         |
+| Mistral    | `mistral/mistral-large`, `mistral/mistral-small`           |
+| Cohere     | `cohere/command-r-plus`, `cohere/command-r`                |
+| Groq       | `groq/llama-3.1-70b-versatile`                             |
+| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar`                 |
 
 For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers).
 
@@ -198,7 +198,7 @@ providers:
   - id: vercel:openai/gpt-4o-mini
     config:
       temperature: 0.7
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4
     config:
       temperature: 0.7
   - id: vercel:google/gemini-2.0-flash
