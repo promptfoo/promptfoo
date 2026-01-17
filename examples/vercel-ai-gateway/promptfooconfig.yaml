@@ -23,7 +23,7 @@ providers:
       maxTokens: 200
 
   # Anthropic via Vercel AI Gateway
-  - id: vercel:anthropic/claude-3-5-haiku-latest
+  - id: vercel:anthropic/claude-3.5-haiku
     config:
       temperature: 0.7
       maxTokens: 200
