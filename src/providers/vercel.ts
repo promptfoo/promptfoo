@@ -42,7 +42,6 @@ export interface VercelAiConfig {
   stopSequences?: string[];
 
   // Request settings
-  maxRetries?: number;
   timeout?: number;
   headers?: Record<string, string>;
 
