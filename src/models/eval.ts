@@ -1083,6 +1083,15 @@ export default class Eval {
     // Fetch all results for these test indices in a single query
     const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
 
+    // Check if any result has metadata.sessionId and add to vars header if not present
+    const hasSessionIdInMetadata = allResults.some(
+      (result) => result.metadata?.sessionId && !result.testCase?.vars?.sessionId,
+    );
+    if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      vars.push('sessionId');
+      vars.sort();
+    }
+
     // Group results by test index
     const resultsByTestIdx = new Map<number, EvalResult[]>();
     for (const result of allResults) {
