@@ -132,9 +132,8 @@ tests:
   - vars:
       text: 'I love this product!'
     assert:
-      - type: equals
-        value: positive
-        transform: output.sentiment
+      - type: javascript
+        value: output.sentiment === 'positive'
 ```
 
 ## Streaming
