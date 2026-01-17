@@ -596,7 +596,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { embed } = await import('ai');
 
-      const model = gateway.textEmbeddingModel(this.modelName);
+      const model = gateway.embeddingModel(this.modelName);
 
       // Set up timeout using AbortController
       const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
