@@ -76,7 +76,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 

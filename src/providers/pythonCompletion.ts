@@ -68,7 +68,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 

@@ -576,7 +576,7 @@ async function processJsonResults(
   }
 
   // Now wait for share to complete and show spinner (like evals)
-  if (sharePromise) {
+  if (sharePromise != null) {
     if (process.stdout.isTTY && !isCI()) {
       const spinner = ora({
         text: 'Sharing model audit...',
