@@ -515,7 +515,8 @@ describe('VercelAiProvider', () => {
       expect(vi.mocked(generateObject)).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: [{ role: 'user', content: 'Generate data' }],
-          schema: testSchema,
+          // OpenAI requires additionalProperties: false, so provider auto-adds it
+          schema: { ...testSchema, additionalProperties: false },
           temperature: 0.5,
         }),
       );

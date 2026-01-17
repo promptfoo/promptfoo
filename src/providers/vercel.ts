@@ -313,8 +313,16 @@ export class VercelAiProvider implements ApiProvider {
       const model = gateway(this.modelName);
 
       // Convert JSON Schema to AI SDK schema format
+      // OpenAI requires additionalProperties: false for strict mode
+      const schemaWithDefaults = {
+        ...this.config.responseSchema,
+        additionalProperties:
+          this.config.responseSchema?.additionalProperties !== undefined
+            ? this.config.responseSchema.additionalProperties
+            : false,
+      };
       const schema = jsonSchema<Record<string, unknown>>(
-        this.config.responseSchema as Parameters<typeof jsonSchema>[0],
+        schemaWithDefaults as Parameters<typeof jsonSchema>[0],
       );
 
       const generateOptions: {
