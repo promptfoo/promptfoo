@@ -1,4 +1,4 @@
-import { lazy, useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -49,7 +49,20 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       {import.meta.env.VITE_PROMPTFOO_LAUNCHER && (
-        <Route path="/launcher" element={<LauncherPage />} />
+        <Route
+          path="/launcher"
+          element={
+            <Suspense
+              fallback={
+                <div className="flex h-screen items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              }
+            >
+              <LauncherPage />
+            </Suspense>
+          }
+        />
       )}
       <Route path="/" element={<PageShell />}>
         <Route element={<TelemetryTracker />}>
