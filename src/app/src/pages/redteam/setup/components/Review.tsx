@@ -324,14 +324,27 @@ export default function Review({
   }, [config.plugins]);
 
   const intents = useMemo(() => {
-    return config.plugins
-      .filter(
-        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
-      )
-      .map((p) => p.config.intent)
-      .flat()
-      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
+    const result: string[] = [];
+
+    for (const plugin of config.plugins) {
+      if (typeof plugin !== 'object' || plugin.id !== 'intent') {
+        continue;
+      }
+
+      const intent = plugin.config?.intent;
+
+      if (Array.isArray(intent)) {
+        for (const item of intent) {
+          if (typeof item === 'string' && item.trim() !== '') {
+            result.push(item);
+          }
+        }
+      } else if (typeof intent === 'string' && intent.trim() !== '') {
+        result.push(intent);
+      }
+    }
+
+    return result;
   }, [config.plugins]);
 
   const [expanded, setExpanded] = React.useState(false);
@@ -642,7 +655,7 @@ export default function Review({
                   </Badge>
                 ))}
               </div>
-              {pluginSummary.length === 0 && (
+              {pluginSummary.length === 0 ? (
                 <>
                   <Alert variant="warning" className="mt-4">
                     <AlertContent>
@@ -656,7 +669,7 @@ export default function Review({
                     Add a plugin
                   </Button>
                 </>
-              )}
+              ) : null}
             </CardContent>
           </Card>
 
@@ -709,8 +722,8 @@ export default function Review({
                   </Badge>
                 ))}
               </div>
-              {(strategySummary.length === 0 ||
-                (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
+              {strategySummary.length === 0 ||
+              (strategySummary.length === 1 && strategySummary[0][0] === 'Basic') ? (
                 <>
                   <Alert variant="warning" className="mt-4">
                     <AlertContent>
@@ -725,12 +738,12 @@ export default function Review({
                     Add more strategies
                   </Button>
                 </>
-              )}
+              ) : null}
             </CardContent>
           </Card>
 
           {/* Custom Policies Card */}
-          {customPolicies.length > 0 && (
+          {customPolicies.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Custom Policies ({customPolicies.length})</CardTitle>
@@ -788,10 +801,10 @@ export default function Review({
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Intents Card */}
-          {intents.length > 0 && (
+          {intents.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Intents ({intents.length})</CardTitle>
@@ -834,7 +847,7 @@ export default function Review({
                       </Button>
                     </div>
                   ))}
-                  {intents.length > 5 && (
+                  {intents.length > 5 ? (
                     <Button
                       variant="link"
                       size="sm"
@@ -843,11 +856,11 @@ export default function Review({
                     >
                       {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </div>
 
         {/* Collapsible Sections */}
@@ -886,7 +899,7 @@ export default function Review({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="p-4">
-                {parsedPurposeSections.length > 1 && (
+                {parsedPurposeSections.length > 1 ? (
                   <div className="mb-2 flex justify-end">
                     <Button
                       variant="ghost"
@@ -906,7 +919,7 @@ export default function Review({
                         : 'Expand All'}
                     </Button>
                   </div>
-                )}
+                ) : null}
 
                 {(!config.purpose?.trim() || config.purpose.length < 100) &&
                 !isFoundationModelProvider(config.target.id) ? (
@@ -974,16 +987,16 @@ export default function Review({
                   <p className="text-sm text-muted-foreground">Not specified</p>
                 )}
                 {config.purpose &&
-                  parsedPurposeSections.length === 0 &&
-                  config.purpose.split('\n').length > 6 && (
-                    <button
-                      type="button"
-                      className="mt-1 text-xs text-primary hover:underline"
-                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    >
-                      {isPurposeExpanded ? 'Show less' : 'Show more'}
-                    </button>
-                  )}
+                parsedPurposeSections.length === 0 &&
+                config.purpose.split('\n').length > 6 ? (
+                  <button
+                    type="button"
+                    className="mt-1 text-xs text-primary hover:underline"
+                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  >
+                    {isPurposeExpanded ? 'Show less' : 'Show more'}
+                  </button>
+                ) : null}
 
                 {config.testGenerationInstructions && (
                   <div className="mt-4">
@@ -998,15 +1011,15 @@ export default function Review({
                       {config.testGenerationInstructions}
                     </p>
                     {config.testGenerationInstructions &&
-                      config.testGenerationInstructions.split('\n').length > 6 && (
-                        <button
-                          type="button"
-                          className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                        >
-                          {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                        </button>
-                      )}
+                    config.testGenerationInstructions.split('\n').length > 6 ? (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs text-primary hover:underline"
+                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                      >
+                        {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1175,7 +1188,7 @@ export default function Review({
                 )}
               </div>
             </div>
-            {logs.length > 0 && <LogViewer logs={logs} />}
+            {logs.length > 0 ? <LogViewer logs={logs} /> : null}
           </div>
         </Card>
 

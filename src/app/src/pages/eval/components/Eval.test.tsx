@@ -11,7 +11,22 @@ const { mockSetSearchParams, mockShowToast } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
 }));
 
+const { mockSocketOn, mockSocketOff, mockSocketDisconnect, mockSocketIo } = vi.hoisted(() => ({
+  mockSocketOn: vi.fn().mockReturnThis(),
+  mockSocketOff: vi.fn(),
+  mockSocketDisconnect: vi.fn(),
+  mockSocketIo: vi.fn(() => ({
+    on: mockSocketOn,
+    off: mockSocketOff,
+    disconnect: mockSocketDisconnect,
+  })),
+}));
+
 vi.mock('@app/utils/api');
+vi.mock('@app/constants', async () => {
+  const actual = await vi.importActual<typeof import('@app/constants')>('@app/constants');
+  return { ...actual, IS_RUNNING_LOCALLY: true };
+});
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
     showToast: mockShowToast,
@@ -40,10 +55,7 @@ vi.mock('@app/stores/apiConfig', () => ({
   default: () => ({ apiBaseUrl: 'http://localhost' }),
 }));
 vi.mock('socket.io-client', () => ({
-  io: vi.fn(() => ({
-    on: vi.fn().mockReturnThis(),
-    disconnect: vi.fn(),
-  })),
+  io: mockSocketIo,
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -118,6 +130,10 @@ describe('Eval', () => {
     baseMockResultsViewSettings.setInComparisonMode.mockClear();
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
     mockShowToast.mockClear();
+    mockSocketOn.mockClear();
+    mockSocketOff.mockClear();
+    mockSocketDisconnect.mockClear();
+    mockSocketIo.mockClear();
 
     vi.useFakeTimers();
 
@@ -474,5 +490,26 @@ describe('Eval', () => {
 
     // Should call setSearchParams with replace: true when applying filters
     expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+  });
+
+  it('should remove socket listeners on cleanup', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    expect(mockSocketOff).not.toHaveBeenCalled();
+
+    await act(async () => {
+      unmount();
+    });
+
+    expect(mockSocketOff).toHaveBeenCalledTimes(2);
+    expect(mockSocketOff).toHaveBeenNthCalledWith(1, 'init');
+    expect(mockSocketOff).toHaveBeenNthCalledWith(2, 'update');
+    expect(mockSocketDisconnect).toHaveBeenCalledTimes(1);
   });
 });

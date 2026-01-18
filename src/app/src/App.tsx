@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -15,21 +15,22 @@ import PageShell from './components/PageShell';
 import { TooltipProvider } from './components/ui/tooltip';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
-import DatasetsPage from './pages/datasets/page';
-import EvalPage from './pages/eval/page';
-import EvalCreatorPage from './pages/eval-creator/page';
-import EvalsIndexPage from './pages/evals/page';
-import HistoryPage from './pages/history/page';
-import LauncherPage from './pages/launcher/page';
-import LoginPage from './pages/login';
-import ModelAuditHistoryPage from './pages/model-audit-history/page';
-import ModelAuditLatestPage from './pages/model-audit-latest/page';
-import ModelAuditResultPage from './pages/model-audit-result/page';
-import ModelAuditSetupPage from './pages/model-audit-setup/page';
-import NotFoundPage from './pages/NotFoundPage';
-import PromptsPage from './pages/prompts/page';
-import ReportPage from './pages/redteam/report/page';
-import RedteamSetupPage from './pages/redteam/setup/page';
+
+const DatasetsPage = lazy(() => import('./pages/datasets/page'));
+const EvalPage = lazy(() => import('./pages/eval/page'));
+const EvalCreatorPage = lazy(() => import('./pages/eval-creator/page'));
+const EvalsIndexPage = lazy(() => import('./pages/evals/page'));
+const HistoryPage = lazy(() => import('./pages/history/page'));
+const LauncherPage = lazy(() => import('./pages/launcher/page'));
+const LoginPage = lazy(() => import('./pages/login'));
+const ModelAuditHistoryPage = lazy(() => import('./pages/model-audit-history/page'));
+const ModelAuditLatestPage = lazy(() => import('./pages/model-audit-latest/page'));
+const ModelAuditResultPage = lazy(() => import('./pages/model-audit-result/page'));
+const ModelAuditSetupPage = lazy(() => import('./pages/model-audit-setup/page'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const PromptsPage = lazy(() => import('./pages/prompts/page'));
+const ReportPage = lazy(() => import('./pages/redteam/report/page'));
+const RedteamSetupPage = lazy(() => import('./pages/redteam/setup/page'));
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -131,7 +132,15 @@ function App() {
     <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+          <Suspense
+            fallback={
+              <div className="flex h-screen items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            }
+          >
+            <RouterProvider router={router} />
+          </Suspense>
         </QueryClientProvider>
       </ToastProvider>
     </TooltipProvider>

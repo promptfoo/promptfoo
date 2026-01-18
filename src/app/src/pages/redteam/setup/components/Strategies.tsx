@@ -117,43 +117,53 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Categorize strategies by type
   const categorizedStrategies = useMemo(() => {
-    const recommended = availableStrategies.filter((s) =>
-      RECOMMENDED_STRATEGIES.includes(s.id as any),
-    );
+    const result: {
+      recommended: StrategyCardData[];
+      agenticSingleTurn: StrategyCardData[];
+      agenticMultiTurn: StrategyCardData[];
+      multiModal: StrategyCardData[];
+      other: StrategyCardData[];
+    } = {
+      recommended: [],
+      agenticSingleTurn: [],
+      agenticMultiTurn: [],
+      multiModal: [],
+      other: [],
+    };
+    const agenticMultiTurnMap = new Map<string, StrategyCardData>();
 
-    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
+    for (const strategy of availableStrategies) {
+      const isRecommended = RECOMMENDED_STRATEGIES.includes(strategy.id as any);
+      const isAgentic = AGENTIC_STRATEGIES.includes(strategy.id as any);
+      const isMultiTurn = MULTI_TURN_STRATEGIES.includes(strategy.id as any);
+      const isMultiModal = MULTI_MODAL_STRATEGIES.includes(strategy.id as any);
 
-    // Split agentic into single-turn and multi-turn
-    const agenticSingleTurn = allAgentic.filter(
-      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-    );
+      if (isRecommended) {
+        result.recommended.push(strategy);
+      }
 
-    // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
-    const agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
-      availableStrategies.find(
-        (s) => s.id === strategyId && AGENTIC_STRATEGIES.includes(s.id as any),
-      ),
+      if (isAgentic) {
+        if (isMultiTurn) {
+          agenticMultiTurnMap.set(strategy.id, strategy);
+        } else {
+          result.agenticSingleTurn.push(strategy);
+        }
+      }
+
+      if (isMultiModal) {
+        result.multiModal.push(strategy);
+      }
+
+      if (!isRecommended && !isAgentic && !isMultiModal) {
+        result.other.push(strategy);
+      }
+    }
+
+    result.agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
+      agenticMultiTurnMap.get(strategyId),
     ).filter(Boolean) as StrategyCardData[];
 
-    const multiModal = availableStrategies.filter((s) =>
-      MULTI_MODAL_STRATEGIES.includes(s.id as any),
-    );
-
-    // Get other strategies that aren't in the above categories
-    const other = availableStrategies.filter(
-      (s) =>
-        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
-        !AGENTIC_STRATEGIES.includes(s.id as any) &&
-        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
-    );
-
-    return {
-      recommended,
-      agenticSingleTurn,
-      agenticMultiTurn,
-      multiModal,
-      other,
-    };
+    return result;
   }, []);
 
   // Determine the initially selected preset

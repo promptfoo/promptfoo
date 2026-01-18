@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
@@ -19,6 +19,7 @@ export default function LauncherPage() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [hasBeenConnected, setHasBeenConnected] = useState(false);
   const [isInitialConnection, setIsInitialConnection] = useState(true);
+  const navTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const {
@@ -88,7 +89,7 @@ export default function LauncherPage() {
       setHasBeenConnected(true);
       // Only auto-navigate if this is the initial connection
       if (isInitialConnection) {
-        setTimeout(() => {
+        navTimeoutRef.current = setTimeout(() => {
           setIsInitialConnection(false);
           navigate('/eval');
         }, 1000);
@@ -97,6 +98,14 @@ export default function LauncherPage() {
       setIsConnecting(true);
     }
   }, [healthStatus, navigate, isInitialConnection]);
+
+  useEffect(() => {
+    return () => {
+      if (navTimeoutRef.current) {
+        clearTimeout(navTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (darkMode === null) {
     return null;

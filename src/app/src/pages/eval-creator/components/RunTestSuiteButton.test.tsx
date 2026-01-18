@@ -21,7 +21,11 @@ describe('RunTestSuiteButton', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
+    try {
+      vi.runOnlyPendingTimers();
+    } catch {
+      // Ignore if not using fake timers
+    }
     vi.useRealTimers();
   });
 
@@ -125,5 +129,47 @@ describe('RunTestSuiteButton', () => {
     alertMock.mockRestore();
     consoleErrorSpy.mockRestore();
     vi.useFakeTimers();
+  });
+
+  it('clears the polling interval on unmount', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+
+    // First call creates the job, subsequent calls return running status
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-1' }) } as any)
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'running', progress: 50, total: 100 }),
+      } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    const { unmount } = render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for the interval to be set up
+    await waitFor(
+      () => {
+        expect(setIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
+    );
+
+    unmount();
+
+    expect(clearIntervalSpy).toHaveBeenCalled();
+
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
   });
 });

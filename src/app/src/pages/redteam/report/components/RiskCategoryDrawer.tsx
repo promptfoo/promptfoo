@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -15,10 +15,11 @@ import {
 import { ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
-import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest, type TestWithMetadata } from './shared';
 import type { GradingResult } from '@promptfoo/types';
+
+const PluginStrategyFlow = lazy(() => import('./PluginStrategyFlow'));
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -420,7 +421,9 @@ const RiskCategoryDrawer = ({
                 <h3 className="mb-3 text-center text-lg font-semibold">
                   Simulated User - Attack Performance
                 </h3>
-                <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
+                <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
+                  <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
+                </Suspense>
               </div>
             </TabsContent>
           </Tabs>

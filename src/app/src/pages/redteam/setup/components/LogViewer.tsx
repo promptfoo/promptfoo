@@ -80,26 +80,39 @@ export function LogViewer({ logs }: LogViewerProps) {
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {
         const container = logsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
       }
       if (fullscreenLogsContainerRef.current) {
         const container = fullscreenLogsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
       }
     } else {
       // Restore previous scroll positions
       if (logsContainerRef.current) {
-        logsContainerRef.current.scrollTop = previousScrollPositionRef.current.main;
+        const container = logsContainerRef.current;
+        requestAnimationFrame(() => {
+          container.scrollTop = previousScrollPositionRef.current.main;
+        });
       }
       if (fullscreenLogsContainerRef.current) {
-        fullscreenLogsContainerRef.current.scrollTop = previousScrollPositionRef.current.fullscreen;
+        const container = fullscreenLogsContainerRef.current;
+        requestAnimationFrame(() => {
+          container.scrollTop = previousScrollPositionRef.current.fullscreen;
+        });
       }
     }
   }, [logs, shouldAutoScroll]);
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      const container = containerRef.current;
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
       setShouldAutoScroll(true);
     }
   }, []);

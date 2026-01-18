@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 
@@ -74,12 +74,12 @@ export function useVersionCheck(): UseVersionCheckResult {
     };
   }, []);
 
-  const dismiss = () => {
+  const dismiss = useCallback(() => {
     if (versionInfo?.latestVersion) {
       localStorage.setItem(STORAGE_KEY, versionInfo.latestVersion);
       setDismissed(true);
     }
-  };
+  }, [versionInfo]);
 
   return {
     versionInfo,
