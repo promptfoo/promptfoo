@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
+import Typography from '@mui/material/Typography';
+import { isProductSoldOut } from './useFourthwall';
 
 import type { FourthwallProduct } from './types';
 
@@ -17,8 +19,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   const primaryImage = product.images[0];
   const hoverImage = product.images[1] || primaryImage;
-
   const displayImage = isHovered && product.images.length > 1 ? hoverImage : primaryImage;
+  const soldOut = isProductSoldOut(product);
 
   return (
     <ButtonBase
@@ -53,7 +55,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           outlineOffset: '2px',
         },
       }}
-      aria-label={`View ${product.name}`}
+      aria-label={`View ${product.name}${soldOut ? ' (Sold Out)' : ''}`}
     >
       {!imageLoaded && (
         <Skeleton
@@ -77,9 +79,36 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           height: '100%',
           objectFit: 'cover',
           opacity: imageLoaded ? 1 : 0,
-          transition: 'opacity 0.3s ease-out',
+          transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
+          filter: soldOut ? 'grayscale(100%)' : 'none',
         }}
       />
+      {soldOut && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            py: 0.75,
+            px: 1,
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: '#fff',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              fontSize: '0.65rem',
+            }}
+          >
+            Sold Out
+          </Typography>
+        </Box>
+      )}
     </ButtonBase>
   );
 }
