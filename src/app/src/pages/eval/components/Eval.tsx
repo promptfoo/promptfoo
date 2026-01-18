@@ -293,11 +293,13 @@ export default function Eval({ fetchId }: EvalOptions) {
           await handleResultsFile(data);
         });
 
+      // Capture socket reference for cleanup (TypeScript needs this for type narrowing)
+      const socketRef = socket;
       return () => {
         controller.abort();
-        socket.off('init');
-        socket.off('update');
-        socket.disconnect();
+        socketRef.off('init');
+        socketRef.off('update');
+        socketRef.disconnect();
         setIsStreaming(false);
       };
     } else {
@@ -326,12 +328,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+    // Cleanup for non-websocket branches (websocket branch returns its own cleanup above)
     return () => {
       controller.abort();
-      if (socket) {
-        socket.disconnect();
-        setIsStreaming(false);
-      }
     };
   }, [
     apiBaseUrl,
