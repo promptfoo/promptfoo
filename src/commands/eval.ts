@@ -648,7 +648,7 @@ export async function doEval(
 
     // Now wait for share to complete and show spinner (as the last output)
     let shareableUrl: string | null = null;
-    if (sharePromise) {
+    if (sharePromise != null) {
       // Determine org context for spinner text
       const orgContext = await getOrgContext();
       const orgSuffix = orgContext

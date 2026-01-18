@@ -256,7 +256,7 @@ export class GoogleProvider extends GoogleGenericProvider {
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 

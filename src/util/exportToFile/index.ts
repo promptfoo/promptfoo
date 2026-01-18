@@ -67,17 +67,24 @@ export function convertTestResultsToTableRow(
   const row = {
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
-    vars: results[0].testCase.vars
-      ? Object.values(varsForHeader)
-          .map((varName) => {
-            const varValue = results[0].testCase.vars?.[varName] || '';
-            if (typeof varValue === 'string') {
-              return varValue;
-            }
-            return JSON.stringify(varValue);
-          })
-          .flat()
-      : [],
+    vars: Object.values(varsForHeader)
+      .map((varName) => {
+        // For sessionId, check metadata first if not in testCase.vars
+        if (varName === 'sessionId') {
+          const varValue =
+            results[0].testCase.vars?.sessionId || results[0].metadata?.sessionId || '';
+          if (typeof varValue === 'string') {
+            return varValue;
+          }
+          return JSON.stringify(varValue);
+        }
+        const varValue = results[0].testCase.vars?.[varName] || '';
+        if (typeof varValue === 'string') {
+          return varValue;
+        }
+        return JSON.stringify(varValue);
+      })
+      .flat(),
     test: results[0].testCase,
     testIdx: results[0].testIdx,
   };
