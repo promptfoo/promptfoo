@@ -32,6 +32,7 @@ vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
     getTargetResponse: mockGetTargetResponse,
     redteamProviderManager: {
       getProvider: mockGetProvider,
+      getGradingProvider: mockGetProvider,
     },
     // Mock tryUnblocking to avoid network calls
     tryUnblocking: vi.fn().mockResolvedValue({ success: false }),

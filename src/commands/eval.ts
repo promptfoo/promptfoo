@@ -411,6 +411,14 @@ export async function doEval(
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
         basePath: cliState.basePath,
       });
+      // Also update cliState.config so redteam providers can access the grader
+      if (cliState.config) {
+        cliState.config.defaultTest = cliState.config.defaultTest || {};
+        if (typeof cliState.config.defaultTest === 'object') {
+          cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+          cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+        }
+      }
     }
     if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {

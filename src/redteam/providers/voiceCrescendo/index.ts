@@ -280,9 +280,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({
           provider: this.config.redteamProvider,
-          preferSmallModel: false,
           jsonOnly: true,
         });
       }
