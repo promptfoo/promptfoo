@@ -3,6 +3,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
+import { Spinner } from '@app/components/ui/spinner';
 import { Outlet } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
@@ -50,13 +51,7 @@ export default function PageShell() {
       <Layout>
         <Navigation onToggleDarkMode={toggleDarkMode} />
         <UpdateBanner />
-        <Suspense
-          fallback={
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-          }
-        >
+        <Suspense fallback={<Spinner size="lg" className="h-[calc(100vh-4rem)]" />}>
           <Outlet />
         </Suspense>
         <PostHogPageViewTracker />

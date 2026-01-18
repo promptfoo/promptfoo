@@ -12,6 +12,7 @@ import {
 } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
+import { Spinner } from './components/ui/spinner';
 import { TooltipProvider } from './components/ui/tooltip';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
@@ -52,13 +53,7 @@ const router = createBrowserRouter(
         <Route
           path="/launcher"
           element={
-            <Suspense
-              fallback={
-                <div className="flex h-screen items-center justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                </div>
-              }
-            >
+            <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
               <LauncherPage />
             </Suspense>
           }
