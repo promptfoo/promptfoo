@@ -128,10 +128,13 @@ export function LogViewer({ logs }: LogViewerProps) {
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
+      // Capture container before RAF to avoid stale ref if component unmounts
       const container = containerRef.current;
-      requestAnimationFrame(() => {
+      const id = requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight;
       });
+      // Track for cleanup on unmount
+      rafIdsRef.current.push(id);
       setShouldAutoScroll(true);
     }
   }, []);
