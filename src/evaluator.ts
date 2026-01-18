@@ -1413,6 +1413,12 @@ class Evaluator {
           // This is the number of test evaluations for THIS prompt, not global progress
           const promptEvalCount =
             metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+          // Warn if user has a metric named __count (it will be overridden)
+          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+            logger.warn(
+              "Metric name '__count' is reserved for derived metrics and will be overridden.",
+            );
+          }
           // Create evaluation context with named scores and __count for average calculations
           const evalContext: Record<string, number> = {
             ...metrics.namedScores,

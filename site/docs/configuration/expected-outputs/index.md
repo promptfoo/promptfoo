@@ -601,7 +601,7 @@ derivedMetrics:
     value: 'APE / __count'
 ```
 
-The `__count` variable contains the number of test evaluations for the current prompt-provider combination. With multiple providers, each provider gets its own separate metrics tracked independently. This is useful when:
+The `__count` variable contains the number of test evals for the current prompt-provider combination. With multiple providers, each provider gets its own separate metrics tracked independently. This is useful when:
 
 - Each test case produces a value that gets summed (like error metrics)
 - You want to display the average instead of the total
