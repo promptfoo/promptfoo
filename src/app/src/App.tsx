@@ -53,9 +53,11 @@ const router = createBrowserRouter(
         <Route
           path="/launcher"
           element={
-            <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
-              <LauncherPage />
-            </Suspense>
+            <ErrorBoundary name="Launcher">
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <LauncherPage />
+              </Suspense>
+            </ErrorBoundary>
           }
         />
       )}
