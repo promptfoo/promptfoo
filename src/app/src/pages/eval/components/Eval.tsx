@@ -294,6 +294,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         });
 
       return () => {
+        controller.abort();
         socket.off('init');
         socket.off('update');
         socket.disconnect();

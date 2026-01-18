@@ -13,9 +13,6 @@ export interface EvalConfigState {
   reset: () => void;
   /** Get the test suite in the expected format */
   getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
-  _cachedTestSuite: EvaluateTestSuiteWithEvaluateOptions | null;
-  _configVersion: number;
-  _testSuiteVersion: number;
 }
 
 export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
@@ -35,56 +32,32 @@ export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
-      _cachedTestSuite: null,
-      _configVersion: 0,
-      _testSuiteVersion: 0,
 
-      setConfig: (config) =>
-        set((state) => ({
-          config,
-          _configVersion: state._configVersion + 1,
-        })),
+      setConfig: (config) => set({ config }),
 
       updateConfig: (updates) =>
         set((state) => ({
           config: { ...state.config, ...updates },
-          _configVersion: state._configVersion + 1,
         })),
 
-      reset: () =>
-        set((state) => ({
-          config: { ...DEFAULT_CONFIG },
-          _configVersion: state._configVersion + 1,
-        })),
+      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
+      // Pure getter - no side effects, safe to call during render
       getTestSuite: () => {
-        const state = get();
-
-        if (state._cachedTestSuite && state._testSuiteVersion === state._configVersion) {
-          return state._cachedTestSuite;
-        }
-
+        const { config } = get();
         // Transform config to match the expected EvaluateTestSuiteWithEvaluateOptions format
-        // Note: The 'tests' field in UnifiedConfig maps to 'testCases' in the old store
-        const suite = {
-          description: state.config.description,
-          env: state.config.env,
-          extensions: state.config.extensions,
-          prompts: state.config.prompts,
-          providers: state.config.providers,
-          scenarios: state.config.scenarios,
-          tests: state.config.tests || [], // This is what was 'testCases' before
-          evaluateOptions: state.config.evaluateOptions,
-          defaultTest: state.config.defaultTest,
-          derivedMetrics: state.config.derivedMetrics,
+        return {
+          description: config.description,
+          env: config.env,
+          extensions: config.extensions,
+          prompts: config.prompts,
+          providers: config.providers,
+          scenarios: config.scenarios,
+          tests: config.tests || [],
+          evaluateOptions: config.evaluateOptions,
+          defaultTest: config.defaultTest,
+          derivedMetrics: config.derivedMetrics,
         } as EvaluateTestSuiteWithEvaluateOptions;
-
-        set({
-          _cachedTestSuite: suite,
-          _testSuiteVersion: state._configVersion,
-        });
-
-        return suite;
       },
     }),
     {

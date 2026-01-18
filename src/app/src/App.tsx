@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -132,15 +132,7 @@ function App() {
     <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
-          <Suspense
-            fallback={
-              <div className="flex h-screen items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              </div>
-            }
-          >
-            <RouterProvider router={router} />
-          </Suspense>
+          <RouterProvider router={router} />
         </QueryClientProvider>
       </ToastProvider>
     </TooltipProvider>

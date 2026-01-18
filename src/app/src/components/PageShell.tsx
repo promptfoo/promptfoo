@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
@@ -50,7 +50,15 @@ export default function PageShell() {
       <Layout>
         <Navigation onToggleDarkMode={toggleDarkMode} />
         <UpdateBanner />
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
         <PostHogPageViewTracker />
       </Layout>
     </PostHogProvider>
