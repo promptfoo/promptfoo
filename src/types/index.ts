@@ -761,21 +761,22 @@ export const TestCaseSchema = z.object({
     .optional(),
 
   // Additional configuration settings for the prompt
+  // Use object spread instead of z.intersection() to generate a flat JSON Schema.
+  // z.intersection() generates allOf with additionalProperties:false in each sub-schema,
+  // causing validation errors for properties defined in other sub-schemas.
+  // See: https://github.com/colinhacks/zod/issues/4564
   options: z
-    .intersection(
-      z.intersection(PromptConfigSchema, OutputConfigSchema),
-      z.intersection(
-        GradingConfigSchema,
-        z.object({
-          // If true, do not expand arrays of variables into multiple eval cases.
-          disableVarExpansion: z.boolean().optional(),
-          // If true, do not include an implicit `_conversation` variable in the prompt.
-          disableConversationVar: z.boolean().optional(),
-          // If true, run this without concurrency no matter what
-          runSerially: z.boolean().optional(),
-        }),
-      ),
-    )
+    .object({
+      ...PromptConfigSchema.shape,
+      ...OutputConfigSchema.shape,
+      ...GradingConfigSchema.shape,
+      // If true, do not expand arrays of variables into multiple eval cases.
+      disableVarExpansion: z.boolean().optional(),
+      // If true, do not include an implicit `_conversation` variable in the prompt.
+      disableConversationVar: z.boolean().optional(),
+      // If true, run this without concurrency no matter what
+      runSerially: z.boolean().optional(),
+    })
     .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.

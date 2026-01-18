@@ -916,131 +916,109 @@
       ]
     },
     "__schema18": {
-      "allOf": [
-        {
-          "type": "object",
-          "properties": {
-            "prefix": {
-              "type": "string"
-            },
-            "suffix": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string"
         },
-        {
-          "type": "object",
-          "properties": {
-            "postprocess": {
-              "type": "string"
-            },
-            "transform": {
-              "type": "string"
-            },
-            "transformVars": {
-              "type": "string"
-            },
-            "storeOutputAs": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+        "suffix": {
+          "type": "string"
         },
-        {
-          "type": "object",
-          "properties": {
-            "rubricPrompt": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "role": {
-                        "type": "string"
-                      },
-                      "content": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["role", "content"],
-                    "additionalProperties": false
-                  }
-                }
-              ]
+        "postprocess": {
+          "type": "string"
+        },
+        "transform": {
+          "type": "string"
+        },
+        "transformVars": {
+          "type": "string"
+        },
+        "storeOutputAs": {
+          "type": "string"
+        },
+        "rubricPrompt": {
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "provider": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {},
-                {
-                  "type": "object",
-                  "propertyNames": {
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
                     "type": "string"
                   },
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {}
-                    ]
+                  "content": {
+                    "type": "string"
                   }
-                }
-              ]
+                },
+                "required": ["role", "content"],
+                "additionalProperties": false
+              }
+            }
+          ]
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "factuality": {
+            {},
+            {
               "type": "object",
-              "properties": {
-                "subset": {
-                  "type": "number"
-                },
-                "superset": {
-                  "type": "number"
-                },
-                "agree": {
-                  "type": "number"
-                },
-                "disagree": {
-                  "type": "number"
-                },
-                "differButFactual": {
-                  "type": "number"
-                }
+              "propertyNames": {
+                "type": "string"
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {}
+                ]
+              }
+            }
+          ]
+        },
+        "factuality": {
+          "type": "object",
+          "properties": {
+            "subset": {
+              "type": "number"
+            },
+            "superset": {
+              "type": "number"
+            },
+            "agree": {
+              "type": "number"
+            },
+            "disagree": {
+              "type": "number"
+            },
+            "differButFactual": {
+              "type": "number"
             }
           },
           "additionalProperties": false
         },
-        {
-          "type": "object",
-          "properties": {
-            "disableVarExpansion": {
-              "type": "boolean"
-            },
-            "disableConversationVar": {
-              "type": "boolean"
-            },
-            "runSerially": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
+        "disableVarExpansion": {
+          "type": "boolean"
+        },
+        "disableConversationVar": {
+          "type": "boolean"
+        },
+        "runSerially": {
+          "type": "boolean"
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "__schema19": {
       "type": "number"
