@@ -32,12 +32,12 @@ const TokenEstimationTab: React.FC<TokenEstimationTabProps> = ({
       <div className="flex items-center gap-2">
         <Switch
           id="token-estimation"
-          checked={!!selectedTarget.config.tokenEstimation?.enabled}
+          checked={!!selectedTarget.config?.tokenEstimation?.enabled}
           onCheckedChange={(checked) => {
             if (checked) {
               updateCustomTarget('tokenEstimation', {
                 enabled: true,
-                multiplier: selectedTarget.config.tokenEstimation?.multiplier ?? 1.3,
+                multiplier: selectedTarget.config?.tokenEstimation?.multiplier ?? 1.3,
               });
             } else {
               updateCustomTarget('tokenEstimation', { enabled: false });

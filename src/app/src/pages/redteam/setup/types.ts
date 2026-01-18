@@ -8,6 +8,7 @@ import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfo
  * to track which input method the user has selected for each field.
  */
 interface TlsConfigUI {
+  enabled?: boolean;
   certInputType?: 'upload' | 'path' | 'inline';
   keyInputType?: 'upload' | 'path' | 'inline';
   jksInputType?: 'upload' | 'path';
@@ -18,14 +19,15 @@ interface TlsConfigUI {
   jksPath?: string;
   keyAlias?: string;
   jksExtractConfigured?: boolean;
-  certificateType?: 'pkcs12' | 'jks';
+  certificateType?: 'pem' | 'pfx' | 'pkcs12' | 'jks';
 }
 
 /**
  * Extended HTTP provider config that includes UI-specific properties
  * for tracking TLS input methods.
  */
-interface HttpProviderConfigUI extends HttpProviderConfig {
+interface HttpProviderConfigUI extends Omit<HttpProviderConfig, 'signatureAuth' | 'tls'> {
+  signatureAuth?: HttpProviderConfig['signatureAuth'];
   tls?: HttpProviderConfig['tls'] & TlsConfigUI;
 }
 
@@ -34,8 +36,8 @@ interface HttpProviderConfigUI extends HttpProviderConfig {
  * This provides proper typing for HTTP-specific config fields, including
  * UI-specific properties for TLS configuration.
  */
-export interface HttpProviderOptions extends CoreProviderOptions {
-  config: HttpProviderConfigUI;
+export interface HttpProviderOptions extends Omit<CoreProviderOptions, 'config'> {
+  config?: HttpProviderConfigUI;
 }
 
 export interface ApplicationDefinition {

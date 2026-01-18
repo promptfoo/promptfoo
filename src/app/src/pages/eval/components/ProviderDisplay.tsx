@@ -33,6 +33,7 @@ const EXCLUDED_FIELDS = new Set([
  * Recursively filter config for display, removing non-useful fields.
  * Returns undefined for empty objects to keep tooltip clean.
  */
+// biome-ignore lint/suspicious/noExplicitAny: Test compatibility requires any
 export function filterConfigForDisplay(obj: any, depth = 0): any {
   if (depth > 10) {
     return undefined; // Prevent infinite recursion
