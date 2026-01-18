@@ -165,7 +165,11 @@ const processCitations = (citations: Citation[]): ExtractedCitation[] => {
  * Component for displaying citations from various sources
  * Handles different citation formats from different providers
  */
-export default function Citations({ citations }: { citations: Citation | Citation[] }) {
+export default function Citations({
+  citations,
+}: {
+  citations: Citation | Citation[] | null | undefined;
+}) {
   const [copiedCitations, setCopiedCitations] = useState<{ [key: string]: boolean }>({});
 
   if (!citations || (Array.isArray(citations) && citations.length === 0)) {
