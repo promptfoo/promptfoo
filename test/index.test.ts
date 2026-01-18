@@ -99,6 +99,7 @@ describe('index.ts exports', () => {
     'DerivedMetricSchema',
     'EvalResultsFilterMode',
     'EvaluateOptionsSchema',
+    'GradingConfigSchema',
     'InputsSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
