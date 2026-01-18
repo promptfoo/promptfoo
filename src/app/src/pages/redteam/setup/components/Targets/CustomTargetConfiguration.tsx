@@ -30,7 +30,7 @@ import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
@@ -54,7 +54,7 @@ interface ProviderConfig {
 
 const highlightJSON = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.json;
+    const grammar = Prism?.languages?.json;
     if (!grammar) {
       return code;
     }

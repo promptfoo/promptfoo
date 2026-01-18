@@ -35,7 +35,8 @@ import {
 } from 'lucide-react';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface SessionEndpointConfigProps {
   session?: {
@@ -273,9 +274,13 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 };
 
 interface SessionsTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+}
+
+interface SessionRequest {
+  prompt?: string;
 }
 
 interface TestResult {
@@ -285,10 +290,10 @@ interface TestResult {
   error?: string;
   details?: {
     sessionId?: string;
-    request1?: any;
-    response1?: any;
-    request2?: any;
-    response2?: any;
+    request1?: SessionRequest;
+    response1?: unknown;
+    request2?: SessionRequest;
+    response2?: unknown;
     sessionSource?: string;
     hasSessionIdTemplate?: boolean;
     hasSessionParser?: boolean;

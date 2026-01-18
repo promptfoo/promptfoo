@@ -16,11 +16,12 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { Check, File, Key, KeyRound, Upload, X } from 'lucide-react';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface DigitalSignatureAuthTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({

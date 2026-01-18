@@ -4,13 +4,13 @@ import type { ReactNode } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import yaml from 'js-yaml';
-import { findProviderConfig, getProviderDisplayName } from './providerConfig';
+import { findProviderConfig, getProviderDisplayName, type ProviderDef } from './providerConfig';
 
 interface ProviderDisplayProps {
   /** The provider string from CompletedPrompt (e.g., "google:gemini-3-flash-preview") */
   providerString: string;
   /** The config.providers array from the eval config */
-  providersArray: any[] | undefined;
+  providersArray: ProviderDef[] | undefined;
   /** Fallback index for backwards-compatible matching */
   fallbackIndex?: number;
 }
@@ -33,7 +33,7 @@ const EXCLUDED_FIELDS = new Set([
  * Recursively filter config for display, removing non-useful fields.
  * Returns undefined for empty objects to keep tooltip clean.
  */
-export function filterConfigForDisplay(obj: any, depth = 0): any {
+export function filterConfigForDisplay(obj: unknown, depth = 0): unknown {
   if (depth > 10) {
     return undefined; // Prevent infinite recursion
   }
@@ -55,7 +55,7 @@ export function filterConfigForDisplay(obj: any, depth = 0): any {
   }
 
   // Handle objects - filter out excluded fields
-  const result: Record<string, any> = {};
+  const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
     // Skip excluded fields (implementation details)
@@ -165,7 +165,7 @@ export function ProviderDisplay({
     typeof providerConfig.id === 'string' &&
     providerConfig.id.trim() &&
     providerConfig.id !== displayedText;
-  const displayId = showId ? providerConfig.id : null;
+  const displayId: string | null = showId && providerConfig.id ? providerConfig.id : null;
 
   // Tooltip: show id (if label used) + filtered config as YAML
   const tooltipData = useMemo(() => {

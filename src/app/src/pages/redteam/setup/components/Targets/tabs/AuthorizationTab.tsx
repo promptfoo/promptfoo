@@ -16,11 +16,12 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { Check, Eye, EyeOff, File, Key, Upload, X } from 'lucide-react';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface AuthorizationTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 // Password field with visibility toggle
@@ -158,18 +159,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   };
 
   const handleOAuthGrantTypeChange = (newGrantType: 'client_credentials' | 'password') => {
-    const currentAuth = selectedTarget.config.auth || {};
+    const currentAuth = selectedTarget.config.auth ?? {};
     if (newGrantType === 'password') {
       // Add username and password fields for password grant
       updateCustomTarget('auth', {
         ...currentAuth,
         grantType: 'password',
-        username: currentAuth.username || '',
-        password: currentAuth.password || '',
+        username: currentAuth.username ?? '',
+        password: currentAuth.password ?? '',
       });
     } else {
       // Remove username and password fields for client_credentials grant
-      const { username: _username, password: _password, ...restAuth } = currentAuth as any;
+      const { username: _username, password: _password, ...restAuth } = currentAuth;
       updateCustomTarget('auth', {
         ...restAuth,
         grantType: 'client_credentials',
@@ -177,8 +178,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
     }
   };
 
-  const updateAuthField = (field: string, value: any) => {
-    const currentAuth = selectedTarget.config.auth || {};
+  const updateAuthField = (field: string, value: unknown) => {
+    const currentAuth = selectedTarget.config.auth ?? {};
     updateCustomTarget('auth', {
       ...currentAuth,
       [field]: value,

@@ -28,11 +28,12 @@ import {
 import { validatePrivateKey } from '../../../utils/crypto';
 import { SetupSection } from '../../SetupSection';
 import SensitiveTextField from './SensitiveTextField';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface TlsHttpsConfigTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
@@ -719,7 +720,11 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     <Textarea
                       rows={4}
                       placeholder="Base64-encoded PFX content"
-                      value={selectedTarget.config.tls?.pfx || ''}
+                      value={
+                        typeof selectedTarget.config.tls?.pfx === 'string'
+                          ? selectedTarget.config.tls.pfx
+                          : ''
+                      }
                       onChange={(e) =>
                         updateCustomTarget('tls', {
                           ...selectedTarget.config.tls,
