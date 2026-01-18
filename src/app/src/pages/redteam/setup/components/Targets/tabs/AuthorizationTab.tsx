@@ -159,22 +159,30 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   };
 
   const handleOAuthGrantTypeChange = (newGrantType: 'client_credentials' | 'password') => {
-    const currentAuth = selectedTarget.config?.auth ?? {};
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow discriminated union through function calls
+    const currentAuth = selectedTarget.config?.auth as any;
     if (newGrantType === 'password') {
       // Add username and password fields for password grant
       updateCustomTarget('auth', {
         ...currentAuth,
         grantType: 'password',
-        username: currentAuth.username ?? '',
-        password: currentAuth.password ?? '',
+        username: currentAuth?.username ?? '',
+        password: currentAuth?.password ?? '',
       });
     } else {
       // Remove username and password fields for client_credentials grant
-      const { username: _username, password: _password, ...restAuth } = currentAuth;
-      updateCustomTarget('auth', {
-        ...restAuth,
-        grantType: 'client_credentials',
-      });
+      if (currentAuth) {
+        const { username: _username, password: _password, ...restAuth } = currentAuth;
+        updateCustomTarget('auth', {
+          ...restAuth,
+          grantType: 'client_credentials',
+        });
+      } else {
+        updateCustomTarget('auth', {
+          type: 'oauth',
+          grantType: 'client_credentials',
+        });
+      }
     }
   };
 
@@ -211,220 +219,245 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       </div>
 
       {/* OAuth 2.0 Form */}
-      {getAuthType() === 'oauth' && (
-        <div className="mt-6 space-y-4">
-          <p className="font-medium">OAuth 2.0 Configuration</p>
-
-          <div className="space-y-2">
-            <Label htmlFor="oauth-grant-type">Grant Type</Label>
-            <Select
-              value={selectedTarget.config?.auth?.grantType || 'client_credentials'}
-              onValueChange={(value) =>
-                handleOAuthGrantTypeChange(value as 'client_credentials' | 'password')
+      {getAuthType() === 'oauth' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | {
+                type: 'oauth';
+                grantType?: 'client_credentials' | 'password';
+                clientId?: string;
+                clientSecret?: string;
+                tokenUrl?: string;
+                scopes?: string[];
+                username?: string;
+                password?: string;
               }
-            >
-              <SelectTrigger id="oauth-grant-type">
-                <SelectValue placeholder="Select grant type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="client_credentials">Client Credentials</SelectItem>
-                <SelectItem value="password">Username & Password</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">OAuth 2.0 Configuration</p>
 
-          <div className="space-y-2">
-            <Label htmlFor="token-url">
-              Token URL <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="token-url"
-              value={selectedTarget.config?.auth?.tokenUrl || ''}
-              onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
-              placeholder="https://example.com/oauth/token"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="client-id">
-              Client ID
-              {selectedTarget.config?.auth?.grantType !== 'password' && (
-                <span className="text-destructive"> *</span>
-              )}
-            </Label>
-            <Input
-              id="client-id"
-              value={selectedTarget.config?.auth?.clientId || ''}
-              onChange={(e) => updateAuthField('clientId', e.target.value)}
-            />
-            {selectedTarget.config?.auth?.grantType === 'password' && (
-              <p className="text-sm text-muted-foreground">Optional for password grant</p>
-            )}
-          </div>
-
-          <PasswordField
-            id="client-secret"
-            label="Client Secret"
-            value={selectedTarget.config?.auth?.clientSecret || ''}
-            onChange={(value) => updateAuthField('clientSecret', value)}
-            required={selectedTarget.config?.auth?.grantType !== 'password'}
-            helperText={
-              selectedTarget.config?.auth?.grantType === 'password'
-                ? 'Optional for password grant'
-                : undefined
-            }
-            showValue={showClientSecret}
-            onToggleVisibility={() => setShowClientSecret(!showClientSecret)}
-          />
-
-          {/* Show username/password fields only for password grant type */}
-          {selectedTarget.config?.auth?.grantType === 'password' && (
-            <>
               <div className="space-y-2">
-                <Label htmlFor="oauth-username">
+                <Label htmlFor="oauth-grant-type">Grant Type</Label>
+                <Select
+                  value={auth?.grantType || 'client_credentials'}
+                  onValueChange={(value) =>
+                    handleOAuthGrantTypeChange(value as 'client_credentials' | 'password')
+                  }
+                >
+                  <SelectTrigger id="oauth-grant-type">
+                    <SelectValue placeholder="Select grant type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client_credentials">Client Credentials</SelectItem>
+                    <SelectItem value="password">Username & Password</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="token-url">
+                  Token URL <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="token-url"
+                  value={auth?.tokenUrl || ''}
+                  onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
+                  placeholder="https://example.com/oauth/token"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="client-id">
+                  Client ID
+                  {auth?.grantType !== 'password' && <span className="text-destructive"> *</span>}
+                </Label>
+                <Input
+                  id="client-id"
+                  value={auth?.clientId || ''}
+                  onChange={(e) => updateAuthField('clientId', e.target.value)}
+                />
+                {auth?.grantType === 'password' && (
+                  <p className="text-sm text-muted-foreground">Optional for password grant</p>
+                )}
+              </div>
+
+              <PasswordField
+                id="client-secret"
+                label="Client Secret"
+                value={auth?.clientSecret || ''}
+                onChange={(value) => updateAuthField('clientSecret', value)}
+                required={auth?.grantType !== 'password'}
+                helperText={
+                  auth?.grantType === 'password' ? 'Optional for password grant' : undefined
+                }
+                showValue={showClientSecret}
+                onToggleVisibility={() => setShowClientSecret(!showClientSecret)}
+              />
+
+              {/* Show username/password fields only for password grant type */}
+              {auth?.grantType === 'password' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="oauth-username">
+                      Username <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="oauth-username"
+                      value={auth?.username || ''}
+                      onChange={(e) => updateAuthField('username', e.target.value)}
+                    />
+                  </div>
+
+                  <PasswordField
+                    id="oauth-password"
+                    label="Password"
+                    value={auth?.password || ''}
+                    onChange={(value) => updateAuthField('password', value)}
+                    required
+                    showValue={showOAuthPassword}
+                    onToggleVisibility={() => setShowOAuthPassword(!showOAuthPassword)}
+                  />
+                </>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="scopes">Scopes (comma-separated)</Label>
+                <Input
+                  id="scopes"
+                  value={Array.isArray(auth?.scopes) ? auth?.scopes.join(', ') : auth?.scopes || ''}
+                  onChange={(e) => {
+                    const scopes = e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter((s) => s.length > 0);
+                    updateAuthField('scopes', scopes);
+                  }}
+                  placeholder="read, write, admin"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter scopes separated by commas (optional)
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* Basic Auth Form */}
+      {getAuthType() === 'basic' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'basic'; username?: string; password?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">Basic Authentication Configuration</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="basic-username">
                   Username <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  id="oauth-username"
-                  value={selectedTarget.config?.auth?.username || ''}
+                  id="basic-username"
+                  value={auth?.username || ''}
                   onChange={(e) => updateAuthField('username', e.target.value)}
                 />
               </div>
 
               <PasswordField
-                id="oauth-password"
+                id="basic-password"
                 label="Password"
-                value={selectedTarget.config?.auth?.password || ''}
+                value={auth?.password || ''}
                 onChange={(value) => updateAuthField('password', value)}
                 required
-                showValue={showOAuthPassword}
-                onToggleVisibility={() => setShowOAuthPassword(!showOAuthPassword)}
+                showValue={showBasicPassword}
+                onToggleVisibility={() => setShowBasicPassword(!showBasicPassword)}
               />
-            </>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="scopes">Scopes (comma-separated)</Label>
-            <Input
-              id="scopes"
-              value={
-                Array.isArray(selectedTarget.config?.auth?.scopes)
-                  ? selectedTarget.config?.auth.scopes.join(', ')
-                  : selectedTarget.config?.auth?.scopes || ''
-              }
-              onChange={(e) => {
-                const scopes = e.target.value
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter((s) => s.length > 0);
-                updateAuthField('scopes', scopes);
-              }}
-              placeholder="read, write, admin"
-            />
-            <p className="text-sm text-muted-foreground">
-              Enter scopes separated by commas (optional)
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Basic Auth Form */}
-      {getAuthType() === 'basic' && (
-        <div className="mt-6 space-y-4">
-          <p className="font-medium">Basic Authentication Configuration</p>
-
-          <div className="space-y-2">
-            <Label htmlFor="basic-username">
-              Username <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="basic-username"
-              value={selectedTarget.config?.auth?.username || ''}
-              onChange={(e) => updateAuthField('username', e.target.value)}
-            />
-          </div>
-
-          <PasswordField
-            id="basic-password"
-            label="Password"
-            value={selectedTarget.config?.auth?.password || ''}
-            onChange={(value) => updateAuthField('password', value)}
-            required
-            showValue={showBasicPassword}
-            onToggleVisibility={() => setShowBasicPassword(!showBasicPassword)}
-          />
-        </div>
-      )}
+            </div>
+          );
+        })()}
 
       {/* Bearer Auth Form */}
-      {getAuthType() === 'bearer' && (
-        <div className="mt-6 space-y-4">
-          <p className="font-medium">Bearer Token Authentication Configuration</p>
+      {getAuthType() === 'bearer' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'bearer'; token?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">Bearer Token Authentication Configuration</p>
 
-          <PasswordField
-            id="bearer-token"
-            label="Token"
-            value={selectedTarget.config?.auth?.token || ''}
-            onChange={(value) => updateAuthField('token', value)}
-            placeholder="Enter your Bearer token"
-            helperText="This token will be sent in the Authorization header as: Bearer {token}"
-            required
-            showValue={showBearerToken}
-            onToggleVisibility={() => setShowBearerToken(!showBearerToken)}
-          />
-        </div>
-      )}
+              <PasswordField
+                id="bearer-token"
+                label="Token"
+                value={auth?.token || ''}
+                onChange={(value) => updateAuthField('token', value)}
+                placeholder="Enter your Bearer token"
+                helperText="This token will be sent in the Authorization header as: Bearer {token}"
+                required
+                showValue={showBearerToken}
+                onToggleVisibility={() => setShowBearerToken(!showBearerToken)}
+              />
+            </div>
+          );
+        })()}
 
       {/* API Key Auth Form */}
-      {getAuthType() === 'api_key' && (
-        <div className="mt-6 space-y-4">
-          <p className="font-medium">API Key Authentication Configuration</p>
+      {getAuthType() === 'api_key' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'api_key'; placement?: 'header' | 'query'; keyName?: string; value?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">API Key Authentication Configuration</p>
 
-          <div className="space-y-2">
-            <Label htmlFor="api-key-placement">Placement</Label>
-            <Select
-              value={selectedTarget.config?.auth?.placement || 'header'}
-              onValueChange={(value) => updateAuthField('placement', value)}
-            >
-              <SelectTrigger id="api-key-placement">
-                <SelectValue placeholder="Select placement" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="header">Header</SelectItem>
-                <SelectItem value="query">Query Parameter</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="api-key-placement">Placement</Label>
+                <Select
+                  value={auth?.placement || 'header'}
+                  onValueChange={(value) => updateAuthField('placement', value)}
+                >
+                  <SelectTrigger id="api-key-placement">
+                    <SelectValue placeholder="Select placement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="header">Header</SelectItem>
+                    <SelectItem value="query">Query Parameter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="key-name">
-              Key Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="key-name"
-              value={selectedTarget.config?.auth?.keyName || 'X-API-Key'}
-              onChange={(e) => updateAuthField('keyName', e.target.value)}
-              placeholder="X-API-Key"
-            />
-            <p className="text-sm text-muted-foreground">
-              {selectedTarget.config?.auth?.placement === 'header'
-                ? 'Header name where the API key will be placed (e.g., X-API-Key, Authorization)'
-                : 'Query parameter name where the API key will be placed (e.g., api_key, key)'}
-            </p>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="key-name">
+                  Key Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="key-name"
+                  value={auth?.keyName || 'X-API-Key'}
+                  onChange={(e) => updateAuthField('keyName', e.target.value)}
+                  placeholder="X-API-Key"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {auth?.placement === 'header'
+                    ? 'Header name where the API key will be placed (e.g., X-API-Key, Authorization)'
+                    : 'Query parameter name where the API key will be placed (e.g., api_key, key)'}
+                </p>
+              </div>
 
-          <PasswordField
-            id="api-key-value"
-            label="API Key Value"
-            value={selectedTarget.config?.auth?.value || ''}
-            onChange={(value) => updateAuthField('value', value)}
-            placeholder="Enter your API key"
-            required
-            showValue={showApiKey}
-            onToggleVisibility={() => setShowApiKey(!showApiKey)}
-          />
-        </div>
-      )}
+              <PasswordField
+                id="api-key-value"
+                label="API Key Value"
+                value={auth?.value || ''}
+                onChange={(value) => updateAuthField('value', value)}
+                placeholder="Enter your API key"
+                required
+                showValue={showApiKey}
+                onToggleVisibility={() => setShowApiKey(!showApiKey)}
+              />
+            </div>
+          );
+        })()}
 
       {/* Digital Signature Auth Form */}
       {getAuthType() === 'digital_signature' && (

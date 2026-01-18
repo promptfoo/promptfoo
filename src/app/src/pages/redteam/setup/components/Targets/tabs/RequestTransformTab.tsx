@@ -44,7 +44,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   React.useEffect(() => {
     if (testOpen) {
       setEditableTransform(
-        selectedTarget.config?.transformRequest || defaultRequestTransform || '',
+        (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || '',
       );
     }
   }, [testOpen, selectedTarget.config?.transformRequest, defaultRequestTransform]);
@@ -108,7 +108,9 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
       <div className="relative">
         <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
-            value={selectedTarget.config?.transformRequest || defaultRequestTransform || ''}
+            value={
+              (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || ''
+            }
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
             highlight={highlightJS}
             padding={10}

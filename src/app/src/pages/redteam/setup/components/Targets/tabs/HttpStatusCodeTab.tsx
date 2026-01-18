@@ -44,7 +44,7 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
       </p>
       <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
         <Editor
-          value={selectedTarget.config.validateStatus || ''}
+          value={(selectedTarget.config?.validateStatus as string) || ''}
           onValueChange={(code) => updateCustomTarget('validateStatus', code)}
           highlight={highlightJS}
           padding={10}

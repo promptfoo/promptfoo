@@ -83,7 +83,10 @@ export function StrategyItem({
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(strategy.id);
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
+    strategy.id as any,
+  );
 
   const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
     if (requiresConfig) {
