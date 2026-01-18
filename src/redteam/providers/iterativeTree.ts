@@ -664,7 +664,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
@@ -772,7 +772,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -788,7 +788,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -811,7 +811,7 @@ async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -827,7 +827,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -851,7 +851,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -867,7 +867,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -898,7 +898,7 @@ async function runRedteamConversation({
           promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
-          guardrails: targetResponse.guardrails,
+          guardrails: targetResponse?.guardrails,
           sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
@@ -970,7 +970,7 @@ async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
@@ -986,7 +986,7 @@ async function runRedteamConversation({
       sessionIds: extractSessionIds(treeOutputs),
     },
     tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
