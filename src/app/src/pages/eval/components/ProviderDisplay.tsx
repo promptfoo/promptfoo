@@ -33,7 +33,7 @@ const EXCLUDED_FIELDS = new Set([
  * Recursively filter config for display, removing non-useful fields.
  * Returns undefined for empty objects to keep tooltip clean.
  */
-export function filterConfigForDisplay(obj: unknown, depth = 0): unknown {
+export function filterConfigForDisplay(obj: any, depth = 0): any {
   if (depth > 10) {
     return undefined; // Prevent infinite recursion
   }
