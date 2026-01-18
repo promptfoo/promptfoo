@@ -413,11 +413,13 @@ export async function doEval(
       });
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
-        cliState.config.defaultTest = cliState.config.defaultTest || {};
-        if (typeof cliState.config.defaultTest === 'object') {
-          cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
-          cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+        // Normalize string shorthand to object
+        if (typeof cliState.config.defaultTest === 'string') {
+          cliState.config.defaultTest = {};
         }
+        cliState.config.defaultTest = cliState.config.defaultTest || {};
+        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
       }
     }
     if (!resumeEval && cmdObj.var) {
