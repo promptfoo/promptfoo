@@ -138,6 +138,7 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         minVersion: undefined,
+        rejectUnauthorized: true,
       });
     });
 
@@ -177,6 +178,7 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         minVersion: 'TLSv1.3',
+        rejectUnauthorized: true,
       });
     });
 
@@ -256,6 +258,7 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         maxVersion: undefined,
+        rejectUnauthorized: true,
       });
     });
   });
