@@ -147,6 +147,18 @@ function EvalOutputCell({
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
+  // Memoize RegExp creation for search highlighting to avoid recreating on each render
+  const searchRegex = useMemo(() => {
+    if (!searchText) {
+      return null;
+    }
+    try {
+      return new RegExp(searchText, 'gi');
+    } catch {
+      return null;
+    }
+  }, [searchText]);
+
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
@@ -295,44 +307,41 @@ function EvalOutputCell({
     );
   }
 
-  if (searchText && shouldHighlightSearchText) {
-    // Highlight search matches
-    try {
-      const regex = new RegExp(searchText, 'gi');
-      const matches: { start: number; end: number }[] = [];
-      let match;
-      while ((match = regex.exec(text)) !== null) {
-        matches.push({
-          start: match.index,
-          end: regex.lastIndex,
-        });
-      }
-      node =
-        matches.length > 0 ? (
-          <>
-            <span key="text-before">{text?.substring(0, matches[0].start)}</span>
-            {matches.map((range, index) => {
-              const matchText = text?.substring(range.start, range.end);
-              const afterText = text?.substring(
-                range.end,
-                matches[index + 1] ? matches[index + 1].start : text?.length,
-              );
-              return (
-                <React.Fragment key={`fragment-${index}`}>
-                  <span className="search-highlight" key={`match-${index}`}>
-                    {matchText}
-                  </span>
-                  <span key={`text-after-${index}`}>{afterText}</span>
-                </React.Fragment>
-              );
-            })}
-          </>
-        ) : (
-          <span key="no-match">{text}</span>
-        );
-    } catch (error) {
-      console.error('Invalid regular expression:', (error as Error).message);
+  if (searchRegex && shouldHighlightSearchText) {
+    // Highlight search matches using memoized regex
+    // Reset lastIndex for global regex to ensure matching starts from beginning
+    searchRegex.lastIndex = 0;
+    const matches: { start: number; end: number }[] = [];
+    let match;
+    while ((match = searchRegex.exec(text)) !== null) {
+      matches.push({
+        start: match.index,
+        end: searchRegex.lastIndex,
+      });
     }
+    node =
+      matches.length > 0 ? (
+        <>
+          <span key="text-before">{text?.substring(0, matches[0].start)}</span>
+          {matches.map((range, index) => {
+            const matchText = text?.substring(range.start, range.end);
+            const afterText = text?.substring(
+              range.end,
+              matches[index + 1] ? matches[index + 1].start : text?.length,
+            );
+            return (
+              <React.Fragment key={`fragment-${index}`}>
+                <span className="search-highlight" key={`match-${index}`}>
+                  {matchText}
+                </span>
+                <span key={`text-after-${index}`}>{afterText}</span>
+              </React.Fragment>
+            );
+          })}
+        </>
+      ) : (
+        <span key="no-match">{text}</span>
+      );
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
     inlineImageSrc ||

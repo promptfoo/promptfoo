@@ -1419,7 +1419,7 @@ function ResultsTable({
     // Initial sync
     handleScroll();
     // Keep in sync on resize
-    window.addEventListener('resize', handleScroll);
+    window.addEventListener('resize', handleScroll, { passive: true });
 
     return () => {
       if (rafId !== null) {
