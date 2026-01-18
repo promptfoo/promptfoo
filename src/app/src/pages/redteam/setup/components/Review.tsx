@@ -337,6 +337,12 @@ export default function Review({
         for (const item of intent) {
           if (typeof item === 'string' && item.trim() !== '') {
             result.push(item);
+          } else if (Array.isArray(item)) {
+            // Multi-step intent: flatten nested array and join steps
+            const steps = item.filter((s): s is string => typeof s === 'string' && s.trim() !== '');
+            if (steps.length > 0) {
+              result.push(steps.join(' → '));
+            }
           }
         }
       } else if (typeof intent === 'string' && intent.trim() !== '') {
