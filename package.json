@@ -97,7 +97,7 @@
       "react": "19.2.3",
       "react-dom": "19.2.3"
     },
-    "gaxios": "^7.0.0",
+    "gaxios": "^7.1.3",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
