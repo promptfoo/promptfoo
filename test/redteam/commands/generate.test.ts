@@ -28,11 +28,15 @@ import type { ApiProvider } from '../../../src/types/index';
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
   synthesize: vi.fn().mockResolvedValue({
-    testCases: [],
-    purpose: '',
-    entities: [],
-    injectVar: 'input',
-    failedPlugins: [],
+    testCases: [] as Array<{
+      vars: Record<string, string>;
+      assert: Array<{ type: string; value: string }>;
+      metadata: { pluginId: string };
+    }>,
+    purpose: '' as string,
+    entities: [] as string[],
+    injectVar: 'input' as string,
+    failedPlugins: [] as Array<{ pluginId: string; requested: number; generated: number }>,
   }),
 }));
 vi.mock('../../../src/telemetry');
