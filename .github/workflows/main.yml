@@ -83,7 +83,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14
+          python-version: 3.14.2
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
@@ -382,7 +382,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14
+          python-version: 3.14.2
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1
@@ -417,7 +417,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14
+          python-version: 3.14.2
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1
