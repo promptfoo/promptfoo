@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { CancelIcon, SaveIcon } from '@app/components/ui/icons';
@@ -146,7 +146,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       {/* Error display */}
       {parseError && (
         <Alert variant="destructive">
-          <AlertDescription>{parseError}</AlertDescription>
+          <AlertContent>
+            <AlertDescription>{parseError}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

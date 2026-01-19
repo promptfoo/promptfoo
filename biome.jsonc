@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -13,6 +13,7 @@
       "**/*.ts",
       "**/*.tsx",
       "**/*.json",
+      "**/*.jsonc",
       "**/*.mjs",
       "**/*.cjs",
       "!!drizzle",
@@ -23,7 +24,9 @@
       "!!**/public",
       "!!examples/multiple-turn-conversation/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
-      "!!test/fixtures/rubric-json-template/**/*.json"
+      "!!test/fixtures/rubric-json-template/**/*.json",
+      // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
+      "!!src/redteam/shared/runtimeTransform.ts"
     ]
   },
   "formatter": {
@@ -103,7 +106,8 @@
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "error",
         "noUnusedFunctionParameters": "error",
-        "useJsxKeyInIterable": "error"
+        "useJsxKeyInIterable": "error",
+        "useIsNan": "error"
       },
       "style": {
         "noEnum": "error",
@@ -142,18 +146,30 @@
         }
       },
       "suspicious": {
+        "noAsyncPromiseExecutor": "error",
+        "noDebugger": "error",
         "noExplicitAny": "error",
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
-        "noRedundantUseStrict": "error"
+        "noRedundantUseStrict": "error",
+        "noThenProperty": "error",
+        "useErrorMessage": "warn",
+        "useIterableCallbackReturn": "off",
+        "noSelfCompare": "error"
       },
       "performance": {
-        "noDelete": "off"
+        "noDelete": "off",
+        "noBarrelFile": "off",
+        "noReExportAll": "off"
       },
       "a11y": {
         "recommended": false,
         "useButtonType": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
       }
     }
   },
@@ -245,6 +261,9 @@
           },
           "suspicious": {
             "noExplicitAny": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
       }
@@ -255,17 +274,15 @@
         "rules": {
           "style": {
             "noRestrictedGlobals": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
-      }
-    },
-    {
-      "includes": ["examples/claude-agent-sdk/advanced/workspace/**/*"],
-      "linter": {
-        "enabled": false
-      },
-      "formatter": {
-        "enabled": false
       }
     },
     {
@@ -303,6 +320,13 @@
           },
           "suspicious": {
             "noExplicitAny": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
           }
         }
       }

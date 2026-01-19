@@ -2,7 +2,7 @@ import 'prismjs/components/prism-json';
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -590,7 +590,9 @@ const CustomTargetConfiguration = ({
           {bodyError ? (
             <Alert variant="destructive" className="py-2">
               <AlertCircle className="size-4" />
-              <AlertDescription>{bodyError}</AlertDescription>
+              <AlertContent>
+                <AlertDescription>{bodyError}</AlertDescription>
+              </AlertContent>
             </Alert>
           ) : (
             <p className="text-sm text-muted-foreground">{config.configDescription}</p>

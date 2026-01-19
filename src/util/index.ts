@@ -13,6 +13,8 @@ export {
 export { setupEnv } from './env';
 // File operations
 export {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   readFilters,

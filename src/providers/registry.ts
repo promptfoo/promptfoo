@@ -452,6 +452,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
+      return createCloudflareGatewayProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('cohere:'),
     create: async (
       providerPath: string,
@@ -944,6 +958,17 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
       return new PortkeyChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
     },
   },
   {

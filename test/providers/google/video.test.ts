@@ -201,8 +201,8 @@ describe('GoogleVideoProvider', () => {
 
   describe('callApi', () => {
     it('should return error when project ID is missing and ADC fails', async () => {
+      delete process.env.GOOGLE_CLOUD_PROJECT;
       delete process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
       // Mock ADC resolution to fail (simulating no credentials configured)
       mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
@@ -210,12 +210,12 @@ describe('GoogleVideoProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Google Veo video generation requires Vertex AI');
-      expect(result.error).toContain('GOOGLE_PROJECT_ID');
+      expect(result.error).toContain('GOOGLE_CLOUD_PROJECT');
     });
 
     it('should resolve project ID from ADC when not explicitly set', async () => {
+      delete process.env.GOOGLE_CLOUD_PROJECT;
       delete process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
       // ADC can resolve the project ID
       mockResolveProjectId.mockResolvedValue('adc-resolved-project');
 

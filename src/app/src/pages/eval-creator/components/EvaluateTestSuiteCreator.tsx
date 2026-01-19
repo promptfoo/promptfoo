@@ -32,7 +32,7 @@ function ErrorFallback({
   error,
   resetErrorBoundary,
 }: {
-  error: Error;
+  error: unknown;
   resetErrorBoundary: () => void;
 }) {
   return (
@@ -41,7 +41,7 @@ function ErrorFallback({
       className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive"
     >
       <p className="font-medium">Something went wrong:</p>
-      <pre className="mt-2 text-sm">{error.message}</pre>
+      <pre className="mt-2 text-sm">{error instanceof Error ? error.message : String(error)}</pre>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary} className="mt-3">
         Try again
       </Button>
