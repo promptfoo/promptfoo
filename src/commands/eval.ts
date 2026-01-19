@@ -348,7 +348,9 @@ export async function doEval(
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency)
-      : (cmdObj.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? evaluateOptions.maxConcurrency);
+      : (cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency);
 
     if (delay > 0) {
       maxConcurrency = 1;
