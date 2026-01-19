@@ -24,9 +24,15 @@ import type { EnvOverrides } from '../types/env';
  * This ensures full Nunjucks feature support while preserving non-env templates.
  *
  * @param obj - The object to process
+ * @param envOverrides - Optional env vars to merge with (or replace) the base env
+ * @param replaceBase - If true, envOverrides replaces the base env entirely instead of merging
  * @returns The object with only env templates rendered
  */
-export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T {
+export function renderEnvOnlyInObject<T>(
+  obj: T,
+  envOverrides?: EnvOverrides,
+  replaceBase?: boolean,
+): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
@@ -45,7 +51,13 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
     const nunjucks = getNunjucksEngine();
     // process.env values are always strings or undefined, never numbers or booleans
     const baseEnvGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
-    const envGlobals = envOverrides ? { ...baseEnvGlobals, ...envOverrides } : baseEnvGlobals;
+    // If replaceBase is true, use envOverrides as the complete env (useful for isolating from cliState)
+    // Otherwise merge envOverrides on top of baseEnvGlobals (normal override behavior)
+    const envGlobals = replaceBase
+      ? (envOverrides ?? {})
+      : envOverrides
+        ? { ...baseEnvGlobals, ...envOverrides }
+        : baseEnvGlobals;
 
     // Match ALL Nunjucks templates {{ ... }}
     // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
@@ -65,8 +77,9 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
 
       // Render if:
       // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
-      // 2. Variable exists (even if it's an empty string)
-      if (hasFilter || (varName && varName in envGlobals)) {
+      // 2. Variable exists AND is not undefined (empty string is valid, undefined is not)
+      // This prevents rendering {{env.FOO}} to empty string when FOO is undefined
+      if (hasFilter || (varName && varName in envGlobals && envGlobals[varName] !== undefined)) {
         try {
           // Use Nunjucks to render the template (supports filters, expressions, etc.)
           return nunjucks.renderString(match, { env: envGlobals });
@@ -85,13 +98,19 @@ export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderEnvOnlyInObject(item, envOverrides)) as unknown as T;
+    return obj.map((item) =>
+      renderEnvOnlyInObject(item, envOverrides, replaceBase),
+    ) as unknown as T;
   }
 
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key], envOverrides);
+      result[key] = renderEnvOnlyInObject(
+        (obj as Record<string, unknown>)[key],
+        envOverrides,
+        replaceBase,
+      );
     }
     return result as T;
   }
