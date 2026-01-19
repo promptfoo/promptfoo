@@ -1459,7 +1459,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
-      });
+        failedPlugins: [],
+      } satisfies SynthesizeMockResult);
     });
 
     it('should always use resolveTeamId for fetching policies regardless of config metadata', async () => {
