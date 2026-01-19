@@ -635,7 +635,7 @@ export class CustomProvider implements ApiProvider {
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
       ...(lastTargetError ? { error: lastTargetError } : {}),
     };
   }

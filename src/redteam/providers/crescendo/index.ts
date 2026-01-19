@@ -651,7 +651,7 @@ export class CrescendoProvider implements ApiProvider {
             : undefined,
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
     };
   }
 
