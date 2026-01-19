@@ -108,9 +108,9 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.11",
-    "@aws-sdk/client-bedrock-agent-runtime": "^3.969.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.969.0",
-    "@aws-sdk/client-sagemaker-runtime": "^3.969.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.971.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.971.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.971.0",
     "@aws-sdk/credential-provider-sso": "^3.968.0",
     "@aws-sdk/types": "^3.968.0",
     "@azure/identity": "^4.13.0",
