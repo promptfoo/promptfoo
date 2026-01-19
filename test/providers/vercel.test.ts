@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
-  VercelAiProvider,
-  VercelAiEmbeddingProvider,
   createVercelProvider,
+  VercelAiEmbeddingProvider,
+  VercelAiProvider,
 } from '../../src/providers/vercel';
 
 // Mock the cache module
