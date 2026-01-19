@@ -202,19 +202,16 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  let _config;
   let testSuite;
   let commandLineOptions: Record<string, unknown> | undefined;
   if (cmdObj.config) {
     // Load configuration from the provided config file
     const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
-    _config = configs.config;
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
   } else {
     // Load configuration from the original evaluation
     const configs = await resolveConfigs({}, originalEval.config);
-    _config = configs.config;
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
   }
