@@ -236,6 +236,8 @@ export const RedteamGenerateOptionsSchema = z.object({
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
   configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
+  cloudConfigId: z.string().optional().describe('UUID of the cloud config when running from cloud'),
+  cloudTargetId: z.string().optional().describe('UUID of the cloud target when running from cloud'),
 });
 
 /**
