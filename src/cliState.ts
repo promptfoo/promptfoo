@@ -21,6 +21,9 @@ interface CliState {
 
   // Final callback to be called after all output is flushed
   postActionCallback?: () => Promise<void>;
+
+  // Maximum concurrency from CLI -j flag (propagated to providers like Python)
+  maxConcurrency?: number;
 }
 
 const state: CliState = {};
