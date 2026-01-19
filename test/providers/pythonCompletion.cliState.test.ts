@@ -89,9 +89,9 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => ({
   PythonWorkerPool: workerPoolMocks.PythonWorkerPoolMock,
 }));
 
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 // Import after mocks are set up
 import { getEnvInt } from '../../src/python/pythonUtils';
-import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 
 describe('PythonProvider cliState.maxConcurrency', () => {
