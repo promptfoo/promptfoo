@@ -50,6 +50,7 @@ import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
+  FailedPluginInfo,
   PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -57,6 +58,47 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+
+/**
+ * Handles failed plugins based on strict mode.
+ * In strict mode, throws PartialGenerationError.
+ * In non-strict mode (default), logs a warning and returns false to continue.
+ * @returns true if we should stop (error thrown), false to continue
+ */
+function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean): void {
+  if (failedPlugins.length === 0) {
+    return;
+  }
+
+  const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+  const warningMessage = dedent`
+    ${chalk.yellow('⚠️  Warning:')} Test case generation failed for ${failedPlugins.length} plugin(s):
+    ${pluginList.join('\n')}
+
+    ${chalk.dim('Possible causes:')}
+      - API rate limiting or connectivity issues
+      - Invalid plugin configuration
+      - Provider errors during generation
+
+    ${chalk.dim('To troubleshoot:')}
+      - Run with --verbose flag to see detailed error messages
+      - Check API keys and provider configuration
+      - Retry the scan after resolving any reported errors
+  `;
+
+  if (strict) {
+    // In strict mode, throw to stop the scan
+    throw new PartialGenerationError(failedPlugins);
+  }
+
+  // In non-strict mode (default), log warning and continue
+  logger.warn(warningMessage);
+  logger.warn(
+    chalk.yellow(
+      `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
+    ),
+  );
+}
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -508,9 +550,7 @@ export async function doGenerateRedteam(
     }
 
     // Check for failed plugins across all contexts
-    if (allFailedPlugins.length > 0) {
-      throw new PartialGenerationError(allFailedPlugins);
-    }
+    handleFailedPlugins(allFailedPlugins, options.strict ?? false);
 
     // Use first context's purpose for backward compatibility in output
     purpose = contexts[0].purpose;
@@ -533,10 +573,8 @@ export async function doGenerateRedteam(
       testGenerationInstructions: augmentedTestGenerationInstructions,
     } as SynthesizeOptions);
 
-    // Check for failed plugins before proceeding
-    if (result.failedPlugins.length > 0) {
-      throw new PartialGenerationError(result.failedPlugins);
-    }
+    // Check for failed plugins - warn by default, throw with --strict
+    handleFailedPlugins(result.failedPlugins, options.strict ?? false);
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -812,6 +850,11 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
+    .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
       // Handle cloud config with target
       if (opts.config && isUuid(opts.config)) {

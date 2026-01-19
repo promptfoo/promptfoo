@@ -388,7 +388,7 @@ describe('doRedteamRun', () => {
   });
 
   describe('PartialGenerationError handling', () => {
-    it('should re-throw PartialGenerationError after logging', async () => {
+    it('should re-throw PartialGenerationError after logging when strict mode causes error', async () => {
       const failedPlugins = [
         { pluginId: 'pii', requested: 5 },
         { pluginId: 'harmful:hate', requested: 3 },
@@ -396,7 +396,8 @@ describe('doRedteamRun', () => {
       const error = new PartialGenerationError(failedPlugins);
       vi.mocked(doGenerateRedteam).mockRejectedValue(error);
 
-      await expect(doRedteamRun({})).rejects.toThrow(PartialGenerationError);
+      // This happens when strict mode is enabled and doGenerateRedteam throws
+      await expect(doRedteamRun({ strict: true })).rejects.toThrow(PartialGenerationError);
     });
 
     it('should log error message before re-throwing PartialGenerationError', async () => {
@@ -406,7 +407,7 @@ describe('doRedteamRun', () => {
       vi.mocked(doGenerateRedteam).mockRejectedValue(error);
 
       try {
-        await doRedteamRun({});
+        await doRedteamRun({ strict: true });
       } catch {
         // Expected to throw
       }
@@ -422,7 +423,7 @@ describe('doRedteamRun', () => {
       vi.mocked(doGenerateRedteam).mockRejectedValue(error);
 
       try {
-        await doRedteamRun({});
+        await doRedteamRun({ strict: true });
       } catch {
         // Expected to throw
       }
@@ -435,6 +436,26 @@ describe('doRedteamRun', () => {
       vi.mocked(doGenerateRedteam).mockRejectedValue(genericError);
 
       await expect(doRedteamRun({})).rejects.toThrow('Some other error');
+    });
+
+    it('should pass strict option through to doGenerateRedteam', async () => {
+      await doRedteamRun({ strict: true });
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          strict: true,
+        }),
+      );
+    });
+
+    it('should not pass strict option when not specified', async () => {
+      await doRedteamRun({});
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          strict: true,
+        }),
+      );
     });
   });
 });

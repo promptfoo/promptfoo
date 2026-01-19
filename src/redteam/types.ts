@@ -206,6 +206,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
+  strict?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -247,6 +248,7 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  strict?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;

@@ -776,7 +776,7 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
-  it('should throw PartialGenerationError when plugins fail to generate tests', async () => {
+  it('should warn but not throw when plugins fail to generate tests (default behavior)', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
@@ -801,12 +801,50 @@ describe('doGenerateRedteam', () => {
       defaultConfig: {},
       write: false,
       config: 'test-config.yaml',
+      // strict is not set (defaults to false)
+    };
+
+    // Should not throw - just warn
+    await expect(doGenerateRedteam(options)).resolves.not.toThrow();
+
+    // Verify warning was logged
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('pii'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('harmful:hate'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('--strict'));
+  });
+
+  it('should throw PartialGenerationError when plugins fail with --strict flag', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+      strict: true, // Enable strict mode
     };
 
     await expect(doGenerateRedteam(options)).rejects.toThrow(PartialGenerationError);
   });
 
-  it('should include plugin details in PartialGenerationError message', async () => {
+  it('should include plugin details in PartialGenerationError message with --strict', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
@@ -822,6 +860,7 @@ describe('doGenerateRedteam', () => {
       defaultConfig: {},
       write: false,
       config: 'test-config.yaml',
+      strict: true, // Enable strict mode
     };
 
     try {
@@ -833,6 +872,40 @@ describe('doGenerateRedteam', () => {
       expect((error as PartialGenerationError).message).toContain('0/5 tests');
       expect((error as PartialGenerationError).failedPlugins).toHaveLength(1);
     }
+  });
+
+  it('should not warn or throw when no plugins fail', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [], // No failures
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    await expect(doGenerateRedteam(options)).resolves.not.toThrow();
+
+    // Verify no warning about failed plugins was logged
+    const warnCalls = vi.mocked(logger.warn).mock.calls;
+    const failedPluginWarnings = warnCalls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('generation failed'),
+    );
+    expect(failedPluginWarnings).toHaveLength(0);
   });
 
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
