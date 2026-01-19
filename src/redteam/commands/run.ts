@@ -90,6 +90,9 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
+        if (opts.maxConcurrency !== undefined) {
+          cliState.maxConcurrency = opts.maxConcurrency;
+        }
         await doRedteamRun(opts);
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -105,6 +108,10 @@ export function redteamRunCommand(program: Command) {
           );
         }
         process.exitCode = 1;
+      } finally {
+        // Reset cliState to prevent stale state leaking to later commands
+        cliState.remote = false;
+        cliState.maxConcurrency = undefined;
       }
     });
 
