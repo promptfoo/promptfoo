@@ -405,6 +405,25 @@ tests:
       data: file://data/config.yaml
 ```
 
+### Path Resolution
+
+`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+
+```yaml title="src/tests/promptfooconfig.yaml"
+tests:
+  - vars:
+      # Resolved as src/tests/data/input.json
+      data: file://./data/input.json
+
+      # Also works - resolved as src/tests/data/input.json
+      data2: file://data/input.json
+
+      # Parent directory - resolved as src/shared/context.json
+      shared: file://../shared/context.json
+```
+
+Without the `file://` prefix, values are passed as plain strings to your provider.
+
 ### Supported File Types
 
 | Type                    | Handling            | Usage             |
