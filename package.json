@@ -107,7 +107,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.8",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.11",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.969.0",
     "@aws-sdk/client-bedrock-runtime": "^3.969.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.969.0",
@@ -166,7 +166,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.8",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.11",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.969.0",
     "@aws-sdk/client-bedrock-runtime": "^3.969.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.969.0",
@@ -178,7 +178,7 @@
     "@fal-ai/client": "~1.7.2",
     "@ibm-cloud/watsonx-ai": "^1.7.6",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.81.0",
+    "@openai/codex-sdk": "^0.87.0",
     "@playwright/browser-chromium": "^1.57.0",
     "@rollup/rollup-linux-x64-gnu": "^4.55.1",
     "@slack/web-api": "^7.13.0",
