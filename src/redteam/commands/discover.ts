@@ -612,7 +612,6 @@ export async function doSocketBasedDiscovery(
     if (showProgress) {
       logger.info('');
       logger.info(chalk.green('✓ Discovery complete'));
-      logger.info('');
       logger.info(chalk.bold('Return to the UI to see detailed results.'));
     }
 
