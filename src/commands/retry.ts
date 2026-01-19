@@ -204,16 +204,19 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Load configuration - from provided config file or from original evaluation
   let config;
   let testSuite;
+  let commandLineOptions: Record<string, unknown> | undefined;
   if (cmdObj.config) {
     // Load configuration from the provided config file
     const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
     config = configs.config;
     testSuite = configs.testSuite;
+    commandLineOptions = configs.commandLineOptions;
   } else {
     // Load configuration from the original evaluation
     const configs = await resolveConfigs({}, originalEval.config);
     config = configs.config;
     testSuite = configs.testSuite;
+    commandLineOptions = configs.commandLineOptions;
   }
 
   // Delete the ERROR results so they will be re-evaluated when we run with resume
@@ -229,10 +232,27 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable resume mode so only the missing (deleted) results will be evaluated
   cliState.resume = true;
 
+  // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
+  // Priority: CLI flag > config file's commandLineOptions
+  const effectiveMaxConcurrency =
+    cmdObj.maxConcurrency ?? (commandLineOptions?.maxConcurrency as number | undefined);
+  const effectiveDelay = cmdObj.delay ?? (commandLineOptions?.delay as number | undefined);
+
+  // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+  // Handle delay mode: force concurrency to 1 when delay is set
+  if (effectiveDelay && effectiveDelay > 0) {
+    cliState.maxConcurrency = 1;
+    logger.info(
+      `Running at concurrency=1 because ${effectiveDelay}ms delay was requested between API calls`,
+    );
+  } else if (effectiveMaxConcurrency !== undefined) {
+    cliState.maxConcurrency = effectiveMaxConcurrency;
+  }
+
   // Set up evaluation options
   const evaluateOptions: EvaluateOptions = {
-    maxConcurrency: cmdObj.maxConcurrency || (config as any).maxConcurrency,
-    delay: cmdObj.delay || (config as any).delay,
+    maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
+    delay: effectiveDelay,
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
@@ -244,8 +264,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     logger.info(`✅ Retry completed for evaluation: ${chalk.cyan(evalId)}`);
     return retriedEval;
   } finally {
-    // Always clear the resume state
+    // Always clear the resume state and maxConcurrency to prevent stale state
     cliState.resume = false;
+    cliState.maxConcurrency = undefined;
   }
 }
 
