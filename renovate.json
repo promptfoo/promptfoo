@@ -2,7 +2,7 @@
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
-  "postUpdateOptions": ["npmDedupe"],
+  "postUpdateOptions": [],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
