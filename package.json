@@ -89,7 +89,7 @@
     "esbuild": "0.27.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-is": "^19.0.0",
+    "react-is": "^19.2.3",
     "*": {
       "whatwg-url": "15.1.0",
       "chokidar": "5.0.0",
