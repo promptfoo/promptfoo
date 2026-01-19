@@ -116,7 +116,10 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       const latency = Date.now() - startTime;
 
       // Format alignment data
-      const output = this.formatAlignmentOutput(response, context?.vars?.format);
+      const output = this.formatAlignmentOutput(
+        response,
+        context?.vars?.format as string | object | undefined,
+      );
 
       logger.debug('[ElevenLabs Alignment] Alignment completed successfully', {
         wordCount: response.words.length,

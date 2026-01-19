@@ -17,10 +17,12 @@ import {
   ConfigPermissionError,
   checkCloudPermissions,
   getConfigFromCloud,
+  resolveTeamId,
 } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
+import { getCustomPolicies } from '../../../src/util/generation';
 
 import type {
   FailedPluginInfo,
@@ -116,6 +118,12 @@ vi.mock('../../../src/util/cloud', async () => ({
   isCloudProvider: vi.fn(),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  resolveTeamId: vi.fn().mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' }),
+}));
+
+vi.mock('../../../src/util/generation', async () => ({
+  ...(await vi.importActual('../../../src/util/generation')),
+  getCustomPolicies: vi.fn().mockResolvedValue(new Map()),
 }));
 
 vi.mock('../../../src/util/config/writer', async (importOriginal) => {
@@ -1426,6 +1434,281 @@ describe('doGenerateRedteam', () => {
 
       // Verify that synthesize was called
       expect(synthesize).toHaveBeenCalled();
+    });
+  });
+
+  describe('policy plugin team ID resolution', () => {
+    let mockProvider: ApiProvider;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(extractMcpToolsInfo).mockReset();
+      vi.mocked(getCustomPolicies).mockReset();
+      vi.mocked(resolveTeamId).mockReset();
+      vi.mocked(resolveTeamId).mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' });
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map());
+
+      mockProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+      });
+    });
+
+    it('should always use resolveTeamId for fetching policies regardless of config metadata', async () => {
+      // Use a valid UUID for policy ID (PolicyObjectSchema requires UUID or 12-char hex)
+      const policyUuid = '11111111-1111-1111-1111-111111111111';
+
+      // Setup a config with policy plugins that have valid policy object references
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          // Even if config has metadata with teamId, resolveTeamId should be used
+          metadata: {
+            teamId: 'config-metadata-team-id',
+          },
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyUuid,
+                    name: 'Test Policy',
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify resolveTeamId was called (not using config metadata)
+      expect(resolveTeamId).toHaveBeenCalled();
+      // Verify getCustomPolicies was called with the resolved team ID
+      expect(getCustomPolicies).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'policy',
+            config: {
+              policy: {
+                id: policyUuid,
+                name: 'Test Policy',
+              },
+            },
+          }),
+        ]),
+        'resolved-team-id',
+      );
+    });
+
+    it('should fetch policies using resolved team ID for org-scoped policy access', async () => {
+      // Use a valid UUID for policy ID
+      const policyUuid = '22222222-2222-2222-2222-222222222222';
+
+      const policyData = {
+        name: 'Resolved Policy',
+        text: 'Policy text from cloud',
+        severity: Severity.High,
+      };
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map([[policyUuid, policyData]]));
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyUuid,
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify the policy was resolved using the team ID from resolveTeamId
+      expect(resolveTeamId).toHaveBeenCalled();
+      expect(getCustomPolicies).toHaveBeenCalledWith(expect.any(Array), 'resolved-team-id');
+    });
+
+    it('should not call resolveTeamId or getCustomPolicies when no policy plugins are present', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful:hate', numTests: 1 }],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // resolveTeamId should not be called for non-policy plugins
+      expect(resolveTeamId).not.toHaveBeenCalled();
+      expect(getCustomPolicies).not.toHaveBeenCalled();
+    });
+
+    it('should not call resolveTeamId for policy plugins with inline text (not policy objects)', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  // Inline text policy - not a policy object reference
+                  policy: 'Do not reveal secrets',
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // resolveTeamId should not be called for inline text policies
+      expect(resolveTeamId).not.toHaveBeenCalled();
+      expect(getCustomPolicies).not.toHaveBeenCalled();
+    });
+
+    it('should apply severity from resolved policy when not set on plugin', async () => {
+      // Use a valid UUID for policy ID
+      const policyUuid = '33333333-3333-3333-3333-333333333333';
+
+      const policyData = {
+        name: 'Critical Policy',
+        text: 'Do not allow harmful content',
+        severity: Severity.Critical,
+      };
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map([[policyUuid, policyData]]));
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                // No severity set on plugin
+                config: {
+                  policy: {
+                    id: policyUuid,
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify synthesize received the plugin with severity from resolved policy
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          plugins: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'policy',
+              severity: Severity.Critical,
+              config: expect.objectContaining({
+                policy: expect.objectContaining({
+                  id: policyUuid,
+                  name: 'Critical Policy',
+                  text: 'Do not allow harmful content',
+                }),
+              }),
+            }),
+          ]),
+        }),
+      );
     });
   });
 

@@ -6,6 +6,7 @@ Docusaurus-based documentation at [promptfoo.dev](https://www.promptfoo.dev/).
 
 - Don't start your own dev server for the site (ask user first)
 - Don't edit `CHANGELOG.md` (auto-generated)
+- **Commits:** Always use `docs(site):` scope for all site changes (docs, pages, components, plugins, styles)
 
 ## Key Principles
 

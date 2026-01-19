@@ -82,6 +82,103 @@ beforeEach(() => {
 
 For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockReset()` in `beforeEach` to ensure test isolation when tests run in random order.
 
+## Zustand Store Testing
+
+When testing components that use Zustand stores, prefer **integration testing with real stores** over mocking.
+
+### When to Use Real Stores vs Mocking
+
+**Use real stores (preferred)** when:
+
+- Testing components that modify store state
+- Verifying state changes after user interactions
+- Testing store action logic (merge, update, delete)
+
+**Mock the store** only when:
+
+- Testing pure UI components that only read from stores
+- Testing isolated component logic completely unrelated to state
+
+### Pattern: Integration Testing with Real Stores
+
+**Reference**: `src/app/src/pages/redteam/setup/components/PluginsTab.test.tsx`
+
+```typescript
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
+import { useMyStore } from './useMyStore';
+
+// Capture initial state OUTSIDE describe block
+const initialState = useMyStore.getState();
+
+describe('MyComponent', () => {
+  beforeEach(() => {
+    // Reset store to initial state before each test
+    act(() => {
+      useMyStore.setState(initialState);
+    });
+  });
+
+  afterEach(() => {
+    // Clean up after each test
+    act(() => {
+      useMyStore.setState(initialState);
+    });
+  });
+
+  test('user interaction updates store correctly', async () => {
+    const user = userEvent.setup();
+
+    // Verify initial state
+    expect(useMyStore.getState().items).toHaveLength(0);
+
+    render(<MyComponent />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Item' }));
+
+    // Assert on actual store state, not mock calls
+    await waitFor(() => {
+      expect(useMyStore.getState().items).toHaveLength(1);
+    });
+  });
+});
+```
+
+### Key Patterns
+
+1. **Capture initial state outside describe**: `const initialState = useMyStore.getState();`
+2. **Reset in beforeEach AND afterEach**: Ensures test isolation
+3. **Wrap setState in act()**: Required for React state batching
+4. **Assert on getState()**: Verify actual store state, not that a mock was called
+5. **Use waitFor for async**: Store updates may be asynchronous
+6. **Mock external dependencies only**: Mock APIs, analytics, child components—NOT the store
+
+### Anti-Pattern: Mocking the Store (avoid this)
+
+```typescript
+// ❌ AVOID: Mocking the store hook loses integration coverage
+vi.mock('./useMyStore');
+const mockUpdateItems = vi.fn();
+(useMyStore as any).mockReturnValue({
+  items: [],
+  updateItems: mockUpdateItems,
+});
+
+test('clicking button calls updateItems', () => {
+  render(<MyComponent />);
+  fireEvent.click(button);
+  // Only verifies mock was called, not that store logic works
+  expect(mockUpdateItems).toHaveBeenCalled();
+});
+```
+
+### Additional Store Test References
+
+- `src/app/src/store/providersStore.test.ts` - Basic store testing
+- `src/app/src/stores/evalConfig.test.ts` - Configuration state
+- `src/app/src/stores/userStore.test.ts` - Async operations with act()
+
 ## Provider Testing
 
 Every provider needs tests covering:

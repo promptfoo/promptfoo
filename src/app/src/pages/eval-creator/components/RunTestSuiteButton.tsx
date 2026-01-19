@@ -27,6 +27,9 @@ const RunTestSuiteButton = () => {
 
   const isDisabled =
     isRunning ||
+    !providers ||
+    !Array.isArray(providers) ||
+    providers.length === 0 ||
     !prompts ||
     prompts.length === 0 ||
     !tests ||

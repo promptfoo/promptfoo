@@ -31,11 +31,10 @@ export function registerGenerateDatasetTool(server: McpServer) {
         ),
 
       numSamples: z
-        .number()
         .int()
         .min(1)
         .max(100)
-        .default(10)
+        .prefault(10)
         .describe('Number of test samples to generate (1-100)'),
 
       provider: z

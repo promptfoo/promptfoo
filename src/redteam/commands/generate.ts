@@ -6,7 +6,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
@@ -158,7 +157,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
@@ -214,7 +212,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    resolvedConfigMetadata = resolved.config.metadata;
     commandLineOptions = resolved.commandLineOptions;
     resolvedConfig = resolved.config;
 
@@ -371,11 +368,13 @@ export async function doGenerateRedteam(
     (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
   );
   if (policyPluginsWithRefs.length > 0) {
-    // Load the calling user's team id; all policies must belong to the same team.
-    const teamId =
-      resolvedConfigMetadata?.teamId ??
-      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
-      (await resolveTeamId()).id;
+    // Always use the calling user's team id for fetching policies.
+    // The server will return:
+    // 1. Policies owned by the user's team
+    // 2. Org-scoped policies (accessible to all teams in the org)
+    // This allows users to run scans with org-scoped templates that reference
+    // org-scoped policies, even if those policies are owned by a different team.
+    const teamId = (await resolveTeamId()).id;
 
     const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 
@@ -442,7 +441,7 @@ export async function doGenerateRedteam(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    const errorMessage = fromError(parsedConfig.error).toString();
+    const errorMessage = z.prettifyError(parsedConfig.error);
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
@@ -886,6 +885,9 @@ export function redteamGenerateCommand(
       if (opts.remote) {
         cliState.remote = true;
       }
+      if (opts.maxConcurrency !== undefined) {
+        cliState.maxConcurrency = opts.maxConcurrency;
+      }
       if (shouldGenerateRemote()) {
         logger.debug('Remote generation enabled');
       } else {
@@ -902,10 +904,11 @@ export function redteamGenerateCommand(
           });
           if (!parsed.success) {
             logger.error('Invalid options:');
-            parsed.error.errors.forEach((err: z.ZodIssue) => {
+            parsed.error.issues.forEach((err: z.ZodIssue) => {
               logger.error(`  ${err.path.join('.')}: ${err.message}`);
             });
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
           overrides = parsed.data;
         }
@@ -923,7 +926,7 @@ export function redteamGenerateCommand(
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
+          error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
@@ -934,7 +937,11 @@ export function redteamGenerateCommand(
               : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-        process.exit(1);
+        process.exitCode = 1;
+        return;
+      } finally {
+        // Reset cliState.maxConcurrency to prevent stale state
+        cliState.maxConcurrency = undefined;
       }
     });
 }
