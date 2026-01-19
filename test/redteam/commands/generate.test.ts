@@ -27,7 +27,13 @@ import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
-  synthesize: vi.fn().mockResolvedValue({ testCases: [] }),
+  synthesize: vi.fn().mockResolvedValue({
+    testCases: [],
+    purpose: '',
+    entities: [],
+    injectVar: 'input',
+    failedPlugins: [],
+  }),
 }));
 vi.mock('../../../src/telemetry');
 vi.mock('../../../src/logger', () => ({
