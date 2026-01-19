@@ -147,7 +147,9 @@ export class PythonProvider implements ApiProvider {
     // 3. CLI -j flag via cliState (general concurrency hint, only when explicitly set)
     if (cliState.maxConcurrency !== undefined) {
       if (cliState.maxConcurrency < 1) {
-        logger.warn(`Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`);
+        logger.warn(
+          `Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`,
+        );
         return 1;
       }
       logger.debug(`Python provider using ${cliState.maxConcurrency} workers (from -j flag)`);
