@@ -22,22 +22,31 @@ import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types/index';
+import type {
+  FailedPluginInfo,
+  RedteamCliGenerateOptions,
+  RedteamPluginObject,
+} from '../../../src/redteam/types';
+import type { ApiProvider, TestCaseWithPlugin } from '../../../src/types/index';
+
+// Type for synthesize mock return value to avoid type inference issues in CI
+type SynthesizeMockResult = {
+  testCases: TestCaseWithPlugin[];
+  purpose: string;
+  entities: string[];
+  injectVar: string;
+  failedPlugins: FailedPluginInfo[];
+};
 
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
   synthesize: vi.fn().mockResolvedValue({
-    testCases: [] as Array<{
-      vars: Record<string, string>;
-      assert: Array<{ type: string; value: string }>;
-      metadata: { pluginId: string };
-    }>,
-    purpose: '' as string,
-    entities: [] as string[],
-    injectVar: 'input' as string,
-    failedPlugins: [] as Array<{ pluginId: string; requested: number; generated: number }>,
-  }),
+    testCases: [],
+    purpose: '',
+    entities: [],
+    injectVar: 'input',
+    failedPlugins: [],
+  } satisfies SynthesizeMockResult),
 }));
 vi.mock('../../../src/telemetry');
 vi.mock('../../../src/logger', () => ({
@@ -1437,7 +1446,7 @@ describe('doGenerateRedteam', () => {
         entities: [],
         injectVar: 'input',
         failedPlugins: [],
-      });
+      } satisfies SynthesizeMockResult);
 
       vi.mocked(fs.existsSync).mockImplementation(function () {
         return false;
