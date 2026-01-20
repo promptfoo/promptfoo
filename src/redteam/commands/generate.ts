@@ -622,6 +622,7 @@ export async function doGenerateRedteam(
       typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
+      ...(options.description ? { description: options.description } : {}),
       defaultTest: {
         ...existingDefaultTest,
         metadata: {
@@ -706,6 +707,9 @@ export async function doGenerateRedteam(
         entities,
       },
     };
+    if (options.description) {
+      existingConfig.description = options.description;
+    }
     existingConfig.tests = [...testsArray, ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     // Add the config hash to metadata
@@ -749,7 +753,14 @@ export async function doGenerateRedteam(
       strategies: strategyObjs,
     });
 
-    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml', headerComments);
+    ret = writePromptfooConfig(
+      {
+        ...(options.description ? { description: options.description } : {}),
+        tests: redteamTests,
+      },
+      'redteam.yaml',
+      headerComments,
+    );
   }
 
   telemetry.record('command_used', {
@@ -792,6 +803,7 @@ export function redteamGenerateCommand(
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file', false)
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option('-d, --description <text>', 'Custom description/name for the generated tests')
     .option(
       '--purpose <purpose>',
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',

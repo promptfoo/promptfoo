@@ -687,6 +687,7 @@ Run the complete red teaming process (init, generate, and evaluate).
 | -------------------------------------------------- | ------------------------------------------------- | -------------------- |
 | `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
 | `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
 | `--no-cache`                                       | Do not read or write results to disk cache        | false                |
 | `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
 | `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
@@ -720,6 +721,7 @@ Generate adversarial test cases to challenge your prompts and models.
 | -------------------------------- | -------------------------------------------------------------------- | -------------------- |
 | `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
 | `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
+| `-d, --description <text>`       | Custom description/name for the generated tests                      |                      |
 | `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
 | `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
 | `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
