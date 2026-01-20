@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -13,6 +13,7 @@
       "**/*.ts",
       "**/*.tsx",
       "**/*.json",
+      "**/*.jsonc",
       "**/*.mjs",
       "**/*.cjs",
       "!!drizzle",
@@ -23,7 +24,9 @@
       "!!**/public",
       "!!examples/multiple-turn-conversation/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
-      "!!test/fixtures/rubric-json-template/**/*.json"
+      "!!test/fixtures/rubric-json-template/**/*.json",
+      // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
+      "!!src/redteam/shared/runtimeTransform.ts"
     ]
   },
   "formatter": {
@@ -280,35 +283,6 @@
             "noFloatingPromises": "off"
           }
         }
-      }
-    },
-    {
-      "includes": ["scripts/**/*"],
-      "linter": {
-        "rules": {
-          "nursery": {
-            "noFloatingPromises": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["code-scan-action/**/*"],
-      "linter": {
-        "rules": {
-          "nursery": {
-            "noFloatingPromises": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["examples/claude-agent-sdk/advanced/workspace/**/*"],
-      "linter": {
-        "enabled": false
-      },
-      "formatter": {
-        "enabled": false
       }
     },
     {

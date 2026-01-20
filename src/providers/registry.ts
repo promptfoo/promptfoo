@@ -106,7 +106,9 @@ import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
+import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -330,6 +332,31 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle Luma Ray video model
+      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
+      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
+      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
+        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
+        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
+        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        const videoModelName = modelName.includes('luma.ray')
+          ? modelName
+          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+        return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
+      // Handle Nova Reel video model
+      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
+      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      if (
+        modelType.includes('amazon.nova-reel') ||
+        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+      ) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
+      }
+
       // Handle Bedrock Agents
       if (modelType === 'agents') {
         const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
@@ -446,6 +473,20 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createCloudflareAiProvider } = await import('./cloudflare-ai');
       return createCloudflareAiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
+      return createCloudflareGatewayProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });
@@ -1062,6 +1103,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('vercel:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVercelProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
       providerPath: string,
@@ -1493,6 +1547,40 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('transformers:') || providerPath.startsWith('transformers.js:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      if (splits.length < 3) {
+        throw new Error(
+          `Invalid Transformers.js provider path: ${providerPath}. ` +
+            'Format: transformers:<task>:<model>\n' +
+            'Supported tasks: feature-extraction, text-generation\n' +
+            'Example: transformers:feature-extraction:Xenova/all-MiniLM-L6-v2',
+        );
+      }
+      const taskType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      switch (taskType) {
+        case 'feature-extraction':
+        case 'embeddings':
+          return new TransformersEmbeddingProvider(modelName, providerOptions);
+        case 'text-generation':
+          return new TransformersTextGenerationProvider(modelName, providerOptions);
+        default:
+          throw new Error(
+            `Unsupported Transformers.js task type: ${taskType}. ` +
+              'Supported tasks: feature-extraction (alias: embeddings), text-generation',
+          );
+      }
     },
   },
   {

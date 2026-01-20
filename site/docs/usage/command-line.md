@@ -28,6 +28,9 @@ The `promptfoo` command line utility supports the following subcommands:
   - `list evals`
   - `list prompts`
   - `list datasets`
+- `logs` - View promptfoo log files.
+  - `logs [file]`
+  - `logs list`
 - `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
@@ -197,6 +200,61 @@ List various resources like evaluations, prompts, and datasets.
 | ------------ | --------------------------------------------------------------- |
 | `-n`         | Show the first n records, sorted by descending date of creation |
 | `--ids-only` | Show only IDs without descriptions                              |
+
+## `promptfoo logs`
+
+View promptfoo log files directly from the command line.
+
+| Option                 | Description                                | Default |
+| ---------------------- | ------------------------------------------ | ------- |
+| `[file]`               | Log file to view (name, path, or partial)  | latest  |
+| `--type <type>`        | Log type: `debug`, `error`, or `all`       | `all`   |
+| `-n, --lines <num>`    | Number of lines to display from end (tail) |         |
+| `--head <num>`         | Number of lines to display from start      |         |
+| `-f, --follow`         | Follow log file in real-time               | `false` |
+| `-l, --list`           | List available log files                   | `false` |
+| `-g, --grep <pattern>` | Filter lines matching pattern (regex)      |         |
+| `--no-color`           | Disable syntax highlighting                |         |
+
+### `promptfoo logs list`
+
+List available log files in the logs directory.
+
+| Option          | Description                          | Default |
+| --------------- | ------------------------------------ | ------- |
+| `--type <type>` | Log type: `debug`, `error`, or `all` | `all`   |
+
+### Examples
+
+```sh
+# View most recent log file (or current session's log if run during a CLI session)
+promptfoo logs
+
+# View last 50 lines
+promptfoo logs -n 50
+
+# View first 20 lines
+promptfoo logs --head 20
+
+# Follow log in real-time (like tail -f)
+promptfoo logs -f
+
+# List all available log files
+promptfoo logs --list
+
+# View a specific log file by name or partial match
+promptfoo logs promptfoo-debug-2024-01-15_10-30-00.log
+promptfoo logs 2024-01-15
+
+# View error logs only
+promptfoo logs --type error
+
+# Filter logs by pattern (case-insensitive regex)
+promptfoo logs --grep "error|warn"
+promptfoo logs --grep "openai"
+```
+
+Log files are stored in `~/.promptfoo/logs` by default. Set `PROMPTFOO_LOG_DIR` to use a custom directory.
 
 ## `promptfoo mcp`
 
@@ -629,14 +687,16 @@ Run the complete red teaming process (init, generate, and evaluate).
 | -------------------------------------------------- | ------------------------------------------------- | -------------------- |
 | `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
 | `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
 | `--no-cache`                                       | Do not read or write results to disk cache        | false                |
 | `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
 | `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
 | `--remote`                                         | Force remote inference wherever possible          | false                |
 | `--force`                                          | Force generation even if no changes are detected  | false                |
-| `--no-progress-bar`                                | Do not show progress bar                          |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |
+| `--no-progress-bar`                                | Do not show progress bar                          |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |                      |
 
 ## `promptfoo redteam discover`
 
@@ -661,7 +721,9 @@ Generate adversarial test cases to challenge your prompts and models.
 | -------------------------------- | -------------------------------------------------------------------- | -------------------- |
 | `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
 | `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
+| `-d, --description <text>`       | Custom description/name for the generated tests                      |                      |
 | `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
+| `-t, --target <id>`              | Cloud provider target ID to run the scan on                          |                      |
 | `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
 | `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
 | `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt | `prompt`             |
@@ -674,6 +736,8 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
+| `--no-progress-bar`              | Do not show progress bar                                             |                      |
+| `--strict`                       | Fail if any plugins fail to generate test cases                      | false                |
 | `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:

@@ -185,6 +185,26 @@ describe('SimulatedUser', () => {
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
+    it('should handle ###STOP### on first turn without crashing (agentResponse undefined)', async () => {
+      // This tests the edge case from GitHub issue #7101
+      // When the simulated user returns ###STOP### on the very first turn,
+      // agentResponse is never set and would be undefined
+      mockUserProviderCallApi.mockResolvedValueOnce({ output: '###STOP###' });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should complete without crashing
+      expect(result.output).toBeDefined();
+      // The target provider should never have been called
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(0);
+      // guardrails should be undefined but not crash
+      expect(result.guardrails).toBeUndefined();
+    });
+
     it('should throw error if originalProvider is not provided', async () => {
       await expect(
         simulatedUser.callApi('test', {
