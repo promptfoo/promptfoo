@@ -6,23 +6,23 @@
  * cache effectiveness, error breakdowns, and per-provider performance.
  */
 
-import type { ApiProvider, EvaluateStats } from '../types/index';
 import { computeAssertionStats } from './assertions';
 import { computeCacheStats } from './cache';
 import { computeErrorStats } from './errors';
 import { computeLatencyStats } from './latency';
 import { computeModelInfo, computeProviderStats } from './providers';
+
+import type { ApiProvider, EvaluateStats } from '../types/index';
 import type { EvalRunStats, StatableResult } from './types';
 
-// Re-export types for consumers
-export * from './types';
-
+export { computeAssertionBreakdown, computeAssertionStats } from './assertions';
+export { computeCacheStats } from './cache';
+export { categorizeError, computeErrorStats } from './errors';
 // Re-export individual functions for granular use
 export { computeLatencyStats, getPercentile } from './latency';
-export { computeCacheStats } from './cache';
-export { computeErrorStats, categorizeError } from './errors';
-export { computeProviderStats, computeModelInfo } from './providers';
-export { computeAssertionStats, computeAssertionBreakdown } from './assertions';
+export { computeModelInfo, computeProviderStats } from './providers';
+// Re-export types for consumers
+export * from './types';
 
 /**
  * Input parameters for computing run statistics.

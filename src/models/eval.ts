@@ -1,7 +1,4 @@
-import { randomUUID } from 'crypto';
-
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
-import type { EvalRunStats } from '../runStats/index';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
@@ -51,6 +48,7 @@ import {
 } from './evalPerformance';
 import EvalResult from './evalResult';
 
+import type { EvalRunStats } from '../runStats/index';
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeAssertionBreakdown, computeAssertionStats } from '../../src/runStats/assertions';
+
 import type { StatableResult } from '../../src/runStats/types';
 import type { EvaluateStats } from '../../src/types/index';
 
@@ -207,7 +208,7 @@ describe('computeAssertionStats', () => {
       'model-graded-closedqa',
       'model-graded-factuality',
       'search-rubric',
-    ];
+    ] as const;
 
     const results: StatableResult[] = [
       {
@@ -215,7 +216,7 @@ describe('computeAssertionStats', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: modelGradedTypes.map((type) => ({
-            pass: true,
+            pass: true as const,
             score: 1,
             reason: '',
             assertion: { type },

@@ -3,11 +3,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { MODEL_GRADED_ASSERTION_TYPES } from './assertions/constants';
-import {
-  renderMetricName,
-  runAssertions,
-  runCompareAssertion,
-} from './assertions/index';
+import { renderMetricName, runAssertions, runCompareAssertion } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -23,8 +19,8 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { getSessionId } from './redteam/util';
-import { generatePrompts } from './suggestions';
 import { computeRunStats } from './runStats/index';
+import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,

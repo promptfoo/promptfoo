@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { categorizeError, computeErrorStats } from '../../src/runStats/errors';
+
 import type { StatableResult } from '../../src/runStats/types';
 
 describe('categorizeError', () => {

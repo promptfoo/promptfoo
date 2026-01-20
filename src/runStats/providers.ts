@@ -1,5 +1,6 @@
-import type { ApiProvider } from '../types/index';
 import { TokenUsageTracker } from '../util/tokenUsage';
+
+import type { ApiProvider } from '../types/index';
 import type { ProviderStats, StatableResult } from './types';
 
 /**

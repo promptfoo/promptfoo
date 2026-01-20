@@ -1,6 +1,7 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
+
 import type { AssertionType, EvaluateStats } from '../types/index';
-import type { AssertionTypeStats, AssertionTokenUsage, StatableResult } from './types';
+import type { AssertionTokenUsage, AssertionTypeStats, StatableResult } from './types';
 
 /**
  * Internal accumulator for per-assertion-type stats during computation.

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeRunStats } from '../../src/runStats/index';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
+
 import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider, EvaluateStats } from '../../src/types/index';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 // Mock TokenUsageTracker
 vi.mock('../../src/util/tokenUsage', () => ({

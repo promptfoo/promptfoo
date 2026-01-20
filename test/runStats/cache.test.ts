@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeCacheStats } from '../../src/runStats/cache';
+
 import type { StatableResult } from '../../src/runStats/types';
 
 describe('computeCacheStats', () => {

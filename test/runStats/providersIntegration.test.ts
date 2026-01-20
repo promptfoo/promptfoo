@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { computeProviderStats } from '../../src/runStats/providers';
-import type { StatableResult } from '../../src/runStats/types';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+
+import type { StatableResult } from '../../src/runStats/types';
 
 /**
  * Integration tests that use the real TokenUsageTracker to verify
