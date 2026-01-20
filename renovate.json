@@ -19,6 +19,12 @@
   ],
   "packageRules": [
     {
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
