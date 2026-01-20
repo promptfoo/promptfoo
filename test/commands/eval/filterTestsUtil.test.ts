@@ -541,8 +541,13 @@ describe('filterTestsUtil', () => {
       const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
 
       // Should match because _conversation is filtered out during comparison
+      // Runtime vars are restored into the returned test case for re-evaluation
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars).toEqual({ prompt: 'hello', goal: 'test' });
+      expect(result[0]?.vars).toEqual({
+        prompt: 'hello',
+        goal: 'test',
+        _conversation: [{ role: 'user', content: 'hi' }],
+      });
     });
 
     it('should match results with sessionId runtime var to test cases without it', async () => {
@@ -605,8 +610,12 @@ describe('filterTestsUtil', () => {
       const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
 
       // Should match because sessionId is filtered out during comparison
+      // Runtime vars are restored into the returned test case for re-evaluation
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars).toEqual({ prompt: 'attack prompt' });
+      expect(result[0]?.vars).toEqual({
+        prompt: 'attack prompt',
+        sessionId: 'goat-session-abc123',
+      });
     });
 
     it('should match results with both _conversation and sessionId to test cases without them', async () => {
@@ -676,9 +685,14 @@ describe('filterTestsUtil', () => {
         (r) => r.failureReason === ResultFailureReason.ERROR,
       );
 
-      // Should match because both _conversation and sessionId are filtered out
+      // Should match because both _conversation and sessionId are filtered out during comparison
+      // Runtime vars are restored into the returned test case for re-evaluation
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars).toEqual({ input: 'test input' });
+      expect(result[0]?.vars).toEqual({
+        input: 'test input',
+        _conversation: [{ role: 'user', content: 'hello' }],
+        sessionId: 'session-xyz789',
+      });
     });
 
     it('should match results with underscore-prefixed custom runtime vars', async () => {
@@ -740,9 +754,10 @@ describe('filterTestsUtil', () => {
 
       const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
 
-      // Should match because _customMetadata is filtered out (underscore prefix convention)
+      // Should match because _customMetadata is filtered out during comparison (underscore prefix convention)
+      // Runtime vars are restored into the returned test case for re-evaluation
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars).toEqual({ prompt: 'test' });
+      expect(result[0]?.vars).toEqual({ prompt: 'test', _customMetadata: { injected: true } });
     });
   });
 });
