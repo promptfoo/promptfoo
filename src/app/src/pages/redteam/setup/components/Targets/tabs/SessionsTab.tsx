@@ -236,8 +236,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
           className="font-mono text-xs"
         />
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Common patterns:{' '}
-          <code className="rounded bg-muted px-1">data.body.sessionId</code>,{' '}
+          Common patterns: <code className="rounded bg-muted px-1">data.body.sessionId</code>,{' '}
           <code className="rounded bg-muted px-1">data.body.session.id</code>,{' '}
           <code className="rounded bg-muted px-1">data.headers['x-session-token']</code>
         </p>
