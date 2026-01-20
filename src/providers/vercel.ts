@@ -133,8 +133,16 @@ function mapTokenUsage(usage?: {
  * Picks defined generation options from config.
  */
 function pickGenerateOptions(config: VercelAiConfig) {
-  const { temperature, maxTokens, topP, topK, frequencyPenalty, presencePenalty, stopSequences } =
-    config;
+  const {
+    temperature,
+    maxTokens,
+    topP,
+    topK,
+    frequencyPenalty,
+    presencePenalty,
+    stopSequences,
+    maxRetries,
+  } = config;
   return Object.fromEntries(
     Object.entries({
       temperature,
@@ -144,6 +152,7 @@ function pickGenerateOptions(config: VercelAiConfig) {
       frequencyPenalty,
       presencePenalty,
       stopSequences,
+      maxRetries,
     }).filter(([, v]) => v !== undefined),
   );
 }
@@ -249,11 +258,14 @@ export class VercelAiProvider implements ApiProvider {
       });
 
       let output = '';
-      for await (const chunk of result.textStream) {
-        output += chunk;
+      try {
+        for await (const chunk of result.textStream) {
+          output += chunk;
+        }
+      } finally {
+        cleanup();
       }
 
-      cleanup();
       const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
 
       logger.debug('Vercel AI Gateway streaming response received', {
@@ -264,7 +276,6 @@ export class VercelAiProvider implements ApiProvider {
 
       return { output, tokenUsage: mapTokenUsage(usage), finishReason };
     } catch (error) {
-      cleanup();
       return handleApiError(error, timeout, 'streaming API call');
     }
   }
