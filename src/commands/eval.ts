@@ -506,14 +506,23 @@ export async function doEval(
     // Only set up pause/resume handler when writing to database
     if (cmdObj.write !== false) {
       sigintHandler = () => {
-        if (paused) {
+        // Atomic check-and-set to handle rapid successive SIGINTs safely
+        const wasPaused = paused;
+        paused = true;
+
+        if (wasPaused) {
           // Second Ctrl+C: immediate force exit
+          // Clear the timeout to avoid resource leak
+          if (forceExitTimeout) {
+            clearTimeout(forceExitTimeout);
+            forceExitTimeout = undefined;
+          }
           // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
           // Database will recover on next run via WAL replay
           logger.warn('Force exiting...');
           process.exit(130);
         }
-        paused = true;
+
         logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
         abortController.abort();
 

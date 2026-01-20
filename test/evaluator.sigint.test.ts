@@ -100,12 +100,13 @@ describe('evaluate SIGINT/abort handling', () => {
     expect(mockAddPrompts).toHaveBeenCalled();
   });
 
-  it('should continue normal flow and write timeout rows when max-duration times out', async () => {
-    // This test verifies that max-duration timeout (evalTimedOut=true)
-    // still writes timeout error rows rather than doing early return
+  it('should continue normal flow and write timeout rows when per-call timeout triggers', async () => {
+    // This test verifies that per-call timeouts (timeoutMs option) write
+    // timeout error rows and continue the normal evaluation flow.
     //
-    // Key difference from user SIGINT: updateSignalFile is NOT called
-    // because the normal timeout flow handles writing timeout error rows
+    // Key difference from user SIGINT: evaluation continues normally and
+    // updateSignalFile is called at the end of the normal flow (not during early return).
+    // Both paths call updateSignalFile, just at different points.
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowProvider: ApiProvider = {
@@ -158,9 +159,10 @@ describe('evaluate SIGINT/abort handling', () => {
     };
 
     try {
-      // Use timeoutMs (per-call timeout) to trigger consistent timeout behavior
+      // Use timeoutMs (per-call timeout) which triggers timeout for individual test cases
+      // Unlike maxEvalTimeMs (max-duration), this doesn't abort the entire evaluation
       await evaluate(testSuite, mockEvalRecord as unknown as Eval, {
-        timeoutMs: 100, // 100ms per-call timeout
+        timeoutMs: 100,
       });
 
       // When timeout triggers, should write timeout error row
