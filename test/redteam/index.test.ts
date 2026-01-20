@@ -2640,4 +2640,184 @@ describe('Language configuration', () => {
       );
     });
   });
+
+  describe('plugin logging and report aggregation', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://health.test');
+      vi.mocked(shouldGenerateRemote).mockResolvedValue(true);
+    });
+
+    it('should show truncated policy text in plugin list for policy plugins', async () => {
+      const longPolicyText =
+        'The assistant must not reveal any internal implementation details such as schema definitions, parameter lists, tool routing logic.';
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1, config: { policy: longPolicyText } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Check that the "Using plugins:" log contains truncated policy text
+      const pluginListMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Using plugins:'));
+
+      expect(pluginListMessage).toBeDefined();
+      // Should contain truncated text (70 chars + ...)
+      expect(pluginListMessage).toContain(
+        '"The assistant must not reveal any internal implementation details such',
+      );
+      expect(pluginListMessage).toContain('...');
+      // Should NOT contain full JSON config
+      expect(pluginListMessage).not.toContain('"policy":');
+    });
+
+    it('should log full config at debug level for policy plugins', async () => {
+      const policyText = 'Test policy for debug logging';
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1, config: { policy: policyText } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Check that debug log contains full config JSON
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Plugin policy config:'));
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining(policyText));
+    });
+
+    it('should show "(custom config)" for non-policy plugins with config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'harmful:hate',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'harmful:hate', numTests: 1, config: { someOption: 'value' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const pluginListMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Using plugins:'));
+
+      expect(pluginListMessage).toBeDefined();
+      expect(pluginListMessage).toContain('(custom config)');
+      // Should NOT contain full JSON
+      expect(pluginListMessage).not.toContain('someOption');
+    });
+
+    it('should aggregate counts for multiple plugins with same ID in report', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 2' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 3' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Find the report in logger.info calls
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      // Strip ANSI codes for easier assertion
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Should show aggregated total: 3 plugins × 2 tests = 6 requested, 6 generated
+      // (mockPluginAction returns 2 tests, called 3 times = 6 total)
+      expect(cleanReport).toContain('6');
+      // Should NOT show separate rows for each policy plugin
+      // (only one "policy" row with aggregated counts)
+      const policyMatches = cleanReport.match(/policy/g);
+      // Should only appear once in the ID column (plus maybe in other contexts)
+      expect(policyMatches?.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should aggregate counts correctly for multiple languages with duplicate plugin IDs', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        language: ['Hmong', 'Zulu'],
+        plugins: [
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 2' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Should show policy (Hmong) and policy (Zulu) with aggregated counts
+      // 2 plugins × 1 test = 2 per language
+      expect(cleanReport).toContain('policy (Hmong)');
+      expect(cleanReport).toContain('policy (Zulu)');
+      expect(cleanReport).toContain('2');
+    });
+  });
 });
