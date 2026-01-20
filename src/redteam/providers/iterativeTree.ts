@@ -1067,7 +1067,9 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,
       });
-      gradingProvider = redteamProvider; // Default to using same provider
+      gradingProvider = await redteamProviderManager.getGradingProvider({
+        jsonOnly: true,
+      });
     }
 
     return runRedteamConversation({
