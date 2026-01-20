@@ -25,5 +25,8 @@
     "@types/node": "^24.10.8",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "undici": "^6.23.0"
   }
 }
