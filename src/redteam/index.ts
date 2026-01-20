@@ -89,6 +89,21 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 }
 
 /**
+ * Generates a unique base display ID for a plugin instance.
+ * For policy plugins, includes truncated policy text to differentiate multiple instances.
+ * @param plugin - The plugin configuration.
+ * @returns A unique base display ID for the plugin.
+ */
+function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
+  if (plugin.id === 'policy' && typeof plugin.config?.policy === 'string') {
+    const policyText = plugin.config.policy.trim().replace(/\n+/g, ' ');
+    const truncated = policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText;
+    return `policy: "${truncated}"`;
+  }
+  return plugin.id;
+}
+
+/**
  * Determines the status of test generation based on requested and generated counts.
  * @param requested - The number of requested tests.
  * @param generated - The number of generated tests.
@@ -1123,31 +1138,22 @@ export async function synthesize({
       const definedLanguages = languages.filter((lang) => lang !== undefined);
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
-        // Don't show language suffix for English (en) - it's the default
+        // Put language prefix at the beginning so it's visible even with truncation
+        const baseId = getPluginBaseDisplayId(plugin);
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          const displayId = langKey === 'en' ? plugin.id : `${plugin.id} (${langKey})`;
+          // Use format like "(Hmong) policy: ..." so language is visible in truncated table
+          const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          // Aggregate counts for duplicate plugin IDs (e.g., multiple policy plugins)
-          if (pluginResults[displayId]) {
-            pluginResults[displayId].requested += requested;
-            pluginResults[displayId].generated += result.generated;
-          } else {
-            pluginResults[displayId] = { requested, generated: result.generated };
-          }
+          pluginResults[displayId] = { requested, generated: result.generated };
         }
       } else {
         // Single language or no language - use aggregated result
+        const baseId = getPluginBaseDisplayId(plugin);
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
-        // Aggregate counts for duplicate plugin IDs (e.g., multiple policy plugins)
-        if (pluginResults[plugin.id]) {
-          pluginResults[plugin.id].requested += requested;
-          pluginResults[plugin.id].generated += generated;
-        } else {
-          pluginResults[plugin.id] = { requested, generated };
-        }
+        pluginResults[baseId] = { requested, generated };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1190,33 +1196,20 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        // Aggregate counts for duplicate plugin IDs
-        if (pluginResults[plugin.id]) {
-          pluginResults[plugin.id].requested += plugin.numTests;
-          pluginResults[plugin.id].generated += customTests.length;
-        } else {
-          pluginResults[plugin.id] = {
-            requested: plugin.numTests,
-            generated: customTests.length,
-          };
-        }
+        const baseId = getPluginBaseDisplayId(plugin);
+        pluginResults[baseId] = {
+          requested: plugin.numTests,
+          generated: customTests.length,
+        };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        // Aggregate counts for duplicate plugin IDs
-        if (pluginResults[plugin.id]) {
-          pluginResults[plugin.id].requested += plugin.numTests;
-        } else {
-          pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-        }
+        const baseId = getPluginBaseDisplayId(plugin);
+        pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      // Aggregate counts for duplicate plugin IDs
-      if (pluginResults[plugin.id]) {
-        pluginResults[plugin.id].requested += plugin.numTests;
-      } else {
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-      }
+      const baseId = getPluginBaseDisplayId(plugin);
+      pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
   });

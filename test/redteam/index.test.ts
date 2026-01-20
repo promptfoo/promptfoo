@@ -2743,7 +2743,7 @@ describe('Language configuration', () => {
       expect(pluginListMessage).not.toContain('someOption');
     });
 
-    it('should aggregate counts for multiple plugins with same ID in report', async () => {
+    it('should show separate rows for multiple policy plugins with unique IDs', async () => {
       const mockPluginAction = vi
         .fn()
         .mockResolvedValue([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
@@ -2776,17 +2776,16 @@ describe('Language configuration', () => {
       // Strip ANSI codes for easier assertion
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Should show aggregated total: 3 plugins × 2 tests = 6 requested, 6 generated
-      // (mockPluginAction returns 2 tests, called 3 times = 6 total)
-      expect(cleanReport).toContain('6');
-      // Should NOT show separate rows for each policy plugin
-      // (only one "policy" row with aggregated counts)
-      const policyMatches = cleanReport.match(/policy/g);
-      // Should only appear once in the ID column (plus maybe in other contexts)
-      expect(policyMatches?.length).toBeLessThanOrEqual(2);
+      // Each policy plugin should have its own row with unique display ID
+      expect(cleanReport).toContain('policy: "Policy 1"');
+      expect(cleanReport).toContain('policy: "Policy 2"');
+      expect(cleanReport).toContain('policy: "Policy 3"');
+      // Each should show 2 requested, 2 generated
+      const twoMatches = cleanReport.match(/\b2\b/g);
+      expect(twoMatches?.length).toBeGreaterThanOrEqual(6); // At least 6 occurrences of "2"
     });
 
-    it('should aggregate counts correctly for multiple languages with duplicate plugin IDs', async () => {
+    it('should show separate rows for each policy and language combination', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: mockPluginAction,
@@ -2815,11 +2814,14 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Should show policy (Hmong) and policy (Zulu) with aggregated counts
-      // 2 plugins × 1 test = 2 per language
-      expect(cleanReport).toContain('policy (Hmong)');
-      expect(cleanReport).toContain('policy (Zulu)');
-      expect(cleanReport).toContain('2');
+      // Each policy should have separate rows for each language (language prefix first)
+      expect(cleanReport).toContain('(Hmong) policy: "Policy 1"');
+      expect(cleanReport).toContain('(Zulu) policy: "Policy 1"');
+      expect(cleanReport).toContain('(Hmong) policy: "Policy 2"');
+      expect(cleanReport).toContain('(Zulu) policy: "Policy 2"');
+      // Each should show 1 requested, 1 generated
+      const oneMatches = cleanReport.match(/\b1\b/g);
+      expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
     });
   });
 });
