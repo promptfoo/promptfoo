@@ -109,8 +109,8 @@ function getStatus(requested: number, generated: number): string {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number; error?: string }>,
-  strategyResults: Record<string, { requested: number; generated: number; error?: string }>,
+  pluginResults: Record<string, { requested: number; generated: number }>,
+  strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -968,10 +968,7 @@ export async function synthesize({
 
       // Generate tests for each language in parallel using Promise.allSettled
       const allPluginTests: TestCase[] = [];
-      const resultsPerLanguage: Record<
-        string,
-        { requested: number; generated: number; error?: string }
-      > = {};
+      const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
       const languagePromises = languages.map(async (lang) => {
         const pluginTests = await action({
@@ -1031,13 +1028,10 @@ export async function synthesize({
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
-          // Track failed language with error reason
-          const errorMsg =
-            result.reason instanceof Error ? result.reason.message : String(result.reason);
+          // Track failed language so it appears in the report
           resultsPerLanguage[lang || 'default'] = {
             requested: plugin.numTests,
             generated: 0,
-            error: errorMsg,
           };
           logger.error(
             `[Language Processing] Error generating tests for ${plugin.id} in language ${lang || 'default'}: ${result.reason}`,

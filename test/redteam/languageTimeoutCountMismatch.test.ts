@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Test to verify that language generation failures are properly tracked
- * with error messages, fixing the count mismatch issue.
+ * Test to verify that language generation failures are properly tracked,
+ * fixing the count mismatch issue.
  *
  * The fix: When a language promise rejects (e.g., timeout), track the failed
- * language with generated: 0 and include the error message.
+ * language with generated: 0 so it appears in the report with correct counts.
+ * The actual error is logged via logger.error() to the error log file.
  */
 describe('Language timeout count mismatch fix', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should track failed languages with error messages using the fixed implementation', async () => {
+  it('should track failed languages in resultsPerLanguage', async () => {
     const languages = ['en', 'zu', 'hmn']; // English, Zulu, Hmong
     const pluginNumTests = 5;
 
@@ -44,10 +45,7 @@ describe('Language timeout count mismatch fix', () => {
 
     // This is the FIXED behavior matching index.ts implementation
     const allPluginTests: any[] = [];
-    const resultsPerLanguage: Record<
-      string,
-      { requested: number; generated: number; error?: string }
-    > = {};
+    const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
     languageResults.forEach((result, index) => {
       const lang = languages[index];
@@ -56,14 +54,12 @@ describe('Language timeout count mismatch fix', () => {
         allPluginTests.push(...tests);
         resultsPerLanguage[lang || 'default'] = { requested, generated };
       } else {
-        // Track failed language with error reason
-        const errorMsg =
-          result.reason instanceof Error ? result.reason.message : String(result.reason);
+        // Track failed language so it appears in the report
         resultsPerLanguage[lang || 'default'] = {
           requested: pluginNumTests,
           generated: 0,
-          error: errorMsg,
         };
+        // Note: In actual implementation, error is logged via logger.error()
       }
     });
 
@@ -79,26 +75,24 @@ describe('Language timeout count mismatch fix', () => {
       generated: 5,
     });
 
-    // Verify failed languages have error messages
+    // Verify failed languages are tracked with generated: 0
     expect(resultsPerLanguage['zu']).toEqual({
       requested: 5,
       generated: 0,
-      error: 'Request timeout after 120000ms',
     });
     expect(resultsPerLanguage['hmn']).toEqual({
       requested: 5,
       generated: 0,
-      error: 'HTTP 500 Internal Server Error',
     });
 
-    // Verify totals
+    // Verify totals match - this is the key fix
     const reportEntries = Object.entries(resultsPerLanguage);
     const reportTotalRequested = reportEntries.reduce((sum, [_, r]) => sum + r.requested, 0);
     const reportTotalGenerated = reportEntries.reduce((sum, [_, r]) => sum + r.generated, 0);
 
     const progressBarExpected = pluginNumTests * languages.length; // 15
 
-    // With the fix, requested counts match
+    // With the fix, requested counts match (no missing languages)
     expect(reportTotalRequested).toBe(progressBarExpected); // Both 15
     expect(reportTotalGenerated).toBe(5); // Only English succeeded
   });
@@ -128,10 +122,7 @@ describe('Language timeout count mismatch fix', () => {
       },
     ];
 
-    const resultsPerLanguage: Record<
-      string,
-      { requested: number; generated: number; error?: string }
-    > = {};
+    const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
     languageResults.forEach((result, index) => {
       const lang = languages[index];
@@ -139,21 +130,18 @@ describe('Language timeout count mismatch fix', () => {
         const { requested, generated } = result.value;
         resultsPerLanguage[lang || 'default'] = { requested, generated };
       } else {
-        const errorMsg =
-          result.reason instanceof Error ? result.reason.message : String(result.reason);
+        // Track failed language so it appears in the report
         resultsPerLanguage[lang || 'default'] = {
           requested: pluginNumTests,
           generated: 0,
-          error: errorMsg,
         };
       }
     });
 
-    // Should handle string rejection reason
+    // Failed language should be tracked with generated: 0
     expect(resultsPerLanguage['fr']).toEqual({
       requested: 5,
       generated: 0,
-      error: 'Connection refused',
     });
   });
 });
