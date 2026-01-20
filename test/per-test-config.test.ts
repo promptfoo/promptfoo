@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runEval } from '../src/evaluator';
-import type { ApiProvider, Prompt, TestCase } from '../src/types/index';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+
+import type { ApiProvider, Prompt, TestCase } from '../src/types/index';
 
 describe('Per-test configuration merging', () => {
   let mockProvider: ApiProvider;
