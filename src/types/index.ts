@@ -747,6 +747,9 @@ export const TestCaseSchema = z.object({
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
+  // Filter which providers this test runs against. Array of provider labels or IDs. Supports wildcards (e.g., 'openai:*').
+  providers: z.array(z.string()).optional(),
+
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 

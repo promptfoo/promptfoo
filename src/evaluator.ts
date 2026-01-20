@@ -52,6 +52,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -316,12 +317,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // Deep clone vars to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
   // Crescendo) may add runtime variables like sessionId to vars during execution.
-  // Without this copy, those mutations would persist to the stored testCase, causing
-  // test matching to fail when using --filter-errors-only or --filter-failing.
-  const vars = { ...(test.vars || {}) };
+  // Without this deep clone, mutations to nested objects would persist to the stored
+  // testCase, causing non-deterministic behavior where test execution order affects results.
+  const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -1172,6 +1173,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1203,6 +1208,10 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
