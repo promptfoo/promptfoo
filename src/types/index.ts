@@ -747,6 +747,9 @@ export const TestCaseSchema = z.object({
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
+  // Filter which providers this test runs against. Array of provider labels or IDs. Supports wildcards (e.g., 'openai:*').
+  providers: z.array(z.string()).optional(),
+
   // Filter to specific prompts by label or ID. If not provided, test runs against all prompts.
   prompts: z.array(z.string()).optional(),
 
