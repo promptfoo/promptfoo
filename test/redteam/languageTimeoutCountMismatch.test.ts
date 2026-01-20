@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Test to verify that language generation failures are properly tracked,
@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * The actual error is logged via logger.error() to the error log file.
  */
 describe('Language timeout count mismatch fix', () => {
-  beforeEach(() => {
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
