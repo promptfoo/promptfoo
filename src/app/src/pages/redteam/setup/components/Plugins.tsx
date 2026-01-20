@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Separator } from '@app/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
@@ -372,13 +372,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Remote Generation Disabled</AlertTitle>
-          <AlertDescription>
-            Some plugins require remote generation and are currently unavailable. These plugins
-            include harmful content tests, bias tests, and other advanced security checks. To enable
-            them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
+              Some plugins require remote generation and are currently unavailable. These plugins
+              include harmful content tests, bias tests, and other advanced security checks. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -386,12 +388,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {hasSelectedMostPlugins && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
-          <AlertDescription>
-            Selecting many plugins is usually not efficient and will significantly increase
-            evaluation time and cost. It's recommended to use the preset configurations or select
-            only the plugins specifically needed for your use case.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
+            <AlertDescription>
+              Selecting many plugins is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the plugins specifically needed for your use case.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -105,10 +105,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
         {validationErrors && (
           <Alert variant="destructive">
             <AlertTriangle className="size-4" />
-            <AlertDescription>
-              <p className="text-sm">Please fix the following issues before continuing:</p>
-              <p className="mt-2 text-sm font-medium">{validationErrors}</p>
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription>
+                <p className="text-sm">Please fix the following issues before continuing:</p>
+                <p className="mt-2 text-sm font-medium">{validationErrors}</p>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
@@ -116,18 +118,20 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
         {hasSpecificDocumentation(providerType) && (
           <Alert variant="info">
             <Info className="size-4" />
-            <AlertDescription>
-              Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
-              <a
-                href={getProviderDocumentationUrl(providerType)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                View the documentation
-              </a>{' '}
-              for detailed setup instructions and examples.
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription>
+                Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
+                <a
+                  href={getProviderDocumentationUrl(providerType)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  View the documentation
+                </a>{' '}
+                for detailed setup instructions and examples.
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 

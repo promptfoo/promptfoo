@@ -26,7 +26,8 @@ import type {
 // Constants
 // ============================================================================
 
-export const XAI_VOICE_WS_URL = 'wss://api.x.ai/v1/realtime';
+export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
+export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_COST_PER_MINUTE = 0.05;
 
 export const XAI_VOICE_DEFAULTS = {
@@ -94,6 +95,10 @@ export type XAIVoiceTool = XAIFileSearchTool | XAIWebSearchTool | XAIXSearchTool
 export interface XAIVoiceOptions {
   // Authentication
   apiKey?: string;
+
+  // Custom endpoint configuration
+  apiBaseUrl?: string; // Full base URL e.g., "https://my-proxy.com/v1"
+  apiHost?: string; // Host only e.g., "my-proxy.com" → "https://my-proxy.com/v1"
 
   // Voice configuration
   voice?: XAIVoice;
@@ -249,6 +254,38 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   /**
+   * Get the HTTP(S) API base URL
+   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > default
+   */
+  protected getApiUrl(): string {
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.XAI_API_BASE_URL ||
+      getEnvString('XAI_API_BASE_URL') ||
+      XAI_VOICE_DEFAULT_API_URL
+    );
+  }
+
+  /**
+   * Convert HTTP(S) URL to WebSocket URL base
+   */
+  private getWebSocketBase(): string {
+    const base = this.getApiUrl();
+    const wsBase = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    return wsBase.replace(/\/+$/, '');
+  }
+
+  /**
+   * Build full WebSocket URL for realtime endpoint
+   */
+  protected getWebSocketUrl(): string {
+    return `${this.getWebSocketBase()}/realtime`;
+  }
+
+  /**
    * Build session configuration for xAI Voice API
    */
   private async buildSessionConfig(): Promise<object> {
@@ -342,10 +379,11 @@ export class XAIVoiceProvider implements ApiProvider {
   }> {
     return new Promise((resolve, reject) => {
       const connectionStartTime = Date.now();
+      const wsUrl = this.getWebSocketUrl();
 
-      logger.debug('[xAI Voice] Connecting to WebSocket', { url: XAI_VOICE_WS_URL });
+      logger.debug('[xAI Voice] Connecting to WebSocket', { url: wsUrl });
 
-      const ws = new WebSocket(XAI_VOICE_WS_URL, {
+      const ws = new WebSocket(wsUrl, {
         headers: {
           Authorization: `Bearer ${this.getApiKey()}`,
           'User-Agent': 'promptfoo xAI Voice Client',

@@ -62,6 +62,69 @@ tests:
       difficulty: easy
 ```
 
+### Filtering Tests by Provider
+
+Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
+
+```yaml
+providers:
+  - id: openai:gpt-3.5-turbo
+    label: fast-model
+  - id: openai:gpt-4
+    label: smart-model
+
+tests:
+  # Only run on fast-model
+  - vars:
+      question: 'What is 2 + 2?'
+    providers:
+      - fast-model
+    assert:
+      - type: equals
+        value: '4'
+
+  # Only run on smart-model
+  - vars:
+      question: 'Explain quantum entanglement'
+    providers:
+      - smart-model
+    assert:
+      - type: llm-rubric
+        value: 'Provides accurate physics explanation'
+```
+
+**Matching syntax:**
+
+| Pattern        | Matches                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `fast-model`   | Exact label match                                                    |
+| `openai:gpt-4` | Exact provider ID match                                              |
+| `openai:*`     | Wildcard - any provider starting with `openai:`                      |
+| `openai`       | Legacy prefix - matches `openai:gpt-4`, `openai:gpt-3.5-turbo`, etc. |
+
+**Apply to all tests using `defaultTest`:**
+
+```yaml
+defaultTest:
+  providers:
+    - openai:* # All tests default to OpenAI providers only
+
+tests:
+  - vars:
+      question: 'Simple question'
+  - vars:
+      question: 'Complex question'
+    providers:
+      - smart-model # Override default for this test
+```
+
+**Edge cases:**
+
+- **No filter**: Without the `providers` field, the test runs against all providers (cross-product behavior)
+- **Empty array**: `providers: []` means the test runs on no providers and is effectively skipped
+- **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
+- **CLI `--filter-providers`**: If you use `--filter-providers` to filter providers at the CLI level, validation only sees the filtered providers. Tests referencing providers excluded by `--filter-providers` will fail validation
+
 ## External Test Files
 
 For larger test suites, store tests in separate files:
@@ -404,6 +467,25 @@ tests:
       document: file://docs/report.pdf
       data: file://data/config.yaml
 ```
+
+### Path Resolution
+
+`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+
+```yaml title="src/tests/promptfooconfig.yaml"
+tests:
+  - vars:
+      # Resolved as src/tests/data/input.json
+      data: file://./data/input.json
+
+      # Also works - resolved as src/tests/data/input.json
+      data2: file://data/input.json
+
+      # Parent directory - resolved as src/shared/context.json
+      shared: file://../shared/context.json
+```
+
+Without the `file://` prefix, values are passed as plain strings to your provider.
 
 ### Supported File Types
 

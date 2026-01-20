@@ -20,6 +20,7 @@ import {
   type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
+  type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -347,7 +348,7 @@ export async function createIterationContext({
   iterationNumber,
   loggerTag = '[Redteam]',
 }: {
-  originalVars: Record<string, string | object>;
+  originalVars: Record<string, VarValue>;
   transformVarsConfig?: string;
   context?: CallApiContextParams;
   iterationNumber: number;

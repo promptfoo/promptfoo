@@ -52,6 +52,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -75,6 +76,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
+  VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
 
@@ -315,12 +317,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // Deep clone vars to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
   // Crescendo) may add runtime variables like sessionId to vars during execution.
-  // Without this copy, those mutations would persist to the stored testCase, causing
-  // test matching to fail when using --filter-errors-only or --filter-failing.
-  const vars = { ...(test.vars || {}) };
+  // Without this deep clone, mutations to nested objects would persist to the stored
+  // testCase, causing non-deterministic behavior where test execution order affects results.
+  const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -733,9 +735,9 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
-): Record<string, string | object>[] {
+): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | object>[] = [{}];
+  const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
     let values: Array<string | object> = [];
@@ -766,7 +768,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, string | object>[] = [];
+    const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -1166,6 +1168,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1197,6 +1203,10 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
@@ -1408,17 +1418,34 @@ class Evaluator {
 
         if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
+          // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
+          // This is the number of test evaluations for THIS prompt, not global progress
+          const promptEvalCount =
+            metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+          // Warn if user has a metric named __count (it will be overridden)
+          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+            logger.warn(
+              "Metric name '__count' is reserved for derived metrics and will be overridden.",
+            );
+          }
+          // Create evaluation context with named scores and __count for average calculations
+          const evalContext: Record<string, number> = {
+            ...metrics.namedScores,
+            __count: promptEvalCount,
+          };
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
             try {
               if (typeof metric.value === 'function') {
-                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+                metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
               } else {
-                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                const evaluatedValue = math.evaluate(metric.value, evalContext);
                 metrics.namedScores[metric.name] = evaluatedValue;
               }
+              // Update context with the new derived metric value for subsequent metrics
+              evalContext[metric.name] = metrics.namedScores[metric.name];
             } catch (error) {
               logger.debug(
                 `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
@@ -2184,6 +2211,9 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Reset cliState.maxConcurrency to prevent stale state between evaluations
+      cliState.maxConcurrency = undefined;
     }
   }
 }

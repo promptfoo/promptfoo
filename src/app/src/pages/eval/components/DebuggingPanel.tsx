@@ -1,4 +1,4 @@
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import TraceView, { type Trace } from '../../../components/traces/TraceView';
@@ -29,7 +29,9 @@ export function DebuggingPanel({
             fallback={
               <Alert variant="destructive">
                 <AlertCircle className="size-4" />
-                <AlertDescription>Error loading traces</AlertDescription>
+                <AlertContent>
+                  <AlertDescription>Error loading traces</AlertDescription>
+                </AlertContent>
               </Alert>
             }
           >

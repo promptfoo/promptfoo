@@ -209,6 +209,7 @@ def call_api(prompt, options, context):
     result["cost"] = 0.0025  # in dollars
     result["cached"] = False
     result["logProbs"] = [-0.5, -0.3, -0.1]
+    result["latencyMs"] = 150  # custom latency in milliseconds
 
     # Error handling
     if something_went_wrong:
@@ -241,6 +242,7 @@ class ProviderResponse:
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+    latencyMs: Optional[int]  # overrides measured latency
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
