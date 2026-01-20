@@ -30,5 +30,7 @@ prompts:
 tests:
   - vars: {}
     assert:
-      - type: is-valid-openai-function-call
-        value: false # Video outputs are not function calls
+      - type: contains
+        value: 'Video:' # Output format is [Video: prompt](url)
+      - type: not-contains
+        value: 'error' # No errors in output

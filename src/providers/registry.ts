@@ -347,7 +347,11 @@ export const providerMap: ProviderFactory[] = [
 
       // Handle Nova Reel video model
       // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
-      if (modelType === 'video' || modelType.includes('amazon.nova-reel')) {
+      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      if (
+        modelType.includes('amazon.nova-reel') ||
+        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+      ) {
         const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
         const videoModelName = modelName || 'amazon.nova-reel-v1:1';
         return new NovaReelVideoProvider(videoModelName, providerOptions);

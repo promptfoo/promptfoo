@@ -19,3 +19,8 @@ prompts:
 
 tests:
   - vars: {}
+    assert:
+      - type: contains
+        value: 'Video:' # Output format is [Video: prompt](url)
+      - type: not-contains
+        value: 'error' # No errors in output
