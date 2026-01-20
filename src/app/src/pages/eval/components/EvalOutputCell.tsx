@@ -11,6 +11,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -25,6 +27,7 @@ import {
   FileCode,
   Hash,
   Link,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Play,
@@ -157,9 +160,10 @@ function EvalOutputCell({
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
+  const { showToast } = useToast();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [openAssertions, setOpenAssertions] = React.useState(false);
@@ -515,20 +519,31 @@ function EvalOutputCell({
 
   const [isReplaying, setIsReplaying] = React.useState(false);
   const handleRerun = async () => {
-    if (!evaluationId || !output.prompt) {
+    if (!evaluationId || !output.prompt || testIdx == null) {
       return;
     }
     setIsReplaying(true);
+    showToast('Re-running cell...', 'info');
     try {
+      // Use testIdx (stable test index from data) instead of rowIndex (visual position)
+      // to ensure correct test case is re-run even when table is filtered/sorted
       const result = await replayEvaluation({
         evaluationId,
-        testIndex: rowIndex,
+        testIndex: testIdx,
         prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
         variables: output.metadata?.inputVars || output.testCase?.vars,
       });
       if (result.error) {
-        console.error('Re-run failed:', result.error);
+        showToast(`Re-run failed: ${result.error}`, 'error');
+      } else {
+        showToast('Cell re-run complete', 'success');
+        refreshTable();
       }
+    } catch (error) {
+      showToast(
+        `Re-run failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
     } finally {
       setIsReplaying(false);
     }
@@ -904,8 +919,12 @@ function EvalOutputCell({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleRerun} disabled={isReplaying}>
-                <Play className="size-4" />
+              <DropdownMenuItem onClick={handleRerun} disabled={isReplaying || testIdx == null}>
+                {isReplaying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
                 {isReplaying ? 'Re-running...' : 'Re-run cell'}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setOpenAssertions(true)}>
@@ -954,6 +973,7 @@ function EvalOutputCell({
               defaultScope="results"
               resultId={output.id}
               testIndex={testIdx}
+              onApplied={refreshTable}
             />
           )}
         </>
@@ -962,7 +982,16 @@ function EvalOutputCell({
   );
 
   return (
-    <div id="eval-output-cell" className="cell" style={cellStyle}>
+    <div id="eval-output-cell" className={cn('cell', isReplaying && 'relative')} style={cellStyle}>
+      {/* Loading overlay when re-running */}
+      {isReplaying && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex items-center justify-center rounded">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Re-running...</span>
+          </div>
+        </div>
+      )}
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">

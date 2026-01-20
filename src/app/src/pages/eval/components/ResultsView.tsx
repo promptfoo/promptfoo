@@ -686,8 +686,9 @@ export default function ResultsView({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Add assertions to {filteredResultsCount || 0} filtered test case
-                    {filteredResultsCount === 1 ? '' : 's'}
+                    {filteredResultsCount === 0
+                      ? 'Apply filters to select test cases'
+                      : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`}
                   </TooltipContent>
                 </Tooltip>
                 {config && (

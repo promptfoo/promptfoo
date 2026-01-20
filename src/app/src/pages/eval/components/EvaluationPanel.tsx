@@ -153,28 +153,29 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       )}
                     </button>
                   )}
-                  {isCopyVisible(valueKey) && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          copyAssertionToClipboard(valueKey, value, e);
-                        }
-                      }}
-                      onFocus={() => setFocusedAssertion(valueKey)}
-                      onBlur={() => setFocusedAssertion(null)}
-                      className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
-                      aria-label={`Copy assertion value ${i}`}
-                    >
-                      {copiedAssertions[valueKey] ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        <Copy className="size-3.5" />
-                      )}
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        copyAssertionToClipboard(valueKey, value, e);
+                      }
+                    }}
+                    onFocus={() => setFocusedAssertion(valueKey)}
+                    onBlur={() => setFocusedAssertion(null)}
+                    className={cn(
+                      'absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow transition-opacity',
+                      isCopyVisible(valueKey) ? 'opacity-100' : 'opacity-0 focus:opacity-100',
+                    )}
+                    aria-label={`Copy assertion value ${i}`}
+                  >
+                    {copiedAssertions[valueKey] ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </Button>
                 </td>
                 <td
                   className="relative px-4 py-3 whitespace-pre-wrap max-w-md"
@@ -182,7 +183,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
                   <span className="break-words">{result.reason}</span>
-                  {result.reason && isCopyVisible(`reason-${i}`) && (
+                  {result.reason && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -197,7 +198,12 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       }}
                       onFocus={() => setFocusedAssertion(`reason-${i}`)}
                       onBlur={() => setFocusedAssertion(null)}
-                      className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
+                      className={cn(
+                        'absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow transition-opacity',
+                        isCopyVisible(`reason-${i}`)
+                          ? 'opacity-100'
+                          : 'opacity-0 focus:opacity-100',
+                      )}
                       aria-label={`Copy assertion reason ${i}`}
                     >
                       {copiedAssertions[`reason-${i}`] ? (

@@ -144,3 +144,47 @@ export async function getAssertionJobStatus(
 
   return response.json();
 }
+
+export interface GeneratedAssertion {
+  type: 'llm-rubric' | 'g-eval';
+  metric: string;
+  value: string;
+}
+
+export interface GenerateAssertionsOptions {
+  type?: 'llm-rubric' | 'g-eval';
+  numAssertions?: number;
+  instructions?: string;
+  provider?: string;
+  testIndices?: number[];
+  resultIds?: string[];
+}
+
+export interface GenerateAssertionsResponse {
+  assertions: GeneratedAssertion[];
+  context: {
+    numPromptsAnalyzed: number;
+    numOutputsAnalyzed: number;
+    existingAssertionCount: number;
+  };
+}
+
+export async function generateAssertionSuggestions(
+  evalId: string,
+  options: GenerateAssertionsOptions = {},
+): Promise<{ data: GenerateAssertionsResponse }> {
+  const response = await callApi(`/eval/${evalId}/assertions/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(options),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Failed to generate assertion suggestions');
+  }
+
+  return response.json();
+}

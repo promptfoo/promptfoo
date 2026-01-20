@@ -5,6 +5,7 @@ import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { AssertionsResult } from '../../assertions/assertionsResult';
+import { generateAssertionSuggestions } from '../../assertions/generateSuggestions';
 import { renderMetricName, runAssertions } from '../../assertions/index';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -27,6 +28,7 @@ import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
+  Assertion,
   AssertionOrSet,
   AtomicTestCase,
   EvalTableDTO,
@@ -1002,6 +1004,143 @@ evalRouter.get(
         },
         5 * 60 * 1000,
       );
+    }
+  },
+);
+
+// Schema for assertion generation request
+const GenerateAssertionsSchema = z.object({
+  type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
+  numAssertions: z.number().min(1).max(20).default(5),
+  instructions: z.string().optional(),
+  provider: z.string().optional(),
+  // Optional: limit to specific test indices or result IDs
+  testIndices: z.array(z.number()).optional(),
+  resultIds: z.array(z.string()).optional(),
+});
+
+// Generate assertion suggestions for an eval
+evalRouter.post(
+  '/:evalId/assertions/generate',
+  async (req: Request, res: Response): Promise<void> => {
+    const evalId = req.params.evalId as string;
+    const parsed = GenerateAssertionsSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.message });
+      return;
+    }
+
+    const { type, numAssertions, instructions, provider, testIndices, resultIds } = parsed.data;
+
+    try {
+      const eval_ = await Eval.findById(evalId);
+      if (!eval_) {
+        res.status(404).json({ success: false, error: 'Eval not found' });
+        return;
+      }
+
+      // Get prompts from the eval
+      const prompts = eval_.prompts.map((p) => p.raw).filter(Boolean);
+      if (prompts.length === 0) {
+        res.status(400).json({ success: false, error: 'No prompts found in eval' });
+        return;
+      }
+
+      // Get sample outputs from the eval
+      let results: EvalResult[];
+      if (resultIds && resultIds.length > 0) {
+        // Get specific results by ID
+        const fetchedResults = await Promise.all(resultIds.map((id) => EvalResult.findById(id)));
+        results = fetchedResults.filter((r): r is EvalResult => r !== null && r.evalId === evalId);
+      } else if (testIndices && testIndices.length > 0) {
+        // Get results by test indices
+        results = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
+      } else {
+        // Get all results and sample for performance
+        const allResults = await EvalResult.findManyByEvalId(evalId);
+        // Sample up to 20 results for generating assertions
+        if (allResults.length > 20) {
+          // Take a random sample to get diverse outputs
+          const shuffled = [...allResults].sort(() => Math.random() - 0.5);
+          results = shuffled.slice(0, 20);
+        } else {
+          results = allResults;
+        }
+      }
+
+      if (results.length === 0) {
+        res.status(400).json({ success: false, error: 'No results found in eval' });
+        return;
+      }
+
+      // Extract outputs from results
+      const outputs = results
+        .map((r) => {
+          if (r.response?.output) {
+            return typeof r.response.output === 'string'
+              ? r.response.output
+              : JSON.stringify(r.response.output);
+          }
+          return null;
+        })
+        .filter((o): o is string => o !== null);
+
+      if (outputs.length === 0) {
+        res.status(400).json({ success: false, error: 'No valid outputs found in results' });
+        return;
+      }
+
+      // Get existing assertions to avoid duplicates (filter out assert-sets)
+      const existingAssertions = results
+        .flatMap((r) => r.testCase?.assert || [])
+        .filter((a): a is Assertion => a != null && a.type !== 'assert-set');
+
+      logger.info('[POST /:evalId/assertions/generate] Generating assertions', {
+        evalId,
+        numPrompts: prompts.length,
+        numOutputs: outputs.length,
+        numExisting: existingAssertions.length,
+        type,
+        numAssertions,
+      });
+
+      // Generate suggestions
+      const suggestions = await generateAssertionSuggestions({
+        prompts,
+        outputs,
+        existingAssertions,
+        numAssertions,
+        type,
+        provider,
+        instructions,
+      });
+
+      logger.info('[POST /:evalId/assertions/generate] Generated assertions', {
+        evalId,
+        numSuggestions: suggestions.length,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          assertions: suggestions,
+          context: {
+            numPromptsAnalyzed: prompts.length,
+            numOutputsAnalyzed: outputs.length,
+            existingAssertionCount: existingAssertions.length,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('[POST /:evalId/assertions/generate] Error generating assertions', {
+        evalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate assertions',
+      });
     }
   },
 );

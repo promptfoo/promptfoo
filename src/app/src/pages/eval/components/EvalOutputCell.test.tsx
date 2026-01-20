@@ -37,6 +37,13 @@ vi.mock('./store', () => ({
   }),
   useTableStore: () => ({
     shouldHighlightSearchText: false,
+    refreshTable: vi.fn(),
+  }),
+}));
+
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
   }),
 }));
 

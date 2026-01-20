@@ -57,11 +57,11 @@ describe('AddAssertionsDialog', () => {
     // Click "Contains text" quick action
     await user.click(screen.getByText('Contains text'));
 
-    // Fill in the value
-    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'denver');
+    // Fill in the value (find by placeholder)
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'denver');
 
-    // Submit
-    await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+    // Submit - button text is now "Run X on Y →"
+    await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
 
     await waitFor(() => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-1', {
@@ -99,10 +99,10 @@ describe('AddAssertionsDialog', () => {
     await user.click(screen.getByText('Contains text'));
 
     // Fill in the value
-    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'sacramento');
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'sacramento');
 
     // Submit
-    await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+    await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
 
     await waitFor(() => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-2', {
@@ -129,13 +129,15 @@ describe('AddAssertionsDialog', () => {
     await user.click(screen.getByText('Contains text'));
 
     // Submit button should be disabled because value is empty
-    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeDisabled();
+    // Button text is still "Run 1 on 1 →" but it's disabled
+    const submitButton = screen.getByRole('button', { name: /Run 1 on 1/ });
+    expect(submitButton).toBeDisabled();
 
     // Type a value
-    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'test');
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'test');
 
     // Submit button should now be enabled
-    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeEnabled();
+    expect(submitButton).toBeEnabled();
   });
 
   it('allows submission for assertion types that do not require values', async () => {
@@ -155,10 +157,11 @@ describe('AddAssertionsDialog', () => {
     await user.click(screen.getByText('Is valid JSON'));
 
     // Submit button should be enabled even without a value
-    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeEnabled();
+    const submitButton = screen.getByRole('button', { name: /Run 1 on 1/ });
+    expect(submitButton).toBeEnabled();
 
     // Submit
-    await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+    await user.click(submitButton);
 
     await waitFor(() => {
       expect(addEvalAssertions).toHaveBeenCalledWith('eval-4', {
@@ -199,8 +202,9 @@ describe('AddAssertionsDialog', () => {
       });
 
       await user.click(screen.getByText('Contains text'));
-      await user.type(screen.getByRole('textbox', { name: 'Value' }), 'debug');
-      await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+      await user.type(screen.getByPlaceholderText('Text to search for...'), 'debug');
+      // For filtered scope with 5 test cases, button shows "Run 1 on 5 →"
+      await user.click(screen.getByRole('button', { name: /Run 1 on 5/ }));
 
       await waitFor(() => {
         expect(addEvalAssertions).toHaveBeenCalled();
@@ -240,8 +244,8 @@ describe('AddAssertionsDialog', () => {
       );
 
       await user.click(screen.getByText('Contains text'));
-      await user.type(screen.getByRole('textbox', { name: 'Value' }), 'test');
-      await user.click(screen.getByRole('button', { name: 'Add assertions' }));
+      await user.type(screen.getByPlaceholderText('Text to search for...'), 'test');
+      await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -252,5 +256,25 @@ describe('AddAssertionsDialog', () => {
         expect(mockOnClose).toHaveBeenCalled();
       });
     });
+  });
+
+  it('shows target count in submit button based on scope', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-5',
+      availableScopes: ['filtered'],
+      defaultScope: 'filtered',
+      filteredCount: 100,
+      onApplied: mockOnApplied,
+    });
+
+    // Add an assertion
+    await user.click(screen.getByText('Is valid JSON'));
+
+    // Button should show "Run 1 on 100 →" for filtered scope with 100 test cases
+    expect(screen.getByRole('button', { name: /Run 1 on 100/ })).toBeInTheDocument();
   });
 });

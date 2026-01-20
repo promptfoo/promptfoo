@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getApiBaseUrl, addEvalAssertions, getAssertionJobStatus } from './api';
+import { addEvalAssertions, getApiBaseUrl, getAssertionJobStatus } from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
