@@ -43,6 +43,7 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 
 /**
@@ -818,6 +819,13 @@ export async function resolveConfigs(
     testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+  );
+
+  // Validate that all prompt references in tests exist
+  validateTestPromptReferences(
+    testSuite.tests || [],
+    testSuite.prompts,
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
   cliState.config = config;

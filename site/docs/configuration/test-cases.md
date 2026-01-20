@@ -125,6 +125,78 @@ tests:
 - **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
 - **CLI `--filter-providers`**: If you use `--filter-providers` to filter providers at the CLI level, validation only sees the filtered providers. Tests referencing providers excluded by `--filter-providers` will fail validation
 
+### Filtering Tests by Prompt
+
+By default, each test runs against all prompts (a cartesian product). You can use the `prompts` field to restrict a test to specific prompts:
+
+```yaml
+prompts:
+  - id: prompt-factual
+    label: Factual Assistant
+    raw: 'You are a factual assistant. Answer: {{question}}'
+  - id: prompt-creative
+    label: Creative Writer
+    raw: 'You are a creative writer. Answer: {{question}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # This test only runs with the Factual Assistant prompt
+  - vars:
+      question: 'What is the capital of France?'
+    prompts:
+      - Factual Assistant
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  # This test only runs with the Creative Writer prompt
+  - vars:
+      question: 'Write a poem about Paris'
+    prompts:
+      - prompt-creative # You can reference by ID or label
+    assert:
+      - type: llm-rubric
+        value: 'Contains poetic language'
+
+  # This test runs with all prompts (default behavior)
+  - vars:
+      question: 'Hello'
+```
+
+The `prompts` field accepts:
+
+- **Exact labels**: `prompts: ['Factual Assistant']`
+- **Exact IDs**: `prompts: ['prompt-factual']`
+- **Wildcard patterns**: `prompts: ['Math:*']` matches `Math:Basic`, `Math:Advanced`, etc.
+- **Prefix patterns**: `prompts: ['Math']` matches `Math:Basic`, `Math:Advanced` (legacy syntax)
+
+:::note
+
+Invalid prompt references will cause an error at config load time. This strict validation catches typos early.
+
+:::
+
+You can also set a default prompt filter in `defaultTest`:
+
+```yaml
+defaultTest:
+  prompts:
+    - Factual Assistant
+
+tests:
+  # Inherits prompts: ['Factual Assistant'] from defaultTest
+  - vars:
+      question: 'What is 2+2?'
+
+  # Override to use a different prompt
+  - vars:
+      question: 'Write a story'
+    prompts:
+      - Creative Writer
+```
+
 ## External Test Files
 
 For larger test suites, store tests in separate files:
