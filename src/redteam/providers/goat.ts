@@ -650,10 +650,12 @@ export default class GoatProvider implements ApiProvider {
       }
     }
 
+    const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         stopReason:
           this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess

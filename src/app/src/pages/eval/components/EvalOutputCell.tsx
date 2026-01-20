@@ -10,6 +10,7 @@ import {
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -865,6 +866,7 @@ function EvalOutputCell({
               gradingResults={output.gradingResult?.componentResults}
               output={text}
               metadata={output.metadata}
+              providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
