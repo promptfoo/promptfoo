@@ -552,6 +552,24 @@ tests:
         threshold: 1000 # milliseconds
 ```
 
+### Passing Arrays to Assertions
+
+By default, array variables expand into multiple test cases. To pass an array directly to assertions like `contains-any`, disable variable expansion:
+
+```yaml
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: contains-any
+      value: '{{expected_values}}'
+
+tests:
+  - description: 'Check for any valid response'
+    vars:
+      expected_values: ['option1', 'option2', 'option3']
+```
+
 ## External Data Sources
 
 ### Google Sheets
