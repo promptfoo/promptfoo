@@ -206,6 +206,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
   defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+  description: z.string().optional().describe('Custom description/name for the generated tests'),
   delay: z
     .int()
     .nonnegative()
