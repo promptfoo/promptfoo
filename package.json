@@ -29,7 +29,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.13.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",

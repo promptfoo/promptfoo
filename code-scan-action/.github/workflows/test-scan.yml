@@ -36,7 +36,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: '24.13.0'
 
       - name: Run Promptfoo Code Scan
         uses: ./ # Action is in root directory

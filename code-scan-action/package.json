@@ -11,7 +11,7 @@
     "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.13.0"
   },
   "dependencies": {
     "@actions/core": "^2.0.2",
