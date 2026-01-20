@@ -1,9 +1,18 @@
 import React, { useCallback, useMemo } from 'react';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -15,15 +24,21 @@ import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
   ClipboardCopy,
+  FileCode,
   Hash,
   Link,
+  Loader2,
+  MoreHorizontal,
   Pencil,
+  Play,
+  Plus,
   Search,
   Star,
   ThumbsDown,
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -88,6 +103,7 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  testIdx?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -119,6 +135,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  testIdx,
   promptIndex,
   onRating,
   firstOutput,
@@ -143,11 +160,13 @@ function EvalOutputCell({
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
+  const { showToast } = useToast();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [openAssertions, setOpenAssertions] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
       ?.pass ?? null,
@@ -484,6 +503,52 @@ function EvalOutputCell({
       });
   };
 
+  const [copiedAssertion, setCopiedAssertion] = React.useState(false);
+  const handleCopyAsAssertion = () => {
+    const assertion = `- type: equals\n  value: ${JSON.stringify(text)}`;
+    navigator.clipboard
+      .writeText(assertion)
+      .then(() => {
+        setCopiedAssertion(true);
+        setTimeout(() => setCopiedAssertion(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy assertion to clipboard:', error);
+      });
+  };
+
+  const [isReplaying, setIsReplaying] = React.useState(false);
+  const handleRerun = async () => {
+    if (!evaluationId || !output.prompt || testIdx == null) {
+      return;
+    }
+    setIsReplaying(true);
+    showToast('Re-running cell...', 'info');
+    try {
+      // Use testIdx (stable test index from data) instead of rowIndex (visual position)
+      // to ensure correct test case is re-run even when table is filtered/sorted
+      const result = await replayEvaluation({
+        evaluationId,
+        testIndex: testIdx,
+        prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
+        variables: output.metadata?.inputVars || output.testCase?.vars,
+      });
+      if (result.error) {
+        showToast(`Re-run failed: ${result.error}`, 'error');
+      } else {
+        showToast('Cell re-run complete', 'success');
+        refreshTable();
+      }
+    } catch (error) {
+      showToast(
+        `Re-run failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsReplaying(false);
+    }
+  };
+
   let tokenUsageDisplay;
   let latencyDisplay;
   let tokPerSecDisplay;
@@ -739,19 +804,6 @@ function EvalOutputCell({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleCopy}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy output to clipboard</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
                 className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
@@ -849,13 +901,47 @@ function EvalOutputCell({
                 type="button"
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handlePromptOpen}
-                aria-label="View output and test details"
+                aria-label="View details"
               >
                 <Search className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>View output and test details</TooltipContent>
+            <TooltipContent>View details</TooltipContent>
           </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={handleRerun} disabled={isReplaying || testIdx == null}>
+                {isReplaying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                {isReplaying ? 'Re-running...' : 'Re-run cell'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setOpenAssertions(true)}>
+                <Plus className="size-4" />
+                Add assertion
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopy}>
+                <ClipboardCopy className="size-4" />
+                {copied ? 'Copied!' : 'Copy output'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCopyAsAssertion}>
+                <FileCode className="size-4" />
+                {copiedAssertion ? 'Copied!' : 'Copy as assertion'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {openPrompt && (
             <EvalOutputPromptDialog
               open={openPrompt}
@@ -867,8 +953,9 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
+              testIndex={testIdx}
               promptIndex={promptIndex}
+              resultId={output.id}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
@@ -877,13 +964,34 @@ function EvalOutputCell({
               cloudConfig={cloudConfig}
             />
           )}
+          {openAssertions && (
+            <AddAssertionsDialog
+              open={openAssertions}
+              onClose={() => setOpenAssertions(false)}
+              evalId={evaluationId}
+              availableScopes={testIdx != null ? ['results', 'tests'] : ['results']}
+              defaultScope="results"
+              resultId={output.id}
+              testIndex={testIdx}
+              onApplied={refreshTable}
+            />
+          )}
         </>
       )}
     </div>
   );
 
   return (
-    <div id="eval-output-cell" className="cell" style={cellStyle}>
+    <div id="eval-output-cell" className={cn('cell', isReplaying && 'relative')} style={cellStyle}>
+      {/* Loading overlay when re-running */}
+      {isReplaying && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex items-center justify-center rounded">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Re-running...</span>
+          </div>
+        </div>
+      )}
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">

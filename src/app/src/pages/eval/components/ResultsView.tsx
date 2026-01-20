@@ -39,6 +39,7 @@ import {
   Edit,
   Eye,
   Play,
+  Plus,
   Settings,
   Share,
   Trash2,
@@ -46,6 +47,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -91,9 +93,11 @@ export default function ResultsView({
     setAuthor,
     totalResultsCount,
     highlightedResultsCount,
+    filteredResultsCount,
     filters,
     removeFilter,
     stats,
+    refreshTable,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -284,6 +288,7 @@ export default function ResultsView({
   const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [addAssertionsDialogOpen, setAddAssertionsDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -497,6 +502,24 @@ export default function ResultsView({
     });
   }, []);
 
+  const appliedFilters = React.useMemo(() => {
+    return Object.values(filters.values).filter((filter) => {
+      if (filter.type === 'metadata' && filter.operator === 'exists') {
+        return Boolean(filter.field);
+      }
+      if (filter.type === 'metadata') {
+        return Boolean(filter.value && filter.field);
+      }
+      if (filter.type === 'metric' && filter.operator === 'is_defined') {
+        return Boolean(filter.field);
+      }
+      if (filter.type === 'metric') {
+        return Boolean(filter.value && filter.field);
+      }
+      return Boolean(filter.value);
+    });
+  }, [filters.values]);
+
   const handleEditAuthor = async (newAuthor: string) => {
     if (evalId) {
       try {
@@ -649,6 +672,24 @@ export default function ResultsView({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Edit table view settings</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddAssertionsDialogOpen(true)}
+                      disabled={!evalId || filteredResultsCount === 0}
+                    >
+                      <Plus className="size-4 mr-2" />
+                      Add assertions
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {filteredResultsCount === 0
+                      ? 'Apply filters to select test cases'
+                      : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`}
+                  </TooltipContent>
                 </Tooltip>
                 {config && (
                   <DropdownMenu open={evalActionsOpen} onOpenChange={setEvalActionsOpen}>
@@ -912,6 +953,18 @@ export default function ResultsView({
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <AddAssertionsDialog
+        open={addAssertionsDialogOpen}
+        onClose={() => setAddAssertionsDialogOpen(false)}
+        evalId={evalId || undefined}
+        availableScopes={['filtered']}
+        defaultScope="filtered"
+        filters={appliedFilters}
+        filterMode={filterMode}
+        searchText={debouncedSearchText}
+        filteredCount={filteredResultsCount}
+        onApplied={refreshTable}
+      />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}
         onClose={() => setEditNameDialogOpen(false)}

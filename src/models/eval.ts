@@ -976,6 +976,50 @@ export default class Eval {
   }
 
   /**
+   * Get all test indices that match the provided filter options.
+   * Uses the same filter logic as table pagination to ensure consistency.
+   */
+  async getFilteredTestIndices(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+    batchSize?: number;
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const batchSize = opts.batchSize ?? 500;
+    let offset = 0;
+    let filteredCount = 0;
+    const testIndices: number[] = [];
+
+    while (true) {
+      const { testIndices: batch, filteredCount: batchCount } = await this.queryTestIndices({
+        offset,
+        limit: batchSize,
+        filterMode: opts.filterMode,
+        searchQuery: opts.searchQuery,
+        filters: opts.filters,
+      });
+
+      if (offset === 0) {
+        filteredCount = batchCount;
+      }
+
+      if (batch.length === 0) {
+        break;
+      }
+
+      testIndices.push(...batch);
+
+      if (batch.length < batchSize || testIndices.length >= filteredCount) {
+        break;
+      }
+
+      offset += batchSize;
+    }
+
+    return { testIndices, filteredCount };
+  }
+
+  /**
    * CRITICAL: Calculates metrics for filtered results.
    * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
    *

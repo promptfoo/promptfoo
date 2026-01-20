@@ -318,6 +318,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    tableRefreshToken,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -642,6 +643,7 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
+    tableRefreshToken,
     appliedFiltersString, // Use the stable string representation instead of filters.values
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
@@ -1166,6 +1168,7 @@ function ResultsTable({
                     output={output}
                     maxTextLength={maxTextLength}
                     rowIndex={info.row.index}
+                    testIdx={info.row.original.testIdx}
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,

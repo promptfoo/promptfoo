@@ -286,6 +286,8 @@ interface TableState {
   isFetching: boolean;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
+  tableRefreshToken: number;
+  refreshTable: () => void;
 
   shouldHighlightSearchText: boolean;
 
@@ -571,6 +573,9 @@ export const useTableStore = create<TableState>()(
     isFetching: false,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
+    tableRefreshToken: 0,
+    refreshTable: () =>
+      set((prevState) => ({ tableRefreshToken: prevState.tableRefreshToken + 1 })),
 
     shouldHighlightSearchText: false,
 
