@@ -4,6 +4,7 @@ import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
 import { REQUEST_TIMEOUT_MS } from './shared';
+import type OpenAI from 'openai';
 
 import type {
   ApiProvider,
@@ -105,25 +106,44 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       apiBaseUrl: this.getApiUrl(),
     });
 
-    let data, status, statusText, latencyMs: number | undefined;
+    interface OpenAIErrorResponse {
+      error: {
+        message: string;
+        type?: string;
+        code?: string;
+      };
+    }
+
+    type SnowflakeCortexResponse = OpenAI.ChatCompletion & {
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+
+    let data: SnowflakeCortexResponse;
+    let status: number;
+    let statusText: string;
+    let latencyMs: number | undefined;
     let cached = false;
 
     try {
-      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
-        `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...config.headers,
+      ({ data, cached, status, statusText, latencyMs } =
+        await fetchWithCache<SnowflakeCortexResponse>(
+          `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        context?.bustCache ?? context?.debug,
-      ));
+          REQUEST_TIMEOUT_MS,
+          'json',
+          context?.bustCache ?? context?.debug,
+        ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -139,7 +159,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
 
     if (data.error) {
       return {
-        error: formatOpenAiError(data),
+        error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
@@ -148,13 +168,13 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
     // Handle tool calls and content
-    let output = '';
+    let output: string | object = '';
     const hasFunctionCall = !!(message.function_call && message.function_call.name);
     const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
 
     if (hasFunctionCall || hasToolCalls) {
       // Tool calls always take priority
-      output = hasFunctionCall ? message.function_call : message.tool_calls;
+      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
     } else if (message.content && message.content.trim()) {
       output = message.content;
     }

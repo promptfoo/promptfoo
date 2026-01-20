@@ -45,6 +45,7 @@ export default function AdvancedOptionsDialog({
   });
 
   // Update local options when scanOptions prop changes or when dialog opens
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalOptions({
       ...defaultScanOptions,

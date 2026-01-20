@@ -1,4 +1,4 @@
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useCallback, useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
@@ -76,7 +76,7 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
-  const handleRedirect = () => {
+  const handleRedirect = useCallback(() => {
     // Handle special case where redirect URL contains query parameters
     // e.g., ?redirect=/some-page?param1=value1&param2=value2
     const searchStr = location.search;
@@ -95,7 +95,7 @@ export default function LoginPage() {
     } else {
       navigate('/');
     }
-  };
+  }, [location.search, navigate]);
 
   // Handle successful login
   useEffect(() => {

@@ -1,2 +1,2 @@
 @AGENTS.md
-@MIGRATION.md
+@UI_GUIDELINES.md

@@ -14,6 +14,7 @@ import {
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
+  isTransientError,
 } from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
@@ -149,10 +150,14 @@ describe('fetchWithProxy', () => {
     delete process.env.npm_config_http_proxy;
     delete process.env.npm_config_proxy;
     delete process.env.all_proxy;
+    delete process.env.PROMPTFOO_INSECURE_SSL;
+    delete process.env.PROMPTFOO_CA_CERT_PATH;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    delete process.env.PROMPTFOO_INSECURE_SSL;
+    delete process.env.PROMPTFOO_CA_CERT_PATH;
   });
 
   it('should add version header to all requests', async () => {
@@ -379,6 +384,12 @@ describe('fetchWithProxy', () => {
       }
       if (key === 'HTTPS_PROXY') {
         return mockProxyUrl;
+      }
+      return defaultValue;
+    });
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_INSECURE_SSL') {
+        return false;
       }
       return defaultValue;
     });
@@ -1317,5 +1328,204 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
+  });
+});
+
+describe('isTransientError', () => {
+  it('should return true for 502 Bad Gateway', () => {
+    const response = createMockResponse({
+      status: 502,
+      statusText: 'Bad Gateway',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 503 Service Unavailable', () => {
+    const response = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 504 Gateway Timeout', () => {
+    const response = createMockResponse({
+      status: 504,
+      statusText: 'Gateway Timeout',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should be case insensitive for status text', () => {
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 502,
+          statusText: 'BAD GATEWAY',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 503,
+          statusText: 'SERVICE UNAVAILABLE',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 504,
+          statusText: 'GATEWAY TIMEOUT',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('should return false for 502 without matching text', () => {
+    const response = createMockResponse({
+      status: 502,
+      statusText: 'Invalid API Key',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
+
+  it('should return false for 500 Internal Server Error', () => {
+    const response = createMockResponse({
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
+});
+
+describe('fetchWithProxy transient error retries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.mocked(sleep).mockClear();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should retry on 503 Service Unavailable', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(1000); // First retry: 2^0 * 1000 = 1000ms
+  });
+
+  it('should not retry on 502 without matching status text', async () => {
+    const nonTransientResponse = createMockResponse({
+      status: 502,
+      statusText: 'Invalid API Key',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(nonTransientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(nonTransientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry up to 3 times with exponential backoff', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1000); // 2^0 * 1000
+    expect(sleep).toHaveBeenNthCalledWith(2, 2000); // 2^1 * 1000
+    expect(sleep).toHaveBeenNthCalledWith(3, 4000); // 2^2 * 1000
+  });
+
+  it('should not retry when disableTransientRetries is true', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com', {
+      disableTransientRetries: true,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchWithRetries with disableTransientRetries', () => {
+  beforeEach(() => {
+    vi.mocked(sleep).mockClear();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.clearAllMocks();
+    // Ensure PROMPTFOO_RETRY_5XX is false so 503 responses don't throw
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return false;
+      }
+      return defaultValue;
+    });
+  });
+
+  it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
+    // This test verifies that fetchWithRetries passes disableTransientRetries: true
+    // to prevent fetchWithProxy from also retrying transient errors
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue(transientResponse);
+    global.fetch = mockFetch;
+
+    // fetchWithRetries with 0 retries - should make exactly 1 attempt
+    // If disableTransientRetries wasn't being passed, fetchWithProxy would retry 3 times
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 0);
+
+    // With disableTransientRetries: true, fetchWithProxy shouldn't retry
+    // So we should see exactly 1 fetch call
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
   });
 });

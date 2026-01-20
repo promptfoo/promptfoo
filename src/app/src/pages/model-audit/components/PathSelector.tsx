@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
@@ -192,6 +192,7 @@ export default function PathSelector({
     setIsDragging(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -272,12 +273,14 @@ export default function PathSelector({
           {/* Current Working Directory Info */}
           {currentWorkingDir && (
             <Alert variant="info">
-              <AlertDescription>
-                <strong>Current directory:</strong> {currentWorkingDir}
-                <span className="block text-xs text-muted-foreground mt-1">
-                  Relative paths will be resolved from this directory
-                </span>
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <strong>Current directory:</strong> {currentWorkingDir}
+                  <span className="block text-xs text-muted-foreground mt-1">
+                    Relative paths will be resolved from this directory
+                  </span>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 

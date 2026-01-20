@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -115,14 +115,16 @@ export const ConfirmEvalNameDialog = ({
           {isLargeOperation && (
             <Alert variant={isVeryLargeOperation ? 'warning' : 'info'}>
               {isVeryLargeOperation && <AlertTriangle className="size-4" />}
-              <AlertDescription>
-                <strong>
-                  This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
-                </strong>{' '}
-                {isVeryLargeOperation
-                  ? 'This operation may take several minutes. Please be patient.'
-                  : 'This operation may take up to a minute.'}
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <strong>
+                    This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
+                  </strong>{' '}
+                  {isVeryLargeOperation
+                    ? 'This operation may take several minutes. Please be patient.'
+                    : 'This operation may take up to a minute.'}
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
           <div className="space-y-2">

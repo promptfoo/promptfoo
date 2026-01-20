@@ -42,6 +42,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   /**
    * Renders the content of the message based on the contentType.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const content = useMemo(() => {
     if (message.loading || !message.content) {
       return null;

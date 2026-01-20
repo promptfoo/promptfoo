@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -65,6 +65,7 @@ export default function CustomIntentSection() {
     return { totalPages: total, startIndex: start, currentIntents: current };
   }, [localConfig.intent, currentPage]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const debouncedUpdatePlugins = useCallback(
     (newIntents: (string | string[])[]) => {
       if (updateTimeout) {
@@ -311,6 +312,7 @@ export default function CustomIntentSection() {
     setIsDragOver(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -355,17 +357,19 @@ export default function CustomIntentSection() {
     <div className="flex flex-col gap-4">
       {uploadError && (
         <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between">
-            {uploadError}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-5"
-              onClick={() => setUploadError(null)}
-            >
-              <X className="size-4" />
-            </Button>
-          </AlertDescription>
+          <AlertContent>
+            <AlertDescription className="flex items-center justify-between">
+              {uploadError}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-5"
+                onClick={() => setUploadError(null)}
+              >
+                <X className="size-4" />
+              </Button>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -528,10 +532,12 @@ export default function CustomIntentSection() {
               </p>
               {previewDialog?.hasNested && (
                 <Alert variant="info" className="mt-3">
-                  <AlertDescription>
-                    Multi-step intents will be preserved as sequential prompts for advanced testing
-                    scenarios.
-                  </AlertDescription>
+                  <AlertContent>
+                    <AlertDescription>
+                      Multi-step intents will be preserved as sequential prompts for advanced
+                      testing scenarios.
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
               )}
             </div>

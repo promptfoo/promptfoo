@@ -166,7 +166,7 @@ const SUPPRESSED_ERROR_PATTERNS = [
   /Consider adding an error boundary to your tree/, // React suggestion message
 ];
 
-console.error = (...args: any[]) => {
+console.error = (...args: unknown[]) => {
   const errorMessage = args.join(' ');
 
   // Check if this error matches any suppressed patterns

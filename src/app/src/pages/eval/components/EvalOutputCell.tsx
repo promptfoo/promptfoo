@@ -257,7 +257,8 @@ function EvalOutputCell({
   }
 
   // Include provider-level error if present (e.g., from Python provider returning error)
-  if (output.error) {
+  // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
+  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     failReasons.unshift(output.error);
   }
 
@@ -334,9 +335,14 @@ function EvalOutputCell({
     }
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc
+    inlineImageSrc ||
+    text?.trim().startsWith('<svg')
   ) {
-    const src = inlineImageSrc || text;
+    // Convert raw SVG to data URI if needed
+    let src = inlineImageSrc || text;
+    if (text?.trim().startsWith('<svg')) {
+      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+    }
     node = (
       <img
         src={src}
@@ -718,11 +724,18 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+  const [actionsHovered, setActionsHovered] = React.useState(false);
+  const showExtraActions = shiftKeyPressed || actionsHovered;
+
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
+    <div
+      className="cell-actions"
+      onMouseEnter={() => setActionsHovered(true)}
+      onMouseLeave={() => setActionsHovered(false)}
+    >
+      {showExtraActions && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -735,21 +748,24 @@ function EvalOutputCell({
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Toggle test highlight"
               >
-                <Star className="size-4" />
+                <Star
+                  className={`size-4 ${commentText.startsWith('!highlight') ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={commentText.startsWith('!highlight') ? 'currentColor' : 'none'}
+                />
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -765,9 +781,69 @@ function EvalOutputCell({
           </Tooltip>
         </>
       )}
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            onClick={() => handleRating(true)}
+            aria-pressed={activeRating === true}
+            aria-label="Mark test passed"
+          >
+            <ThumbsUp
+              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+              fill={activeRating === true ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            onClick={() => handleRating(false)}
+            aria-pressed={activeRating === false}
+            aria-label="Mark test failed"
+          >
+            <ThumbsDown
+              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+              fill={activeRating === false ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleSetScore}
+            aria-label="Set test score"
+          >
+            <Hash className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Set test score</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handleCommentOpen}
+            aria-label="Edit comment"
+          >
+            <Pencil className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Edit comment</TooltipContent>
+      </Tooltip>
       {output.prompt && (
         <>
-          <Tooltip>
+          <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
@@ -793,7 +869,7 @@ function EvalOutputCell({
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={output.testCase?.vars}
+              variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
@@ -803,66 +879,6 @@ function EvalOutputCell({
           )}
         </>
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
-            onClick={() => handleRating(true)}
-            aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
-          >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? '!stroke-foreground' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
-            onClick={() => handleRating(false)}
-            aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
-          >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? '!stroke-foreground' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="action p-1 rounded hover:bg-muted transition-colors"
-            onClick={handleSetScore}
-            aria-label="Set test score"
-          >
-            <Hash className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Set test score</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="action p-1 rounded hover:bg-muted transition-colors"
-            onClick={handleCommentOpen}
-            aria-label="Edit comment"
-          >
-            <Pencil className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Edit comment</TooltipContent>
-      </Tooltip>
     </div>
   );
 

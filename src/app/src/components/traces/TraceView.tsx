@@ -1,14 +1,15 @@
 import { useCallback } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import { SpanData } from '@promptfoo/tracing/store';
 import { Download } from 'lucide-react';
 import TraceTimeline from './TraceTimeline';
 
 export interface Trace {
   traceId: string;
   testCaseId?: string | number;
-  spans?: any[];
+  spans?: Partial<SpanData>[];
 }
 
 interface TraceViewProps {
@@ -73,6 +74,7 @@ export default function TraceView({
     return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
   };
 
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: We are getting confused between Trace and TraceData somewhere in here
   let filteredTraces: any[] = traces;
 
   if (traces.length > 0) {
@@ -115,15 +117,17 @@ export default function TraceView({
     return (
       <div className="p-2">
         <Alert variant="info">
-          <AlertTitle>No spans received</AlertTitle>
-          <AlertDescription>
-            <p>Traces were created but no spans were received. Make sure your provider is:</p>
-            <ul className="mt-2 ml-4 list-disc space-y-1">
-              <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
-              <li>Creating spans within the trace context</li>
-              <li>Properly exporting spans before the evaluation completes</li>
-            </ul>
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>No spans received</AlertTitle>
+            <AlertDescription>
+              <p>Traces were created but no spans were received. Make sure your provider is:</p>
+              <ul className="mt-2 ml-4 list-disc space-y-1">
+                <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
+                <li>Creating spans within the trace context</li>
+                <li>Properly exporting spans before the evaluation completes</li>
+              </ul>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       </div>
     );

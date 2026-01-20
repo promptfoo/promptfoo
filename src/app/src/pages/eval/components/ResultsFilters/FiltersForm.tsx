@@ -156,6 +156,7 @@ function FilterRow({
     fetchMetadataValues,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTypeChange = useCallback(
     (type: ResultsFilter['type']) => {
       const updatedFilter = { ...filter, type, value: '' };
