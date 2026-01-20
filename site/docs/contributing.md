@@ -42,7 +42,7 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # Use the Node.js version specified in .nvmrc (node >= 20 required)
+   # Use the Node.js version specified in .nvmrc (Node.js >= 20.0.0 required)
    nvm use
 
    # Install dependencies (npm, pnpm, or yarn all work)

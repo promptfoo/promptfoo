@@ -70,6 +70,26 @@ type PluginClass<T extends PluginConfig> = new (
   config: T,
 ) => RedteamPluginBase;
 
+/**
+ * Computes modifiers from config (same logic as appendModifiers in base.ts).
+ * Used to ensure modifiers are available for strategies when using remote generation.
+ */
+function computeModifiersFromConfig(config: PluginConfig | undefined): Record<string, string> {
+  const modifiers: Record<string, string> = {
+    ...(config?.modifiers as Record<string, string> | undefined),
+  };
+  if (config?.language && typeof config.language === 'string') {
+    modifiers.language = config.language;
+  }
+  if (config?.inputs && Object.keys(config.inputs).length > 0) {
+    const schema = Object.entries(config.inputs as Record<string, string>)
+      .map(([k, description]) => `"${k}": "${description}"`)
+      .join(', ');
+    modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+  }
+  return modifiers;
+}
+
 async function fetchRemoteTestCases(
   key: string,
   purpose: string,
@@ -95,14 +115,21 @@ async function fetchRemoteTestCases(
   const body = JSON.stringify({
     config,
     injectVar,
+    // Send inputs at top level for server compatibility (server expects it there)
+    inputs: config?.inputs as Record<string, string> | undefined,
     n,
     purpose,
     task: key,
     version: VERSION,
     email: getUserEmail(),
   });
+
+  interface PluginGenerationResponse {
+    result?: TestCase[];
+  }
+
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -117,7 +144,7 @@ async function fetchRemoteTestCases(
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
     }
-    const ret = (data as { result: TestCase[] }).result;
+    const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
@@ -140,11 +167,18 @@ function createPluginFactory<T extends PluginConfig>(
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
       const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
+      const computedModifiers = computeModifiersFromConfig(config);
+
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
+          // Add computed config with modifiers so strategies can access them
+          pluginConfig: {
+            ...config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     },
@@ -222,11 +256,16 @@ const pluginFactories: PluginFactory[] = [
       }
 
       const testCases = await getHarmfulTests(params, category);
+      const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(category),
+          pluginConfig: {
+            ...params.config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     },
@@ -244,11 +283,16 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
       );
+      const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(category),
+          pluginConfig: {
+            ...params.config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     }
@@ -279,11 +323,16 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
     );
+    const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
       metadata: {
         ...testCase.metadata,
         pluginId: getShortPluginId(category),
+        pluginConfig: {
+          ...params.config,
+          modifiers: computedModifiers,
+        },
       },
     }));
   },
@@ -308,11 +357,16 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         config ?? {},
       );
+      const computedModifiers = computeModifiersFromConfig(config);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
+          pluginConfig: {
+            ...config,
+            modifiers: computedModifiers,
+          },
         },
       }));
 

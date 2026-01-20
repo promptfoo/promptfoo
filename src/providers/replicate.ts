@@ -145,7 +145,7 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 

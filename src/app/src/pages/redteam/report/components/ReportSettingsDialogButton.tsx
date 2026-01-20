@@ -55,7 +55,7 @@ const ReportSettingsDialogButton = () => {
             aria-label="settings"
             className="text-muted-foreground hover:text-foreground"
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="size-5" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Report Settings</TooltipContent>

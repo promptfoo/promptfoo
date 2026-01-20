@@ -19,7 +19,6 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
@@ -513,6 +512,7 @@ export const CustomPoliciesSection = () => {
     [recordEvent, config.applicationDefinition],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -526,6 +526,7 @@ export const CustomPoliciesSection = () => {
         const text = await file.text();
 
         // Parse CSV and take the first column regardless of header name
+        const { parse } = await import('csv-parse/browser/esm/sync');
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,
@@ -638,10 +639,10 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="size-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Edit</TooltipContent>
@@ -666,6 +667,7 @@ export const CustomPoliciesSection = () => {
     [
       generatingTestCase,
       generatingPolicyId,
+      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       handleEditPolicy,
       handleGenerateTestCase,
       apiHealthStatus,
@@ -684,12 +686,12 @@ export const CustomPoliciesSection = () => {
   const toolbarActions = (
     <>
       <Button size="sm" onClick={handleAddPolicy}>
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="mr-2 size-4" />
         Add Policy
       </Button>
       <Button variant="outline" size="sm" asChild disabled={isUploadingCsv}>
         <label className="cursor-pointer">
-          <Upload className="mr-2 h-4 w-4" />
+          <Upload className="mr-2 size-4" />
           {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
           <input
             type="file"
@@ -710,7 +712,7 @@ export const CustomPoliciesSection = () => {
           className="text-destructive"
           onClick={handleDeleteSelected}
         >
-          <Trash2 className="mr-2 h-4 w-4" />
+          <Trash2 className="mr-2 size-4" />
           Delete ({selectedCount})
         </Button>
       )}
@@ -772,7 +774,7 @@ export const CustomPoliciesSection = () => {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               Delete
             </Button>
           </DialogFooter>

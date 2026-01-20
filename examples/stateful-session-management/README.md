@@ -10,7 +10,7 @@ npx promptfoo@latest init --example stateful-session-management
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - An OpenAI API key in `OPENAI_API_KEY`
 
 ## Setup

@@ -169,12 +169,17 @@ vi.mock('../../../src/providers', async () => {
   };
 });
 
-vi.mock('../../../src/util/templates', () => ({
-  extractVariablesFromTemplate: vi.fn().mockReturnValue([]),
-  getNunjucksEngine: vi.fn().mockReturnValue({
-    renderString: vi.fn().mockImplementation((str) => str),
-  }),
-}));
+vi.mock('../../../src/util/templates', () => {
+  // Create a real nunjucks environment for proper template rendering
+  const nunjucks = require('nunjucks');
+  const env = nunjucks.configure({ autoescape: false });
+  env.addGlobal('env', process.env);
+
+  return {
+    extractVariablesFromTemplate: vi.fn().mockReturnValue([]),
+    getNunjucksEngine: vi.fn().mockReturnValue(env),
+  };
+});
 
 vi.mock('../../../src/prompts', () => ({
   readPrompts: vi.fn().mockImplementation(async (prompts) => {
@@ -2029,5 +2034,754 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: inlineDefaultTest.vars,
       }),
     );
+  });
+});
+
+describe('readConfig with environment variable substitution', () => {
+  // Store original env vars to restore after tests
+  const originalEnv: Record<string, string | undefined> = {};
+  const testEnvVars = [
+    'TEST_PROMPT_PATH',
+    'TEST_PROVIDER_PATH',
+    'TEST_ASSERTION_PATH',
+    'MY_API_KEY',
+    'UNDEFINED_VAR',
+    'OPTIONAL_PATH',
+    'TEST_BASE_PATH',
+    'TEST_SUB_PATH',
+    'TEST-PATH-WITH-DASHES',
+    'TEST_GRADER_PROVIDER',
+    'EXTERNAL_API_KEY',
+    'EMPTY_VAR',
+    'PROMPT_TEXT',
+    'EVIL_VAR',
+    'SPECIAL_PATH',
+    'TRAVERSAL_PATH',
+    'MY_VAR',
+    'MULTILINE_VAR',
+    'DEEP_VAR',
+    // Env vars for provider ID tests (regression test for #7079)
+    'TEST_APPLICATION',
+    'TEST_BASE_URL',
+    'TEST_SERVICE_NAME',
+    'TEST_SERVICE_VERSION',
+    'TEST_DEFINED_VAR',
+    'TEST_SESSION',
+    'TEST_TOKEN',
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    // Store original env var values
+    for (const varName of testEnvVars) {
+      originalEnv[varName] = process.env[varName];
+    }
+
+    // Reset path.parse to use actual implementation
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Restore or delete environment variables to prevent test pollution
+    for (const varName of testEnvVars) {
+      if (originalEnv[varName] !== undefined) {
+        process.env[varName] = originalEnv[varName];
+      } else {
+        delete process.env[varName];
+      }
+    }
+  });
+
+  it('should substitute environment variables in prompts paths', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in providers paths', async () => {
+    process.env.TEST_PROVIDER_PATH = '/custom/providers';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['{{ env.TEST_PROVIDER_PATH }}/custom_provider.js'],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.providers).toEqual(['/custom/providers/custom_provider.js']);
+  });
+
+  it('should substitute environment variables in nested config values', async () => {
+    process.env.MY_API_KEY = 'sk-test-12345';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: [
+        {
+          id: 'openai:gpt-4o',
+          config: {
+            apiKey: '{{ env.MY_API_KEY }}',
+          },
+        },
+      ],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
+  });
+
+  it('should substitute environment variables in assertion paths', async () => {
+    process.env.TEST_ASSERTION_PATH = '/custom/assertions';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          vars: { input: 'test' },
+          assert: [
+            {
+              type: 'python',
+              value: 'file://{{ env.TEST_ASSERTION_PATH }}/custom_assert.py',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.tests as any)[0].assert[0].value).toEqual(
+      'file:///custom/assertions/custom_assert.py',
+    );
+  });
+
+  it('should preserve runtime templates like {{ vars.x }}', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with mixed templates',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+      tests: [
+        {
+          vars: { question: 'What is AI?' },
+          assert: [
+            {
+              type: 'contains',
+              value: '{{ vars.question }}',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Env var should be substituted
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+    // Runtime template should be preserved
+    expect((result.tests as any)[0].assert[0].value).toEqual('{{ vars.question }}');
+  });
+
+  it('should preserve undefined environment variable templates', async () => {
+    // Intentionally NOT setting UNDEFINED_VAR
+    const mockConfig = {
+      description: 'Test config with undefined env var',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.UNDEFINED_VAR }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Undefined env vars should be preserved (not rendered)
+    expect(result.prompts).toEqual(['{{ env.UNDEFINED_VAR }}/prompt.txt']);
+  });
+
+  it('should substitute environment variables with default filter', async () => {
+    // Intentionally NOT setting OPTIONAL_PATH
+    const mockConfig = {
+      description: 'Test config with default filter',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env.OPTIONAL_PATH | default('./prompts') }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Should use default value when env var is not set
+    expect(result.prompts).toEqual(['./prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in JavaScript config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/js/prompts';
+    const mockConfig = {
+      description: 'JS config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect(result.prompts).toEqual(['/js/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in YAML config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/yaml/prompts';
+    const mockConfig = {
+      description: 'YAML config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result.prompts).toEqual(['/yaml/prompts/prompt.txt']);
+  });
+
+  it('should substitute multiple environment variables in a single string', async () => {
+    process.env.TEST_BASE_PATH = '/base';
+    process.env.TEST_SUB_PATH = 'prompts';
+    const mockConfig = {
+      description: 'Test config with multiple env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_BASE_PATH }}/{{ env.TEST_SUB_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/base/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables using bracket notation', async () => {
+    process.env['TEST-PATH-WITH-DASHES'] = '/dashed/path';
+    const mockConfig = {
+      description: 'Test config with bracket notation',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env['TEST-PATH-WITH-DASHES'] }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/dashed/path/prompt.txt']);
+  });
+
+  it('should substitute environment variables in defaultTest options', async () => {
+    process.env.TEST_GRADER_PROVIDER = 'openai:gpt-4-turbo';
+    const mockConfig = {
+      description: 'Test config with env vars in defaultTest',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      defaultTest: {
+        options: {
+          provider: '{{ env.TEST_GRADER_PROVIDER }}',
+        },
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.defaultTest as any).options.provider).toEqual('openai:gpt-4-turbo');
+  });
+
+  it('should substitute environment variables in env config field', async () => {
+    process.env.EXTERNAL_API_KEY = 'external-key-123';
+    const mockConfig = {
+      description: 'Test config with env vars in env field',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      env: {
+        API_KEY: '{{ env.EXTERNAL_API_KEY }}',
+        STATIC_VAR: 'static-value',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.env).toEqual({
+      API_KEY: 'external-key-123',
+      STATIC_VAR: 'static-value',
+    });
+  });
+
+  describe('security edge cases', () => {
+    it('should handle empty string environment variables', async () => {
+      process.env.EMPTY_VAR = '';
+      const mockConfig = {
+        description: 'Test config with empty env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EMPTY_VAR }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Empty string is still a valid value
+      expect(result.prompts).toEqual(['/prompt.txt']);
+    });
+
+    it('should safely handle env vars containing template-like syntax', async () => {
+      process.env.PROMPT_TEXT = 'Hello {{ vars.name }}';
+      const mockConfig = {
+        description: 'Test config with template-like env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.PROMPT_TEXT }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env var value should be substituted, preserving its content
+      expect(result.prompts).toEqual(['Hello {{ vars.name }}']);
+    });
+
+    it('should safely handle env vars containing Nunjucks statement syntax', async () => {
+      process.env.EVIL_VAR = '{% for i in range(100) %}x{% endfor %}';
+      const mockConfig = {
+        description: 'Test config with statement syntax in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EVIL_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The statement syntax should be treated as a literal string value
+      expect(result.prompts).toEqual(['{% for i in range(100) %}x{% endfor %}']);
+    });
+
+    it('should handle env vars containing special regex characters', async () => {
+      process.env.SPECIAL_PATH = '/path/with/$pecial/chars.*[test]';
+      const mockConfig = {
+        description: 'Test config with special chars in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.SPECIAL_PATH }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['/path/with/$pecial/chars.*[test]/prompt.txt']);
+    });
+
+    it('should handle potential path traversal in env vars', async () => {
+      // Note: This test demonstrates that path traversal is possible if env vars are controlled by attackers
+      // File validation should happen at file load time, not in the template renderer
+      process.env.TRAVERSAL_PATH = '../../etc';
+      const mockConfig = {
+        description: 'Test config with path traversal',
+        providers: ['openai:gpt-4o'],
+        prompts: ['file://{{ env.TRAVERSAL_PATH }}/passwd'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The renderer does not validate paths - that's the responsibility of file loaders
+      expect(result.prompts).toEqual(['file://../../etc/passwd']);
+    });
+
+    it('should skip env var rendering for strings exceeding the 50k character limit', async () => {
+      const longString = 'x'.repeat(50001);
+      const mockConfig = {
+        description: 'Test config with overly long string',
+        providers: ['openai:gpt-4o'],
+        prompts: [longString],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      // Should warn and skip rendering, but not throw
+      const result = await readConfig('config.json');
+      expect(result.prompts).toEqual([longString]); // Unchanged
+    });
+
+    it('should handle malformed template syntax gracefully', async () => {
+      process.env.MY_VAR = 'test-value';
+      const mockConfig = {
+        description: 'Test config with malformed templates',
+        providers: ['openai:gpt-4o'],
+        prompts: [
+          '{{ env.MY_VAR }', // Missing closing braces
+          '{{ env.MY_VAR )', // Wrong closing character
+          '{{env.MY_VAR}}', // No space (still valid)
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Malformed templates should be preserved as-is
+      // Well-formed template should be rendered
+      expect(result.prompts).toEqual([
+        '{{ env.MY_VAR }', // Preserved - malformed
+        '{{ env.MY_VAR )', // Preserved - malformed
+        'test-value', // Rendered - valid
+      ]);
+    });
+
+    it('should handle env vars with newlines and special whitespace', async () => {
+      process.env.MULTILINE_VAR = 'line1\nline2\ttab';
+      const mockConfig = {
+        description: 'Test config with multiline env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.MULTILINE_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['line1\nline2\ttab']);
+    });
+
+    it('should handle deeply nested objects with env vars', async () => {
+      process.env.DEEP_VAR = 'nested-value';
+      const mockConfig = {
+        description: 'Test config with deeply nested env vars',
+        providers: ['openai:gpt-4o'],
+        prompts: ['test'],
+        tests: [
+          {
+            vars: { input: 'test' },
+            assert: [
+              {
+                type: 'javascript',
+                value: {
+                  nested: {
+                    level: {
+                      deep: {
+                        value: '{{ env.DEEP_VAR }}',
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.tests as any)[0].assert[0].value.nested.level.deep.value).toEqual(
+        'nested-value',
+      );
+    });
+  });
+
+  describe('provider ID with env variables (regression test for #7079)', () => {
+    it('should substitute process.env variables in provider ID URLs', async () => {
+      process.env.TEST_APPLICATION = 'myapp';
+      process.env.TEST_BASE_URL = 'example.com';
+      process.env.TEST_SERVICE_NAME = 'api';
+      process.env.TEST_SERVICE_VERSION = 'v1';
+      const mockConfig = {
+        description: 'Test config with env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.TEST_APPLICATION}}.{{env.TEST_BASE_URL}}/api/{{env.TEST_SERVICE_NAME}}/{{env.TEST_SERVICE_VERSION}}/myEndpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapp.example.com/api/api/v1/myEndpoint',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve undefined env var templates in provider ID URLs', async () => {
+      // Intentionally NOT setting the env variables
+      const mockConfig = {
+        description: 'Test config with undefined env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Undefined env vars should be preserved (not rendered as empty)
+      expect((result.providers as any)[0].id).toEqual(
+        'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+      );
+    });
+
+    it('should handle mixed defined and undefined env vars in provider ID', async () => {
+      process.env.TEST_DEFINED_VAR = 'defined-value';
+      const mockConfig = {
+        description: 'Test config with mixed env vars',
+        providers: [
+          {
+            id: 'https://{{env.TEST_DEFINED_VAR}}.{{env.UNDEFINED_VAR}}/api',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Defined env var should be substituted, undefined should be preserved
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR}}/api',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars in provider config headers', async () => {
+      process.env.TEST_SESSION = 'session-123';
+      process.env.TEST_TOKEN = 'token-456';
+      const mockConfig = {
+        description: 'Test config with env vars in headers',
+        providers: [
+          {
+            id: 'https://api.example.com/endpoint',
+            config: {
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie: 'SESSION={{env.TEST_SESSION}}; TOKEN={{env.TEST_TOKEN}};',
+                'X-Token': '{{env.TEST_TOKEN}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'SESSION=session-123; TOKEN=token-456;',
+      );
+      expect((result.providers as any)[0].config.headers['X-Token']).toEqual('token-456');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars from config env section in provider IDs (fixes #7079)', async () => {
+      // This test verifies that env vars defined in the config's `env:` section
+      // are resolved during readConfig() - this was broken before the fix
+      // Use unique variable names to avoid collisions with any existing env vars
+      const mockConfig = {
+        description: 'Test config with env vars in config env section',
+        env: {
+          CONFIG_ONLY_APP_7079: 'myapp',
+          CONFIG_ONLY_URL_7079: 'example.com',
+        },
+        providers: [
+          {
+            // These env vars reference the config's env section and should be resolved
+            id: 'https://{{env.CONFIG_ONLY_APP_7079}}.{{env.CONFIG_ONLY_URL_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env vars from config.env should now be resolved during readConfig()
+      expect((result.providers as any)[0].id).toEqual('https://myapp.example.com/api/endpoint');
+
+      // The env section itself should be returned as-is
+      expect(result.env).toEqual({
+        CONFIG_ONLY_APP_7079: 'myapp',
+        CONFIG_ONLY_URL_7079: 'example.com',
+      });
+    });
+
+    it('should substitute env vars from config env section in provider ID and headers (exact #7079 scenario)', async () => {
+      // This test exactly replicates the user's scenario from GitHub issue #7079
+      // where env vars in both provider ID and headers were not being resolved
+      const mockConfig = {
+        description: 'Exact scenario from GitHub issue #7079',
+        env: {
+          APPLICATION_7079: 'myapplication',
+          BASE_URL_7079: 'api.example.com',
+          SERVICENAME_7079: 'userservice',
+          SERVICEVERSION_7079: 'v1',
+          REGION_SESSION_7079: 'us-east-1-session-abc123',
+          XSRF_TOKEN_7079: 'xsrf-token-xyz789',
+          SESSION_7079: 'session-id-12345',
+        },
+        providers: [
+          {
+            id: 'https://{{env.APPLICATION_7079}}.{{env.BASE_URL_7079}}/api/{{env.SERVICENAME_7079}}/{{env.SERVICEVERSION_7079}}/myEndpoint',
+            config: {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie:
+                  'REGION_SESSION={{env.REGION_SESSION_7079}}; XSRF-TOKEN={{env.XSRF_TOKEN_7079}}; SESSION={{env.SESSION_7079}};',
+                'X-XSRF-TOKEN': '{{env.XSRF_TOKEN_7079}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Verify provider ID is fully resolved - before fix this would be "https://./api///myEndpoint"
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapplication.api.example.com/api/userservice/v1/myEndpoint',
+      );
+
+      // Verify headers are fully resolved
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'REGION_SESSION=us-east-1-session-abc123; XSRF-TOKEN=xsrf-token-xyz789; SESSION=session-id-12345;',
+      );
+      expect((result.providers as any)[0].config.headers['X-XSRF-TOKEN']).toEqual(
+        'xsrf-token-xyz789',
+      );
+      // Static header should remain unchanged
+      expect((result.providers as any)[0].config.headers['Content-Type']).toEqual(
+        'application/json',
+      );
+    });
+
+    it('should handle nested templates in config.env values (two-pass rendering)', async () => {
+      // This test verifies that config.env values can reference process.env variables
+      // and the two-pass rendering correctly resolves them before using as overrides
+      process.env.TEST_BASE_URL = 'api.example.com';
+      const mockConfig = {
+        description: 'Test config with nested templates in env section',
+        env: {
+          // This config.env value references a process.env variable
+          FULL_URL_7079: 'https://{{env.TEST_BASE_URL}}/api',
+        },
+        providers: [
+          {
+            // This provider ID references the config.env value that was templated
+            id: '{{env.FULL_URL_7079}}/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The nested template should be resolved: process.env.TEST_BASE_URL -> FULL_URL_7079 -> provider id
+      expect((result.providers as any)[0].id).toEqual('https://api.example.com/api/endpoint');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve templates when config.env has undefined values (JS config pattern)', async () => {
+      // This test simulates the common JS config pattern: env: { FOO: process.env.FOO }
+      // where process.env.FOO is undefined. The template should be preserved, not rendered
+      // to empty string (which would cause https://./api/// failures)
+      // NOTE: Must use JS config path (via importModule) because JSON.stringify drops undefined values
+      const mockConfig = {
+        description: 'Test config with undefined env values (simulating JS config)',
+        env: {
+          DEFINED_VAR_7079: 'defined-value',
+          UNDEFINED_VAR_7079: undefined, // Simulates process.env.UNDEFINED_VAR being undefined
+        },
+        providers: [
+          {
+            id: 'https://{{env.DEFINED_VAR_7079}}.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      // Use JS config path to preserve undefined values (JSON.stringify would drop them)
+      vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+      vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+      const result = await readConfig('config.js');
+
+      // The undefined env var should be preserved as template, not rendered to empty string
+      // DEFINED_VAR_7079 should be rendered, UNDEFINED_VAR_7079 should stay as template
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
+      );
+    });
   });
 });

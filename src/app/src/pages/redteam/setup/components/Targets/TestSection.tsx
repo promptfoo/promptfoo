@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -70,7 +70,7 @@ const TestSection: React.FC<TestSectionProps> = ({
       {/* Header */}
       <div className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Send className="h-3.5 w-3.5 text-primary" />
+          <Send className="size-3.5 text-primary" />
           <span className="text-sm font-medium">Test Target Configuration</span>
         </div>
       </div>
@@ -90,19 +90,21 @@ const TestSection: React.FC<TestSectionProps> = ({
           className="mb-3"
         >
           {isTestRunning ? (
-            <Spinner className="mr-1.5 h-3.5 w-3.5" />
+            <Spinner className="mr-1.5 size-3.5" />
           ) : (
-            <Play className="mr-1.5 h-3.5 w-3.5" />
+            <Play className="mr-1.5 size-3.5" />
           )}
           {isTestRunning ? 'Testing...' : 'Test Target'}
         </Button>
 
         {!selectedTarget.config.url && !selectedTarget.config.request && (
           <Alert variant="warning" className="mb-3">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-sm">
-              Please configure the target URL or request before testing.
-            </AlertDescription>
+            <AlertCircle className="size-4" />
+            <AlertContent>
+              <AlertDescription className="text-sm">
+                Please configure the target URL or request before testing.
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
@@ -120,36 +122,38 @@ const TestSection: React.FC<TestSectionProps> = ({
                 }
               >
                 {testResult.changes_needed ? (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="size-4" />
                 ) : testResult.success ? (
-                  <CheckCircle className="h-4 w-4" />
+                  <CheckCircle className="size-4" />
                 ) : (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="size-4" />
                 )}
-                <AlertDescription className="text-sm">
-                  <p className="font-medium">
-                    {testResult.changes_needed
-                      ? 'Configuration Changes Needed'
-                      : testResult.success
-                        ? 'Test Passed'
-                        : 'Test Failed'}
-                  </p>
-                  <p className="mt-1">{testResult.message}</p>
+                <AlertContent>
+                  <AlertDescription className="text-sm">
+                    <p className="font-medium">
+                      {testResult.changes_needed
+                        ? 'Configuration Changes Needed'
+                        : testResult.success
+                          ? 'Test Passed'
+                          : 'Test Failed'}
+                    </p>
+                    <p className="mt-1">{testResult.message}</p>
 
-                  {testResult.changes_needed_suggestions &&
-                    testResult.changes_needed_suggestions.length > 0 && (
-                      <div className="mt-2 rounded-md bg-background/50 p-2">
-                        <p className="mb-1.5 font-medium">Suggested Changes</p>
-                        <ul className="m-0 list-disc space-y-0.5 pl-4">
-                          {testResult.changes_needed_suggestions.map(
-                            (suggestion: string, index: number) => (
-                              <li key={index}>{suggestion}</li>
-                            ),
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                </AlertDescription>
+                    {testResult.changes_needed_suggestions &&
+                      testResult.changes_needed_suggestions.length > 0 && (
+                        <div className="mt-2 rounded-md bg-background/50 p-2">
+                          <p className="mb-1.5 font-medium">Suggested Changes</p>
+                          <ul className="m-0 list-disc space-y-0.5 pl-4">
+                            {testResult.changes_needed_suggestions.map(
+                              (suggestion: string, index: number) => (
+                                <li key={index}>{suggestion}</li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
 
@@ -163,7 +167,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                 <span className="text-sm font-medium">Request & Response Details</span>
                 <ChevronDown
                   className={cn(
-                    'h-4 w-4 text-muted-foreground transition-transform',
+                    'size-4 text-muted-foreground transition-transform',
                     detailsExpanded && 'rotate-180',
                   )}
                 />
@@ -192,13 +196,15 @@ const TestSection: React.FC<TestSectionProps> = ({
                             </CodeBlock>
                           )}
 
-                        {selectedTarget.config.body && !testResult?.transformedRequest && (
-                          <CodeBlock label="Body" maxHeight="300px">
-                            {typeof selectedTarget.config.body === 'string'
-                              ? selectedTarget.config.body
-                              : JSON.stringify(selectedTarget.config.body, null, 2)}
-                          </CodeBlock>
-                        )}
+                        {selectedTarget.config.body &&
+                          !testResult?.providerResponse?.metadata?.finalRequestBody &&
+                          !testResult?.transformedRequest && (
+                            <CodeBlock label="Body" maxHeight="300px">
+                              {typeof selectedTarget.config.body === 'string'
+                                ? selectedTarget.config.body
+                                : JSON.stringify(selectedTarget.config.body, null, 2)}
+                            </CodeBlock>
+                          )}
 
                         {selectedTarget.config.request && (
                           <CodeBlock label="Raw Request" maxHeight="300px">
@@ -206,11 +212,22 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </CodeBlock>
                         )}
 
-                        {testResult?.transformedRequest && (
-                          <CodeBlock label="Transformed Body">
-                            {typeof testResult.transformedRequest === 'string'
-                              ? testResult.transformedRequest
-                              : JSON.stringify(testResult.transformedRequest, null, 2)}
+                        {/* Show rendered body with template variables resolved */}
+                        {(testResult?.providerResponse?.metadata?.finalRequestBody ||
+                          testResult?.transformedRequest) && (
+                          <CodeBlock label="Rendered Body">
+                            {typeof (
+                              testResult?.providerResponse?.metadata?.finalRequestBody ||
+                              testResult?.transformedRequest
+                            ) === 'string'
+                              ? testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                testResult?.transformedRequest
+                              : JSON.stringify(
+                                  testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                    testResult?.transformedRequest,
+                                  null,
+                                  2,
+                                )}
                           </CodeBlock>
                         )}
                       </div>
@@ -230,9 +247,20 @@ const TestSection: React.FC<TestSectionProps> = ({
                             )}
 
                             <CodeBlock label="Raw Response">
-                              {typeof testResult.providerResponse?.raw === 'string'
-                                ? testResult.providerResponse?.raw
-                                : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                              {(() => {
+                                const raw = testResult.providerResponse?.raw;
+                                if (typeof raw === 'string') {
+                                  // Try to parse and format as JSON
+                                  try {
+                                    const parsed = JSON.parse(raw);
+                                    return JSON.stringify(parsed, null, 2);
+                                  } catch {
+                                    // Not valid JSON, return as-is
+                                    return raw;
+                                  }
+                                }
+                                return JSON.stringify(raw, null, 2);
+                              })()}
                             </CodeBlock>
 
                             {testResult.providerResponse?.sessionId && (
@@ -259,7 +287,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                         <Label className="text-sm font-medium">Final Response</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground" />
+                            <Info className="size-3.5 cursor-help text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent className="text-sm">
                             This is what promptfoo will use for evaluation. Configure the response

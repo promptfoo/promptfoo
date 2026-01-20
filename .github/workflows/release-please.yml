@@ -43,7 +43,7 @@ jobs:
 
       # Format CHANGELOG.md after release-please creates/updates the PR
       # This fixes the asterisk bullet markers that release-please generates
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
@@ -84,7 +84,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
@@ -104,7 +104,7 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
@@ -123,6 +123,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}

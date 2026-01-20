@@ -264,16 +264,17 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
         );
+
+        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
         (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
-    } else {
-      logger.error(`ESM import failed: ${err}`);
     }
 
     // Log stack trace for debugging
-    if ((err as any).stack) {
-      logger.debug((err as any).stack);
+    const e = err as Error;
+    if (e.stack) {
+      logger.debug(e.stack);
     }
 
     // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
@@ -284,9 +285,11 @@ export async function importModule(modulePath: string, functionName?: string) {
       const resolvedModulePath = safeResolve(modulePath);
       try {
         await fsPromises.access(resolvedModulePath);
-        // File exists - the error is about a missing dependency, preserve original error
+        // File exists - the error is about a missing dependency, log and preserve original error
+        logger.error(`ESM import failed: ${err}`);
       } catch {
         // File doesn't exist - normalize to ENOENT for clearer error message
+        // Don't log as error - this is expected during config file discovery
         const enoentError = new Error(
           `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
         ) as NodeJS.ErrnoException;
@@ -294,6 +297,9 @@ export async function importModule(modulePath: string, functionName?: string) {
         enoentError.path = resolvedModulePath;
         throw enoentError;
       }
+    } else {
+      // For all other errors (not file-not-found), log as error
+      logger.error(`ESM import failed: ${err}`);
     }
 
     throw err;
@@ -325,6 +331,8 @@ export function isCjsInEsmError(message: string): boolean {
  * This is intentional - it's designed for loading trusted user configuration files
  * (custom providers, assertions, hooks) that need full Node.js capabilities.
  */
+
+// biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
 function loadCjsModule(modulePath: string): any {
   const code = fs.readFileSync(modulePath, 'utf-8');
   const dirname = path.dirname(modulePath);
@@ -334,6 +342,7 @@ function loadCjsModule(modulePath: string): any {
   const moduleRequire = createRequire(pathToFileURL(modulePath).href);
 
   // Create module and exports objects
+  // biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
   const moduleObj: { exports: any } = { exports: {} };
 
   // Create a context with CJS globals

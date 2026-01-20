@@ -8,6 +8,7 @@ import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultForm
 import { escapeRegExp } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
 
@@ -103,9 +104,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe('Number of times to repeat the evaluation (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
-      cache: z.boolean().optional().default(true).describe('Enable caching of results'),
-      write: z.boolean().optional().default(false).describe('Write results to database'),
-      share: z.boolean().optional().default(false).describe('Create shareable URL for results'),
+      cache: z.boolean().optional().prefault(true).describe('Enable caching of results'),
+      write: z.boolean().optional().prefault(false).describe('Write results to database'),
+      share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
       resultLimit: z
         .number()
         .min(1)
@@ -367,7 +368,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         } else {
           // For simple cases without custom filtering, use doEval directly
           // Prepare command line options that doEval expects
-          const cmdObj = {
+          const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
             repeat,
@@ -379,7 +380,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             filterProviders: Array.isArray(providerFilter)
               ? providerFilter.join('|')
               : providerFilter,
-          } as Partial<CommandLineOptions>;
+          };
 
           // Prepare evaluate options
           const evaluateOptions: EvaluateOptions = {
@@ -393,7 +394,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           // Run the evaluation using the existing doEval function
           const startTime = Date.now();
           const evalResult = await doEval(
-            cmdObj as any,
+            cmdObj,
             defaultConfig,
             defaultConfigPath,
             evaluateOptions,

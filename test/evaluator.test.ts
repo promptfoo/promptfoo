@@ -1786,6 +1786,285 @@ describe('evaluator', () => {
     );
   });
 
+  it('evaluator should correctly count named scores with template metric variables', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for template metrics')],
+      tests: [
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{metricCategory}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+        {
+          vars: { metricCategory: 'Accuracy' },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: '{{metricCategory}}',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScores: expect.objectContaining({
+              Accuracy: expect.any(Number),
+            }),
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 3, // 2 assertions in first test + 1 in second
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should handle mixed static and template metrics correctly', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test mixed metrics')],
+      tests: [
+        {
+          vars: { category: 'Dynamic' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: '{{category}}',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Static',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Dynamic: 1,
+              Static: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should calculate derived metrics with __count variable for averages', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for derived metrics')],
+      tests: [
+        {
+          vars: { errorValue: 0.1 },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'context.vars.errorValue',
+              metric: 'APE',
+            },
+          ],
+        },
+        {
+          vars: { errorValue: 0.2 },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'context.vars.errorValue',
+              metric: 'APE',
+            },
+          ],
+        },
+        {
+          vars: { errorValue: 0.3 },
+          assert: [
+            {
+              type: 'javascript',
+              value: 'context.vars.errorValue',
+              metric: 'APE',
+            },
+          ],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'APE_sum',
+          value: 'APE', // Should be 0.1 + 0.2 + 0.3 = 0.6
+        },
+        {
+          name: 'MAPE',
+          value: 'APE / __count', // Should be 0.6 / 3 = 0.2
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const metrics = evalRecord.prompts[0]?.metrics;
+    expect(metrics).toBeDefined();
+    expect(metrics!.namedScores.APE).toBeCloseTo(0.6, 10);
+    expect(metrics!.namedScores.APE_sum).toBeCloseTo(0.6, 10);
+    expect(metrics!.namedScores.MAPE).toBeCloseTo(0.2, 10);
+  });
+
+  it('evaluator should pass __count to JavaScript function derived metrics', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for function derived metrics')],
+      tests: [
+        {
+          vars: { score: 10 },
+          assert: [{ type: 'javascript', value: 'context.vars.score', metric: 'Score' }],
+        },
+        {
+          vars: { score: 20 },
+          assert: [{ type: 'javascript', value: 'context.vars.score', metric: 'Score' }],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'AverageScore',
+          value: (namedScores: Record<string, number>) => {
+            // __count should be available in namedScores
+            const count = namedScores.__count || 1;
+            return namedScores.Score / count;
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            namedScores: expect.objectContaining({
+              Score: 30, // 10 + 20
+              AverageScore: 15, // 30 / 2
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('evaluator should calculate __count per-prompt with multiple prompts', async () => {
+    // With 2 prompts and 3 tests, each prompt should have __count = 3 (not 6)
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('First prompt'), toPrompt('Second prompt')],
+      tests: [
+        {
+          vars: { errorValue: 0.1 },
+          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
+        },
+        {
+          vars: { errorValue: 0.2 },
+          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
+        },
+        {
+          vars: { errorValue: 0.3 },
+          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'MAPE',
+          value: 'APE / __count', // Should be 0.6 / 3 = 0.2 for each prompt
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // Both prompts should have the same MAPE since they each get 3 test evaluations
+    const metrics0 = evalRecord.prompts[0]?.metrics;
+    const metrics1 = evalRecord.prompts[1]?.metrics;
+    expect(metrics0).toBeDefined();
+    expect(metrics1).toBeDefined();
+    expect(metrics0!.namedScores.APE).toBeCloseTo(0.6, 10);
+    expect(metrics0!.namedScores.MAPE).toBeCloseTo(0.2, 10); // 0.6 / 3, not 0.6 / 6
+    expect(metrics1!.namedScores.APE).toBeCloseTo(0.6, 10);
+    expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.2, 10); // 0.6 / 3, not 0.6 / 6
+  });
+
+  it('evaluator should calculate __count per-prompt with multiple providers', async () => {
+    // With 1 prompt and 2 providers, there are 2 prompt entries (one per provider).
+    // Each prompt entry gets 2 test evaluations, so __count = 2 for each.
+    const mockProvider1: ApiProvider = {
+      id: () => 'provider1',
+      callApi: async () => ({ output: 'response1' }),
+    };
+    const mockProvider2: ApiProvider = {
+      id: () => 'provider2',
+      callApi: async () => ({ output: 'response2' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockProvider1, mockProvider2],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { errorValue: 0.1 },
+          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
+        },
+        {
+          vars: { errorValue: 0.2 },
+          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'MAPE',
+          value: 'APE / __count', // 0.3 / 2 = 0.15 for each provider's prompt
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // With 2 providers, there are 2 prompt entries (one per provider)
+    expect(evalRecord.prompts).toHaveLength(2);
+
+    // Each prompt entry has its own metrics from its 2 test evaluations
+    const metrics0 = evalRecord.prompts[0]?.metrics;
+    const metrics1 = evalRecord.prompts[1]?.metrics;
+    expect(metrics0).toBeDefined();
+    expect(metrics1).toBeDefined();
+    // Each provider's prompt gets APE = 0.3 (0.1 + 0.2)
+    expect(metrics0!.namedScores.APE).toBeCloseTo(0.3, 10);
+    expect(metrics1!.namedScores.APE).toBeCloseTo(0.3, 10);
+    // __count = 2 (tests per provider), so MAPE = 0.3 / 2 = 0.15
+    expect(metrics0!.namedScores.MAPE).toBeCloseTo(0.15, 10);
+    expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3784,6 +4063,44 @@ describe('runEval', () => {
     expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
   });
 
+  it('should preserve provider error context and plugin metadata on failure', async () => {
+    const apiError: any = new Error('Request failed with status code 400');
+    apiError.response = {
+      status: 400,
+      statusText: 'Bad Request',
+      data: 'Invalid payload',
+    };
+
+    const failingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('failing-provider'),
+      label: 'Azure GPT 5',
+      callApi: vi.fn().mockRejectedValue(apiError),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: failingProvider,
+      prompt: { raw: 'Test prompt', label: 'error-label' },
+      test: { metadata: { pluginId: 'plugin-123', strategyId: 'basic' } },
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.metadata?.errorContext).toMatchObject({
+      providerId: 'failing-provider',
+      providerLabel: 'Azure GPT 5',
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    expect(result.metadata?.errorContext?.responseSnippet).toContain('Invalid payload');
+    expect(result.metadata?.pluginId).toBe('plugin-123');
+    expect(result.metadata?.strategyId).toBe('basic');
+    expect(result.error).toContain('Request failed with status code 400');
+  });
+
   it('should handle registers', async () => {
     const registers = { savedValue: 'stored data' };
 
@@ -3954,6 +4271,161 @@ describe('runEval', () => {
           rejectedPrediction: 0,
         },
       },
+    });
+  });
+
+  it('should skip rendering redteam inject variable to prevent nunjucks errors on template syntax', async () => {
+    // This tests the fix for Discord issue where redteam prompts containing {{purpose | trim}}
+    // caused "TypeError: Cannot read properties of undefined (reading 'replace')"
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          // This contains template syntax that would fail if rendered (purpose is undefined)
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          injectVar: 'prompt',
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // The inject var should be preserved as-is, not rendered
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
+    // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          // injectVar NOT set - should fall back to 'prompt'
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    // Should still skip rendering the default 'prompt' var
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  describe('latencyMs handling', () => {
+    it('should use provider-supplied latencyMs when available', async () => {
+      const providerWithLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 5000,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(5000);
+    });
+
+    it('should use provider-supplied latencyMs for cached responses', async () => {
+      const cachedProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Cached output',
+          cached: true,
+          latencyMs: 3500,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: cachedProvider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(3500);
+      expect(results[0].response?.cached).toBe(true);
+    });
+
+    it('should fall back to measured latency when provider does not supply latencyMs', async () => {
+      const providerWithoutLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('no-latency-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return {
+            output: 'Test output',
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+          };
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithoutLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      // Should have measured latency (>= 50ms since we added a delay)
+      expect(results[0].latencyMs).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should respect provider latencyMs of 0', async () => {
+      const providerWithZeroLatency: ApiProvider = {
+        id: vi.fn().mockReturnValue('zero-latency-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Test output',
+          latencyMs: 0,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider: providerWithZeroLatency,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(0);
     });
   });
 });

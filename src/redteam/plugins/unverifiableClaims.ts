@@ -76,9 +76,9 @@ export class UnverifiableClaimsPlugin extends RedteamPluginBase {
     ];
   }
 
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
+  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
     // Filter out empty prompts that sometimes occur
-    const validPrompts = prompts.filter((p) => p.prompt && p.prompt.trim().length > 0);
+    const validPrompts = prompts.filter((p) => p.__prompt && p.__prompt.trim().length > 0);
     return super.promptsToTestCases(validPrompts);
   }
 }

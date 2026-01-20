@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import TransformTestDialog from './TransformTestDialog';
 
@@ -159,6 +159,7 @@ describe('TransformTestDialog', () => {
   it('should display an error message when Format JSON button is clicked with invalid JSON and clear it after a timeout', async () => {
     const testInput = 'invalid json';
     const onTestInputChange = vi.fn();
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
     renderWithTooltipProvider(
       <TransformTestDialog
@@ -171,18 +172,20 @@ describe('TransformTestDialog', () => {
     const formatButton = screen.getByRole('button', { name: /format json/i });
     fireEvent.click(formatButton);
 
-    await waitFor(() => {
-      const alert = screen.getByRole('alert');
-      expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent(/invalid json/i);
+    const alert = screen.getByRole('alert');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveTextContent(/invalid json/i);
+
+    const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 3000);
+    const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    await waitFor(
-      () => {
-        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      },
-      { timeout: 4000 },
-    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    setTimeoutSpy.mockRestore();
   });
 
   it('should display deeply nested JSON objects in the test result output', async () => {

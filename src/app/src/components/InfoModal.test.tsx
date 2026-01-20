@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import InfoModal from './InfoModal';
 
@@ -6,28 +7,28 @@ describe('InfoModal', () => {
   const mockOnClose = vi.fn();
 
   it('does not render when closed', () => {
-    render(<InfoModal open={false} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={false} onClose={mockOnClose} />);
     expect(screen.queryByText('About Promptfoo')).not.toBeInTheDocument();
   });
 
   it('displays the correct title', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('About Promptfoo')).toBeInTheDocument();
   });
 
   it('displays the correct version', () => {
     process.env.VITE_PROMPTFOO_VERSION = '1.0.0';
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Version 1.0.0')).toBeInTheDocument();
   });
 
   it('displays the correct description', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText(/Promptfoo is a MIT licensed open-source tool/)).toBeInTheDocument();
   });
 
   it('renders all links correctly', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     const links = [
       'Documentation',
       'GitHub Repository',
@@ -41,19 +42,22 @@ describe('InfoModal', () => {
   });
 
   it('calls onClose when Close button is clicked', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
-    fireEvent.click(screen.getByText('Close'));
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
+    // Find the Close button in the footer (not the dialog X button)
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
+    fireEvent.click(footerCloseButton!);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('has correct aria-labelledby attribute', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+  it('has accessible dialog with title', () => {
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'about-promptfoo-dialog-title');
+    expect(dialog).toHaveAccessibleName('About Promptfoo');
   });
 
   it('has correct link targets', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     const links = screen.getAllByRole('link');
     links.forEach((link) => {
       expect(link).toHaveAttribute('target', '_blank');
@@ -61,7 +65,7 @@ describe('InfoModal', () => {
   });
 
   it('has correct link hrefs', () => {
-    render(<InfoModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     const links = [
       { text: 'Documentation', href: 'https://www.promptfoo.dev/docs/intro' },
       { text: 'GitHub Repository', href: 'https://github.com/promptfoo/promptfoo' },

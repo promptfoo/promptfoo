@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
 
@@ -319,18 +319,26 @@ describe('CustomIntentPluginSection', () => {
 
   describe('Plugin Configuration Updates', () => {
     it('calls updatePlugins when intents are modified', async () => {
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       render(<CustomIntentPluginSection />);
 
       const textField = screen.getByRole('textbox');
       fireEvent.change(textField, { target: { value: 'New intent' } });
 
-      // Wait for debounced update
-      await waitFor(
-        () => {
-          expect(mockUpdatePlugins).toHaveBeenCalled();
-        },
-        { timeout: 2000 },
-      );
+      const draftCallback = setTimeoutSpy.mock.calls[0]?.[0] as (() => void) | undefined;
+      act(() => {
+        draftCallback?.();
+      });
+
+      const debounceCallback = setTimeoutSpy.mock.calls[setTimeoutSpy.mock.calls.length - 1]?.[0] as
+        | (() => void)
+        | undefined;
+      act(() => {
+        debounceCallback?.();
+      });
+
+      expect(mockUpdatePlugins).toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
     });
 
     it('shows clear all confirmation dialog', async () => {

@@ -1,5 +1,3 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -368,12 +366,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
   if (invalidStrategies.length > 0) {
     const validStrategiesString = Strategies.map((s) => s.id).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
-    logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}.
-
-        ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    throw new Error(
+      `Invalid strategy(s): ${invalidStrategiesString}. Valid strategies are: ${validStrategiesString}`,
     );
-    process.exit(1);
   }
 }
 

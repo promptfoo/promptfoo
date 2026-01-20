@@ -306,7 +306,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             <label htmlFor="postman-file-upload">
               <Button variant="outline" asChild className="cursor-pointer">
                 <span>
-                  <Upload className="mr-2 h-4 w-4" />
+                  <Upload className="mr-2 size-4" />
                   Upload JSON File
                 </span>
               </Button>

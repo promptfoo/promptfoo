@@ -416,13 +416,8 @@ Content-Type: application/json
 
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
-        .closest('.cursor-pointer');
+      // Provider list is always expanded - select WebSocket
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       fireEvent.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
@@ -537,13 +532,8 @@ Content-Type: application/json
 
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
-        .closest('.cursor-pointer');
+      // Provider list is always expanded - select WebSocket
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       fireEvent.click(websocketProviderCard!);
 
       await waitFor(() => {
@@ -582,11 +572,8 @@ Content-Type: application/json
         expect(nextButton).not.toBeDisabled();
       });
 
-      // Switch to HTTP provider
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('.cursor-pointer');
+      // Provider list is always expanded - switch to HTTP provider
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
       fireEvent.click(httpProviderCard!);
 
       // For HTTP, Next button should be disabled until tests pass
