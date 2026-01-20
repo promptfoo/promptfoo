@@ -356,6 +356,88 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should write description to output file when description option is provided', async () => {
+    const options: RedteamCliGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      output: 'output.yaml',
+      description: 'My custom scan description',
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My custom scan description',
+        tests: expect.any(Array),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should write description to config file when write option is true and description is provided', async () => {
+    const options: RedteamCliGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      description: 'My custom scan description',
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({});
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My custom scan description',
+        tests: expect.any(Array),
+      }),
+      'config.yaml',
+      expect.any(Array),
+    );
+  });
+
   it('should handle missing configuration file', async () => {
     const options = {
       cache: true,
@@ -2801,6 +2883,19 @@ describe('redteam generate command with target option', () => {
     );
     expect(targetOption).toBeDefined();
     expect(targetOption?.description).toContain('Cloud provider target ID');
+  });
+
+  it('should accept -d/--description option in generate command', async () => {
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCommand).toBeDefined();
+
+    // Check that the -d/--description option is defined
+    const descriptionOption = generateCommand!.options.find(
+      (opt) => opt.short === '-d' || opt.long === '--description',
+    );
+    expect(descriptionOption).toBeDefined();
+    expect(descriptionOption?.description).toContain('Custom description');
   });
 
   it('should also work with the init alias command', async () => {

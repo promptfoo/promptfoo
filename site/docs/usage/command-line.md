@@ -687,13 +687,14 @@ Run the complete red teaming process (init, generate, and evaluate).
 | -------------------------------------------------- | ------------------------------------------------- | -------------------- |
 | `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
 | `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
 | `--no-cache`                                       | Do not read or write results to disk cache        | false                |
 | `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
 | `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
 | `--remote`                                         | Force remote inference wherever possible          | false                |
 | `--force`                                          | Force generation even if no changes are detected  | false                |
-| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
 | `--no-progress-bar`                                | Do not show progress bar                          |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
 | `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |                      |
 | `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |                      |
 
@@ -720,7 +721,9 @@ Generate adversarial test cases to challenge your prompts and models.
 | -------------------------------- | -------------------------------------------------------------------- | -------------------- |
 | `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
 | `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
+| `-d, --description <text>`       | Custom description/name for the generated tests                      |                      |
 | `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
+| `-t, --target <id>`              | Cloud provider target ID to run the scan on                          |                      |
 | `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
 | `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
 | `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt | `prompt`             |
@@ -733,6 +736,7 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
+| `--no-progress-bar`              | Do not show progress bar                                             |                      |
 | `--strict`                       | Fail if any plugins fail to generate test cases                      | false                |
 | `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
 

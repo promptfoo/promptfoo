@@ -198,6 +198,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
+  description?: string;
   envFile?: string;
   maxConcurrency?: number;
   output?: string;

@@ -83,6 +83,7 @@ providers:
 | [LocalAI](./localai.md)                             | Local                                                        | `localai:gpt4all-j`                                                             |
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                           | Uses OpenAI provider with custom endpoint                                       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                        | `llama:7b`                                                                      |
+| [Transformers.js](./transformers.md)                | Local ONNX inference via Transformers.js                     | `transformers:text-generation:Xenova/gpt2`                                      |
 | [MCP (Model Context Protocol)](./mcp.md)            | Direct MCP server integration for testing agentic systems    | `mcp` with server configuration                                                 |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                                                 | Compatible with OpenAI syntax                                                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                                    | `ws://example.com/ws`                                                           |
