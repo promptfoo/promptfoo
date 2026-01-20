@@ -1039,7 +1039,7 @@ export async function synthesize({
             generated: 0,
             error: errorMsg,
           };
-          logger.warn(
+          logger.error(
             `[Language Processing] Error generating tests for ${plugin.id} in language ${lang || 'default'}: ${result.reason}`,
           );
         }
