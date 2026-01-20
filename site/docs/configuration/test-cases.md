@@ -196,6 +196,7 @@ tests:
     prompts:
       - Creative Writer
 ```
+
 ## External Test Files
 
 For larger test suites, store tests in separate files:
