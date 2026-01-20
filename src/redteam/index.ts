@@ -968,7 +968,10 @@ export async function synthesize({
 
       // Generate tests for each language in parallel using Promise.allSettled
       const allPluginTests: TestCase[] = [];
-      const resultsPerLanguage: Record<string, { requested: number; generated: number; error?: string }> = {};
+      const resultsPerLanguage: Record<
+        string,
+        { requested: number; generated: number; error?: string }
+      > = {};
 
       const languagePromises = languages.map(async (lang) => {
         const pluginTests = await action({
