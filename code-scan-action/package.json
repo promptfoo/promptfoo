@@ -1,6 +1,6 @@
 {
   "name": "@promptfoo/code-scan-action",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "GitHub Action for scanning PRs with promptfoo code-scan",
   "private": true,
   "main": "dist/index.js",
