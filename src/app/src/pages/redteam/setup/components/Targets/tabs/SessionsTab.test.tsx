@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
-import SessionsTab from './SessionsTab';
 import { callApi } from '@app/utils/api';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
 // Mock the callApi utility
