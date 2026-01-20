@@ -22,6 +22,19 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   exec: `${BASE_DOCS_URL}/custom-script`,
   custom: `${BASE_DOCS_URL}`, // General providers page
 
+  // Agent Frameworks
+  'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
+  'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
+  langchain: `${BASE_DOCS_URL}/python`,
+  langgraph: `${BASE_DOCS_URL}/python`,
+  crewai: `${BASE_DOCS_URL}/python`,
+  autogen: `${BASE_DOCS_URL}/python`,
+  'pydantic-ai': `${BASE_DOCS_URL}/python`,
+  llamaindex: `${BASE_DOCS_URL}/python`,
+  'google-adk': `${BASE_DOCS_URL}/python`,
+  'generic-agent': `${BASE_DOCS_URL}/python`,
+
   // Foundation Models
   openai: `${BASE_DOCS_URL}/openai`,
   anthropic: `${BASE_DOCS_URL}/anthropic`,
@@ -62,7 +75,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'text-generation-webui': `${BASE_DOCS_URL}/text-generation-webui`,
 
   // Additional providers found in docs
-  adaline: `${BASE_DOCS_URL}/adaline`,
   alibaba: `${BASE_DOCS_URL}/alibaba`,
   cerebras: `${BASE_DOCS_URL}/cerebras`,
   cloudera: `${BASE_DOCS_URL}/cloudera`,
@@ -77,6 +89,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   sequence: `${BASE_DOCS_URL}/sequence`,
   'simulated-user': `${BASE_DOCS_URL}/simulated-user`,
   togetherai: `${BASE_DOCS_URL}/togetherai`,
+  together: `${BASE_DOCS_URL}/togetherai`,
   watsonx: `${BASE_DOCS_URL}/watsonx`,
   webhook: `${BASE_DOCS_URL}/webhook`,
   'manual-input': `${BASE_DOCS_URL}/manual-input`,

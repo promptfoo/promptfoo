@@ -1,15 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  parseModelAuditArgs,
-  validateModelAuditArgs,
-  suggestReplacements,
+  DEPRECATED_OPTIONS_MAP,
   formatUnsupportedArgsError,
   isValidFormat,
-  validateModelAuditOptions,
-  safeValidateModelAuditOptions,
-  VALID_MODELAUDIT_OPTIONS,
-  DEPRECATED_OPTIONS_MAP,
   type ModelAuditCliOptions,
+  parseModelAuditArgs,
+  safeValidateModelAuditOptions,
+  suggestReplacements,
+  VALID_MODELAUDIT_OPTIONS,
+  validateModelAuditArgs,
+  validateModelAuditOptions,
 } from '../../src/util/modelAuditCliParser';
 
 describe('ModelAudit CLI Parser', () => {

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 
@@ -163,8 +164,14 @@ counter = 0
 def call_api(prompt, options, context):
     global counter
     counter += 1
+    start_time = time.time()
     time.sleep(0.1)  # 100ms
-    return {"output": f"Worker count: {counter}"}
+    end_time = time.time()
+    return {
+        "output": f"Worker count: {counter}",
+        "start_time": start_time,
+        "end_time": end_time
+    }
 `);
 
     const provider = new PythonProvider(`file://${scriptPath}`, {
@@ -176,8 +183,6 @@ def call_api(prompt, options, context):
 
     await provider.initialize();
 
-    const start = Date.now();
-
     // 4 concurrent calls with 4 workers should run in parallel
     const results = await Promise.all([
       provider.callApi('1'),
@@ -186,11 +191,18 @@ def call_api(prompt, options, context):
       provider.callApi('4'),
     ]);
 
-    const duration = Date.now() - start;
+    // Extract timestamps from results
+    const startTimes = results.map((r) => (r as any).start_time as number);
+    const endTimes = results.map((r) => (r as any).end_time as number);
 
-    // Each call takes 100ms, with 4 workers they run in parallel
-    // Total time should be ~100ms, not 400ms
-    expect(duration).toBeLessThan(300); // Allow some overhead
+    // Verify parallelization by checking execution overlap:
+    // If parallel: the last call to start begins before the first call ends
+    // If sequential: each call starts after the previous ends (no overlap)
+    const maxStartTime = Math.max(...startTimes);
+    const minEndTime = Math.min(...endTimes);
+
+    // For true parallel execution, there must be overlap
+    expect(maxStartTime).toBeLessThan(minEndTime);
 
     // Each worker maintains its own counter
     results.forEach((r) => {

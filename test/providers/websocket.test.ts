@@ -1,6 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
-
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 
 const websocketMocks = vi.hoisted(() => {

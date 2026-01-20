@@ -1,13 +1,7 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('ConfirmEvalNameDialog', () => {
   const mockOnClose = vi.fn();
@@ -535,23 +529,15 @@ describe('ConfirmEvalNameDialog', () => {
         itemCount: 1000,
       };
 
-      const { rerender } = renderWithTheme(<ConfirmEvalNameDialog {...props} />);
+      const { rerender } = render(<ConfirmEvalNameDialog {...props} />);
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
       await user.click(confirmButton);
 
-      rerender(
-        <ThemeProvider theme={createTheme()}>
-          <ConfirmEvalNameDialog {...props} open={false} />
-        </ThemeProvider>,
-      );
+      rerender(<ConfirmEvalNameDialog {...props} open={false} />);
 
       const newProps = { ...props, currentName: 'New Name' };
-      rerender(
-        <ThemeProvider theme={createTheme()}>
-          <ConfirmEvalNameDialog {...newProps} />
-        </ThemeProvider>,
-      );
+      rerender(<ConfirmEvalNameDialog {...newProps} />);
 
       const button = screen.getByRole('button', { name: 'Confirm' });
       expect(button).toHaveTextContent('Confirm');

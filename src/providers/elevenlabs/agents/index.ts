@@ -4,21 +4,22 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
-import type { EnvOverrides } from '../../../types/env';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { ElevenLabsClient } from '../client';
 import { ElevenLabsCache } from '../cache';
+import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
-import type { ElevenLabsAgentsConfig, AgentSimulationResponse } from './types';
-import { parseConversation, buildSimulationRequest } from './conversation';
+import { buildSimulationRequest, parseConversation } from './conversation';
 import {
-  processEvaluationResults,
   calculateOverallScore,
   generateEvaluationSummary,
+  processEvaluationResults,
 } from './evaluation';
-import { extractToolCalls, analyzeToolUsage, generateToolUsageSummary } from './tools';
+import { analyzeToolUsage, extractToolCalls, generateToolUsageSummary } from './tools';
+
+import type { EnvOverrides } from '../../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
+import type { AgentSimulationResponse, ElevenLabsAgentsConfig } from './types';
 
 /**
  * ElevenLabs Agents Provider Implementation
@@ -110,7 +111,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null;
     }

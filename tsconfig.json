@@ -13,18 +13,18 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./"
-  },
-  "ts-node": {
-    "swc": true
+    "baseUrl": "./",
+    "jsx": "react-jsx"
   },
   "include": [
     "src/",
     "test/",
+    "scripts/",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
-    "src/types/globals.d.ts"
+    "src/types/globals.d.ts",
+    "src/types/optional-deps.d.ts"
   ],
   "exclude": [
     "dist",

@@ -51,6 +51,8 @@ A test case represents a single example input that is fed into all prompts and p
 | description           | string                                                          | No       | Description of what you're testing                                                                                                                                                                                                     |
 | vars                  | Record\<string, string \| string[] \| object \| any\> \| string | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
 | provider              | string \| ProviderOptions \| ApiProvider                        | No       | Override the default [provider](/docs/providers) for this specific test case                                                                                                                                                           |
+| providers             | string[]                                                        | No       | Filter which providers this test runs against. Supports labels, IDs, and wildcards (e.g., `openai:*`). See [filtering tests by provider](/docs/configuration/test-cases#filtering-tests-by-provider).                                  |
+| prompts               | string[]                                                        | No       | Filter this test to run only with specific prompts (by label or ID). Supports wildcards like `Math:*`. See [Filtering Tests by Prompt](/docs/configuration/test-cases#filtering-tests-by-prompt).                                      |
 | assert                | [Assertion](#assertion)[]                                       | No       | List of automatic checks to run on the LLM output. See [assertions & metrics](/docs/configuration/expected-outputs) for all available types.                                                                                           |
 | threshold             | number                                                          | No       | Test will fail if the combined score of assertions is less than this number                                                                                                                                                            |
 | metadata              | Record\<string, string \| string[] \| any\>                     | No       | Additional metadata to include with the test case, useful for [filtering](/docs/configuration/test-cases#metadata-in-csv) or grouping results                                                                                          |
@@ -106,7 +108,7 @@ Set default values for command-line options. These defaults will be used unless 
 | var                      | object             | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                       |
 | **Filtering**            |                    |                                                                                                                       |
 | filterPattern            | string             | Only run tests whose description matches the regular expression pattern                                               |
-| filterProviders          | string             | Only run tests with providers matching this regex                                                                     |
+| filterProviders          | string             | Only run tests with providers matching this regex (matches against provider `id` or `label`)                          |
 | filterTargets            | string             | Only run tests with targets matching this regex (alias for filterProviders)                                           |
 | filterFirstN             | number             | Only run the first N test cases                                                                                       |
 | filterSample             | number             | Run a random sample of N test cases                                                                                   |
@@ -582,7 +584,7 @@ interface ProviderOptions {
   // It can be used to uniquely identify targets even if the provider id changes.
   label?: string;
 
-  // List of prompt display strings
+  // List of prompt labels to include (exact, group prefix like "group", or wildcard "group:*")
   prompts?: string[];
 
   // Transform the output, either with inline Javascript or external py/js script

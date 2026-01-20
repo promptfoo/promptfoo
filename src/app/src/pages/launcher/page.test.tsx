@@ -1,11 +1,11 @@
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mock } from 'vitest';
 import LauncherPage from './page';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -99,9 +99,17 @@ describe('LauncherPage', () => {
 
   it('toggles dark mode when button is clicked', async () => {
     mockLocalStorage.getItem.mockReturnValue('false');
+    document.documentElement.removeAttribute('data-theme'); // Ensure light mode at start
     renderLauncher();
 
-    const darkModeButton = await screen.findByRole('button', { name: /Switch to dark mode/i });
+    // Wait for the page to finish loading and render the dark mode toggle
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Switch to (dark|light) mode/i }),
+      ).toBeInTheDocument();
+    });
+
+    const darkModeButton = screen.getByRole('button', { name: /Switch to (dark|light) mode/i });
     await act(async () => {
       await userEvent.click(darkModeButton);
     });

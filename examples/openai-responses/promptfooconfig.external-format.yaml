@@ -42,6 +42,13 @@ providers:
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format: file://response_format.json
 
+  - id: openai:responses:gpt-4.1
+    label: nested-file-reference
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+      response_format: file://nested_response_format.json
+
 tests:
   - vars:
       event: 'Alice and Bob are attending a JSON schema conference in New York on September 15th, 2025.'

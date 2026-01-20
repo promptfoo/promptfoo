@@ -1,6 +1,7 @@
-import { ElevenLabsWebSocketClient, StreamingMessage } from '../websocket-client';
-import type { TTSStreamConfig, StreamingChunk } from './types';
 import logger from '../../../logger';
+import { ElevenLabsWebSocketClient, StreamingMessage } from '../websocket-client';
+
+import type { StreamingChunk, TTSStreamConfig } from './types';
 
 export interface StreamingSession {
   client: ElevenLabsWebSocketClient;

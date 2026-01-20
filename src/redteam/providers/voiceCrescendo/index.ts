@@ -13,16 +13,8 @@
  */
 
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-  TokenUsage,
-} from '../../../types/index';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
@@ -30,9 +22,22 @@ import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { textToAudio } from '../../strategies/simpleAudio';
-import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import { redteamProviderManager, type TargetResponse, getTargetResponse } from '../shared';
+import {
+  externalizeResponseForRedteamHistory,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from '../shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../../../types/index';
+import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 8;
 const DEFAULT_MAX_BACKTRACKS = 5;
@@ -203,7 +208,7 @@ class VoiceMemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const original = this.getConversation(conversationId);
-    const newId = uuidv4();
+    const newId = crypto.randomUUID();
     const newConversation = original.slice(0, -2); // Remove last user + assistant
     this.conversations.set(newId, [...newConversation]);
     return newId;
@@ -237,7 +242,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
-    this.conversationId = uuidv4();
+    this.conversationId = crypto.randomUUID();
     this.delayBetweenTurns = config.delayBetweenTurns || 500;
 
     logger.debug('[VoiceCrescendo] Provider initialized', { config });
@@ -275,9 +280,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
+        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({
           jsonOnly: true,
         });
       }
@@ -344,8 +348,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
    */
   private async textToAudio(text: string): Promise<string> {
     try {
-      const audioBase64 = await textToAudio(text, this.config.language || 'en');
-      return audioBase64;
+      const audio = await textToAudio(text, this.config.language || 'en');
+      return audio.base64;
     } catch (error) {
       logger.error(`[VoiceCrescendo] Failed to convert text to audio: ${error}`);
       throw error;
@@ -371,7 +375,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
       transcript: textPrompt,
     });
 
-    return getTargetResponse(targetProvider, prompt, context);
+    const response = await getTargetResponse(targetProvider, prompt, context);
+    return externalizeResponseForRedteamHistory(response, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
   }
 
   /**

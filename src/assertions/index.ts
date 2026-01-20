@@ -23,6 +23,7 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
@@ -77,6 +78,7 @@ import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
+import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -86,7 +88,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleSearchRubric } from './searchRubric';
+import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
@@ -181,9 +183,37 @@ const ASSERTION_HANDLERS: Record<
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
   webhook: handleWebhook,
+  'word-count': handleWordCount,
 };
 
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Renders a metric name template with test variables.
+ * @param metric - The metric name, possibly containing Nunjucks template syntax
+ * @param vars - The test variables to use for rendering
+ * @returns The rendered metric name, or the original if rendering fails
+ */
+export function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric) {
+    return metric;
+  }
+  try {
+    const rendered = nunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
+}
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
@@ -267,8 +297,9 @@ export async function runAssertion({
   }
 
   // Render assertion values
+  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
+  let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -289,10 +320,11 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -306,10 +338,11 @@ export async function runAssertion({
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -396,11 +429,14 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  // Generate traceparent for grader calls to link them to the main trace
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: test.vars || {},
+        ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
 
@@ -535,7 +571,7 @@ export async function runAssertions({
       assertResult.addResult({
         index,
         result,
-        metric: assertion.metric,
+        metric: renderMetricName(assertion.metric, test.vars || {}),
         weight: assertion.weight,
       });
     },
@@ -551,7 +587,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric,
+      metric: renderMetricName(metric, test.vars || {}),
       weight,
     });
   });

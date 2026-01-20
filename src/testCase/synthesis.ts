@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { loadApiProvider } from '../providers/index';
 import { retryWithDeduplication, sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
@@ -57,7 +57,7 @@ export function testCasesPrompt(
     ${sampleArray(tests, 100)
       .map((test) => {
         if (!test.vars) {
-          return;
+          return null;
         }
         return dedent`
           <Test>

@@ -1,7 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
-import { importModule, isCjsInEsmError, resolvePackageEntryPoint } from '../src/esm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  clearWrapperDirCache,
+  getWrapperDir,
+  importModule,
+  isCjsInEsmError,
+  resolvePackageEntryPoint,
+} from '../src/esm';
 import logger from '../src/logger';
 
 // Use __dirname directly since tests run in CommonJS mode
@@ -20,6 +26,49 @@ vi.mock('../src/logger', () => ({
 describe('ESM utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearWrapperDirCache();
+  });
+
+  describe('getWrapperDir', () => {
+    afterEach(() => {
+      clearWrapperDirCache();
+    });
+
+    it('returns python wrapper directory', () => {
+      const result = getWrapperDir('python');
+      expect(result).toContain('python');
+      expect(result).toMatch(/python$/);
+    });
+
+    it('returns ruby wrapper directory', () => {
+      const result = getWrapperDir('ruby');
+      expect(result).toContain('ruby');
+      expect(result).toMatch(/ruby$/);
+    });
+
+    it('returns golang wrapper directory', () => {
+      const result = getWrapperDir('golang');
+      expect(result).toContain('golang');
+      expect(result).toMatch(/golang$/);
+    });
+
+    it('caches wrapper directory paths', () => {
+      const first = getWrapperDir('python');
+      const second = getWrapperDir('python');
+      expect(first).toBe(second);
+    });
+
+    it('clears cache when clearWrapperDirCache is called', () => {
+      const first = getWrapperDir('python');
+      clearWrapperDirCache();
+      // After clearing, the next call should still return the same path
+      // (the path computation is deterministic)
+      const second = getWrapperDir('python');
+      expect(first).toBe(second);
+    });
   });
 
   describe('importModule', () => {
@@ -108,11 +157,16 @@ describe('ESM utilities', () => {
       expect(result.testFunction()).toBe('js default test result');
     });
 
-    it('throws error for non-existent module', async () => {
+    it('throws ENOENT error for non-existent module (normalized from ERR_MODULE_NOT_FOUND)', async () => {
       const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
 
-      await expect(importModule(nonExistentPath)).rejects.toThrow();
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
+      // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
+      const error = await importModule(nonExistentPath).catch((e) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as NodeJS.ErrnoException).code).toBe('ENOENT');
+      expect((error as NodeJS.ErrnoException).path).toBe(nonExistentPath);
+      // Should NOT log error for missing files - this is expected during config discovery
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('logs debug information during import process', async () => {

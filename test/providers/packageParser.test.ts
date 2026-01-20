@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import {
   isPackagePath,
@@ -96,6 +95,16 @@ describe('loadFromPackage', () => {
     expect(result).toBe(mockModule.nested.getVariable);
     result('test input');
     expect(mockModule.nested.getVariable).toHaveBeenCalledWith('test input');
+  });
+
+  it('should throw an error if entity is not found in module', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ someOtherExport: vi.fn() });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).rejects.toThrow(
+      `Could not find entity: ${mockFunctionName} in module: ${mockPackagePath}`,
+    );
   });
 });
 

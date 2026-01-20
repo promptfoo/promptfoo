@@ -1,21 +1,12 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
+import {
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -27,12 +18,30 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+  VarValue,
+} from '../../types/index';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -52,8 +61,12 @@ interface IterativeMetaMetadata {
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
+    trace?: Record<string, unknown>;
+    traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[];
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 function getIterativeMetaGoalRubric(goal: string | undefined): string {
@@ -85,6 +98,7 @@ export async function runMetaAgentRedteam({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -96,8 +110,9 @@ export async function runMetaAgentRedteam({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  inputs?: Record<string, string>;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
@@ -113,7 +128,17 @@ export async function runMetaAgentRedteam({
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
-  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
+  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
+
+  // Resolve tracing options
+  const tracingOptions = resolveTracingOptions({
+    strategyId: 'iterative-meta',
+    test,
+    config: {},
+  });
+  const shouldFetchTrace =
+    tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+  const traceSnapshots: TraceContextData[] = [];
 
   const sessionIds: string[] = [];
   const totalTokenUsage = createEmptyTokenUsage();
@@ -126,6 +151,9 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+
+  // Track the previous iteration's trace summary for attack generation
+  let previousTraceSummary: string | undefined;
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
@@ -168,6 +196,10 @@ export async function runMetaAgentRedteam({
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
+      // Include trace summary from previous iteration if tracing is enabled for attack generation
+      ...(tracingOptions.includeInAttack && previousTraceSummary
+        ? { traceSummary: previousTraceSummary }
+        : {}),
     };
 
     // Get strategic decision from cloud
@@ -193,7 +225,7 @@ export async function runMetaAgentRedteam({
     }
 
     if (agentResp.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
+      logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
       continue;
@@ -214,6 +246,12 @@ export async function runMetaAgentRedteam({
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
+    }
+
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      attackPrompt = extractedPrompt;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -262,12 +300,19 @@ export async function runMetaAgentRedteam({
       .replace(/\{%/g, '{ %')
       .replace(/%\}/g, '% }');
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, VarValue> = {
+      ...iterationVars,
+      [injectVar]: escapedAttackPrompt,
+      ...(currentInputVars || {}),
+    };
+
     const targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: escapedAttackPrompt,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -279,17 +324,55 @@ export async function runMetaAgentRedteam({
     });
 
     // Execute attack against target
-    const targetResponse: TargetResponse = await getTargetResponse(
+    const iterationStart = Date.now();
+    const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
+      initialTargetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+    );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
+    // Fetch trace context if tracing is enabled
+    let traceContext: TraceContextData | null = null;
+    let computedTraceSummary: string | undefined;
+    if (shouldFetchTrace) {
+      const traceparent = context?.traceparent ?? undefined;
+      const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+      if (traceId) {
+        traceContext = await fetchTraceContext(traceId, {
+          earliestStartTime: iterationStart,
+          includeInternalSpans: tracingOptions.includeInternalSpans,
+          maxSpans: tracingOptions.maxSpans,
+          maxDepth: tracingOptions.maxDepth,
+          maxRetries: tracingOptions.maxRetries,
+          retryDelayMs: tracingOptions.retryDelayMs,
+          spanFilter: tracingOptions.spanFilter,
+          sanitizeAttributes: tracingOptions.sanitizeAttributes,
+        });
+
+        if (traceContext) {
+          traceSnapshots.push(traceContext);
+          if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
+            computedTraceSummary = formatTraceSummary(traceContext);
+          }
+        }
+      }
+    }
+
     logger.debug('[IterativeMeta] Raw target response', {
       responseLength: targetResponse.output?.length,
+      hasTrace: !!traceContext,
     });
 
     if (targetResponse.error) {
@@ -319,6 +402,13 @@ export async function runMetaAgentRedteam({
     // Grade the response
     let graderResult: GradingResult | undefined = undefined;
 
+    // Prepare trace summaries for attack generation and grading
+    const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
+    const gradingTraceSummary = tracingOptions.includeInGrading ? computedTraceSummary : undefined;
+
+    // Update previous trace summary for next iteration's attack generation
+    previousTraceSummary = attackTraceSummary;
+
     let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
     );
@@ -343,6 +433,13 @@ export async function runMetaAgentRedteam({
           gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
+          undefined, // skipRefusalCheck
+          tracingOptions.includeInGrading
+            ? {
+                traceContext,
+                traceSummary: gradingTraceSummary,
+              }
+            : undefined,
         );
         graderResult = {
           ...grade,
@@ -379,6 +476,10 @@ export async function runMetaAgentRedteam({
       score: 0, // Not used in meta strategy
       graderPassed: graderResult?.pass,
       guardrails: undefined,
+      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      traceSummary: computedTraceSummary,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
     });
 
     // Check if vulnerability was achieved
@@ -408,6 +509,10 @@ export async function runMetaAgentRedteam({
       stopReason,
       redteamHistory,
       sessionIds,
+      traceSnapshots:
+        traceSnapshots.length > 0
+          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+          : undefined,
     },
     tokenUsage: totalTokenUsage,
   };
@@ -420,13 +525,15 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  readonly inputs?: Record<string, string>;
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeMeta] Constructor config', {
       config,
     });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
@@ -452,6 +559,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       task: 'meta-agent-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
+      inputs: this.inputs,
     });
   }
 
@@ -482,7 +591,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
         provider: this.agentProvider,
         jsonOnly: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,
         jsonOnly: true,
       }),
@@ -495,6 +604,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

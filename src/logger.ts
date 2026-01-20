@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -41,9 +42,9 @@ type LogLevel = keyof typeof LOG_LEVELS;
 export interface SanitizedLogContext {
   url?: string;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   queryParams?: Record<string, string>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Lazy source map support - only loaded when debug is enabled
@@ -80,7 +81,7 @@ export async function initializeSourceMapSupport(): Promise<void> {
  */
 export function getCallerLocation(): string {
   try {
-    const error = new Error();
+    const error = new Error('stack trace capture');
     const stack = error.stack?.split('\n') || [];
 
     // Skip first 3 lines (Error, getCallerLocation, and the logger method)
@@ -109,7 +110,12 @@ export function getCallerLocation(): string {
   return '';
 }
 
-type StrictLogMethod = (message: string) => winston.Logger;
+/**
+ * Log input can be a simple string or a structured object with message field.
+ * Structured objects are used when setStructuredLogging(true) is enabled.
+ */
+type LogInput = string | { message: string; [key: string]: unknown };
+type StrictLogMethod = (input: LogInput) => winston.Logger;
 type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
@@ -117,7 +123,7 @@ type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
 /**
  * Extracts the actual message string from potentially nested info objects
  */
-function extractMessage(info: any): string {
+function extractMessage(info: winston.Logform.TransformableInfo): string {
   if (typeof info.message === 'object' && info.message !== null && 'message' in info.message) {
     return typeof info.message.message === 'string'
       ? info.message.message
@@ -180,7 +186,7 @@ export function setLogLevel(level: LogLevel) {
     winstonLogger.transports[0].level = level;
 
     if (level === 'debug') {
-      initializeSourceMapSupport();
+      void initializeSourceMapSupport();
     }
   } else {
     throw new Error(`Invalid log level: ${level}`);
@@ -207,15 +213,7 @@ function setupLogDirectory(): string {
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const logFiles = getLogFiles(logDir);
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {
@@ -278,17 +276,20 @@ export function initializeRunLogging(): void {
 }
 
 /**
- * Creates a logger method for the specified log level
+ * Creates a logger method for the specified log level.
+ * Accepts either a string message or a structured object with a message field.
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
-  return (message: string) => {
+  return (input: LogInput) => {
     const location =
       level === 'debug' ? getCallerLocation() : isDebugEnabled() ? getCallerLocation() : '';
 
     if (level === 'debug') {
-      initializeSourceMapSupport();
+      void initializeSourceMapSupport();
     }
 
+    // Handle both string and structured object inputs
+    const message = typeof input === 'string' ? input : input.message;
     return winstonLogger[level]({ message, location });
   };
 }
@@ -340,9 +341,9 @@ export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'w
 /**
  * Sanitizes context object for logging using generic sanitization
  */
-function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
+function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> {
   // Special handling for URLs to preserve the URL-specific sanitization logic
-  const contextWithSanitizedUrls: Record<string, any> = {};
+  const contextWithSanitizedUrls: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(context)) {
     if (key === 'url' && typeof value === 'string') {
@@ -357,8 +358,16 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
 }
 
 /**
- * Creates a log method that accepts an optional context parameter
- * If context is provided, it will be sanitized and formatted
+ * Creates a log method that accepts an optional context parameter.
+ * If context is provided, it will be sanitized and formatted.
+ *
+ * When structured logging is enabled (via setStructuredLogging(true)):
+ * - Passes { message, ...context } object to the logger
+ * - Ideal for cloud logging integrations that expect structured data
+ *
+ * When structured logging is disabled (default):
+ * - Formats context as JSON string appended to message
+ * - Suitable for CLI/console output
  */
 function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
@@ -375,8 +384,15 @@ function createLogMethodWithContext(
     }
 
     const sanitized = sanitizeContext(context);
-    const contextStr = safeJsonStringify(sanitized, true);
-    internalLogger[level](`${message}\n${contextStr}`);
+
+    if (useStructuredLogging) {
+      // Structured mode: pass object with message field for cloud logging systems
+      internalLogger[level]({ message, ...sanitized });
+    } else {
+      // Default mode: format as string for CLI/console output
+      const contextStr = safeJsonStringify(sanitized, true);
+      internalLogger[level](`${message}\n${contextStr}`);
+    }
   };
 }
 
@@ -442,9 +458,12 @@ export async function logRequestResponse(options: {
   };
 
   if (useStructuredLogging) {
-    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
+    // Pass message and context separately to use the wrapper's structured logging path.
+    // This ensures proper typing and consistent handling with other structured log calls.
+    const { message, ...context } = logObject;
+    logMethod(message, context);
   } else {
-    logMethod(`Api Request`, logObject);
+    logMethod('Api Request', logObject);
   }
 }
 
@@ -511,7 +530,7 @@ export async function closeLogger(): Promise<void> {
 
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
-  initializeSourceMapSupport();
+  void initializeSourceMapSupport();
 }
 
 export default logger;

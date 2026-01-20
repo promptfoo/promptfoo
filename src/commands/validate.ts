@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { validate as isUUID } from 'uuid';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
@@ -11,6 +10,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { isUuid } from '../util/uuid';
 import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
@@ -31,9 +31,14 @@ interface ValidateTargetOptions {
 /**
  * Test basic connectivity for a provider (Non-http)
  */
-async function testBasicConnectivity(provider: ApiProvider): Promise<void> {
+async function testBasicConnectivity(provider: ApiProvider): Promise<{
+  success: boolean;
+  error?: string;
+}> {
   const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-  logger.info(`\n${chalk.bold(`Testing provider: ${providerId}`)}`);
+  logger.info('');
+  logger.info(chalk.bold(`Provider: ${providerId}`));
+  logger.info(chalk.dim('─'.repeat(50)));
 
   try {
     // Make a simple test call
@@ -44,17 +49,26 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<void> {
     });
 
     if (result.error) {
-      logger.warn(chalk.yellow(`✗ Connectivity test failed`));
-      logger.warn(`  ${result.error}`);
+      logger.error(chalk.red(`  ✗ Connectivity test`));
+      logger.error(chalk.red(`    ${result.error}`));
+      return { success: false, error: result.error };
     } else if (result.output) {
-      logger.info(chalk.green(`✓ Connectivity test passed`));
-      logger.info(`  Response: ${JSON.stringify(result.output).substring(0, 100)}...`);
+      logger.info(chalk.green(`  ✓ Connectivity test`));
+      const responsePreview = JSON.stringify(result.output).substring(0, 100);
+      logger.info(
+        chalk.dim(`    Response: ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`),
+      );
+      return { success: true };
     } else {
-      logger.warn(chalk.yellow(`✗ Connectivity test returned no output`));
+      logger.warn(chalk.yellow(`  ✗ Connectivity test`));
+      logger.info(chalk.dim(`    No output received from provider`));
+      return { success: false, error: 'No output received' };
     }
   } catch (err) {
-    logger.warn(chalk.yellow(`✗ Connectivity test failed`));
-    logger.warn(`  Error: ${err instanceof Error ? err.message : String(err)}`);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    logger.error(chalk.red(`  ✗ Connectivity test`));
+    logger.error(chalk.red(`    ${errorMsg}`));
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -62,87 +76,133 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<void> {
  * Display detailed test results with suggestions
  */
 function displayTestResult(result: any, testName: string): void {
+  const indent = '    ';
+
   if (result.success) {
-    logger.info(chalk.green(`✓ ${testName} passed`));
+    logger.info(chalk.green(`  ✓ ${testName}`));
     if (result.message && result.message !== 'Test completed') {
-      logger.info(`  ${result.message}`);
+      logger.info(chalk.dim(`${indent}${result.message}`));
     }
     if (result.sessionId) {
-      logger.info(`  Session ID: ${result.sessionId}`);
+      logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
     }
   } else {
-    logger.warn(chalk.yellow(`✗ ${testName} failed`));
-    if (result.message) {
-      logger.warn(`  ${result.message}`);
+    // Check if this is a "suggestions" failure (configuration issue) vs a hard error
+    const hasSuggestions = result.analysis?.changes_needed;
+    const isHardError = result.error && !hasSuggestions;
+
+    if (isHardError) {
+      logger.error(chalk.red(`  ✗ ${testName}`));
+      if (result.message) {
+        logger.error(chalk.red(`${indent}${result.message}`));
+      }
+      if (result.error && result.error !== result.message) {
+        logger.error(chalk.red(`${indent}${result.error}`));
+      }
+    } else if (hasSuggestions) {
+      logger.warn(chalk.yellow(`  ⚠ ${testName}`));
+      if (result.message) {
+        logger.info(`${indent}${result.message}`);
+      }
+    } else {
+      logger.warn(chalk.yellow(`  ✗ ${testName}`));
+      if (result.message) {
+        logger.info(`${indent}${result.message}`);
+      }
     }
-    if (result.error && result.error !== result.message) {
-      logger.warn(`  ${result.error}`);
-    }
+
     if (result.reason) {
-      logger.warn(`  Reason: ${result.reason}`);
+      logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
     }
   }
 
   // Display API analysis feedback if available (from testAnalyzerResponse)
-  if (result.analysis) {
+  if (result.analysis?.changes_needed) {
     const analysis = result.analysis;
 
-    if (analysis.changes_needed) {
-      logger.warn(chalk.yellow('\n  Configuration issues detected:'));
-      if (analysis.changes_needed_reason) {
-        logger.warn(`  ${analysis.changes_needed_reason}`);
-      }
-      if (
-        analysis.changes_needed_suggestions &&
-        Array.isArray(analysis.changes_needed_suggestions)
-      ) {
-        logger.warn(chalk.yellow('\n  Suggestions:'));
-        analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
-          logger.warn(`  ${idx + 1}. ${suggestion}`);
-        });
-      }
+    logger.info('');
+    logger.info(chalk.cyan(`${indent}Suggestions:`));
+    if (analysis.changes_needed_reason) {
+      logger.info(`${indent}${analysis.changes_needed_reason}`);
+    }
+    if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
+      logger.info('');
+      analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
+        logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
+      });
     }
   }
 
-  // Show transformed request if available
+  // Show transformed request if available (only when verbose or debug)
   if (result.transformedRequest) {
-    logger.info(chalk.dim('\n  Request details:'));
+    logger.debug('');
+    logger.debug(chalk.dim(`${indent}Request details:`));
     if (result.transformedRequest.url) {
-      logger.info(chalk.dim(`  URL: ${result.transformedRequest.url}`));
+      logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
     }
     if (result.transformedRequest.method) {
-      logger.info(chalk.dim(`  Method: ${result.transformedRequest.method}`));
+      logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
     }
   }
+}
+
+interface ProviderTestSummary {
+  providerId: string;
+  connectivityPassed: boolean;
+  sessionPassed: boolean | null;
+  hasSuggestions: boolean;
+  sessionSkipped: boolean;
 }
 
 /**
  * Run comprehensive tests for HTTP providers
  */
-async function testHttpProvider(provider: ApiProvider): Promise<void> {
+async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSummary> {
   const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-  logger.info(`\n${chalk.bold(`Testing HTTP provider: ${providerId}`)}`);
+  logger.info('');
+  logger.info(chalk.bold(`Provider: ${providerId}`));
+  logger.info(chalk.dim('─'.repeat(50)));
+
+  const summary: ProviderTestSummary = {
+    providerId,
+    connectivityPassed: false,
+    sessionPassed: null,
+    hasSuggestions: false,
+    sessionSkipped: false,
+  };
 
   // Test 1: Connectivity
-  logger.info('Testing basic connectivity...');
-  const connectivityResult = await testProviderConnectivity(provider);
+  logger.info(`  ◌ Connectivity test ${chalk.dim('(running...)')}`);
+  const connectivityResult = await testProviderConnectivity({ provider });
   displayTestResult(connectivityResult, 'Connectivity test');
+  summary.hasSuggestions = !!connectivityResult.analysis?.changes_needed;
+
+  // Connectivity actually works if success is true OR if the only issue is suggestions (no actual error)
+  const connectivityActuallyWorked =
+    connectivityResult.success || (summary.hasSuggestions && !connectivityResult.error);
+  summary.connectivityPassed = connectivityActuallyWorked;
 
   // Test 2: Session management (only if connectivity test passed and target is stateful)
-  if (connectivityResult.success) {
+  if (connectivityActuallyWorked) {
     // Check if the provider is explicitly configured as non-stateful
     if (provider.config?.stateful === false) {
-      logger.info(chalk.dim('\nSkipping session management test (target is not stateful)'));
+      logger.info(chalk.dim(`  ○ Session test (skipped - target is stateless)`));
+      summary.sessionSkipped = true;
     } else {
-      logger.info('\nTesting session management...');
-      const sessionResult = await testProviderSession(provider, undefined, {
-        skipConfigValidation: true,
+      logger.info(`  ◌ Session test ${chalk.dim('(running...)')}`);
+      const sessionResult = await testProviderSession({
+        provider,
+        options: { skipConfigValidation: true },
       });
       displayTestResult(sessionResult, 'Session test');
+      summary.sessionPassed = sessionResult.success;
     }
   } else {
-    logger.info(chalk.dim('\nSkipping session management test (connectivity test failed)'));
+    logger.info(chalk.dim(`  ○ Session test (skipped - connectivity failed)`));
+    summary.sessionSkipped = true;
   }
+
+  return summary;
 }
 
 /**
@@ -157,7 +217,7 @@ async function loadProvidersForTesting(
     let provider: ApiProvider;
 
     // Cloud target
-    if (isUUID(target)) {
+    if (isUuid(target)) {
       const providerOptions = await getProviderFromCloud(target);
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
@@ -210,10 +270,82 @@ async function loadProvidersForTesting(
 }
 
 /**
+ * Display a summary of all test results
+ */
+function displayTestSummary(summaries: ProviderTestSummary[]): void {
+  logger.info('');
+  logger.info(chalk.bold('Summary'));
+  logger.info(chalk.dim('═'.repeat(50)));
+
+  let totalPassed = 0;
+  let totalFailed = 0;
+  let totalSuggestions = 0;
+  let totalSkipped = 0;
+
+  for (const summary of summaries) {
+    const parts: string[] = [];
+
+    if (summary.connectivityPassed) {
+      parts.push(chalk.green('connectivity: passed'));
+      totalPassed++;
+    } else {
+      parts.push(chalk.red('connectivity: failed'));
+      totalFailed++;
+    }
+
+    if (summary.sessionSkipped) {
+      parts.push(chalk.dim('session: skipped'));
+      totalSkipped++;
+    } else if (summary.sessionPassed === true) {
+      parts.push(chalk.green('session: passed'));
+      totalPassed++;
+    } else if (summary.sessionPassed === false) {
+      parts.push(chalk.red('session: failed'));
+      totalFailed++;
+    }
+
+    if (summary.hasSuggestions) {
+      totalSuggestions++;
+    }
+
+    logger.info(`  ${summary.providerId}`);
+    logger.info(`    ${parts.join(', ')}`);
+  }
+
+  logger.info('');
+
+  // Overall status
+  const statusParts: string[] = [];
+  if (totalPassed > 0) {
+    statusParts.push(chalk.green(`${totalPassed} passed`));
+  }
+  if (totalFailed > 0) {
+    statusParts.push(chalk.red(`${totalFailed} failed`));
+  }
+  if (totalSkipped > 0) {
+    statusParts.push(chalk.dim(`${totalSkipped} skipped`));
+  }
+
+  logger.info(`Tests: ${statusParts.join(', ')}`);
+
+  if (totalSuggestions > 0) {
+    logger.info(
+      chalk.yellow(
+        `\n${totalSuggestions} provider(s) have configuration suggestions - see above for details`,
+      ),
+    );
+  }
+
+  if (totalFailed > 0) {
+    process.exitCode = 1;
+  }
+}
+
+/**
  * Run provider tests for a specific target or all providers in config
  */
 async function runProviderTests(target: string | undefined, config: UnifiedConfig): Promise<void> {
-  logger.info('\nRunning provider tests...');
+  const summaries: ProviderTestSummary[] = [];
 
   try {
     // Load provider(s)
@@ -228,24 +360,45 @@ async function runProviderTests(target: string | undefined, config: UnifiedConfi
       try {
         // Use detailed HTTP tests for HTTP providers, basic connectivity for others
         if (isHttpProvider(provider)) {
-          await testHttpProvider(provider);
+          const summary = await testHttpProvider(provider);
+          summaries.push(summary);
         } else {
-          await testBasicConnectivity(provider);
+          const result = await testBasicConnectivity(provider);
+          const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+          summaries.push({
+            providerId,
+            connectivityPassed: result.success,
+            sessionPassed: null,
+            hasSuggestions: false,
+            sessionSkipped: true, // Non-HTTP providers don't have session tests
+          });
         }
       } catch (err) {
         const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-        logger.warn(
-          chalk.yellow(
-            `Failed to test provider ${providerId}: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        );
+        logger.error('');
+        logger.error(chalk.bold(`Provider: ${providerId}`));
+        logger.error(chalk.dim('─'.repeat(50)));
+        logger.error(chalk.red(`  ✗ Test execution failed`));
+        logger.error(chalk.red(`    ${err instanceof Error ? err.message : String(err)}`));
+        summaries.push({
+          providerId,
+          connectivityPassed: false,
+          sessionPassed: null,
+          hasSuggestions: false,
+          sessionSkipped: true,
+        });
       }
     }
+
+    // Display summary
+    if (summaries.length > 0) {
+      displayTestSummary(summaries);
+    }
   } catch (err) {
-    // Don't fail validation on test errors, just warn
-    logger.warn(
-      chalk.yellow(`Provider tests failed: ${err instanceof Error ? err.message : String(err)}`),
+    logger.error(
+      chalk.red(`Provider tests failed: ${err instanceof Error ? err.message : String(err)}`),
     );
+    process.exitCode = 1;
   }
 }
 
@@ -267,14 +420,14 @@ export async function doValidate(
       logger.error(
         dedent`Configuration validation error:
 Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
-${fromError(configParse.error).message}`,
+${z.prettifyError(configParse.error)}`,
       );
       process.exitCode = 1;
       return;
     }
     const suiteParse = TestSuiteSchema.safeParse(testSuite);
     if (!suiteParse.success) {
-      logger.error(dedent`Test suite validation error:\n${fromError(suiteParse.error).message}`);
+      logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
       process.exitCode = 1;
       return;
     }
@@ -296,14 +449,18 @@ export async function doValidateTarget(
   disableCache();
 
   if (!opts.target && !opts.config) {
-    logger.error('Please specify either -t <provider-id> or -c <config-path>');
+    logger.error(chalk.red('Please specify either -t <provider-id> or -c <config-path>'));
     process.exitCode = 1;
     return;
   }
 
+  logger.info('');
+  logger.info(chalk.bold('Validating Target'));
+  logger.info(chalk.dim('═'.repeat(50)));
+
   // If -c is provided, load config and test all providers
   if (opts.config) {
-    logger.info(`Loading configuration from ${opts.config}...`);
+    logger.info(chalk.dim(`Configuration: ${opts.config}`));
     try {
       const { config } = await resolveConfigs(
         { config: [opts.config], envPath: opts.envPath },
@@ -312,17 +469,21 @@ export async function doValidateTarget(
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
       logger.error(
-        `Failed to load or test providers from config: ${err instanceof Error ? err.message : String(err)}`,
+        chalk.red(
+          `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
+        ),
       );
       process.exitCode = 1;
     }
   } else if (opts.target) {
     // Test a specific provider ID or cloud UUID
-    logger.info('Testing provider...');
+    logger.info(chalk.dim(`Target: ${opts.target}`));
     try {
       await runProviderTests(opts.target, {} as UnifiedConfig);
     } catch (err) {
-      logger.error(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        chalk.red(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`),
+      );
       process.exitCode = 1;
     }
   }

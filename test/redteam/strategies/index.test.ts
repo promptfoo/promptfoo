@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
@@ -63,16 +63,10 @@ describe('validateStrategies', () => {
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
-  it('should exit for invalid strategies', async () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+  it('should throw error for invalid strategies', async () => {
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
-    await validateStrategies(invalidStrategies);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(validateStrategies(invalidStrategies)).rejects.toThrow('Invalid strategy(s)');
   });
 });
 
@@ -296,10 +290,7 @@ describe('custom strategy validation', () => {
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
-  it('should reject invalid custom-like strategy patterns', async () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+  it('should throw error for invalid custom-like strategy patterns', async () => {
     const strategies: RedteamStrategyObject[] = [
       { id: 'invalid-strategy' },
       { id: 'custom-invalid' },
@@ -307,10 +298,7 @@ describe('custom strategy validation', () => {
       { id: 'notcustom:variant' },
     ];
 
-    await validateStrategies(strategies);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(validateStrategies(strategies)).rejects.toThrow('Invalid strategy(s)');
   });
 });
 

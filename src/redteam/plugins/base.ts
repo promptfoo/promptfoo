@@ -1,7 +1,21 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import {
+  extractAllPromptsFromTags,
+  extractInputVarsFromPrompt,
+  getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  removePrefix,
+} from '../util';
+
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
@@ -13,29 +27,22 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
  * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
  * @param generatedPrompts - The LLM response of generated prompts.
- * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+ * @returns An array of { __prompt: string } objects. Each of these objects represents a test case.
  */
-export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: string }[] {
   // Try PromptBlock: first (for multi-line content)
   if (generatedPrompts.includes('PromptBlock:')) {
     return generatedPrompts
       .split('PromptBlock:')
       .map((block) => block.trim())
       .filter((block) => block.length > 0)
-      .map((block) => ({ prompt: block }));
+      .map((block) => ({ __prompt: block }));
   }
 
   // Check if we have multi-line prompts (multiple "Prompt:" with content spanning multiple lines)
@@ -102,7 +109,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
         .map((prompt) => {
           // Strip leading/trailing asterisks for backward compatibility
           const cleanedPrompt = prompt.replace(/^\*+\s*/, '').replace(/\s*\*+$/, '');
-          return { prompt: cleanedPrompt };
+          return { __prompt: cleanedPrompt };
         });
     }
   }
@@ -131,7 +138,43 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
   return promptLines
     .map(parsePrompt)
     .filter((prompt): prompt is string => prompt !== null)
-    .map((prompt) => ({ prompt }));
+    .map((prompt) => ({ __prompt: prompt }));
+}
+
+/**
+ * Parses LLM output into multi-input test cases when inputs schema is defined.
+ * Extracts JSON from <Prompt> tags and returns them as prompt strings.
+ *
+ * @param generatedOutput - The LLM response containing generated test cases.
+ * @param inputs - The inputs schema defining expected variable names.
+ * @returns An array of { __prompt: string } objects where __prompt is the JSON string.
+ */
+export function parseGeneratedInputs(
+  generatedOutput: string,
+  inputs: Record<string, string>,
+): { __prompt: string }[] {
+  const results: { __prompt: string }[] = [];
+  const inputKeys = Object.keys(inputs);
+
+  // Extract JSON from <Prompt> tags
+  const promptStrings = extractAllPromptsFromTags(generatedOutput);
+
+  for (const jsonStr of promptStrings) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+
+      // Validate all required keys exist
+      const hasAllKeys = inputKeys.every((key) => key in parsed);
+      if (hasAllKeys) {
+        // Return the JSON string as the prompt value
+        results.push({ __prompt: jsonStr });
+      }
+    } catch {
+      logger.debug(`Failed to parse JSON from <Prompt> tag: ${jsonStr}`);
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -210,14 +253,23 @@ export abstract class RedteamPluginBase {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
+    // Check if we're using multi-input mode
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+
+    if (hasMultipleInputs) {
+      logger.debug(
+        `Using multi-input mode with inputs: ${Object.keys(this.config.inputs!).join(', ')}`,
+      );
+    }
+
     /**
-     * Generates a batch of prompts using the API provider.
-     * @param currentPrompts - The current list of prompts.
-     * @returns A promise that resolves to an array of new prompts.
+     * Generates a batch of prompts/test cases using the API provider.
+     * In single-input mode, returns { __prompt: string }[]
+     * In multi-input mode, returns Record<string, string>[]
      */
     const generatePrompts = async (
-      currentPrompts: { prompt: string }[],
-    ): Promise<{ prompt: string }[]> => {
+      currentPrompts: { __prompt: string }[] | Record<string, string>[],
+    ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
@@ -271,9 +323,17 @@ export abstract class RedteamPluginBase {
         throw new Error(message);
       }
 
+      // Use appropriate parser based on mode
+      if (hasMultipleInputs) {
+        return parseGeneratedInputs(generatedPrompts, this.config.inputs!);
+      }
       return parseGeneratedPrompts(generatedPrompts);
     };
-    const allPrompts = await retryWithDeduplication(generatePrompts, n);
+
+    const allPrompts = await retryWithDeduplication(
+      generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
+      n,
+    );
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
@@ -281,25 +341,43 @@ export abstract class RedteamPluginBase {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts);
+    return this.promptsToTestCases(prompts as { __prompt: string }[]);
   }
 
   /**
-   * Converts an array of { prompt: string } objects into an array of test cases.
-   * @param prompts - An array of { prompt: string } objects.
+   * Converts an array of { __prompt: string } objects into an array of test cases.
+   * When inputs is defined, the __prompt contains JSON which is stored in injectVar
+   * (which will be MULTI_INPUT_VAR in multi-input mode), and individual keys are
+   * extracted into vars for usability.
+   * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
-    return prompts.sort().map((prompt) => ({
-      vars: {
-        [this.injectVar]: prompt.prompt,
-      },
-      assert: this.getAssertions(prompt.prompt),
-      metadata: {
-        pluginId: getShortPluginId(this.id),
-        pluginConfig: this.config,
-      },
-    }));
+  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+
+    return prompts.sort().map((promptObj) => {
+      // Extract input vars from the prompt for multi-input mode
+      const inputVars = hasMultipleInputs
+        ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
+        : undefined;
+
+      // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
+      const vars: Record<string, string> = {
+        [this.injectVar]: promptObj.__prompt,
+        ...(inputVars || {}),
+      };
+
+      return {
+        vars,
+        assert: this.getAssertions(promptObj.__prompt),
+        metadata: {
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
+          // Include extracted input vars in metadata for multi-turn strategies
+          ...(inputVars ? { inputVars } : {}),
+        },
+      };
+    });
   }
 
   /**
@@ -314,6 +392,26 @@ export abstract class RedteamPluginBase {
     if (config.language) {
       invariant(typeof config.language === 'string', 'language must be a string');
       modifiers.language = config.language;
+    }
+
+    // Add inputs as a modifier if defined - instructs LLM to output JSON wrapped in <Prompt> tags
+    if (config.inputs && Object.keys(config.inputs).length > 0) {
+      const schema = Object.entries(config.inputs)
+        .map(([key, description]) => `"${key}": "${description}"`)
+        .join(', ');
+      modifiers.__outputFormat = dedent`
+        <OutputFormat>
+          Consider the combinations of each of these fields. 
+          Output each message/test case strictly as a SINGLE JSON object with ONLY the defined fields.
+          Output it wrapped in <Prompt> tags: 
+          <Prompt>{${schema}}</Prompt>
+        </OutputFormat>
+        `;
+    }
+
+    // Store the computed modifiers back into config so they get passed to strategies
+    if (Object.keys(modifiers).length > 0) {
+      config.modifiers = modifiers;
     }
 
     // No modifiers
@@ -331,13 +429,13 @@ export abstract class RedteamPluginBase {
       .join('\n');
 
     return dedent`
-      ${template.trim()}
+      ${template}
 
-      CRITICAL: Ensure all generated prompts strictly follow these requirements:
+      CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
       <Modifiers>
       ${modifierSection}
       </Modifiers>
-      Rewrite ALL prompts to fully comply with the above modifiers.
+      Rewrite ALL prompts to strictly comply with the above modifiers.
     `.trim();
   }
 }

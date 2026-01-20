@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Sora video generation
+
+prompts:
+  - 'A cinematic shot of: {{scene}}'
+
+providers:
+  # Sora 2 - Standard video generation ($0.10/second)
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720 # Landscape: 1280x720, Portrait: 720x1280
+      seconds: 4 # Video duration: 4, 8, or 12 seconds
+
+  # Sora 2 Pro - Higher quality video generation ($0.30/second)
+  - id: openai:video:sora-2-pro
+    config:
+      size: 1280x720
+      seconds: 4
+
+tests:
+  - vars:
+      scene: a cat riding a skateboard through a city at sunset
+  - vars:
+      scene: waves crashing on a tropical beach with palm trees swaying
+  - vars:
+      scene: a robot dancing in a neon-lit cyberpunk city
+  - vars:
+      scene: hot air balloons floating over misty mountains at sunrise

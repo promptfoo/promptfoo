@@ -1,25 +1,26 @@
+import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
+import { ElevenLabsCache } from '../cache';
+import { ElevenLabsClient } from '../client';
+import { CostTracker } from '../cost-tracker';
+import { encodeAudio, saveAudioFile } from './audio';
+import { applyPronunciationDictionary, createPronunciationDictionary } from './pronunciation';
+import {
+  calculateStreamingMetrics,
+  combineStreamingChunks,
+  createStreamingConnection,
+  handleStreamingTTS,
+} from './streaming';
+import { designVoice, remixVoice } from './voice-design';
+
+import type { EnvOverrides } from '../../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../../types/providers';
-import type { EnvOverrides } from '../../../types/env';
-import { getEnvString } from '../../../envars';
-import logger from '../../../logger';
-import { ElevenLabsClient } from '../client';
-import { ElevenLabsCache } from '../cache';
-import { CostTracker } from '../cost-tracker';
 import type { ElevenLabsTTSConfig, TTSResponse, TTSStreamConfig } from './types';
-import { encodeAudio, saveAudioFile } from './audio';
-import {
-  createStreamingConnection,
-  handleStreamingTTS,
-  combineStreamingChunks,
-  calculateStreamingMetrics,
-} from './streaming';
-import { createPronunciationDictionary, applyPronunciationDictionary } from './pronunciation';
-import { designVoice, remixVoice } from './voice-design';
 
 /**
  * ElevenLabs Text-to-Speech provider
@@ -155,7 +156,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Wait for advanced features initialization (voice design, remix, pronunciation)
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null; // Only wait once
     }

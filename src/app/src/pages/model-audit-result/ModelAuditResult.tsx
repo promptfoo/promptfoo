@@ -1,34 +1,32 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
-import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { formatDataGridDate } from '@app/utils/date';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
 import {
-  ArrowBack as ArrowBackIcon,
-  Delete as DeleteIcon,
-  Download as DownloadIcon,
-  History as HistoryIcon,
-} from '@mui/icons-material';
-import {
-  Alert,
-  Box,
-  Breadcrumbs,
-  Button,
-  CircularProgress,
-  Container,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Link,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material';
+} from '@app/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
+import ScanResultHeader from '../model-audit/components/ScanResultHeader';
+import { useSeverityCounts } from '../model-audit/hooks';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 
 import type { HistoricalScan } from '../model-audit/stores';
@@ -61,7 +59,6 @@ export default function ModelAuditResult() {
 
       try {
         const result = await fetchScanById(id, abortController.signal);
-        // Don't update state if request was aborted
         if (abortController.signal.aborted) {
           return;
         }
@@ -71,14 +68,12 @@ export default function ModelAuditResult() {
           setError('Scan not found');
         }
       } catch (err) {
-        // Don't update state if request was aborted
         if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
           return;
         }
         const errorMessage = err instanceof Error ? err.message : 'Failed to load scan';
         setError(errorMessage);
       } finally {
-        // Only update loading state if not aborted
         if (!abortController.signal.aborted) {
           setIsLoading(false);
         }
@@ -86,7 +81,6 @@ export default function ModelAuditResult() {
     };
 
     loadScan();
-
     return () => abortController.abort();
   }, [id, fetchScanById]);
 
@@ -122,205 +116,103 @@ export default function ModelAuditResult() {
     URL.revokeObjectURL(url);
   }, [scan]);
 
+  const severityCounts = useSeverityCounts(scan?.results?.issues);
+
   if (isLoading) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? theme.palette.background.default
-              : theme.palette.grey[50],
-          py: 4,
-        }}
-      >
-        <Container maxWidth="xl">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
+        <div className="container max-w-7xl mx-auto px-4">
           <ResultPageSkeleton />
-        </Container>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   if (error || !scan) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? theme.palette.background.default
-              : theme.palette.grey[50],
-          py: 4,
-        }}
-      >
-        <Container maxWidth="md">
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error || 'Scan not found'}
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
+        <div className="container max-w-2xl mx-auto px-4">
+          <Alert variant="destructive" className="mb-6">
+            <AlertContent>
+              <AlertDescription>{error || 'Scan not found'}</AlertDescription>
+            </AlertContent>
           </Alert>
-          <Stack direction="row" spacing={2}>
-            <Button
-              component={RouterLink}
-              to={MODEL_AUDIT_ROUTES.LIST}
-              variant="contained"
-              startIcon={<ArrowBackIcon />}
-            >
-              Back to History
+          <div className="flex gap-3">
+            <Button asChild>
+              <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
+                <ArrowBackIcon className="size-4 mr-2" />
+                Back to History
+              </RouterLink>
             </Button>
-            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.SETUP} variant="outlined">
-              New Scan
+            <Button variant="outline" asChild>
+              <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>New Scan</RouterLink>
             </Button>
-          </Stack>
-        </Container>
-      </Box>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: (theme) =>
-          theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
-        py: 4,
-      }}
-    >
-      <Container maxWidth="xl">
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
-          {/* Breadcrumbs */}
-          <Breadcrumbs sx={{ mb: 3 }}>
-            <Link
-              component={RouterLink}
-              to={MODEL_AUDIT_ROUTES.ROOT}
-              underline="hover"
-              color="inherit"
-            >
-              Model Audit
-            </Link>
-            <Link
-              component={RouterLink}
-              to={MODEL_AUDIT_ROUTES.LIST}
-              underline="hover"
-              color="inherit"
-            >
-              History
-            </Link>
-            <Typography color="text.primary">{scan.name || scan.id.slice(0, 8)}</Typography>
-          </Breadcrumbs>
+  const topBar = (
+    <div className="flex items-center justify-between">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
+          <ArrowBackIcon className="size-4 mr-2" />
+          Back to History
+        </RouterLink>
+      </Button>
 
-          {/* Header */}
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'flex-start', sm: 'center' }}
-            spacing={2}
-            mb={4}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            Actions
+            <MoreVertIcon className="size-4 ml-2" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleDownload}>
+            <DownloadIcon className="size-4 mr-2" />
+            Download JSON
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setDeleteDialogOpen(true)}
+            className="text-destructive focus:text-destructive"
           >
-            <Box>
-              <Typography variant="h4" gutterBottom fontWeight="bold">
-                {scan.name || 'Model Security Scan'}
-              </Typography>
-              <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Created: {formatDataGridDate(scan.createdAt)}
-                </Typography>
-                {scan.author && (
-                  <Typography variant="body2" color="text.secondary">
-                    • Author: {scan.author}
-                  </Typography>
-                )}
-                <Typography variant="body2" color="text.secondary" fontFamily="monospace">
-                  • ID: {scan.id.slice(0, 12)}...
-                </Typography>
-              </Stack>
-            </Box>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownload}
-              >
-                Download
-              </Button>
-              <Button
-                component={RouterLink}
-                to={MODEL_AUDIT_ROUTES.LIST}
-                variant="outlined"
-                size="small"
-                startIcon={<HistoryIcon />}
-              >
-                History
-              </Button>
-              <Button
-                color="error"
-                variant="outlined"
-                size="small"
-                startIcon={<DeleteIcon />}
-                onClick={() => setDeleteDialogOpen(true)}
-              >
-                Delete
-              </Button>
-            </Stack>
-          </Stack>
+            <DeleteIcon className="size-4 mr-2" />
+            Delete Scan
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
 
-          {/* Scan Metadata */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 4 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Scan Details
-            </Typography>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={4}>
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Model Path
-                </Typography>
-                <Typography variant="body2" fontFamily="monospace">
-                  {scan.modelPath}
-                </Typography>
-              </Box>
-              {scan.totalChecks !== undefined && scan.totalChecks !== null && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Checks
-                  </Typography>
-                  <Typography variant="body2">
-                    <Typography component="span" color="success.main">
-                      {scan.passedChecks || 0} passed
-                    </Typography>
-                    {' / '}
-                    <Typography component="span" color="error.main">
-                      {scan.failedChecks || 0} failed
-                    </Typography>
-                    {' / '}
-                    {scan.totalChecks} total
-                  </Typography>
-                </Box>
-              )}
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Status
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color={scan.hasErrors ? 'error.main' : 'success.main'}
-                  fontWeight={500}
-                >
-                  {scan.hasErrors ? 'Issues Found' : 'Clean'}
-                </Typography>
-              </Box>
-            </Stack>
-          </Paper>
+  return (
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      <ScanResultHeader
+        name={scan.name || 'Model Security Scan'}
+        modelPath={scan.modelPath}
+        createdAt={new Date(scan.createdAt).toISOString()}
+        author={scan.author ?? undefined}
+        severityCounts={severityCounts}
+        topBar={topBar}
+      />
 
-          {/* Results */}
-          {scan.results && (
-            <ResultsTab
-              scanResults={scan.results}
-              onShowFilesDialog={() => setShowFilesDialog(true)}
-              totalChecks={scan.totalChecks}
-              passedChecks={scan.passedChecks}
-              failedChecks={scan.failedChecks}
-            />
-          )}
-        </Paper>
+      {/* Main Content */}
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="bg-white dark:bg-zinc-900">
+          <CardContent className="pt-6">
+            {scan.results && (
+              <ResultsTab
+                scanResults={scan.results}
+                onShowFilesDialog={() => setShowFilesDialog(true)}
+                totalChecks={scan.totalChecks}
+                passedChecks={scan.passedChecks}
+                failedChecks={scan.failedChecks}
+              />
+            )}
+          </CardContent>
+        </Card>
 
         {/* Scanned Files Dialog */}
         {scan.results && (
@@ -339,29 +231,39 @@ export default function ModelAuditResult() {
         )}
 
         {/* Delete Confirmation Dialog */}
-        <Dialog open={deleteDialogOpen} onClose={() => !isDeleting && setDeleteDialogOpen(false)}>
-          <DialogTitle>Delete Scan?</DialogTitle>
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete this scan? This action cannot be undone.
-            </DialogContentText>
+            <DialogHeader>
+              <DialogTitle>Delete Scan?</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this scan? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <DeleteIcon className="size-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDelete}
-              color="error"
-              variant="contained"
-              disabled={isDeleting}
-              startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogActions>
         </Dialog>
-      </Container>
-    </Box>
+      </div>
+    </div>
   );
 }

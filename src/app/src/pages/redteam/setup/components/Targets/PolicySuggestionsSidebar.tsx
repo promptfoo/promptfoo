@@ -1,18 +1,10 @@
 import React from 'react';
 
-import AddIcon from '@mui/icons-material/Add';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import ThumbDownIcon from '@mui/icons-material/ThumbDown';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Plus, Sparkles, ThumbsDown } from 'lucide-react';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type PolicySuggestionsSidebarProps = {
@@ -31,154 +23,77 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
   onRemoveSuggestedPolicy,
 }) => {
   return (
-    <Paper
-      elevation={2}
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border bg-background shadow-sm">
       {/* Header - fixed */}
-      <Box
-        sx={{
-          p: 2,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          backgroundColor: 'action.hover',
-          flexShrink: 0,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <AutoFixHighIcon color="action" />
-          <Typography variant="subtitle1" fontWeight={600} color="text.primary">
-            Suggested Policies
-          </Typography>
-        </Box>
-      </Box>
+      <div className="shrink-0 border-b bg-muted/50 p-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-5 text-muted-foreground" />
+          <h3 className="font-semibold">Suggested Policies</h3>
+        </div>
+      </div>
 
       {/* Content - scrollable */}
-      <Box
-        sx={{
-          flex: 1,
-          overflow: 'auto',
-          p: 2,
-        }}
-      >
+      <div className="flex-1 overflow-auto p-4">
         {/* Show generate button when not generating and no suggestions */}
         {!isGeneratingPolicies && suggestedPolicies.length === 0 && (
-          <Box sx={{ py: 4, px: 1 }}>
-            <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+          <div className="px-2 py-8">
+            <p className="mb-4 text-center text-sm text-muted-foreground">
               Generate AI-powered policy suggestions based on your application.
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={onGeneratePolicies}
-              startIcon={<AutoFixHighIcon />}
-              disabled={isGeneratingPolicies}
-            >
+            </p>
+            <Button className="w-full" onClick={onGeneratePolicies} disabled={isGeneratingPolicies}>
+              <Sparkles className="mr-2 size-4" />
               Generate Suggestions
             </Button>
-          </Box>
+          </div>
         )}
 
         {isGeneratingPolicies && suggestedPolicies.length === 0 && (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              py: 4,
-            }}
-          >
-            <CircularProgress size={32} />
-            <Typography variant="body2" color="text.secondary" align="center">
+          <div className="flex flex-col items-center gap-4 py-8">
+            <Spinner className="size-8" />
+            <p className="text-center text-sm text-muted-foreground">
               Analyzing your application to generate relevant policies...
-            </Typography>
-          </Box>
+            </p>
+          </div>
         )}
 
         {suggestedPolicies.length > 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <div className="flex flex-col gap-3">
             {suggestedPolicies.map((policy, index) => (
               <Card
                 key={index}
-                variant="outlined"
-                sx={{
-                  backgroundColor: 'background.default',
-                  '&:hover': {
-                    boxShadow: 2,
-                    borderColor: 'primary.main',
-                    backgroundColor: 'background.paper',
-                    transform: 'translateY(-1px)',
-                  },
-                  transition: 'all 0.2s',
-                }}
+                className="cursor-pointer transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
+                onClick={() => onAddSuggestedPolicy(policy)}
               >
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <AddIcon
-                      fontSize="small"
-                      color="primary"
-                      sx={{
-                        mt: 0.25,
-                        flexShrink: 0,
-                        cursor: 'pointer',
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddSuggestedPolicy(policy);
-                      }}
-                    />
-                    <Box
-                      sx={{ flex: 1, cursor: 'pointer' }}
-                      onClick={() => onAddSuggestedPolicy(policy)}
-                    >
-                      <Typography
-                        variant="subtitle2"
-                        fontWeight={600}
-                        color="text.primary"
-                        gutterBottom
-                      >
-                        {policy.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                        {policy.text}
-                      </Typography>
-                    </Box>
-                    <Tooltip title="Dismiss suggestion">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveSuggestedPolicy(policy);
-                        }}
-                        sx={{
-                          flexShrink: 0,
-                          color: 'text.secondary',
-                          '&:hover': {
-                            color: 'error.main',
-                            backgroundColor: 'error.50',
-                          },
-                        }}
-                      >
-                        <ThumbDownIcon fontSize="small" />
-                      </IconButton>
+                <CardContent className="p-3">
+                  <div className="flex items-start gap-3">
+                    <Plus className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div className="flex-1">
+                      <h4 className="mb-1 font-semibold">{policy.name}</h4>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{policy.text}</p>
+                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveSuggestedPolicy(policy);
+                          }}
+                        >
+                          <ThumbsDown className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Dismiss suggestion</TooltipContent>
                     </Tooltip>
-                  </Box>
+                  </div>
                 </CardContent>
               </Card>
             ))}
-          </Box>
+          </div>
         )}
-      </Box>
-    </Paper>
+      </div>
+    </div>
   );
 };

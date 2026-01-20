@@ -1,30 +1,31 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, expect, it, vi } from 'vitest';
 import ChecksSection from './ChecksSection';
+
 import type { ScanCheck } from '../ModelAudit.types';
 
-vi.mock('@mui/x-data-grid', () => ({
-  ...vi.importActual('@mui/x-data-grid'),
-  DataGrid: (props: { rows: any[]; columns: any[] }) => {
-    const { rows, columns } = props;
+// Mock the DataTable component from the design system
+vi.mock('@app/components/data-table/data-table', () => ({
+  DataTable: (props: { data: any[]; columns: any[] }) => {
+    const { data, columns } = props;
     return (
       <div data-testid="mock-data-grid">
         <table>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col.field}>{col.headerName}</th>
+              {columns.map((col: any) => (
+                <th key={col.accessorKey || col.id}>{col.header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {data.map((row: any, index: number) => (
               <tr key={index}>
-                {columns.map((col) => (
-                  <td key={col.field}>{row[col.field]}</td>
+                {columns.map((col: any) => (
+                  <td key={col.accessorKey || col.id}>
+                    {col.accessorKey ? row[col.accessorKey] : ''}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -34,8 +35,6 @@ vi.mock('@mui/x-data-grid', () => ({
     );
   },
 }));
-
-const theme = createTheme();
 
 describe('ChecksSection', () => {
   const mockChecks: ScanCheck[] = [
@@ -68,22 +67,19 @@ describe('ChecksSection', () => {
     },
   ];
 
-  it('should render accordion, summary, filter, and DataGrid on happy path', async () => {
+  it('should render heading, summary, filter, and DataGrid on happy path', async () => {
     render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={mockChecks} totalChecks={10} passedChecks={8} failedChecks={2} />
-      </ThemeProvider>,
+      <ChecksSection checks={mockChecks} totalChecks={10} passedChecks={8} failedChecks={2} />,
     );
 
-    const accordionHeader = screen.getByRole('button', { name: /Security Checks/i });
-    expect(accordionHeader).toBeInTheDocument();
+    // Check heading is rendered (no longer an accordion)
+    expect(screen.getByRole('heading', { name: /Security Checks/i })).toBeInTheDocument();
 
     expect(screen.getByText('Total: 10')).toBeInTheDocument();
     expect(screen.getByText('Passed: 8')).toBeInTheDocument();
     expect(screen.getByText('Failed: 2')).toBeInTheDocument();
 
-    await userEvent.click(accordionHeader);
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('Show Failed/Skipped Only')).toBeInTheDocument();
 
     expect(screen.getByTestId('mock-data-grid')).toBeInTheDocument();
@@ -104,14 +100,9 @@ describe('ChecksSection', () => {
   });
 
   it('should filter out passed checks when the filter chip is clicked and restore all checks when toggled back', async () => {
-    render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={mockChecks} totalChecks={3} passedChecks={1} failedChecks={1} />
-      </ThemeProvider>,
-    );
+    render(<ChecksSection checks={mockChecks} totalChecks={3} passedChecks={1} failedChecks={1} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Security Checks/i }));
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('Insecure Deserialization')).toBeInTheDocument();
     expect(screen.getByText('File Permissions')).toBeInTheDocument();
     expect(screen.getByText('Outdated Dependency')).toBeInTheDocument();
@@ -129,25 +120,17 @@ describe('ChecksSection', () => {
     expect(screen.getByText('Outdated Dependency')).toBeInTheDocument();
   });
 
-  it('should render nothing when totalChecks is defined and checks is an empty array', () => {
-    const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={[]} totalChecks={10} />
-      </ThemeProvider>,
-    );
+  it('should render nothing when totalChecks is 0 and checks is an empty array', () => {
+    const { container } = render(<ChecksSection checks={[]} totalChecks={0} />);
 
     expect(container.firstChild).toBeNull();
   });
 
   it('should render the component without summary chips when totalChecks is undefined and checks is an empty array', () => {
-    render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={[]} totalChecks={undefined} />
-      </ThemeProvider>,
-    );
+    render(<ChecksSection checks={[]} totalChecks={undefined} />);
 
-    const accordionHeader = screen.getByRole('button', { name: /Security Checks/i });
-    expect(accordionHeader).toBeInTheDocument();
+    // Heading should be rendered (no longer an accordion button)
+    expect(screen.getByRole('heading', { name: /Security Checks/i })).toBeInTheDocument();
 
     expect(screen.queryByText(/Total:/i)).toBeNull();
     expect(screen.queryByText(/Passed:/i)).toBeNull();
@@ -168,14 +151,12 @@ describe('ChecksSection', () => {
     ];
 
     render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection
-          checks={checksWithSpecialChars}
-          totalChecks={1}
-          passedChecks={0}
-          failedChecks={1}
-        />
-      </ThemeProvider>,
+      <ChecksSection
+        checks={checksWithSpecialChars}
+        totalChecks={1}
+        passedChecks={0}
+        failedChecks={1}
+      />,
     );
 
     expect(screen.getByTestId('mock-data-grid')).toBeInTheDocument();
@@ -209,33 +190,26 @@ describe('ChecksSection', () => {
         status: 'failed',
         message: 'Special chars path test',
         severity: 'warning',
-        location: '/path/with/!@#$%^&*()_+=-`~[]\{}|;\':",./<>?chars.txt',
+        location: '/path/with/!@#$%^&*()_+=-`~[]\\{}|;\':",./<>?chars.txt',
         why: 'Testing special chars',
         timestamp: new Date('2024-01-01T00:00:02Z').getTime(),
       },
     ];
 
     render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={edgeCaseChecks} totalChecks={3} passedChecks={1} failedChecks={2} />
-      </ThemeProvider>,
+      <ChecksSection checks={edgeCaseChecks} totalChecks={3} passedChecks={1} failedChecks={2} />,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Security Checks/i }));
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('filename.js')).toBeInTheDocument();
     expect(screen.getByText('./relative/path.txt')).toBeInTheDocument();
     expect(
-      screen.getByText('/path/with/!@#$%^&*()_+=-`~[]\{}|;\':",./<>?chars.txt'),
+      screen.getByText('/path/with/!@#$%^&*()_+=-`~[]\\{}|;\':",./<>?chars.txt'),
     ).toBeInTheDocument();
   });
 
   it('should not render Scanned Assets section when checks.length is 0, totalChecks is defined, and assets is an empty array', () => {
-    render(
-      <ThemeProvider theme={theme}>
-        <ChecksSection checks={[]} totalChecks={1} assets={[]} />
-      </ThemeProvider>,
-    );
+    render(<ChecksSection checks={[]} totalChecks={1} assets={[]} />);
 
     const scannedAssetsHeader = screen.queryByText('Scanned Assets:');
     expect(scannedAssetsHeader).toBeNull();

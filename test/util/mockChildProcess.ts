@@ -6,6 +6,7 @@
  * and event handlers are properly set up.
  */
 import type { ChildProcess } from 'child_process';
+
 import { vi } from 'vitest';
 
 export interface MockChildProcessOptions {
@@ -23,7 +24,7 @@ export interface MockChildProcessOptions {
   customEventHandlers?: Record<string, (callback: (...args: any[]) => void) => void>;
 }
 
-export interface MockChildProcess extends Partial<ChildProcess> {
+export interface MockChildProcess {
   stdout: { on: ReturnType<typeof vi.fn> };
   stderr: { on: ReturnType<typeof vi.fn> };
   killed: boolean;

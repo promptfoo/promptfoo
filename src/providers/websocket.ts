@@ -7,8 +7,8 @@ import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
-import { getProcessShim } from '../util/transform';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -222,7 +222,7 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
-    const streamResponse = this.streamResponse ? await this.streamResponse : undefined;
+    const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };

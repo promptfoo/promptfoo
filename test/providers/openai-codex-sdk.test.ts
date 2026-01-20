@@ -1,6 +1,6 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -101,7 +101,7 @@ describe('OpenAICodexSDKProvider', () => {
     it('should initialize with custom config', () => {
       const config = {
         apiKey: 'test-key',
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         working_dir: '/test/dir',
       };
 
@@ -132,7 +132,7 @@ describe('OpenAICodexSDKProvider', () => {
     it('should not warn about known OpenAI models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -373,7 +373,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123');
+        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: undefined,
+        });
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
@@ -459,7 +462,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             sandboxMode: 'read-only',
           }),
@@ -479,7 +482,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             networkAccessEnabled: true,
             webSearchEnabled: true,
@@ -499,7 +502,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             modelReasoningEffort: 'high',
           }),
@@ -518,7 +521,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             approvalPolicy: 'never',
           }),
@@ -622,8 +625,14 @@ describe('OpenAICodexSDKProvider', () => {
     describe('streaming', () => {
       it('should handle streaming events', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 2' } };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-2', type: 'agent_message', text: 'Part 2' },
+          };
           yield {
             type: 'turn.completed',
             usage: { input_tokens: 10, cached_input_tokens: 5, output_tokens: 20 },
@@ -649,7 +658,10 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should abort streaming on signal', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
+          };
           // Abort will happen here
         };
 
@@ -677,7 +689,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
             working_dir: '/test/dir',
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -832,7 +844,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: 'gpt-5.2',
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
@@ -842,7 +854,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).toHaveBeenCalledWith({
           workingDirectory: undefined,
           skipGitRepoCheck: false,
-          model: 'gpt-4o',
+          model: 'gpt-5.2',
         });
       });
 

@@ -1,6 +1,6 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
@@ -13,23 +13,25 @@ import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
 import type {
   AgentDefinition,
+  CanUseTool,
   HookCallbackMatcher,
   HookEvent,
-  Options as QueryOptions,
   OutputFormat,
+  PermissionResult,
+  Options as QueryOptions,
   SandboxSettings,
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
 } from '@anthropic-ai/claude-agent-sdk';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 /**
  * Claude Agent SDK Provider
@@ -128,10 +130,21 @@ export interface ClaudeCodeOptions {
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
 
   /**
-   * User can set more dangerous 'acceptEdits' or 'bypassPermissions' if they know what they're doing,
-   * - 'dontAsk' mode denies permissions that aren't pre-approved without prompting
+   * Permission mode for controlling how tool executions are handled:
+   * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'plan' - Planning mode, no actual tool execution
+   * - 'acceptEdits' - Auto-accept file edit operations
+   * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
+   * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
+   * - 'delegate' - Delegate mode, restricts team leader to only Teammate and Task tools
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  permission_mode?:
+    | 'default'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'delegate';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -235,6 +248,24 @@ export interface ClaudeCodeOptions {
    * When enabled, commands are executed in a sandboxed environment that restricts
    * filesystem and network access. This provides an additional security layer.
    *
+   * Available options:
+   * - `enabled` - Enable/disable sandboxing
+   * - `autoAllowBashIfSandboxed` - Auto-allow bash commands when sandboxed
+   * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
+   * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
+   * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `ignoreViolations` - Map of command patterns to violation types to ignore
+   * - `network` - Network configuration:
+   *   - `allowedDomains` - Domains the sandbox can access
+   *   - `allowLocalBinding` - Allow binding to localhost
+   *   - `allowUnixSockets` - Specific Unix sockets to allow
+   *   - `allowAllUnixSockets` - Allow all Unix socket connections
+   *   - `httpProxyPort` - HTTP proxy port for network access
+   *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `ripgrep` - Custom ripgrep configuration:
+   *   - `command` - Path to ripgrep executable
+   *   - `args` - Additional arguments for ripgrep
+   *
    * @example Enable sandboxing with auto-allow
    * ```yaml
    * sandbox:
@@ -242,7 +273,7 @@ export interface ClaudeCodeOptions {
    *   autoAllowBashIfSandboxed: true
    * ```
    *
-   * @example Configure network options
+   * @example Configure network options with proxy
    * ```yaml
    * sandbox:
    *   enabled: true
@@ -250,6 +281,20 @@ export interface ClaudeCodeOptions {
    *     allowLocalBinding: true
    *     allowedDomains:
    *       - api.example.com
+   *     httpProxyPort: 8080
+   *     socksProxyPort: 1080
+   * ```
+   *
+   * @example Exclude specific commands and configure ripgrep
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   excludedCommands:
+   *     - docker
+   *     - podman
+   *   ripgrep:
+   *     command: /usr/local/bin/rg
+   *     args: ['--hidden']
    * ```
    *
    * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
@@ -374,6 +419,100 @@ export interface ClaudeCodeOptions {
    * ```
    */
   spawn_claude_code_process?: (options: SpawnOptions) => SpawnedProcess;
+
+  /**
+   * Configuration for handling AskUserQuestion tool in automated evaluations.
+   * Since there's no human to answer questions, this provides automated responses.
+   *
+   * @example
+   * ```yaml
+   * ask_user_question:
+   *   behavior: first_option  # Always select the first option
+   * ```
+   */
+  ask_user_question?: {
+    /**
+     * Default behavior for answering questions:
+     * - 'first_option': Always select the first option (default)
+     * - 'random': Randomly select from available options
+     * - 'deny': Deny the tool use (agent cannot ask questions)
+     */
+    behavior?: 'first_option' | 'random' | 'deny';
+  };
+}
+
+/**
+ * Type for AskUserQuestion tool input from the SDK
+ */
+interface AskUserQuestionToolInput {
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  answers?: Record<string, string>;
+}
+
+/**
+ * Creates a canUseTool callback for handling AskUserQuestion tool in automated evaluations.
+ * This provides automated responses to questions that would normally require user input.
+ *
+ * The callback wraps an optional user-provided canUseTool and handles AskUserQuestion specifically,
+ * deferring to the wrapped callback for all other tools.
+ */
+function createAskUserQuestionCanUseTool(
+  behavior: 'first_option' | 'random' | 'deny' = 'first_option',
+  wrappedCanUseTool?: CanUseTool,
+): CanUseTool {
+  return async (toolName, input, options): Promise<PermissionResult> => {
+    // Only handle AskUserQuestion tool
+    if (toolName !== 'AskUserQuestion') {
+      // Defer to wrapped callback or allow by default
+      if (wrappedCanUseTool) {
+        return wrappedCanUseTool(toolName, input, options);
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
+
+    // Deny the tool use if configured to do so
+    if (behavior === 'deny') {
+      return {
+        behavior: 'deny',
+        message: 'AskUserQuestion is disabled in automated evaluation mode',
+      };
+    }
+
+    const toolInput = input as unknown as AskUserQuestionToolInput;
+    const answers: Record<string, string> = {};
+
+    // Generate answers for each question based on the configured behavior
+    for (const question of toolInput.questions) {
+      if (!question.options || question.options.length === 0) {
+        continue;
+      }
+
+      let selectedLabels: string[];
+      if (behavior === 'random') {
+        const randomIndex = Math.floor(Math.random() * question.options.length);
+        selectedLabels = [question.options[randomIndex].label];
+      } else {
+        // first_option (default)
+        selectedLabels = [question.options[0].label];
+      }
+
+      // Multi-select answers are comma-separated strings per SDK documentation
+      answers[question.question] = selectedLabels.join(', ');
+    }
+
+    return {
+      behavior: 'allow',
+      updatedInput: {
+        questions: toolInput.questions, // Pass through original questions
+        answers,
+      },
+    };
+  };
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -519,6 +658,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       isTempDir = true;
     }
 
+    // Create canUseTool callback for ask_user_question convenience option
+    // AskUserQuestion is handled via canUseTool per SDK documentation
+    let canUseTool: CanUseTool | undefined;
+    if (config.ask_user_question) {
+      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+    }
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     const cacheKeyQueryOptions: Omit<
@@ -587,7 +733,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Transform MCP config to Claude Agent SDK MCP servers
-    const mcpServers = config.mcp ? transformMCPConfigToClaudeCode(config.mcp) : {};
+    const mcpServers = config.mcp ? await transformMCPConfigToClaudeCode(config.mcp) : {};
 
     if (workingDir) {
       // verify the working dir exists and is a directory
@@ -628,9 +774,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
-      // stderr and spawnClaudeCodeProcess callbacks are not included in cache key since they're functions
+      // Callbacks are not included in cache key since they're functions
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
+      canUseTool,
     };
     const queryParams = { prompt, options };
 

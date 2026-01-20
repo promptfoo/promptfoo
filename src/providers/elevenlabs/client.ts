@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { ElevenLabsAPIError, ElevenLabsRateLimitError, ElevenLabsAuthError } from './errors';
+import { ElevenLabsAPIError, ElevenLabsAuthError, ElevenLabsRateLimitError } from './errors';
 
 export interface ElevenLabsClientConfig {
   apiKey: string;

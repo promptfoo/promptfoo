@@ -1,8 +1,8 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import UpdateBanner from './UpdateBanner';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
-import { ThemeProvider, createTheme, Theme } from '@mui/material/styles';
+import { renderWithProviders } from '@app/utils/testutils';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import UpdateBanner from './UpdateBanner';
 
 vi.mock('@app/hooks/useVersionCheck');
 
@@ -33,7 +33,7 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
     expect(screen.getByText(/\(current: v1.9.0\)/i)).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe('UpdateBanner', () => {
     expect(copyCommandButton).toHaveAttribute('title', 'npm i -g promptfoo@latest');
   });
 
-  it('should copy the update command to the clipboard and display a snackbar when the copy command button is clicked and the clipboard API succeeds', async () => {
+  it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -77,7 +77,7 @@ describe('UpdateBanner', () => {
       },
     });
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
 
@@ -85,7 +85,11 @@ describe('UpdateBanner', () => {
 
     expect(mockWriteText).toHaveBeenCalledWith('npm i -g promptfoo@latest');
 
-    expect(await screen.findByText(/Update command copied to clipboard/i)).toBeVisible();
+    // After copying, the Check icon should be shown (Lucide icons have lucide-check class)
+    await waitFor(() => {
+      const checkIcon = copyCommandButton.querySelector('.lucide-check');
+      expect(checkIcon).toBeInTheDocument();
+    });
   });
 
   it('should render correctly in both dark and light modes', () => {
@@ -108,23 +112,18 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    const lightTheme = createTheme({ palette: { mode: 'light' } });
-    const darkTheme = createTheme({ palette: { mode: 'dark' } });
-
-    const renderWithTheme = (theme: Theme) =>
-      render(
-        <ThemeProvider theme={theme}>
-          <UpdateBanner />
-        </ThemeProvider>,
-      );
-
-    renderWithTheme(lightTheme);
+    // Light mode
+    document.documentElement.removeAttribute('data-theme');
+    renderWithProviders(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
 
     cleanup();
 
-    renderWithTheme(darkTheme);
+    // Dark mode
+    document.documentElement.setAttribute('data-theme', 'dark');
+    renderWithProviders(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
+    document.documentElement.removeAttribute('data-theme');
   });
 
   it('should render the copy command button with default text when commandType is undefined', () => {
@@ -147,7 +146,7 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();
@@ -173,7 +172,7 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();

@@ -14,6 +14,7 @@ import type { TestCase, Vars } from '../types/index';
 function castRowToVars(row: Record<string, unknown>): Vars {
   return row as Record<
     string,
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
   >;
 }
@@ -117,7 +118,7 @@ interface HuggingFaceResponse {
  */
 interface ConcurrentFetchResult {
   offset: number;
-  response: any;
+  response: HuggingFaceResponse | null;
   success: boolean;
   error?: Error;
 }
@@ -407,20 +408,20 @@ export async function fetchHuggingFaceDataset(
 
           const futureUrl = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${futureParams.toString()}`;
 
-          concurrentPromises.push(
-            fetchWithCache(futureUrl, { headers })
-              .then((resp) => ({
-                offset: futureOffset,
-                response: resp,
-                success: resp.status >= 200 && resp.status < 300,
-              }))
-              .catch((err) => ({
-                offset: futureOffset,
-                response: null,
-                success: false,
-                error: err,
-              })),
-          );
+          const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
+            .then((resp) => ({
+              offset: futureOffset,
+              // FIXME:  I am actually pretty sure this is a bug, and should be `resp.data`
+              response: resp as unknown as HuggingFaceResponse,
+              success: resp.status >= 200 && resp.status < 300,
+            }))
+            .catch((err) => ({
+              offset: futureOffset,
+              response: null,
+              success: false,
+              error: err,
+            }));
+          concurrentPromises.push(p);
         }
 
         if (concurrentPromises.length > 0) {
@@ -431,7 +432,8 @@ export async function fetchHuggingFaceDataset(
           let concurrentRowCount = 0;
           for (const result of concurrentResults) {
             if (result.status === 'fulfilled' && result.value.success) {
-              const concurrentData = result.value.response.data as HuggingFaceResponse;
+              // biome-ignore lint/suspicious/noExplicitAny: FIXME
+              const concurrentData = (result.value.response as any).data as HuggingFaceResponse;
               if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
                 totalRows = concurrentData.num_rows_total;
               }

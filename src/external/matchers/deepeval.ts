@@ -1,12 +1,24 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import { getAndCheckProvider, fail, loadRubricPrompt } from '../../matchers';
+import {
+  callProviderWithContext,
+  fail,
+  getAndCheckProvider,
+  loadRubricPrompt,
+} from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
-import type { GradingConfig, GradingResult, TokenUsage } from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { ConversationRelevancyTemplate, type MessageRole } from './conversationRelevancyTemplate';
+
+import type {
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+  TokenUsage,
+  VarValue,
+} from '../../types/index';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -23,8 +35,9 @@ interface VerdictResult {
 export async function matchesConversationRelevance(
   messages: Message[],
   threshold: number,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -72,7 +85,13 @@ export async function matchesConversationRelevance(
     promptText = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
   }
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'conversation-relevance',
+    { messages: renderedMessages, ...(vars || {}) },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }

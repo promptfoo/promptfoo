@@ -1,10 +1,12 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -21,20 +23,18 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts/index';
-import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
-import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -52,7 +52,9 @@ import type {
   ProviderResponse,
   ProviderType,
   ProviderTypeMap,
+  TestCase,
   TokenUsage,
+  VarValue,
 } from './types/index';
 
 class LlmRubricProviderError extends Error {
@@ -100,11 +102,11 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
  */
-function callProviderWithContext(
+export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
-  vars: Record<string, any>,
+  vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
   return provider.callApi(prompt, {
@@ -172,11 +174,12 @@ export async function getGradingProvider(
     }
   } else {
     // No provider specified - check defaultTest.options.provider as fallback
-    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const defaultTest = cliState.config?.defaultTest;
+    const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const cfg =
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      defaultTestObj?.provider ||
+      defaultTestObj?.options?.provider?.text ||
+      defaultTestObj?.options?.provider ||
       undefined;
 
     if (cfg) {
@@ -548,9 +551,9 @@ function splitIntoSentences(text: string) {
 }
 
 function processContextForTemplating(
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
   enableObjectAccess: boolean,
-): Record<string, string | object> {
+): Record<string, VarValue> {
   if (enableObjectAccess) {
     return context;
   }
@@ -573,7 +576,7 @@ function processContextForTemplating(
 
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
@@ -598,7 +601,7 @@ export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
@@ -663,7 +666,7 @@ export async function matchesLlmRubric(
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  let jsonObjects: any[] = [];
+  let jsonObjects: object[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
@@ -738,6 +741,9 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+    metadata: {
+      renderedGradingPrompt: prompt,
+    },
   };
 }
 
@@ -769,7 +775,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -935,7 +941,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -1239,7 +1245,7 @@ export async function matchesContextRecall(
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1438,7 +1444,7 @@ export async function matchesContextFaithfulness(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1556,7 +1562,7 @@ export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
@@ -1751,9 +1757,10 @@ export async function matchesSearchRubric(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   _provider?: ApiProvider,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -1798,7 +1805,13 @@ export async function matchesSearchRubric(
   });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    searchProvider,
+    prompt,
+    'search-rubric',
+    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    providerCallContext,
+  );
 
   if (resp.error || !resp.output) {
     return {
@@ -1816,7 +1829,7 @@ export async function matchesSearchRubric(
       pass?: boolean;
       score?: number;
       reason?: string;
-      searchResults?: any;
+      searchResults?: unknown;
     };
 
     // Apply threshold if specified

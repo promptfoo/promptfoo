@@ -1,12 +1,21 @@
 /**
- * Audio format conversion utilities for real-time audio providers.
- *
- * This module provides functions for converting between different audio formats
- * used by various audio providers (OpenAI Realtime, Google Live, Bedrock Nova Sonic).
+ * Audio format conversion utilities for the red team audio evaluation pipeline.
  */
 
-export type SupportedInputFormat = 'wav' | 'mp3' | 'pcm16' | 'webm' | 'ogg';
+/**
+ * Supported input formats for audio conversion.
+ */
+export type SupportedInputFormat = 'pcm16' | 'wav' | 'mp3' | 'ogg' | 'flac' | 'webm';
 export type SupportedOutputFormat = 'wav' | 'mp3';
+
+/**
+ * Realtime audio format configuration.
+ */
+export interface RealtimeFormat {
+  format: 'pcm16';
+  sampleRate: number;
+  channels: number;
+}
 
 export interface ConvertedAudio {
   data: Buffer;
@@ -16,80 +25,70 @@ export interface ConvertedAudio {
 }
 
 /**
- * Convert audio to the PCM16 format expected by real-time audio providers.
+ * Convert audio data to the realtime format expected by providers.
  *
- * @param input - Input audio buffer
- * @param inputFormat - Format of the input audio
- * @returns Converted audio in PCM16 format
+ * @param data - Raw audio data as a Buffer or base64-encoded string
+ * @param inputFormat - The format of the input audio
+ * @param targetSampleRate - Target sample rate (default: 24000)
+ * @returns Converted audio data in PCM16 format
  */
-export async function convertToRealtimeFormat(
-  input: Buffer,
+export function convertToRealtimeFormat(
+  data: Buffer | string,
   inputFormat: SupportedInputFormat,
-): Promise<ConvertedAudio> {
-  // For PCM16 input, return as-is
+  _targetSampleRate: number = 24000,
+): Buffer {
+  // Convert base64 string to Buffer if needed
+  const buffer = typeof data === 'string' ? Buffer.from(data, 'base64') : data;
+
+  // PCM16 is the target format, so pass through directly
   if (inputFormat === 'pcm16') {
-    return {
-      data: input,
-      format: 'pcm16',
-      sampleRate: 24000,
-      channels: 1,
-    };
+    return buffer;
   }
 
   // For WAV input, strip header and return PCM data
   if (inputFormat === 'wav') {
     // WAV header is typically 44 bytes
-    const pcmData = input.subarray(44);
-    return {
-      data: pcmData,
-      format: 'pcm16',
-      sampleRate: 24000,
-      channels: 1,
-    };
+    return buffer.subarray(44);
   }
 
-  // For other formats, return the input as-is with a warning
-  // In a full implementation, this would use ffmpeg or similar for conversion
-  return {
-    data: input,
-    format: 'pcm16',
-    sampleRate: 24000,
-    channels: 1,
-  };
+  // TODO: Implement actual format conversion using ffmpeg or similar
+  // For now, throw an error for unsupported formats to fail fast
+  throw new Error(
+    `Audio format conversion from '${inputFormat}' to PCM16 is not yet implemented. ` +
+      `Please provide audio in PCM16 format, or implement conversion using ffmpeg.`,
+  );
 }
 
 /**
- * Convert PCM16 audio from real-time providers to a standard format.
+ * Convert audio data from realtime format back to a specified output format.
  *
- * @param input - Input PCM16 audio buffer
+ * @param data - PCM16 audio data
  * @param outputFormat - Desired output format
- * @param sampleRate - Sample rate of the input audio
- * @returns Converted audio in the requested format
+ * @param sampleRate - Sample rate of the PCM data
+ * @returns Converted audio data in the specified format
  */
-export async function convertFromRealtimeFormat(
-  input: Buffer,
-  outputFormat: SupportedOutputFormat,
+export function convertFromRealtimeFormat(
+  data: Buffer,
+  outputFormat: SupportedInputFormat,
   sampleRate: number = 24000,
-): Promise<ConvertedAudio> {
-  if (outputFormat === 'wav') {
-    // Create a basic WAV header
-    const header = createWavHeader(input.length, sampleRate, 1, 16);
-    const wavData = Buffer.concat([header, input]);
-    return {
-      data: wavData,
-      format: 'wav',
-      sampleRate,
-      channels: 1,
-    };
+): Buffer {
+  // PCM16 is the source format, so pass through directly
+  if (outputFormat === 'pcm16') {
+    return data;
   }
 
-  // For MP3, return as-is (would need ffmpeg for actual conversion)
-  return {
-    data: input,
-    format: outputFormat,
-    sampleRate,
-    channels: 1,
-  };
+  // For WAV output, create header and combine with data
+  if (outputFormat === 'wav') {
+    const header = createWavHeader(data.length, sampleRate, 1, 16);
+    return Buffer.concat([header, data]);
+  }
+
+  // TODO: Implement actual format conversion using ffmpeg or similar
+  // For now, throw an error for unsupported formats to fail fast
+  throw new Error(
+    `Audio format conversion from PCM16 to '${outputFormat}' is not yet implemented. ` +
+      `Please use PCM16 output format, or implement conversion using ffmpeg.`,
+  );
 }
 
 /**

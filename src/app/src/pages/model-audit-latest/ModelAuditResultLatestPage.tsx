@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
+import { AddIcon, HistoryIcon, SecurityIcon } from '@app/components/ui/icons';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
-import { formatDataGridDate } from '@app/utils/date';
-import {
-  Add as AddIcon,
-  History as HistoryIcon,
-  Security as SecurityIcon,
-} from '@mui/icons-material';
-import { Alert, Box, Button, Container, Link, Paper, Stack, Typography } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import { LatestScanSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
+import ScanResultHeader from '../model-audit/components/ScanResultHeader';
+import { useSeverityCounts } from '../model-audit/hooks';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
@@ -30,12 +29,10 @@ export default function ModelAuditResultLatestPage() {
       setError(null);
 
       try {
-        // Try to get the latest scan
         const response = await callApi('/model-audit/scans?limit=1&sort=createdAt&order=desc', {
           signal: abortController.signal,
         });
 
-        // Don't update state if request was aborted
         if (abortController.signal.aborted) {
           return;
         }
@@ -53,14 +50,12 @@ export default function ModelAuditResultLatestPage() {
           setLatestScan(null);
         }
       } catch (err) {
-        // Don't update state if request was aborted
         if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
           return;
         }
         const errorMessage = err instanceof Error ? err.message : 'Failed to load latest scan';
         setError(errorMessage);
       } finally {
-        // Only update loading state if not aborted
         if (!abortController.signal.aborted) {
           setIsLoading(false);
         }
@@ -72,157 +67,118 @@ export default function ModelAuditResultLatestPage() {
     return () => abortController.abort();
   }, []);
 
+  const severityCounts = useSeverityCounts(latestScan?.results?.issues);
+
   if (isLoading) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? theme.palette.background.default
-              : theme.palette.grey[50],
-          py: 4,
-        }}
-      >
-        <Container maxWidth="xl">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
+        <div className="container max-w-7xl mx-auto px-4">
           <LatestScanSkeleton />
-        </Container>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? theme.palette.background.default
-              : theme.palette.grey[50],
-          py: 4,
-        }}
-      >
-        <Container maxWidth="md">
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
+        <div className="container max-w-2xl mx-auto px-4">
+          <Alert variant="destructive" className="mb-6">
+            <AlertContent>
+              <AlertDescription>{error}</AlertDescription>
+            </AlertContent>
           </Alert>
-          <Stack direction="row" spacing={2}>
-            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.SETUP} variant="contained">
-              Go to Setup
+          <div className="flex gap-3">
+            <Button asChild>
+              <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>Go to Setup</RouterLink>
             </Button>
-            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.LIST} variant="outlined">
-              View History
+            <Button variant="outline" asChild>
+              <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>View History</RouterLink>
             </Button>
-          </Stack>
-        </Container>
-      </Box>
+          </div>
+        </div>
+      </div>
     );
   }
 
   // Empty state - no scans yet
   if (!latestScan) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? theme.palette.background.default
-              : theme.palette.grey[50],
-          py: 8,
-        }}
-      >
-        <Container maxWidth="md">
-          <Paper sx={{ p: 6, textAlign: 'center' }}>
-            <SecurityIcon sx={{ fontSize: 64, color: 'primary.main', mb: 3 }} />
-            <Typography variant="h4" gutterBottom fontWeight={600}>
-              No Model Scans Yet
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              Run your first security scan to detect vulnerabilities in ML models.
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Model Audit scans models for security issues like pickle exploits, unsafe
-              deserialization, and malicious code injection.{' '}
-              <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
-                Learn more
-              </Link>
-            </Typography>
-            <Button
-              component={RouterLink}
-              to={MODEL_AUDIT_ROUTES.SETUP}
-              variant="contained"
-              size="large"
-              startIcon={<AddIcon />}
-              sx={{ mt: 4 }}
-            >
-              Run Your First Scan
-            </Button>
-          </Paper>
-        </Container>
-      </Box>
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-16">
+        <div className="container max-w-2xl mx-auto px-4">
+          <Card className="text-center bg-white dark:bg-zinc-900">
+            <CardContent className="py-12">
+              <SecurityIcon className="size-16 text-primary mx-auto mb-6" />
+              <h1 className="text-2xl font-bold mb-2">No Model Scans Yet</h1>
+              <p className="text-muted-foreground mb-4">
+                Run your first security scan to detect vulnerabilities in ML models.
+              </p>
+              <p className="text-sm text-muted-foreground mb-8">
+                Model Audit scans models for security issues like pickle exploits, unsafe
+                deserialization, and malicious code injection.{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/model-audit/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Learn more
+                </a>
+              </p>
+              <Button size="lg" asChild>
+                <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+                  <AddIcon className="size-4 mr-2" />
+                  Run Your First Scan
+                </RouterLink>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     );
   }
 
-  // Show latest scan results
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: (theme) =>
-          theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
-        py: 4,
-      }}
-    >
-      <Container maxWidth="xl">
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'flex-start', sm: 'center' }}
-            spacing={2}
-            mb={4}
-          >
-            <Box>
-              <Typography variant="h4" gutterBottom fontWeight="bold">
-                Latest Scan Results
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {latestScan.name || 'Model Security Scan'} •{' '}
-                {formatDataGridDate(latestScan.createdAt)}
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={2}>
-              <Button
-                component={RouterLink}
-                to={MODEL_AUDIT_ROUTES.SETUP}
-                variant="contained"
-                startIcon={<AddIcon />}
-              >
-                New Scan
-              </Button>
-              <Button
-                component={RouterLink}
-                to={MODEL_AUDIT_ROUTES.LIST}
-                variant="outlined"
-                startIcon={<HistoryIcon />}
-              >
-                View History
-              </Button>
-            </Stack>
-          </Stack>
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      <ScanResultHeader
+        name={latestScan.name || 'Latest Scan Results'}
+        modelPath={latestScan.modelPath}
+        createdAt={new Date(latestScan.createdAt).toISOString()}
+        severityCounts={severityCounts}
+        size="sm"
+      />
 
-          {latestScan.results && (
-            <ResultsTab
-              scanResults={latestScan.results}
-              onShowFilesDialog={() => setShowFilesDialog(true)}
-              totalChecks={latestScan.totalChecks}
-              passedChecks={latestScan.passedChecks}
-              failedChecks={latestScan.failedChecks}
-            />
-          )}
-        </Paper>
+      {/* Main Content */}
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        {/* Action Toolbar */}
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <Button variant="outline" size="sm" asChild>
+            <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
+              <HistoryIcon className="size-4 mr-2" />
+              History
+            </RouterLink>
+          </Button>
+          <Button size="sm" asChild>
+            <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+              <AddIcon className="size-4 mr-2" />
+              New Scan
+            </RouterLink>
+          </Button>
+        </div>
+
+        <Card className="bg-white dark:bg-zinc-900">
+          <CardContent className="pt-6">
+            {latestScan.results && (
+              <ResultsTab
+                scanResults={latestScan.results}
+                onShowFilesDialog={() => setShowFilesDialog(true)}
+                totalChecks={latestScan.totalChecks}
+                passedChecks={latestScan.passedChecks}
+                failedChecks={latestScan.failedChecks}
+              />
+            )}
+          </CardContent>
+        </Card>
 
         {latestScan.results && (
           <ScannedFilesDialog
@@ -238,7 +194,7 @@ export default function ModelAuditResultLatestPage() {
             )}
           />
         )}
-      </Container>
-    </Box>
+      </div>
+    </div>
   );
 }
