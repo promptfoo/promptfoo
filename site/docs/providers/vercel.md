@@ -7,7 +7,7 @@ description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Verc
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 ## Setup
 
@@ -156,12 +156,14 @@ The Vercel AI Gateway supports models from these providers:
 | ---------- | ----------------------------------------------------------- |
 | OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`      |
 | Anthropic  | `anthropic/claude-sonnet-4.5`, `anthropic/claude-haiku-4.5` |
-| Google     | `google/gemini-3-flash`, `google/gemini-2.5-flash`          |
-| Mistral    | `mistral/mistral-large-3`, `mistral/mistral-small`          |
+| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`          |
+| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`         |
 | Cohere     | `cohere/command-a`                                          |
+| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`              |
 | Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`        |
+| xAI        | `xai/grok-3`, `xai/grok-4`                                  |
 
-For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers).
+For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
 
 ## Embedding Models
 
@@ -188,6 +190,7 @@ Supported embedding models:
 | OpenAI   | `openai/text-embedding-3-small`, `openai/text-embedding-3-large` |
 | Google   | `google/gemini-embedding-001`, `google/text-embedding-005`       |
 | Cohere   | `cohere/embed-v4.0`                                              |
+| Voyage   | `voyage/voyage-3.5`, `voyage/voyage-code-3`                      |
 
 ## Examples
 
@@ -274,6 +277,6 @@ LOG_LEVEL=debug promptfoo eval
 ## Related Links
 
 - [Vercel AI SDK Documentation](https://ai-sdk.dev/)
-- [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway)
-- [Supported Providers](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers)
+- [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
+- [Supported Providers](https://vercel.com/docs/ai-gateway/models-and-providers)
 - [promptfoo Provider Guide](/docs/providers/)

@@ -19,7 +19,7 @@ vi.mock('ai', () => {
     const gateway = Object.assign(
       vi.fn((modelName: string) => ({ modelName })),
       {
-        embeddingModel: vi.fn((modelName: string) => ({ modelName, type: 'embedding' })),
+        textEmbeddingModel: vi.fn((modelName: string) => ({ modelName, type: 'embedding' })),
       },
     );
     return gateway;
@@ -67,10 +67,10 @@ describe('VercelAiProvider', () => {
     });
 
     it('should create a provider with custom options', () => {
-      const provider = new VercelAiProvider('anthropic/claude-sonnet-4-20250514', {
+      const provider = new VercelAiProvider('anthropic/claude-sonnet-4.5', {
         config: { temperature: 0.7, maxTokens: 1024 },
       });
-      expect(provider.modelName).toBe('anthropic/claude-sonnet-4-20250514');
+      expect(provider.modelName).toBe('anthropic/claude-sonnet-4.5');
       expect(provider.config).toEqual({ temperature: 0.7, maxTokens: 1024 });
     });
   });
@@ -327,7 +327,7 @@ describe('VercelAiProvider', () => {
         finishReason: Promise.resolve('stop'),
       } as any);
 
-      const provider = new VercelAiProvider('anthropic/claude-sonnet-4-20250514', {
+      const provider = new VercelAiProvider('anthropic/claude-sonnet-4.5', {
         config: {
           streaming: true,
           temperature: 0.5,

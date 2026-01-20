@@ -33,8 +33,8 @@ npx promptfoo eval -c examples/vercel-ai-gateway/promptfooconfig.yaml
 The configuration compares responses from three different providers, all accessed through Vercel AI Gateway:
 
 - **OpenAI** (gpt-4o-mini)
-- **Anthropic** (claude-3.5-haiku)
-- **Google** (gemini-2.0-flash)
+- **Anthropic** (claude-haiku-4.5)
+- **Google** (gemini-2.5-flash)
 
 Each provider answers questions about technical topics, and the assertions verify that responses contain relevant keywords.
 

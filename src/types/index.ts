@@ -98,7 +98,10 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
-const GradingConfigSchema = z.object({
+// Exported for:
+// 1. Testing key overlap in merged schemas (see test/types/index.test.ts)
+// 2. External consumers who need to validate grading config independently
+export const GradingConfigSchema = z.object({
   rubricPrompt: z
     .union([
       z.string(),
@@ -761,34 +764,36 @@ export const TestCaseSchema = z.object({
     .optional(),
 
   // Additional configuration settings for the prompt
+  // Use object spread instead of z.intersection() to generate a flat JSON Schema.
+  // z.intersection() generates allOf with additionalProperties:false in each sub-schema,
+  // causing validation errors for properties defined in other sub-schemas.
+  // See: https://github.com/colinhacks/zod/issues/4564
   options: z
-    .intersection(
-      z.intersection(PromptConfigSchema, OutputConfigSchema),
-      z.intersection(
-        GradingConfigSchema,
-        z.object({
-          // If true, do not expand arrays of variables into multiple eval cases.
-          disableVarExpansion: z.boolean().optional(),
-          // If true, do not include an implicit `_conversation` variable in the prompt.
-          disableConversationVar: z.boolean().optional(),
-          // If true, run this without concurrency no matter what
-          runSerially: z.boolean().optional(),
-        }),
-      ),
-    )
+    .object({
+      ...PromptConfigSchema.shape,
+      ...OutputConfigSchema.shape,
+      ...GradingConfigSchema.shape,
+      // If true, do not expand arrays of variables into multiple eval cases.
+      disableVarExpansion: z.boolean().optional(),
+      // If true, do not include an implicit `_conversation` variable in the prompt.
+      disableConversationVar: z.boolean().optional(),
+      // If true, run this without concurrency no matter what
+      runSerially: z.boolean().optional(),
+    })
     .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
 
+  // Use catchall(z.any()) to allow arbitrary metadata keys while still typing known internal properties.
+  // Don't use z.intersection() here as it generates allOf with additionalProperties:false
+  // which would reject custom metadata keys. See: https://github.com/colinhacks/zod/issues/4564
   metadata: z
-    .intersection(
-      MetadataSchema,
-      z.object({
-        pluginConfig: z.custom<PluginConfig>().optional(),
-        strategyConfig: z.custom<StrategyConfig>().optional(),
-      }),
-    )
+    .object({
+      pluginConfig: z.custom<PluginConfig>().optional(),
+      strategyConfig: z.custom<StrategyConfig>().optional(),
+    })
+    .catchall(z.any())
     .optional(),
 });
 

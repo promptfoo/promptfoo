@@ -42,6 +42,7 @@ export interface VercelAiConfig {
   stopSequences?: string[];
 
   // Request settings
+  maxRetries?: number;
   timeout?: number;
   headers?: Record<string, string>;
 
@@ -470,7 +471,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
       const result = await embed({
-        model: gateway.embeddingModel(this.modelName),
+        model: gateway.textEmbeddingModel(this.modelName),
         value: input,
         abortSignal: signal,
       });
