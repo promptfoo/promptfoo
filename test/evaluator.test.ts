@@ -2231,6 +2231,217 @@ describe('evaluator', () => {
     expect(mockUnlabeledProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('evaluate with test-level providers filter', async () => {
+    const mockProvider1: ApiProvider = {
+      id: () => 'provider-1',
+      label: 'fast-model',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Fast Output',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const mockProvider2: ApiProvider = {
+      id: () => 'provider-2',
+      label: 'smart-model',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Smart Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockProvider1, mockProvider2],
+      prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+      tests: [
+        {
+          description: 'fast test',
+          vars: { input: 'simple' },
+          providers: ['fast-model'], // Only run on fast-model
+        },
+        {
+          description: 'smart test',
+          vars: { input: 'complex' },
+          providers: ['smart-model'], // Only run on smart-model
+        },
+        {
+          description: 'all providers test',
+          vars: { input: 'general' },
+          // No providers filter - runs on both
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // 1 test on fast-model + 1 test on smart-model + 2 tests (1 on each provider) = 4 total
+    expect(summary.stats.successes).toBe(4);
+    expect(mockProvider1.callApi).toHaveBeenCalledTimes(2); // fast test + all providers test
+    expect(mockProvider2.callApi).toHaveBeenCalledTimes(2); // smart test + all providers test
+  });
+
+  it('evaluate with test-level providers filter using wildcard', async () => {
+    const openaiProvider: ApiProvider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'OpenAI Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const anthropicProvider: ApiProvider = {
+      id: () => 'anthropic:claude-3',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Anthropic Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [openaiProvider, anthropicProvider],
+      prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+      tests: [
+        {
+          vars: { input: 'test' },
+          providers: ['openai:*'], // Wildcard - only run on openai providers
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(openaiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(anthropicProvider.callApi).toHaveBeenCalledTimes(0);
+  });
+
+  it('evaluate inherits providers filter from defaultTest', async () => {
+    const provider1: ApiProvider = {
+      id: () => 'provider-1',
+      label: 'default-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output 1',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const provider2: ApiProvider = {
+      id: () => 'provider-2',
+      label: 'other-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output 2',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider1, provider2],
+      prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+      defaultTest: {
+        providers: ['default-provider'], // Default to only default-provider
+      },
+      tests: [
+        {
+          vars: { input: 'test1' },
+          // Inherits providers filter from defaultTest
+        },
+        {
+          vars: { input: 'test2' },
+          providers: ['other-provider'], // Override defaultTest
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(provider1.callApi).toHaveBeenCalledTimes(1); // test1 only
+    expect(provider2.callApi).toHaveBeenCalledTimes(1); // test2 only
+  });
+
+  it('evaluate with empty providers array blocks all providers', async () => {
+    const mockProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockProvider],
+      prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+      tests: [
+        {
+          vars: { input: 'test' },
+          providers: [], // Empty array = block all
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(0);
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(0);
+  });
+
+  it('evaluate with providers filter and providerPromptMap combined', async () => {
+    const provider1: ApiProvider = {
+      id: () => 'provider-1',
+      label: 'provider-one',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output 1',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const provider2: ApiProvider = {
+      id: () => 'provider-2',
+      label: 'provider-two',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output 2',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider1, provider2],
+      prompts: [
+        { raw: 'Prompt A', label: 'prompt-a' },
+        { raw: 'Prompt B', label: 'prompt-b' },
+      ],
+      providerPromptMap: {
+        'provider-one': ['prompt-a'], // provider-one only runs prompt-a
+        'provider-two': ['prompt-b'], // provider-two only runs prompt-b
+      },
+      tests: [
+        {
+          vars: { input: 'test' },
+          providers: ['provider-one'], // Only run on provider-one
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // providers filter limits to provider-one
+    // providerPromptMap limits provider-one to prompt-a
+    // Result: 1 test case (provider-one + prompt-a)
+    expect(summary.stats.successes).toBe(1);
+    expect(provider1.callApi).toHaveBeenCalledTimes(1);
+    expect(provider2.callApi).toHaveBeenCalledTimes(0);
+  });
+
   it('should use the options from the test if they exist', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
