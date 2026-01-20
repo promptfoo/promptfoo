@@ -46,6 +46,18 @@ describe('removePrefix', () => {
   it('should handle prefix that is the entire string', () => {
     expect(removePrefix('Prompt:', 'Prompt')).toBe('');
   });
+
+  it('should handle French typography with space before colon', () => {
+    expect(removePrefix('Prompt : Hello world', 'Prompt')).toBe('Hello world');
+  });
+
+  it('should handle French typography with multiple spaces before colon', () => {
+    expect(removePrefix('Prompt   : Hello world', 'Prompt')).toBe('Hello world');
+  });
+
+  it('should handle French typography with asterisks and space before colon', () => {
+    expect(removePrefix('**Prompt :** Hello world', 'Prompt')).toBe('Hello world');
+  });
 });
 
 describe('normalizeApostrophes', () => {

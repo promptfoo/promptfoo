@@ -53,6 +53,16 @@ export function buildFormatExample(inputs: InputsSchema): string {
 }
 
 /**
+ * Checks if a line contains a prompt marker (e.g., "Prompt:" or "Prompt :" for French typography).
+ * @param line - The line to check
+ * @returns True if the line contains a prompt marker
+ */
+function hasPromptMarker(line: string): boolean {
+  // Match "prompt" followed by optional whitespace and colon
+  return /prompt\s*:/i.test(line);
+}
+
+/**
  * Parses the LLM response of generated prompts into an array of objects.
  * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
@@ -74,7 +84,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
   const lines = generatedPrompts.split('\n');
   const promptLineIndices = lines
     .map((line, index) => ({ line: line.trim(), index }))
-    .filter(({ line }) => line.toLowerCase().includes('prompt:')) // Match legacy behavior - prompt anywhere in line
+    .filter(({ line }) => hasPromptMarker(line)) // Match "Prompt:" or "Prompt :" (French typography)
     .map(({ index }) => index);
 
   // If we have multiple "Prompt:" markers, check if any prompt has multiple content lines
@@ -87,7 +97,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
       let consecutiveContentLines = 0;
       for (let j = promptIndex + 1; j < nextPromptIndex; j++) {
         const line = lines[j].trim();
-        if (line.length > 0 && !line.toLowerCase().includes('prompt:')) {
+        if (line.length > 0 && !hasPromptMarker(line)) {
           consecutiveContentLines++;
         } else {
           break; // Stop at empty line or another prompt line
@@ -106,8 +116,8 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
       for (const line of lines) {
         const trimmedLine = line.trim();
 
-        // Check if this line contains "Prompt:" (matching legacy detection)
-        if (trimmedLine.toLowerCase().includes('prompt:')) {
+        // Check if this line contains a prompt marker
+        if (hasPromptMarker(trimmedLine)) {
           // Save the previous prompt if it exists and is not empty
           if (inPrompt && currentPrompt.trim().length > 0) {
             prompts.push(currentPrompt.trim());
@@ -140,7 +150,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
 
   // Legacy parsing for backwards compatibility (single-line prompts)
   const parsePrompt = (line: string): string | null => {
-    if (!line.toLowerCase().includes('prompt:')) {
+    if (!hasPromptMarker(line)) {
       return null;
     }
     let prompt = removePrefix(line, 'Prompt');

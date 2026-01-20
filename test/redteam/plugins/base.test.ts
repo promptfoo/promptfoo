@@ -643,6 +643,46 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    // Tests for French typography (space before colon)
+    it('should handle French typography with space before colon', () => {
+      const input = 'Prompt : Hello world\nPrompt : How are you?';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
+    });
+
+    it('should handle mixed French and standard typography', () => {
+      const input = 'Prompt: Standard format\nPrompt : French format\nPrompt:No space';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'Standard format' },
+        { __prompt: 'French format' },
+        { __prompt: 'No space' },
+      ]);
+    });
+
+    it('should handle French typography with asterisks', () => {
+      const input = '**Prompt :** French with asterisks\n**Prompt:** Standard with asterisks';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'French with asterisks' },
+        { __prompt: 'Standard with asterisks' },
+      ]);
+    });
+
+    it('should handle French typography with numbered lists', () => {
+      const input = `
+        1. Prompt : First item French style
+        2. Prompt: Second item standard style
+        3) Prompt : Third item French style
+      `;
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'First item French style' },
+        { __prompt: 'Second item standard style' },
+        { __prompt: 'Third item French style' },
+      ]);
+    });
+
     // Tests for new multi-line functionality
     it('should parse PromptBlock entries correctly', () => {
       const input = `PromptBlock: [2024-06-10 14:23:12] INFO api.gateway - Request processed
