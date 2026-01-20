@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { AddIcon, HistoryIcon, SecurityIcon } from '@app/components/ui/icons';
@@ -84,7 +84,9 @@ export default function ModelAuditResultLatestPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
           <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{error}</AlertDescription>
+            </AlertContent>
           </Alert>
           <div className="flex gap-3">
             <Button asChild>
@@ -106,7 +108,7 @@ export default function ModelAuditResultLatestPage() {
         <div className="container max-w-2xl mx-auto px-4">
           <Card className="text-center bg-white dark:bg-zinc-900">
             <CardContent className="py-12">
-              <SecurityIcon className="h-16 w-16 text-primary mx-auto mb-6" />
+              <SecurityIcon className="size-16 text-primary mx-auto mb-6" />
               <h1 className="text-2xl font-bold mb-2">No Model Scans Yet</h1>
               <p className="text-muted-foreground mb-4">
                 Run your first security scan to detect vulnerabilities in ML models.
@@ -125,7 +127,7 @@ export default function ModelAuditResultLatestPage() {
               </p>
               <Button size="lg" asChild>
                 <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
-                  <AddIcon className="h-4 w-4 mr-2" />
+                  <AddIcon className="size-4 mr-2" />
                   Run Your First Scan
                 </RouterLink>
               </Button>
@@ -152,13 +154,13 @@ export default function ModelAuditResultLatestPage() {
         <div className="flex items-center justify-end gap-2 mb-4">
           <Button variant="outline" size="sm" asChild>
             <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
-              <HistoryIcon className="h-4 w-4 mr-2" />
+              <HistoryIcon className="size-4 mr-2" />
               History
             </RouterLink>
           </Button>
           <Button size="sm" asChild>
             <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
-              <AddIcon className="h-4 w-4 mr-2" />
+              <AddIcon className="size-4 mr-2" />
               New Scan
             </RouterLink>
           </Button>

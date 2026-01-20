@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -994,18 +994,22 @@ export default function StrategyConfigDialog({
         <div className="flex flex-col gap-4">
           {/* Mode description */}
           <Alert variant="info" className="py-2">
-            <Info className="h-4 w-4" />
-            <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
-            <AlertDescription className="text-sm text-muted-foreground">
-              {modeInfo.description}
-            </AlertDescription>
+            <Info className="size-4" />
+            <AlertContent>
+              <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
+              <AlertDescription className="text-sm text-muted-foreground">
+                {modeInfo.description}
+              </AlertDescription>
+            </AlertContent>
           </Alert>
 
           {/* Ordering warnings */}
           {orderingWarnings.map((warning, idx) => (
             <Alert key={idx} variant="warning" className="py-2">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-sm">{warning}</AlertDescription>
+              <AlertTriangle className="size-4" />
+              <AlertContent>
+                <AlertDescription className="text-sm">{warning}</AlertDescription>
+              </AlertContent>
             </Alert>
           ))}
 
@@ -1068,7 +1072,7 @@ export default function StrategyConfigDialog({
                           onClick={() => handleRemovePlugin(plugin)}
                           className="rounded-full p-0.5 hover:bg-muted"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="size-3" />
                         </button>
                       </Badge>
                     ))}
@@ -1211,9 +1215,9 @@ export default function StrategyConfigDialog({
                           onClick={() => handleMoveStepUp(index)}
                           disabled={!canMoveUp}
                           aria-label="move step up"
-                          className={cn('h-8 w-8', !canMoveUp && 'opacity-30')}
+                          className={cn('size-8', !canMoveUp && 'opacity-30')}
                         >
-                          <ArrowUp className="h-4 w-4" />
+                          <ArrowUp className="size-4" />
                         </Button>
                         <Button
                           type="button"
@@ -1222,9 +1226,9 @@ export default function StrategyConfigDialog({
                           onClick={() => handleMoveStepDown(index)}
                           disabled={!canMoveDown}
                           aria-label="move step down"
-                          className={cn('h-8 w-8', !canMoveDown && 'opacity-30')}
+                          className={cn('size-8', !canMoveDown && 'opacity-30')}
                         >
-                          <ArrowDown className="h-4 w-4" />
+                          <ArrowDown className="size-4" />
                         </Button>
                         <Button
                           type="button"
@@ -1232,9 +1236,9 @@ export default function StrategyConfigDialog({
                           size="icon"
                           onClick={() => handleRemoveStep(index)}
                           aria-label="delete step"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </div>

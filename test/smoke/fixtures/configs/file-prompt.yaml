@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - file:// prompt loading'
+
+providers:
+  - echo
+
+prompts:
+  - file://prompt-template.txt
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: contains
+        value: bananas

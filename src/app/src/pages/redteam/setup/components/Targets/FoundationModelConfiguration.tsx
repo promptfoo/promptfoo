@@ -215,6 +215,20 @@ const FoundationModelConfiguration = ({
                 Optional - defaults to {providerInfo.envVar} environment variable
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="api-base-url">API Base URL</Label>
+              <Input
+                id="api-base-url"
+                type="url"
+                value={selectedTarget.config?.apiBaseUrl ?? ''}
+                onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
+                placeholder="https://api.openai.com/v1"
+              />
+              <p className="text-sm text-muted-foreground">
+                For proxies, local models (Ollama, LMStudio), or custom API endpoints
+              </p>
+            </div>
           </div>
         </SetupSection>
       </div>

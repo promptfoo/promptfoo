@@ -1,22 +1,8 @@
 import { useMemo } from 'react';
 
+import { cn } from '@app/lib/utils';
 import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import Box from '@mui/material/Box';
-import { grey, red } from '@mui/material/colors';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { keyframes, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import invariant from 'tiny-invariant';
-
-const bounce = keyframes`
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-`;
 
 interface BaseMessage {
   role: 'user' | 'assistant' | 'system';
@@ -38,103 +24,93 @@ export interface LoadingMessage extends BaseMessage {
 export type Message = LoadedMessage | LoadingMessage;
 
 const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
 
-  const textColor = isUser || isDark ? '#FFFFFF' : '#000000';
-  const alignSelf = isUser ? 'flex-end' : 'flex-start';
+  const bubbleClasses = cn(
+    'p-3 max-w-[70%] overflow-hidden shadow-sm',
+    isUser
+      ? 'bg-red-500 rounded-[20px_20px_5px_20px] self-end shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]'
+      : 'bg-gray-200 dark:bg-gray-800 rounded-[20px_20px_20px_5px] self-start shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]',
+  );
 
-  const bubbleProps = {
-    p: 1.5,
-    maxWidth: '70%',
-    overflow: 'hidden',
-    background: isUser ? red[500] : isDark ? grey[800] : grey[200],
-    borderRadius: isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
-    alignSelf,
-    boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-  };
+  const textClasses = cn(
+    'text-sm whitespace-pre-wrap break-words',
+    isUser ? 'text-white font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.2)]' : 'dark:text-white',
+  );
 
   /**
    * Renders the content of the message based on the contentType.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const content = useMemo(() => {
     if (message.loading || !message.content) {
       return null;
     }
 
-    message = message as LoadedMessage;
-
-    const contentType = message?.contentType ?? 'text';
+    const loadedMessage = message as LoadedMessage;
+    const contentType = loadedMessage?.contentType ?? 'text';
 
     switch (contentType) {
       case 'audio': {
-        const audioSource = resolveAudioSource(message.audio, message.content);
+        const audioSource = resolveAudioSource(loadedMessage.audio, loadedMessage.content);
         if (!audioSource) {
           return null;
         }
 
         return (
-          <Box>
+          <div>
             <audio controls style={{ width: '500px' }} data-testid="audio">
               <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
               Your browser does not support the audio element.
             </audio>
-          </Box>
+          </div>
         );
       }
       case 'image': {
-        const imageSrc = resolveImageSource(message.image || message.content);
+        const imageSrc = resolveImageSource(loadedMessage.image || loadedMessage.content);
         if (!imageSrc) {
           return null;
         }
 
         return (
-          <Box
+          <div
             role="img"
             data-testid="image"
-            sx={{
-              width: '100%',
-              minWidth: '500px',
-              minHeight: '300px',
-              backgroundImage: `url(${imageSrc})`,
-              backgroundSize: 'contain',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'start',
-            }}
+            className="w-full min-w-[500px] min-h-[300px] bg-contain bg-no-repeat bg-left"
+            style={{ backgroundImage: `url(${imageSrc})` }}
           />
         );
       }
       case 'video': {
         return (
-          <Box sx={{ width: '500px', display: 'flex', justifyContent: 'center' }}>
+          <div className="w-[500px] flex justify-center">
             <video controls style={{ maxHeight: '200px' }} data-testid="video">
               <source
                 src={
-                  message?.content.startsWith('data:')
-                    ? message?.content
-                    : `data:video/mp4;base64,${message?.content}`
+                  loadedMessage?.content.startsWith('data:')
+                    ? loadedMessage?.content
+                    : `data:video/mp4;base64,${loadedMessage?.content}`
                 }
                 type="video/mp4"
               />
               Your browser does not support the video element.
             </video>
-          </Box>
+          </div>
         );
       }
       case 'text': {
-        const audioSource = resolveAudioSource(message.audio);
-        const imageSrc = resolveImageSource(message.image);
+        const audioSource = resolveAudioSource(loadedMessage.audio);
+        const imageSrc = resolveImageSource(loadedMessage.image);
         const hasAudio = Boolean(audioSource);
         const hasImage = Boolean(imageSrc);
 
         // If we have audio or image data, render them alongside the transcript
         if (hasAudio || hasImage) {
           return (
-            <Box>
+            <div>
               {hasAudio && (
-                <Box sx={{ mb: 1 }}>
+                <div className="mb-2">
                   <audio
                     controls
                     style={{ width: '100%', maxWidth: '400px', height: '36px' }}
@@ -143,56 +119,20 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
                     <source src={audioSource?.src} type={audioSource?.type || 'audio/mpeg'} />
                     Your browser does not support the audio element.
                   </audio>
-                </Box>
+                </div>
               )}
               {hasImage && (
-                <Box sx={{ mb: 1 }}>
-                  <img
-                    src={imageSrc}
-                    alt="Input"
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: '300px',
-                      borderRadius: '8px',
-                    }}
-                  />
-                </Box>
+                <div className="mb-2">
+                  <img src={imageSrc} alt="Input" className="max-w-full max-h-[300px] rounded-lg" />
+                </div>
               )}
-              <Typography
-                variant="body1"
-                sx={{
-                  fontSize: '14px',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  overflowWrap: 'anywhere',
-                  color: textColor,
-                  textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
-                  fontWeight: isUser ? 500 : 400,
-                }}
-              >
-                {message.content}
-              </Typography>
-            </Box>
+              <p className={textClasses}>{loadedMessage.content}</p>
+            </div>
           );
         }
 
         // Plain text without media
-        return (
-          <Typography
-            variant="body1"
-            sx={{
-              fontSize: '14px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              overflowWrap: 'anywhere',
-              color: textColor,
-              textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
-              fontWeight: isUser ? 500 : 400,
-            }}
-          >
-            {message.content}
-          </Typography>
-        );
+        return <p className={textClasses}>{loadedMessage.content}</p>;
       }
     }
   }, [
@@ -200,58 +140,47 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
     message?.content,
     (message as LoadedMessage)?.audio,
     (message as LoadedMessage)?.image,
+    textClasses,
   ]);
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: alignSelf }} data-testid={`chat-message-${index}`}>
+    <div
+      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      data-testid={`chat-message-${index}`}
+    >
       {message.loading ? (
-        <Paper
-          elevation={1}
-          sx={{
-            ...bubbleProps,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            py: 1.5,
-            px: 2.5,
-            maxWidth: 'none',
-          }}
+        <div
+          className={cn(bubbleClasses, 'flex items-center justify-center py-3 px-5 max-w-none')}
           data-testid="loading-indicator"
         >
-          <Box sx={{ display: 'flex', gap: 0.75 }}>
+          <div className="flex gap-1.5">
             {[0, 1, 2].map((i) => (
-              <Box
+              <div
                 key={i}
-                sx={{
-                  width: 6,
-                  height: 6,
-                  bgcolor: 'white',
-                  borderRadius: '50%',
-                  animation: `${bounce} 1.4s infinite ease-in-out both`,
-                  animationDelay: `${i * 0.16}s`,
-                }}
+                className="size-1.5 bg-white rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.16}s` }}
               />
             ))}
-          </Box>
-        </Paper>
+          </div>
+        </div>
       ) : (
-        <Paper elevation={1} sx={bubbleProps} role="alert">
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <div className={bubbleClasses} role="alert">
+          <div className="flex items-center mb-2">
             {isUser && (
-              <span role="img" aria-label="attacker" style={{ marginRight: '8px' }}>
+              <span role="img" aria-label="attacker" className="mr-2">
                 ⚔️
               </span>
             )}
             {isAssistant && (
-              <span role="img" aria-label="target" style={{ marginRight: '8px' }}>
+              <span role="img" aria-label="target" className="mr-2">
                 🎯
               </span>
             )}
-          </Box>
+          </div>
           {content}
-        </Paper>
+        </div>
       )}
-    </Box>
+    </div>
   );
 };
 
@@ -266,9 +195,6 @@ export default function ChatMessages({
   displayTurnCount = false,
   maxTurns = 1,
 }: ChatMessagesProps) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-
   if (!messages || messages.length === 0) {
     return null;
   }
@@ -279,55 +205,24 @@ export default function ChatMessages({
   );
 
   return (
-    <Stack
-      sx={{
-        backgroundColor: (theme) =>
-          theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
-        p: 2,
-      }}
-      direction="column"
-      gap={2}
-    >
+    <div className="flex flex-col gap-4 p-4 bg-[#F8F9FA] dark:bg-black/20">
       {messages.map((message, index) => {
         const msg = <ChatMessage key={index} message={message} index={index} />;
         const shouldDisplayTurnCount = displayTurnCount && index % 2 === 0;
 
         return shouldDisplayTurnCount ? (
-          <>
-            <Typography
-              sx={{
-                color: isDark ? grey[800] : grey[400],
-                width: '100%',
-                textAlign: 'center',
-                my: 2,
-                fontWeight: 600,
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                '&::before': {
-                  content: '""',
-                  flex: 1,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  marginRight: 2,
-                },
-                '&::after': {
-                  content: '""',
-                  flex: 1,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  marginLeft: 2,
-                },
-              }}
-            >
+          <div key={index}>
+            <div className="flex items-center w-full text-center my-4 text-xs font-semibold text-gray-400 dark:text-gray-800">
+              <div className="flex-1 border-b border-border mr-4" />
               {index / 2 + 1}/{maxTurns}
-            </Typography>
+              <div className="flex-1 border-b border-border ml-4" />
+            </div>
             {msg}
-          </>
+          </div>
         ) : (
           msg
         );
       })}
-    </Stack>
+    </div>
   );
 }

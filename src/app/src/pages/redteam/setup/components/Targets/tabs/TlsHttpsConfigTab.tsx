@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
@@ -153,7 +153,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <Upload className="mr-2 h-4 w-4" />
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
@@ -167,7 +167,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <File className="mr-2 h-4 w-4" />
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
@@ -181,7 +181,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <Key className="mr-2 h-4 w-4" />
+                    <Key className="mr-2 size-4" />
                     Paste Inline
                   </Button>
                 </div>
@@ -221,7 +221,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </label>
                     {selectedTarget.config.tls?.cert && (
                       <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> Certificate loaded
+                        <Check className="size-4" /> Certificate loaded
                       </span>
                     )}
                   </div>
@@ -272,7 +272,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <Upload className="mr-2 h-4 w-4" />
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
@@ -286,7 +286,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <File className="mr-2 h-4 w-4" />
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
@@ -300,7 +300,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <KeyRound className="mr-2 h-4 w-4" />
+                    <KeyRound className="mr-2 size-4" />
                     Paste Inline
                   </Button>
                 </div>
@@ -346,7 +346,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </label>
                     {selectedTarget.config.tls?.key && (
                       <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> Key loaded
+                        <Check className="size-4" /> Key loaded
                       </span>
                     )}
                   </div>
@@ -391,12 +391,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 
               <div className="rounded-lg border border-border p-4 space-y-4">
                 <Alert variant="info">
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Upload a JKS file to automatically extract the certificate and private key for
-                    TLS configuration. The jks-js library will be used to convert the JKS content to
-                    PEM format.
-                  </AlertDescription>
+                  <Info className="size-4" />
+                  <AlertContent>
+                    <AlertDescription>
+                      Upload a JKS file to automatically extract the certificate and private key for
+                      TLS configuration. The jks-js library will be used to convert the JKS content
+                      to PEM format.
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
 
                 <div className="space-y-2">
@@ -413,7 +415,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         })
                       }
                     >
-                      <Upload className="mr-2 h-4 w-4" />
+                      <Upload className="mr-2 size-4" />
                       Upload JKS
                     </Button>
                     <Button
@@ -427,7 +429,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         })
                       }
                     >
-                      <File className="mr-2 h-4 w-4" />
+                      <File className="mr-2 size-4" />
                       File Path
                     </Button>
                   </div>
@@ -484,7 +486,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       {selectedTarget.config.tls?.jksContent && (
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <Check className="h-4 w-4" /> JKS file loaded:{' '}
+                            <Check className="size-4" /> JKS file loaded:{' '}
                             {selectedTarget.config.tls?.jksFileName || 'keystore.jks'}
                           </span>
                           <Button
@@ -583,18 +585,20 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         }
                       }}
                     >
-                      <KeyRound className="mr-2 h-4 w-4" />
+                      <KeyRound className="mr-2 size-4" />
                       Configure JKS Extraction
                     </Button>
 
                     {selectedTarget.config.tls?.jksExtractConfigured && (
                       <Alert variant="success">
-                        <Check className="h-4 w-4" />
-                        <AlertDescription>
-                          JKS extraction configured. The certificate and private key will be
-                          extracted from the JKS file on the backend using the provided password and
-                          key alias.
-                        </AlertDescription>
+                        <Check className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            JKS extraction configured. The certificate and private key will be
+                            extracted from the JKS file on the backend using the provided password
+                            and key alias.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                   </div>
@@ -621,7 +625,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <Upload className="mr-2 h-4 w-4" />
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
@@ -635,7 +639,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <File className="mr-2 h-4 w-4" />
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
@@ -649,7 +653,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       })
                     }
                   >
-                    <Lock className="mr-2 h-4 w-4" />
+                    <Lock className="mr-2 size-4" />
                     Base64
                   </Button>
                 </div>
@@ -690,7 +694,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </label>
                     {selectedTarget.config.tls?.pfx && (
                       <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-4 w-4" /> PFX loaded
+                        <Check className="size-4" /> PFX loaded
                       </span>
                     )}
                   </div>
@@ -765,7 +769,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     })
                   }
                 >
-                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  <ShieldCheck className="mr-2 size-4" />
                   Upload
                 </Button>
                 <Button
@@ -779,7 +783,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     })
                   }
                 >
-                  <File className="mr-2 h-4 w-4" />
+                  <File className="mr-2 size-4" />
                   File Path
                 </Button>
                 <Button
@@ -793,7 +797,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     })
                   }
                 >
-                  <Lock className="mr-2 h-4 w-4" />
+                  <Lock className="mr-2 size-4" />
                   Paste Inline
                 </Button>
               </div>
@@ -833,7 +837,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   </label>
                   {selectedTarget.config.tls?.ca && (
                     <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <Check className="h-4 w-4" /> CA certificate loaded
+                      <Check className="size-4" /> CA certificate loaded
                     </span>
                   )}
                 </div>
@@ -889,11 +893,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </div>
               {selectedTarget.config.tls?.rejectUnauthorized === false && (
                 <Alert variant="warning">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Disabling certificate verification is dangerous and should never be used in
-                    production!
-                  </AlertDescription>
+                  <AlertTriangle className="size-4" />
+                  <AlertContent>
+                    <AlertDescription>
+                      Disabling certificate verification is dangerous and should never be used in
+                      production!
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
               )}
 

@@ -38,6 +38,7 @@ export default function PluginConfigDialog({
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
   // Update localConfig when config prop changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
       setLocalConfig(config || {});
@@ -243,7 +244,7 @@ export default function PluginConfigDialog({
                     size="icon"
                     onClick={() => removeArrayItem(arrayKey, index)}
                   >
-                    <Minus className="h-4 w-4" />
+                    <Minus className="size-4" />
                   </Button>
                 )}
               </div>
@@ -254,7 +255,7 @@ export default function PluginConfigDialog({
               onClick={() => addArrayItem(arrayKey)}
               disabled={hasEmptyArrayItems(currentArray)}
             >
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus className="mr-1 size-4" />
               Add
             </Button>
           </div>

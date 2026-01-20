@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ScanStatistics from './ScanStatistics';
@@ -30,17 +29,14 @@ const renderScanStatistics = (
   onSeverityClick = vi.fn(),
   onFilesClick = vi.fn(),
 ) => {
-  const theme = createTheme();
   return render(
     <TooltipProvider delayDuration={0}>
-      <ThemeProvider theme={theme}>
-        <ScanStatistics
-          scanResults={scanResults}
-          selectedSeverity={selectedSeverity}
-          onSeverityClick={onSeverityClick}
-          onFilesClick={onFilesClick}
-        />
-      </ThemeProvider>
+      <ScanStatistics
+        scanResults={scanResults}
+        selectedSeverity={selectedSeverity}
+        onSeverityClick={onSeverityClick}
+        onFilesClick={onFilesClick}
+      />
     </TooltipProvider>,
   );
 };

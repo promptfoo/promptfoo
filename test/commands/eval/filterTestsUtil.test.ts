@@ -468,4 +468,281 @@ describe('filterTestsUtil', () => {
 
     // ... other tests with similar structure ...
   });
+
+  describe('runtime variable filtering integration', () => {
+    /**
+     * These tests verify that resultIsForTestCase properly filters runtime variables
+     * when matching test cases. They use the real resultIsForTestCase without mocking.
+     */
+
+    beforeEach(() => {
+      // Reset mocks but restore real resultIsForTestCase behavior for these tests
+      vi.resetAllMocks();
+    });
+
+    it('should match results with _conversation runtime var to test cases without it', async () => {
+      // Use the real resultIsForTestCase by restoring its implementation
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'hello', goal: 'test' }, assert: [] }],
+      };
+
+      // Result has _conversation added during multi-turn evaluation
+      const resultsWithRuntimeVars: EvaluateResult[] = [
+        {
+          vars: { prompt: 'hello', goal: 'test', _conversation: [{ role: 'user', content: 'hi' }] },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'hello', goal: 'test' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because _conversation is filtered out during comparison
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'hello', goal: 'test' });
+    });
+
+    it('should match results with sessionId runtime var to test cases without it', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'attack prompt' }, assert: [] }],
+      };
+
+      // Result has sessionId added during GOAT/Crescendo strategy execution
+      const resultsWithSessionId: EvaluateResult[] = [
+        {
+          vars: { prompt: 'attack prompt', sessionId: 'goat-session-abc123' },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'attack prompt' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithSessionId,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because sessionId is filtered out during comparison
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'attack prompt' });
+    });
+
+    it('should match results with both _conversation and sessionId to test cases without them', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { input: 'test input' }, assert: [] }],
+      };
+
+      // Result has both runtime vars
+      const resultsWithBothRuntimeVars: EvaluateResult[] = [
+        {
+          vars: {
+            input: 'test input',
+            _conversation: [{ role: 'user', content: 'hello' }],
+            sessionId: 'session-xyz789',
+          },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'error', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { input: 'test input' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithBothRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 1,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should match because both _conversation and sessionId are filtered out
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ input: 'test input' });
+    });
+
+    it('should match results with underscore-prefixed custom runtime vars', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'test' }, assert: [] }],
+      };
+
+      // Result has custom underscore-prefixed runtime var
+      const resultsWithCustomRuntimeVar: EvaluateResult[] = [
+        {
+          vars: { prompt: 'test', _customMetadata: { injected: true } },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'test' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithCustomRuntimeVar,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because _customMetadata is filtered out (underscore prefix convention)
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'test' });
+    });
+  });
 });

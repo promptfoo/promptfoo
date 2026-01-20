@@ -44,6 +44,8 @@ env:
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   test:
@@ -62,7 +64,7 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -87,23 +89,10 @@ jobs:
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
-      - name: Verify Python and promptfoo
-        run: |
-          echo "Checking Python version:"
-          if ! docker exec promptfoo-container python --version; then
-            echo "Python check failed"
-            exit 1
-          fi
-
-          echo "Checking promptfoo version:"
-          if ! docker exec promptfoo-container promptfoo --version; then
-            echo "promptfoo check failed"
-            exit 1
-          fi
-
       - name: Run health check
         run: |
-          # Loop to check if the server is up
+          # Wait for server to be fully ready (including database migrations)
+          # before running any CLI commands that also trigger migrations
           for ((retry=1; retry<=10; retry++)); do
             if curl -f http://localhost:3000/health; then
               echo -e "\nHealth check passed"
@@ -118,6 +107,20 @@ jobs:
           # If health check did not pass after retries, exit with an error
           if [ -z "$HEALTH_CHECK_PASS" ]; then
             echo -e "\nHealth check failed after multiple attempts" >&2
+            exit 1
+          fi
+
+      - name: Verify Python and promptfoo
+        run: |
+          echo "Checking Python version:"
+          if ! docker exec promptfoo-container python --version; then
+            echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          if ! docker exec promptfoo-container promptfoo --version; then
+            echo "promptfoo check failed"
             exit 1
           fi
 
@@ -181,7 +184,7 @@ jobs:
     needs: [test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -226,7 +229,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.platforms.digest-suffix }}
           path: ${{ runner.temp }}/digests/*
@@ -236,9 +239,11 @@ jobs:
   merge-docker-digests:
     runs-on: ubuntu-latest
     needs: [build-docker-and-push-digests]
+    outputs:
+      manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
@@ -276,5 +281,42 @@ jobs:
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
       - name: Inspect image
+        id: inspect
         run: |
-          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag_name || steps.meta.outputs.version }}"
+          IMAGE_TAG="${{ inputs.tag_name || steps.meta.outputs.version }}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          # Log full inspection details and extract digest
+          INSPECT_OUTPUT=$(docker buildx imagetools inspect "${IMAGE_REF}")
+          echo "$INSPECT_OUTPUT"
+          # Extract the manifest digest (first Digest: line)
+          DIGEST=$(echo "$INSPECT_OUTPUT" | grep -m1 "^Digest:" | awk '{print $2}')
+          if [ -z "$DIGEST" ]; then
+            echo "Error: Failed to extract manifest digest from inspect output"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Manifest digest: $DIGEST"
+
+  attest-docker-image:
+    name: 'Attest Multi-arch Image'
+    runs-on: ubuntu-latest
+    needs: [merge-docker-digests]
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
+          subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'
+          push-to-registry: true

@@ -99,9 +99,17 @@ describe('LauncherPage', () => {
 
   it('toggles dark mode when button is clicked', async () => {
     mockLocalStorage.getItem.mockReturnValue('false');
+    document.documentElement.removeAttribute('data-theme'); // Ensure light mode at start
     renderLauncher();
 
-    const darkModeButton = await screen.findByRole('button', { name: /Switch to dark mode/i });
+    // Wait for the page to finish loading and render the dark mode toggle
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Switch to (dark|light) mode/i }),
+      ).toBeInTheDocument();
+    });
+
+    const darkModeButton = screen.getByRole('button', { name: /Switch to (dark|light) mode/i });
     await act(async () => {
       await userEvent.click(darkModeButton);
     });

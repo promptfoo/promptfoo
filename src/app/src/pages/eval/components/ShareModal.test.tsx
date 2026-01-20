@@ -96,9 +96,9 @@ describe('ShareModal', () => {
       expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
     });
 
-    const copyButton = screen.getByTestId('FileCopyIcon').closest('button');
+    const copyButton = screen.getByLabelText('Copy share URL');
     expect(copyButton).toBeInTheDocument();
-    await userEvent.click(copyButton!);
+    await userEvent.click(copyButton);
 
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
@@ -142,8 +142,10 @@ describe('ShareModal', () => {
       expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
     });
 
-    const closeButton = screen.getByText('Close');
-    await userEvent.click(closeButton);
+    // There are two buttons with name "Close" - the visible text button and the X icon button with sr-only text
+    // We want the visible text button which is the first one in the DOM
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    await userEvent.click(closeButtons[0]);
 
     expect(mockOnClose).toHaveBeenCalled();
   });

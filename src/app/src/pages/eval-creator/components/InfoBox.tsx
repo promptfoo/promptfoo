@@ -41,7 +41,7 @@ export function InfoBox({ children, variant = 'info', className }: InfoBoxProps)
         className,
       )}
     >
-      <Icon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+      <Icon className="size-5 shrink-0 mt-0.5" />
       <div className="text-sm leading-relaxed flex-1">{children}</div>
     </div>
   );

@@ -12,9 +12,9 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 // Helper to render with TooltipProvider
 let rerenderWithTooltipProvider: (ui: React.ReactElement) => void;
 const renderWithTooltipProvider = (ui: React.ReactElement) => {
-  const result = render(<TooltipProvider>{ui}</TooltipProvider>);
+  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   rerenderWithTooltipProvider = (newUi: React.ReactElement) => {
-    result.rerender(<TooltipProvider>{newUi}</TooltipProvider>);
+    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
   };
   return result;
 };

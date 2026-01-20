@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -14,7 +14,6 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
 import { CloudUpload, Eye, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { PluginConfig } from '@promptfoo/redteam/types';
@@ -66,6 +65,7 @@ export default function CustomIntentSection() {
     return { totalPages: total, startIndex: start, currentIntents: current };
   }, [localConfig.intent, currentPage]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const debouncedUpdatePlugins = useCallback(
     (newIntents: (string | string[])[]) => {
       if (updateTimeout) {
@@ -229,6 +229,7 @@ export default function CustomIntentSection() {
       }
     } else if (filename.endsWith('.csv')) {
       try {
+        const { parse } = await import('csv-parse/browser/esm/sync');
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,
@@ -311,6 +312,7 @@ export default function CustomIntentSection() {
     setIsDragOver(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -355,23 +357,25 @@ export default function CustomIntentSection() {
     <div className="flex flex-col gap-4">
       {uploadError && (
         <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between">
-            {uploadError}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5"
-              onClick={() => setUploadError(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </AlertDescription>
+          <AlertContent>
+            <AlertDescription className="flex items-center justify-between">
+              {uploadError}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-5"
+                onClick={() => setUploadError(null)}
+              >
+                <X className="size-4" />
+              </Button>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
       {isLoading ? (
         <div className="flex justify-center p-8">
-          <Spinner className="h-8 w-8" />
+          <Spinner className="size-8" />
         </div>
       ) : (
         <>
@@ -388,7 +392,7 @@ export default function CustomIntentSection() {
             onDrop={handleDrop}
             onClick={() => document.getElementById('file-upload-input')?.click()}
           >
-            <CloudUpload className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
+            <CloudUpload className="mx-auto mb-2 size-12 text-muted-foreground" />
             <h3 className="text-lg font-semibold">Drop files here or click to upload</h3>
             <p className="mt-1 text-sm text-muted-foreground">Supports .csv and .json files</p>
             <div className="mt-3 flex justify-center gap-2">
@@ -434,7 +438,7 @@ export default function CustomIntentSection() {
                     disabled={(localConfig.intent || []).length <= 1}
                     className="self-start"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               );
@@ -469,12 +473,12 @@ export default function CustomIntentSection() {
               onClick={() => addArrayItem('intent')}
               disabled={hasEmptyArrayItems(localConfig.intent as (string | string[])[])}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-2 size-4" />
               Add Intent
             </Button>
             <Button variant="outline" asChild>
               <label>
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="mr-2 size-4" />
                 Upload File
                 <input
                   id="file-upload-input"
@@ -499,7 +503,7 @@ export default function CustomIntentSection() {
               onClick={() => setShowClearConfirm(true)}
               disabled={shouldDisableClearAll()}
             >
-              <X className="mr-2 h-4 w-4" />
+              <X className="mr-2 size-4" />
               Clear All
             </Button>
           </div>
@@ -511,7 +515,7 @@ export default function CustomIntentSection() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
+              <Eye className="size-5" />
               Preview Upload: {previewDialog?.filename}
             </DialogTitle>
           </DialogHeader>
@@ -528,10 +532,12 @@ export default function CustomIntentSection() {
               </p>
               {previewDialog?.hasNested && (
                 <Alert variant="info" className="mt-3">
-                  <AlertDescription>
-                    Multi-step intents will be preserved as sequential prompts for advanced testing
-                    scenarios.
-                  </AlertDescription>
+                  <AlertContent>
+                    <AlertDescription>
+                      Multi-step intents will be preserved as sequential prompts for advanced
+                      testing scenarios.
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
               )}
             </div>

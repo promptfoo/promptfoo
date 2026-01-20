@@ -5,7 +5,8 @@
 1. **NEVER** commit directly to main
 2. **NEVER** merge branches into main directly
 3. **NEVER** push to main - EVER
-4. **NEVER** use `--amend` or `--force` without explicit approval
+4. **NEVER** use `--force` without explicit approval
+5. **ALWAYS** create new commits - never amend or rebase unless explicitly asked
 
 **Forbidden commands:**
 
@@ -14,6 +15,12 @@
 - Any direct commits to main
 
 All changes to main MUST go through pull requests.
+
+## Commit Policy
+
+**"Explicitly asked"** = user says "amend", "squash", "rebase", or "fix up the commit".
+
+"Looks good" or "go ahead" is NOT permission to rewrite history.
 
 ## Standard Workflow
 

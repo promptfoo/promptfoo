@@ -9,6 +9,8 @@ import {
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   readFilters,
@@ -271,7 +273,11 @@ describe('file utilities', () => {
     });
 
     it('should throw error when file does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
+        throw enoentError;
+      });
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
         `File does not exist: ${path.resolve('/mock/base/path', 'nonexistent.yaml')}`,
@@ -298,7 +304,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -312,7 +317,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -322,12 +326,9 @@ describe('file utilities', () => {
       process.env.TEST_ROOT_PATH = '/root/dir';
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
       maybeLoadFromExternalFile(input);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       delete process.env.TEST_ROOT_PATH;
@@ -341,7 +342,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
       const expectedPath = path.resolve('/absolute/path/test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -357,11 +357,6 @@ describe('file utilities', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileData);
 
       maybeLoadFromExternalFile(input);
-
-      expect(fs.existsSync).toHaveBeenCalledTimes(3);
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(3);
       expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
@@ -646,7 +641,6 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://test.py');
 
       expect(result).toBe('file contents');
-      expect(fs.existsSync).toHaveBeenCalled();
       expect(fs.readFileSync).toHaveBeenCalled();
     });
 
@@ -660,14 +654,13 @@ describe('file utilities', () => {
     });
 
     it('should handle non-Python/JS files with colons normally', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('{"data": "test"}');
 
       // JSON file with colon should still load normally (not treated as function)
       const result = maybeLoadFromExternalFile('file://data:test.json');
 
       expect(result).toEqual({ data: 'test' });
-      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
     });
 
     it('should preserve function references in config objects (integration test)', () => {
@@ -1088,7 +1081,6 @@ describe('file utilities', () => {
 
       maybeLoadToolsFromExternalFile(tools, vars);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
     });
 
@@ -1097,7 +1089,6 @@ describe('file utilities', () => {
 
       await maybeLoadToolsFromExternalFile(tools);
 
-      expect(fs.existsSync).toHaveBeenCalledTimes(2);
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 
@@ -1265,6 +1256,266 @@ describe('file utilities', () => {
         await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
         await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/SyntaxError/);
       });
+    });
+  });
+
+  describe('maybeLoadFromExternalFileWithVars', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+    });
+
+    it('should render variables and load from file', () => {
+      const mockContent = JSON.stringify({ name: 'test', value: 123 });
+      vi.mocked(fs.readFileSync).mockReturnValue(mockContent);
+
+      const result = maybeLoadFromExternalFileWithVars('file://{{ filename }}.json', {
+        filename: 'config',
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('config.json'), 'utf8');
+      expect(result).toEqual({ name: 'test', value: 123 });
+    });
+
+    it('should render variables in object', () => {
+      const config = {
+        name: '{{ name }}',
+        apiKey: '{{ api_key }}',
+      };
+      const vars = { name: 'test-function', api_key: 'sk-123' };
+
+      const result = maybeLoadFromExternalFileWithVars(config, vars);
+
+      expect(result).toEqual({
+        name: 'test-function',
+        apiKey: 'sk-123',
+      });
+    });
+
+    it('should pass through non-file values unchanged', () => {
+      const config = { type: 'function', name: 'calculator' };
+      const result = maybeLoadFromExternalFileWithVars(config, {});
+
+      expect(result).toEqual(config);
+    });
+
+    it('should handle undefined and null', () => {
+      expect(maybeLoadFromExternalFileWithVars(undefined, {})).toBeUndefined();
+      expect(maybeLoadFromExternalFileWithVars(null, {})).toBeNull();
+    });
+  });
+
+  describe('maybeLoadResponseFormatFromExternalFile', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+    });
+
+    it('should return undefined for undefined input', () => {
+      expect(maybeLoadResponseFormatFromExternalFile(undefined, {})).toBeUndefined();
+    });
+
+    it('should return null for null input', () => {
+      expect(maybeLoadResponseFormatFromExternalFile(null, {})).toBeNull();
+    });
+
+    it('should load response_format from file', () => {
+      const mockFormat = JSON.stringify({
+        type: 'json_schema',
+        json_schema: { name: 'my_schema', schema: { type: 'object' } },
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFormat);
+
+      const result = maybeLoadResponseFormatFromExternalFile('file://format.json', {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('format.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        json_schema: { name: 'my_schema', schema: { type: 'object' } },
+      });
+    });
+
+    it('should render variables in response_format', () => {
+      const format = {
+        type: 'json_schema',
+        name: '{{ schema_name }}',
+        schema: { type: 'object' },
+      };
+      const vars = { schema_name: 'my_custom_schema' };
+
+      const result = maybeLoadResponseFormatFromExternalFile(format, vars);
+
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'my_custom_schema',
+        schema: { type: 'object' },
+      });
+    });
+
+    it('should load nested schema from file when schema is a file reference', () => {
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
+
+      const format = {
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: 'file://schema.json',
+      };
+
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('schema.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+        },
+      });
+    });
+
+    it('should load nested json_schema.schema from file', () => {
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        required: ['id'],
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
+
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'nested_schema',
+          schema: 'file://nested.json',
+        },
+      };
+
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('nested.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        json_schema: {
+          name: 'nested_schema',
+          schema: {
+            type: 'object',
+            required: ['id'],
+          },
+        },
+      });
+    });
+
+    it('should render variables in nested schema file path', () => {
+      const nestedSchema = JSON.stringify({ type: 'object' });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
+
+      const format = {
+        type: 'json_schema',
+        name: 'dynamic_schema',
+        schema: 'file://{{ schema_file }}.json',
+      };
+      const vars = { schema_file: 'my-schema' };
+
+      maybeLoadResponseFormatFromExternalFile(format, vars);
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('my-schema.json'),
+        'utf8',
+      );
+    });
+
+    it('should pass through json_object type without modification', () => {
+      const format = { type: 'json_object' };
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(result).toEqual({ type: 'json_object' });
+    });
+
+    it('should pass through non-json_schema types without nested loading', () => {
+      const format = { type: 'text' };
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(result).toEqual({ type: 'text' });
+    });
+
+    it('should handle inline schema without file loading', () => {
+      const format = {
+        type: 'json_schema',
+        name: 'inline_schema',
+        schema: {
+          type: 'object',
+          properties: { count: { type: 'number' } },
+        },
+      };
+
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(result).toEqual(format);
+    });
+
+    it('should handle chained file references (outer file contains nested file reference)', () => {
+      // This tests the critical case where:
+      // 1. response_format: file://format.json
+      // 2. format.json contains { type: 'json_schema', schema: 'file://schema.json' }
+      // Both files should be loaded correctly
+      const outerFormat = JSON.stringify({
+        type: 'json_schema',
+        name: 'chained_schema',
+        schema: 'file://nested-schema.json',
+      });
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      });
+
+      // Mock fs.readFileSync to return different content based on the file path
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+        if (filePath.includes('format.json')) {
+          return outerFormat;
+        }
+        if (filePath.includes('nested-schema.json')) {
+          return nestedSchema;
+        }
+        throw new Error(`Unexpected file: ${filePath}`);
+      });
+
+      const result = maybeLoadResponseFormatFromExternalFile('file://format.json', {});
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('format.json'), 'utf8');
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('nested-schema.json'),
+        'utf8',
+      );
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'chained_schema',
+        schema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      });
+    });
+
+    it('should propagate errors when nested schema file does not exist', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      const format = {
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: 'file://nonexistent.json',
+      };
+
+      expect(() => maybeLoadResponseFormatFromExternalFile(format, {})).toThrow();
     });
   });
 

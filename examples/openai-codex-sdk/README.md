@@ -16,7 +16,7 @@ Install the OpenAI Codex SDK:
 npm install @openai/codex-sdk
 ```
 
-**Requirements**: Node.js 18+
+**Requirements**: Node.js 20+
 
 Set your OpenAI API key:
 
