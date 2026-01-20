@@ -757,7 +757,23 @@ export async function synthesize({
             ? pluginLanguageConfig.length
             : 1;
           const actualTestCount = (p.numTests || 0) * pluginLanguageCount;
-          return `${p.id} (${formatTestCount(actualTestCount, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`;
+          // Build a concise display string for the plugin
+          let configSummary = '';
+          if (p.config) {
+            if (p.id === 'policy' && typeof p.config.policy === 'string') {
+              // For policy plugins, show truncated policy text to help differentiate
+              const policyText = p.config.policy.trim().replace(/\n+/g, ' ');
+              const truncated =
+                policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+              configSummary = ` "${truncated}"`;
+            } else {
+              // For other plugins with config, just indicate config exists
+              configSummary = ' (custom config)';
+            }
+            // Log full config at debug level for troubleshooting
+            logger.debug(`Plugin ${p.id} config: ${JSON.stringify(p.config)}`);
+          }
+          return `${p.id} (${formatTestCount(actualTestCount, false)})${configSummary}`;
         })
         .sort()
         .join('\n'),
@@ -1103,21 +1119,33 @@ export async function synthesize({
 
       // If multiple defined languages were used, create separate report entries for each language
       // Otherwise, use the aggregated result for the plugin
+      // NOTE: Aggregate counts for plugins with same ID (e.g., multiple policy plugins)
       const definedLanguages = languages.filter((lang) => lang !== undefined);
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Don't show language suffix for English (en) - it's the default
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
           const displayId = langKey === 'en' ? plugin.id : `${plugin.id} (${langKey})`;
-          pluginResults[displayId] = result;
+          // Aggregate counts for duplicate plugin IDs (e.g., multiple policy plugins)
+          if (pluginResults[displayId]) {
+            pluginResults[displayId].requested += result.requested;
+            pluginResults[displayId].generated += result.generated;
+          } else {
+            pluginResults[displayId] = { ...result };
+          }
         }
       } else {
         // Single language or no language - use aggregated result
-        pluginResults[plugin.id] = {
-          requested:
-            plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
-          generated: allPluginTests.length,
-        };
+        const requested =
+          plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
+        const generated = allPluginTests.length;
+        // Aggregate counts for duplicate plugin IDs (e.g., multiple policy plugins)
+        if (pluginResults[plugin.id]) {
+          pluginResults[plugin.id].requested += requested;
+          pluginResults[plugin.id].generated += generated;
+        } else {
+          pluginResults[plugin.id] = { requested, generated };
+        }
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1160,17 +1188,33 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = {
-          requested: plugin.numTests,
-          generated: customTests.length,
-        };
+        // Aggregate counts for duplicate plugin IDs
+        if (pluginResults[plugin.id]) {
+          pluginResults[plugin.id].requested += plugin.numTests;
+          pluginResults[plugin.id].generated += customTests.length;
+        } else {
+          pluginResults[plugin.id] = {
+            requested: plugin.numTests,
+            generated: customTests.length,
+          };
+        }
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+        // Aggregate counts for duplicate plugin IDs
+        if (pluginResults[plugin.id]) {
+          pluginResults[plugin.id].requested += plugin.numTests;
+        } else {
+          pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+        }
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+      // Aggregate counts for duplicate plugin IDs
+      if (pluginResults[plugin.id]) {
+        pluginResults[plugin.id].requested += plugin.numTests;
+      } else {
+        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+      }
       progressBar?.increment(plugin.numTests);
     }
   });
