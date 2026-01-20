@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -117,18 +117,20 @@ export default function LauncherPage() {
         )}
       >
         <Alert variant="warning">
-          <AlertDescription>
-            Connection lost. Try visiting{' '}
-            <a
-              href="https://local.promptfoo.app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline hover:no-underline"
-            >
-              local.promptfoo.app
-            </a>{' '}
-            instead
-          </AlertDescription>
+          <AlertContent>
+            <AlertDescription>
+              Connection lost. Try visiting{' '}
+              <a
+                href="https://local.promptfoo.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline hover:no-underline"
+              >
+                local.promptfoo.app
+              </a>{' '}
+              instead
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       </div>
 
@@ -139,12 +141,12 @@ export default function LauncherPage() {
 
       {/* Header section */}
       <div className="mb-8 flex w-full max-w-[600px] flex-col items-center sm:mb-10">
-        <img src={logoPanda} alt="Promptfoo Logo" className="mb-6 h-16 w-16 lg:h-20 lg:w-20" />
+        <img src={logoPanda} alt="Promptfoo Logo" className="mb-6 size-16 lg:size-20" />
         <h1 className="mb-6 text-center text-2xl font-light sm:text-3xl md:text-4xl">
           Welcome to Promptfoo
         </h1>
 
-        <p
+        <div
           className={cn(
             'flex items-center gap-2 text-base',
             isConnecting ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-500',
@@ -157,11 +159,11 @@ export default function LauncherPage() {
             </>
           ) : (
             <>
-              <CheckCircle className="h-4 w-4" />
+              <CheckCircle className="size-4" />
               Connected to Promptfoo successfully!
             </>
           )}
-        </p>
+        </div>
       </div>
 
       {/* Info cards */}
@@ -169,7 +171,7 @@ export default function LauncherPage() {
         {/* Getting Started card */}
         <Card className="border border-border bg-transparent p-6">
           <div className="mb-4 flex items-center gap-3">
-            <TerminalIcon className="h-5 w-5 text-primary" />
+            <TerminalIcon className="size-5 text-primary" />
             <h2 className="text-xl font-light">Getting Started</h2>
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">
@@ -215,7 +217,7 @@ export default function LauncherPage() {
         {/* Safari/Brave card */}
         <Card className="border border-border bg-transparent p-6">
           <div className="mb-4 flex items-center gap-3">
-            <GlobeIcon className="h-5 w-5 text-primary" />
+            <GlobeIcon className="size-5 text-primary" />
             <h2 className="text-xl font-light">Using Safari or Brave?</h2>
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">

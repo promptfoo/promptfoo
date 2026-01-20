@@ -1,24 +1,22 @@
 import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import CloseIcon from '@mui/icons-material/Close';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import Box from '@mui/material/Box';
-import Checkbox from '@mui/material/Checkbox';
-import CircularProgress from '@mui/material/CircularProgress';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import { alpha } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -33,13 +31,14 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import yaml from 'js-yaml';
+import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
+import { ProviderDisplay } from './ProviderDisplay';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -53,9 +52,8 @@ import type {
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
-import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
@@ -91,19 +89,15 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-        <CircularProgress size={16} />
-        <Typography variant="caption">Loading audio...</Typography>
-      </Box>
+      <div className="flex items-center gap-2 py-0.5">
+        <Spinner className="size-4" />
+        <span className="text-xs text-muted-foreground">Loading audio...</span>
+      </div>
     );
   }
 
   if (!audioUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load audio
-      </Typography>
-    );
+    return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
@@ -154,15 +148,24 @@ function TableHeader({
     setPromptOpen(false);
   };
   return (
-    <div className={`${className || ''}`}>
-      <TruncatedText text={text} maxLength={maxLength} />
+    <div className={`${className || ''} flex items-center gap-1`}>
+      {expandedText ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="text-left cursor-pointer transition-colors px-2 py-1.5 -mx-2 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-[13px]"
+              onClick={handlePromptOpen}
+            >
+              <span className="line-clamp-3">{text}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>View prompt</TooltipContent>
+        </Tooltip>
+      ) : (
+        <TruncatedText text={text} maxLength={maxLength} />
+      )}
       {expandedText && (
         <>
-          <Tooltip title="View prompt">
-            <button className="action" onClick={handlePromptOpen}>
-              🔎
-            </button>
-          </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
               open={promptOpen}
@@ -171,12 +174,13 @@ function TableHeader({
             />
           )}
           {resourceId && (
-            <Tooltip title="View other evals and datasets for this prompt">
-              <span className="action">
-                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank">
-                  <OpenInNewIcon fontSize="small" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
+                  <ExternalLink className="size-4" />
                 </Link>
-              </span>
+              </TooltipTrigger>
+              <TooltipContent>View other evals and datasets for this prompt</TooltipContent>
             </Tooltip>
           )}
         </>
@@ -214,6 +218,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  hasMinimalScrollRoom,
   zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
@@ -223,65 +228,71 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
   'use no memo';
   return (
-    <table
-      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
-        stickyHeader && 'results-table-sticky'
-      }`}
-      style={{
-        wordBreak,
-        width: `${tableWidth}px`,
-        zoom,
-      }}
+    <div
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
     >
-      <thead ref={theadRef}>
-        {stickyHeader && (
-          <div className="header-dismiss">
-            <IconButton
-              onClick={() => setStickyHeader(false)}
-              size="small"
-              sx={{ color: 'text.primary' }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </div>
-        )}
-        {reactTable.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id} className="header">
-            {headerGroup.headers.map((header) => {
-              const isMetadataCol =
-                header.column.id.startsWith('Variable') || header.column.id === 'description';
-              const isFinalRow = headerGroup.depth === 1;
+      <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
+        <button
+          type="button"
+          onClick={() => setStickyHeader(false)}
+          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+          width: `${tableWidth}px`,
+          zoom,
+        }}
+      >
+        <thead ref={theadRef}>
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => {
+                const isMetadataCol =
+                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                const isFinalRow = headerGroup.depth === 1;
 
-              return (
-                <th
-                  key={header.id}
-                  tabIndex={0}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                    borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                    height: isFinalRow ? 'fit-content' : 'auto',
-                  }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              );
-            })}
-          </tr>
-        ))}
-      </thead>
-    </table>
+                return (
+                  <th
+                    key={header.id}
+                    tabIndex={0}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: header.getSize(),
+                      borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                      height: isFinalRow ? 'fit-content' : 'auto',
+                    }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+      </table>
+    </div>
   );
 }
 
@@ -352,6 +363,7 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -559,6 +571,7 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -580,6 +593,7 @@ function ResultsTable({
   }, [evalId]);
 
   // Only fetch data when pagination or filters change, but not when evalId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (!evalId) {
       return;
@@ -658,6 +672,7 @@ function ResultsTable({
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       const injectVarName = config?.redteam?.injectVar || 'prompt';
@@ -752,10 +767,13 @@ function ResultsTable({
                     return (
                       <div className="cell">
                         <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
-                        <Tooltip title="Original file path">
-                          <span style={{ fontSize: '0.8em', color: '#666' }}>
-                            {mediaMetadata.path} ({mediaType}/{format})
-                          </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span style={{ fontSize: '0.8em', color: '#666' }}>
+                              {mediaMetadata.path} ({mediaType}/{format})
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Original file path</TooltipContent>
                         </Tooltip>
                       </div>
                     );
@@ -808,21 +826,21 @@ function ResultsTable({
                     <div className="cell" data-capture="true">
                       {/* For audio: show player instead of raw base64/storageRef */}
                       {isAudioContent && typeof value === 'string' ? (
-                        <Box>
+                        <div>
                           <StorageRefAudioPlayer data={value} />
-                        </Box>
+                        </div>
                       ) : isImageContent ? (
                         /* For image: show image or placeholder */
-                        <Box>
+                        <div>
                           {typeof value === 'string' &&
                           (isStorageRef(value) || isBlobRef(value)) ? (
-                            <Typography variant="caption" color="text.secondary">
+                            <span className="text-xs text-muted-foreground">
                               Image preview not yet supported for storage refs
-                            </Typography>
+                            </span>
                           ) : (
                             cellContent
                           )}
-                        </Box>
+                        </div>
                       ) : (
                         /* For other encoding strategies: show raw content */
                         cellContent
@@ -830,19 +848,13 @@ function ResultsTable({
 
                       {/* Show original decoded text */}
                       {originalForDisplay && (
-                        <Box
-                          sx={{
-                            marginTop: '6px',
-                            color: 'text.secondary',
-                            fontSize: '0.8em',
-                          }}
-                        >
+                        <div className="mt-1.5 text-muted-foreground text-[0.8em]">
                           <strong>Original (decoded):</strong>{' '}
                           <TruncatedText
                             text={String(originalForDisplay)}
                             maxLength={maxTextLength}
                           />
-                        </Box>
+                        </div>
                       )}
                     </div>
                   );
@@ -904,6 +916,7 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -936,24 +949,27 @@ function ResultsTable({
                   {metrics?.cost ? (
                     <div>
                       <strong>Total Cost:</strong>{' '}
-                      <Tooltip
-                        title={`Average: $${Intl.NumberFormat(undefined, {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits:
-                            testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1
-                              ? 2
-                              : 4,
-                        }).format(
-                          testCounts[idx]?.total ? metrics.cost / testCounts[idx].total : 0,
-                        )} per test`}
-                      >
-                        <span style={{ cursor: 'help' }}>
-                          $
-                          {Intl.NumberFormat(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
-                          }).format(metrics.cost)}
-                        </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span style={{ cursor: 'help' }}>
+                            $
+                            {Intl.NumberFormat(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
+                            }).format(metrics.cost)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {`Average: $${Intl.NumberFormat(undefined, {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits:
+                              testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1
+                                ? 2
+                                : 4,
+                          }).format(
+                            testCounts[idx]?.total ? metrics.cost / testCounts[idx].total : 0,
+                          )} per test`}
+                        </TooltipContent>
                       </Tooltip>
                       {filteredMetrics?.cost && testCounts[idx]?.filtered ? (
                         <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
@@ -1040,42 +1056,26 @@ function ResultsTable({
                   ) : null}
                 </div>
               ) : null;
-              const providerConfig = Array.isArray(config?.providers)
-                ? config.providers[idx]
-                : undefined;
+              // Get provider string, handling both string and object formats
+              const providerString =
+                typeof prompt.provider === 'string'
+                  ? prompt.provider
+                  : typeof prompt.provider === 'object' && prompt.provider !== null
+                    ? (prompt.provider as any).id || JSON.stringify(prompt.provider)
+                    : String(prompt.provider || 'Unknown provider');
 
-              let providerParts: string[] = [];
-              try {
-                if (prompt.provider && typeof prompt.provider === 'string') {
-                  providerParts = prompt.provider.split(':');
-                } else if (prompt.provider) {
-                  const providerObj = prompt.provider as any; // Use any for flexible typing
-                  const providerId =
-                    typeof providerObj === 'object' && providerObj !== null
-                      ? providerObj.id || JSON.stringify(providerObj)
-                      : String(providerObj);
-                  providerParts = [providerId];
-                }
-              } catch (error) {
-                console.error('Error parsing provider:', error);
-                providerParts = ['Error parsing provider'];
-              }
-
-              const providerDisplay = (
-                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
-                  {providerParts.length > 1 ? (
-                    <>
-                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                    </>
-                  ) : (
-                    <strong>{providerParts[0] || 'Unknown provider'}</strong>
-                  )}
-                </Tooltip>
-              );
               return (
                 <div className="output-header">
                   <div className="pills collapse-font-small">
-                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
+                    {prompt.provider ? (
+                      <div className="provider">
+                        <ProviderDisplay
+                          providerString={providerString}
+                          providersArray={config?.providers as any[] | undefined}
+                          fallbackIndex={idx}
+                        />
+                      </div>
+                    ) : null}
                     <div className="summary">
                       <div
                         className={`highlight ${
@@ -1087,15 +1087,18 @@ function ResultsTable({
                         }`}
                       >
                         {passRates[idx]?.filtered !== null ? (
-                          <Tooltip
-                            title={`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx].filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
-                          >
-                            <span>
-                              <strong>{passRates[idx].filtered?.toFixed(2)}% passing</strong> (
-                              {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered}{' '}
-                              filtered, {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
-                              total)
-                            </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <strong>{passRates[idx].filtered?.toFixed(2)}% passing</strong> (
+                                {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered}{' '}
+                                filtered, {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
+                                total)
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx].filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
+                            </TooltipContent>
                           </Tooltip>
                         ) : (
                           <>
@@ -1112,15 +1115,17 @@ function ResultsTable({
                         </div>
                       </div>
                     ) : null}
-                    {metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
-                      <Box className="collapse-hidden">
+                    {!isRedteam &&
+                    metrics?.namedScores &&
+                    Object.keys(metrics.namedScores).length > 0 ? (
+                      <div className="collapse-hidden">
                         <CustomMetrics
                           lookup={metrics.namedScores}
                           counts={metrics.namedScoresCount}
                           metricTotals={metricTotals}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
-                      </Box>
+                      </div>
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
@@ -1133,22 +1138,15 @@ function ResultsTable({
                   />
                   {details}
                   {filterMode === 'failures' && head.prompts.length > 1 && (
-                    <FormControlLabel
-                      sx={{
-                        '& .MuiFormControlLabel-label': {
-                          fontSize: '0.75rem',
-                        },
-                      }}
-                      control={
-                        <Checkbox
-                          checked={isChecked}
-                          onChange={(event) =>
-                            onFailureFilterToggle(columnId, event.target.checked)
-                          }
-                        />
-                      }
-                      label="Show failures"
-                    />
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={(checked) =>
+                          onFailureFilterToggle(columnId, checked === true)
+                        }
+                      />
+                      <span>Show failures</span>
+                    </label>
                   )}
                 </div>
               );
@@ -1273,6 +1271,7 @@ function ResultsTable({
     }
   }, [navigate]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
@@ -1359,6 +1358,33 @@ function ResultsTable({
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
+
+  useEffect(() => {
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
+
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
       return;
@@ -1405,20 +1431,11 @@ function ResultsTable({
       {filteredResultsCount === 0 &&
         !isFetching &&
         (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
-          <Box
-            sx={{
-              padding: '20px',
-              textAlign: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.03)',
-              borderRadius: '4px',
-              marginTop: '20px',
-              marginBottom: '20px',
-            }}
-          >
-            <Typography variant="body1">No results found for the current filters.</Typography>
-          </Box>
+          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+            <p>No results found for the current filters.</p>
+          </div>
         )}
-      <Box sx={{ height: '1rem' }} />
+      <div className="h-4" />
       <ResultsTableHeader
         reactTable={reactTable}
         tableWidth={tableWidth}
@@ -1427,6 +1444,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
         zoom={zoom}
       />
       <div
@@ -1442,26 +1460,14 @@ function ResultsTable({
         }}
         ref={tableRef}
       >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
-            zIndex: 20,
-            opacity: isFetching ? 1 : 0,
-            pointerEvents: isFetching ? 'auto' : 'none',
-            transition: 'opacity 0.3s ease-in-out',
-            backdropFilter: 'blur(2px)',
-          }}
+        <div
+          className={cn(
+            'absolute inset-0 flex items-center justify-center bg-background/70 z-20 transition-opacity duration-300 backdrop-blur-[2px]',
+            isFetching ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+          )}
         >
-          <CircularProgress size={60} />
-        </Box>
+          <Spinner className="size-[60px]" />
+        </div>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1537,19 +1543,13 @@ function ResultsTable({
                             </div>
                           )}
                           {originalImageText ? (
-                            <Box
-                              sx={{
-                                marginTop: '6px',
-                                color: 'text.secondary',
-                                fontSize: '0.8em',
-                              }}
-                            >
+                            <div className="mt-1.5 text-muted-foreground text-[0.8em]">
                               <strong>Original (image text):</strong>{' '}
                               <TruncatedText
                                 text={String(originalImageText)}
                                 maxLength={maxTextLength}
                               />
-                            </Box>
+                            </div>
                           ) : null}
                         </>
                       );
@@ -1574,112 +1574,79 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <Box
-        className="pagination"
-        px={2}
-        mx={-2}
-        sx={{
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          backgroundColor: 'background.paper',
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          width: '100vw',
-          boxShadow: 3,
-        }}
-      >
-        <Box>
+      <div className="pagination sticky bottom-0 z-10 flex items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+        <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (
-            <Typography component="span" sx={{ fontWeight: 600 }}>
-              0
-            </Typography>
+            <span className="font-semibold">0</span>
           ) : (
             <>
-              <Typography component="span" sx={{ fontWeight: 600 }}>
+              <span className="font-semibold">
                 {pagination.pageIndex * pagination.pageSize + 1}
-              </Typography>{' '}
+              </span>{' '}
               to{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
+              <span className="font-semibold">
                 {Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredResultsCount)}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {filteredResultsCount}
-              </Typography>
+              </span>{' '}
+              of <span className="font-semibold">{filteredResultsCount}</span>
             </>
           )}{' '}
           results
-        </Box>
+        </div>
 
         {filteredResultsCount > 0 && (
-          <Box>
+          <div>
             Page{' '}
-            <Typography component="span" sx={{ fontWeight: 600 }}>
-              {reactTable.getState().pagination.pageIndex + 1}
-            </Typography>{' '}
-            of{' '}
-            <Typography component="span" sx={{ fontWeight: 600 }}>
-              {pageCount}
-            </Typography>
-          </Box>
+            <span className="font-semibold">{reactTable.getState().pagination.pageIndex + 1}</span>{' '}
+            of <span className="font-semibold">{pageCount}</span>
+          </div>
         )}
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <div className="flex items-center gap-2">
           {/* PAGE SIZE SELECTOR */}
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <div className="flex items-center gap-2">
             <span>Results per page:</span>
             <Select
-              value={pagination.pageSize}
-              onChange={(e) => {
+              value={String(pagination.pageSize)}
+              onValueChange={(value) => {
                 setPagination((prev) => ({
                   ...prev,
-                  pageSize: Number(e.target.value),
+                  pageSize: Number(value),
                 }));
                 window.scrollTo(0, 0);
               }}
-              displayEmpty
-              inputProps={{ 'aria-label': 'Results per page' }}
-              size="small"
-              sx={{ m: 1, minWidth: 80 }}
               disabled={filteredResultsCount <= 10}
             >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={50} disabled={filteredResultsCount <= 10}>
-                50
-              </MenuItem>
-              <MenuItem value={100} disabled={filteredResultsCount <= 50}>
-                100
-              </MenuItem>
-              <MenuItem value={500} disabled={filteredResultsCount <= 100}>
-                500
-              </MenuItem>
-              <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
-                1000
-              </MenuItem>
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
+                  50
+                </SelectItem>
+                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
+                  100
+                </SelectItem>
+                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
+                  500
+                </SelectItem>
+                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
+                  1000
+                </SelectItem>
+              </SelectContent>
             </Select>
-          </Typography>
+          </div>
 
           {/* PAGE NAVIGATOR */}
-          <Typography
-            component="span"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              opacity: pageCount > 1 ? 1 : 0.5,
-              pointerEvents: pageCount > 1 ? 'auto' : 'none',
-            }}
+          <div
+            className={cn(
+              'flex items-center gap-2',
+              pageCount <= 1 && 'opacity-50 pointer-events-none',
+            )}
           >
             <span>Go to:</span>
-            <BaseNumberInput
-              size="small"
+            <NumberInput
               value={pagination.pageIndex + 1}
               onChange={(v) => {
                 const page = v !== undefined ? v - 1 : null;
@@ -1691,19 +1658,19 @@ function ResultsTable({
                   clearRowIdFromUrl();
                 }
               }}
-              sx={{
-                width: '60px',
-                textAlign: 'center',
-              }}
+              className="w-[60px] h-8 text-center"
               min={1}
               max={pageCount || 1}
               disabled={pageCount === 1}
             />
-          </Typography>
+          </div>
 
           {/* PAGE NAVIGATION BUTTONS */}
-          <ButtonGroup>
-            <IconButton
+          <div className="flex">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-r-none"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
@@ -1714,9 +1681,12 @@ function ResultsTable({
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
             >
-              <ArrowBackIcon />
-            </IconButton>
-            <IconButton
+              <ArrowLeft className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-l-none -ml-px"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
@@ -1727,11 +1697,11 @@ function ResultsTable({
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
             >
-              <ArrowForwardIcon />
-            </IconButton>
-          </ButtonGroup>
-        </Box>
-      </Box>
+              <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
       <CustomMetricsDialog
         open={customMetricsDialogOpen}
         onClose={() => setCustomMetricsDialogOpen(false)}

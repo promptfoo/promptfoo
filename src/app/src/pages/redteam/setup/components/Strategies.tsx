@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Separator } from '@app/components/ui/separator';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -257,6 +257,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
       if (isStrategyDisabled(strategyId)) {
@@ -591,27 +592,31 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Remote Generation Disabled</AlertTitle>
-          <AlertDescription>
-            Some strategies require remote generation and are currently unavailable. These
-            strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
-            enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-          </AlertDescription>
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
-          <AlertDescription>
-            Selecting many strategies is usually not efficient and will significantly increase
-            evaluation time and cost. It's recommended to use the preset configurations or select
-            only the strategies specifically needed for your use case.
-          </AlertDescription>
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
+            <AlertDescription>
+              Selecting many strategies is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the strategies specifically needed for your use case.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

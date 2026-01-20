@@ -25,6 +25,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
+- `openai:video:<model name>` - uses Sora video generation models
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -627,6 +628,113 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+## Video Generation (Sora)
+
+OpenAI supports video generation via `openai:video:<model>`. Supported models include:
+
+- `sora-2` - OpenAI's video generation model ($0.10/second)
+- `sora-2-pro` - Higher quality video generation ($0.30/second)
+
+### Basic Usage
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
+      seconds: 8 # Duration: 4, 8, or 12 seconds
+```
+
+### Configuration Options
+
+| Parameter              | Description                                       | Default    |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| `size`                 | Video dimensions                                  | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                 | `8`        |
+| `input_reference`      | Base64 image data or file path for image-to-video | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix              | -          |
+| `poll_interval_ms`     | Polling interval for job status                   | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation         | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                        | `true`     |
+| `download_spritesheet` | Download spritesheet preview                      | `true`     |
+
+### Example Configuration
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'A cinematic shot of: {{scene}}'
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 4
+  - id: openai:video:sora-2-pro
+    config:
+      size: 720x1280
+      seconds: 8
+
+tests:
+  - vars:
+      scene: a cat riding a skateboard through a city
+  - vars:
+      scene: waves crashing on a beach at sunset
+```
+
+### Image-to-Video Generation
+
+Generate videos starting from a source image using `input_reference`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      input_reference: file://assets/start-image.png
+      seconds: 4
+
+prompts:
+  - 'Animate this image: the character slowly walks forward'
+```
+
+The `input_reference` accepts either a `file://` path or base64-encoded image data.
+
+### Video Remixing
+
+Remix an existing Sora video with a new prompt using `remix_video_id`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      remix_video_id: video_abc123def456
+
+prompts:
+  - 'Make the scene more dramatic with stormy weather'
+```
+
+The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
+
+:::note
+Remixed videos are not cached since each remix produces unique results even with the same prompt.
+:::
+
+### Viewing Generated Videos
+
+Videos are automatically displayed in the web viewer with playback controls. The viewer shows:
+
+- Video player with controls
+- Video metadata (model, size, duration)
+- Thumbnail preview (if enabled)
+
+Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and served via the web interface.
+
+### Pricing
+
+| Model      | Cost per Second |
+| ---------- | --------------- |
+| sora-2     | $0.10           |
+| sora-2-pro | $0.30           |
+
 ## Web Search Support
 
 The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
@@ -1034,6 +1142,23 @@ The external file should contain the complete `response_format` configuration ob
     "additionalProperties": false
   }
 }
+```
+
+You can also use nested file references for the schema itself, which is useful for sharing schemas across multiple response formats:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": "file://./schemas/event-schema.json"
+}
+```
+
+Variable rendering is supported in file paths using Nunjucks syntax:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
 ```
 
 For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:

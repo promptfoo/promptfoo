@@ -157,6 +157,9 @@ describe('CrescendoProvider', () => {
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
+    });
 
     // Mock server feature support to return true so unblocking logic runs
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -1807,6 +1810,9 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
+    });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
     mockGetGraderById.mockImplementation(function () {
@@ -2079,6 +2085,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -2415,6 +2424,9 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);

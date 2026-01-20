@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@app/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Check, Copy, X } from 'lucide-react';
@@ -83,10 +89,10 @@ function CodeDisplay({
             variant="ghost"
             size="icon"
             onClick={onCopy}
-            className="absolute right-2 top-2 h-8 w-8 bg-background shadow-sm hover:shadow"
+            className="absolute right-2 top-2 size-8 bg-background shadow-sm hover:shadow"
             aria-label={`Copy ${title.toLowerCase()}`}
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
         )}
       </div>
@@ -378,14 +384,17 @@ export default function EvalOutputPromptDialog({
         {/* Header with title and close button */}
         <SheetHeader className="flex flex-row items-center justify-between p-4 border-b border-border space-y-0">
           <SheetTitle>Details{provider && `: ${provider}`}</SheetTitle>
+          <SheetDescription className="sr-only">
+            View prompt, output, evaluation results, and metadata details
+          </SheetDescription>
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
             aria-label="close"
-            className="h-8 w-8 ml-2"
+            className="size-8 ml-2"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </Button>
         </SheetHeader>
 
@@ -398,14 +407,14 @@ export default function EvalOutputPromptDialog({
           <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent px-4 h-auto py-0">
             <TabsTrigger
               value="prompt-output"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+              className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
             >
               {hasOutputContent ? 'Prompt & Output' : 'Prompt'}
             </TabsTrigger>
             {hasEvaluationData && (
               <TabsTrigger
                 value="evaluation"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Evaluation
               </TabsTrigger>
@@ -413,7 +422,7 @@ export default function EvalOutputPromptDialog({
             {hasMessagesData && (
               <TabsTrigger
                 value="messages"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Messages
               </TabsTrigger>
@@ -421,7 +430,7 @@ export default function EvalOutputPromptDialog({
             {hasMetadata && (
               <TabsTrigger
                 value="metadata"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Metadata
               </TabsTrigger>
@@ -429,7 +438,7 @@ export default function EvalOutputPromptDialog({
             {hasTracesData && (
               <TabsTrigger
                 value="traces"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Traces
               </TabsTrigger>

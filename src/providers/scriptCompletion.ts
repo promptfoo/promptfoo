@@ -81,7 +81,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
       if (cachedResult) {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
-        return JSON.parse(cachedResult as string);
+        return { ...JSON.parse(cachedResult as string), cached: true };
       }
     } else if (fileHashes.length === 0 && isCacheEnabled()) {
       logger.warn(

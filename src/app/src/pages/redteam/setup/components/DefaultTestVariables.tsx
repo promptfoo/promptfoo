@@ -39,6 +39,7 @@ export default function DefaultTestVariables() {
   }, [config.defaultTest?.vars]);
 
   // Sync local state back to global config
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const syncToGlobalState = useCallback(() => {
     const vars: Record<string, string> = {};
     variables.forEach((variable) => {
@@ -135,7 +136,7 @@ export default function DefaultTestVariables() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={addVariable} className="shrink-0">
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-2 size-4" />
           Add Variable
         </Button>
       </div>
@@ -156,7 +157,7 @@ export default function DefaultTestVariables() {
                   <p className="mt-1 text-xs text-destructive">{variable.nameError}</p>
                 )}
               </div>
-              <div className="flex-grow">
+              <div className="grow">
                 <Label className="sr-only">Value</Label>
                 <Input
                   placeholder="Value"
@@ -171,7 +172,7 @@ export default function DefaultTestVariables() {
                 aria-label={`Delete variable ${variable.name}`}
                 className="mt-0.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             </div>
           ))}

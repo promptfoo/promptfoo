@@ -1,46 +1,51 @@
-import BugReportIcon from '@mui/icons-material/BugReport';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import ForumIcon from '@mui/icons-material/Forum';
-import GitHubIcon from '@mui/icons-material/GitHub';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import WorkIcon from '@mui/icons-material/Work';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { cn } from '@app/lib/utils';
+import {
+  BookOpen,
+  Briefcase,
+  Bug,
+  Calendar,
+  ExternalLink,
+  Github,
+  MessageCircle,
+} from 'lucide-react';
 
 const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
-    icon: <MenuBookIcon fontSize="small" />,
+    icon: <BookOpen className="size-4" />,
     text: 'Documentation',
     href: 'https://www.promptfoo.dev/docs/intro',
   },
   {
-    icon: <GitHubIcon fontSize="small" />,
+    icon: <Github className="size-4" />,
     text: 'GitHub Repository',
     href: 'https://github.com/promptfoo/promptfoo',
   },
   {
-    icon: <BugReportIcon fontSize="small" />,
+    icon: <Bug className="size-4" />,
     text: 'File an Issue',
     href: 'https://github.com/promptfoo/promptfoo/issues',
   },
   {
-    icon: <ForumIcon fontSize="small" />,
+    icon: <MessageCircle className="size-4" />,
     text: 'Join Our Discord Community',
     href: 'https://discord.gg/promptfoo',
   },
   {
-    icon: <CalendarTodayIcon fontSize="small" />,
+    icon: <Calendar className="size-4" />,
     text: 'Book a Meeting',
     href: 'https://cal.com/team/promptfoo/intro2',
   },
   {
-    icon: <WorkIcon fontSize="small" />,
+    icon: <Briefcase className="size-4" />,
     text: 'Careers',
     href: 'https://www.promptfoo.dev/careers/',
   },
@@ -51,68 +56,48 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
   onClose,
 }: T) {
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      aria-labelledby="about-promptfoo-dialog-title"
-    >
-      <DialogTitle id="about-promptfoo-dialog-title">
-        <Stack>
-          <Typography variant="h6">About Promptfoo</Typography>
-          <Link
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>About Promptfoo</DialogTitle>
+          <a
             href="https://github.com/promptfoo/promptfoo/releases"
-            underline="none"
-            sx={{
-              color: 'inherit',
-            }}
             target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Typography variant="subtitle2">
-              Version {import.meta.env.VITE_PROMPTFOO_VERSION}
-            </Typography>
-          </Link>
-        </Stack>
-      </DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" gutterBottom>
+            Version {import.meta.env.VITE_PROMPTFOO_VERSION}
+          </a>
+        </DialogHeader>
+        <DialogDescription>
           Promptfoo is a MIT licensed open-source tool for evaluating and red-teaming LLMs. We make
           it easy to track the performance of your models and prompts over time with automated
           support for dataset generation and grading.
-        </Typography>
-        <Stack spacing={2} mt={2}>
+        </DialogDescription>
+        <div className="flex flex-col gap-3 mt-2">
           {links.map((item, index) => (
-            <Stack
+            <a
               key={index}
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              sx={{
-                flexWrap: 'wrap',
-                '& .MuiSvgIcon-root': {
-                  color: 'text.primary',
-                },
-              }}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                'flex items-center gap-2 text-sm text-foreground',
+                'hover:text-primary transition-colors',
+              )}
             >
               {item.icon}
-              <Link
-                underline="none"
-                target="_blank"
-                href={item.href}
-                sx={{
-                  color: 'inherit',
-                }}
-              >
-                <Typography variant="body2">{item.text}</Typography>
-              </Link>
-            </Stack>
+              <span>{item.text}</span>
+              <ExternalLink className="size-3 opacity-50 ml-auto" />
+            </a>
           ))}
-        </Stack>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }

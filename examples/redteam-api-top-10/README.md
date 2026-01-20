@@ -34,7 +34,7 @@ npx promptfoo@latest redteam run
 ## Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (for filesystem MCP server)
+- Node.js 20+ (for filesystem MCP server)
 - [uv](https://docs.astral.sh/uv/) package manager
 - Anthropic API key
 

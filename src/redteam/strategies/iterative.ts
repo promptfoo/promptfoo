@@ -29,6 +29,10 @@ export function addIterativeJailbreaks(
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
+    // Get inputs from plugin config if available
+    const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
+    const inputs = pluginConfig?.inputs as Record<string, string> | undefined;
+
     return {
       ...testCase,
       provider: {
@@ -36,6 +40,8 @@ export function addIterativeJailbreaks(
         config: {
           injectVar,
           ...config,
+          // Pass inputs from plugin config to iterative provider
+          ...(inputs && { inputs }),
         },
       },
       assert: testCase.assert?.map((assertion) => ({

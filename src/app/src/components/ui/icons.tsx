@@ -8,6 +8,7 @@
 
 export {
   AlertCircle as AlertCircleIcon,
+  AlertTriangle as AlertTriangleIcon,
   AlertTriangle as WarningIcon,
   ArrowLeft as ArrowBackIcon,
   ArrowRight as ArrowForwardIcon,

@@ -64,7 +64,7 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
           aria-label="toggle password visibility"
           disabled={disabled}
         >
-          {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </Button>
       </div>
       {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}

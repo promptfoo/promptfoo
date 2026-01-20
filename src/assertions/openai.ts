@@ -41,7 +41,7 @@ export const handleIsValidOpenAiToolsCall = async ({
 
   // Handle traditional OpenAI function/tool calls
   if (typeof output === 'object' && 'tool_calls' in output) {
-    output = (output as { tool_calls: any }).tool_calls;
+    output = output.tool_calls as string | object;
   }
   const toolsOutput = output as {
     type: 'function';
