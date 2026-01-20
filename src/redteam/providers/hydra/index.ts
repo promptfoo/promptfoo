@@ -319,6 +319,7 @@ export class HydraProvider implements ApiProvider {
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,
+        ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {

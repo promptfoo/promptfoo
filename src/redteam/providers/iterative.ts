@@ -158,11 +158,13 @@ export async function runRedteamConversation({
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
+        inputs,
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
+        inputs,
       });
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
@@ -261,15 +263,17 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let improvement, newInjectVar;
+    let improvement, newInjectVar: string;
     if (typeof redteamResp.output === 'string') {
       try {
         const parsed = extractFirstJsonObject<{
           improvement: string;
-          prompt: string;
+          prompt: string | Record<string, string>;
         }>(redteamResp.output);
         improvement = parsed.improvement;
-        newInjectVar = parsed.prompt;
+        // Handle multi-input mode where prompt is an object
+        newInjectVar =
+          typeof parsed.prompt === 'object' ? JSON.stringify(parsed.prompt) : parsed.prompt;
       } catch (err) {
         // Re-throw abort errors to properly cancel the operation
         if (err instanceof Error && err.name === 'AbortError') {
@@ -283,7 +287,9 @@ export async function runRedteamConversation({
       }
     } else {
       improvement = redteamResp.output?.improvement;
-      newInjectVar = redteamResp.output?.prompt;
+      // Handle multi-input mode where prompt is an object
+      const promptValue = redteamResp.output?.prompt;
+      newInjectVar = typeof promptValue === 'object' ? JSON.stringify(promptValue) : promptValue;
     }
 
     if (improvement === undefined || newInjectVar === undefined) {
