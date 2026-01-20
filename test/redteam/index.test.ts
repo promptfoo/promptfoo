@@ -2710,9 +2710,11 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Check that debug log contains full config JSON
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Plugin policy config:'));
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining(policyText));
+      // Check that debug log uses structured logging with plugin config
+      expect(logger.debug).toHaveBeenCalledWith('Plugin config', {
+        pluginId: 'policy',
+        config: expect.objectContaining({ policy: policyText }),
+      });
     });
 
     it('should show "(custom config)" for non-policy plugins with config', async () => {

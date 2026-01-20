@@ -770,8 +770,8 @@ export async function synthesize({
               // For other plugins with config, just indicate config exists
               configSummary = ' (custom config)';
             }
-            // Log full config at debug level for troubleshooting
-            logger.debug(`Plugin ${p.id} config: ${JSON.stringify(p.config)}`);
+            // Log full config at debug level for troubleshooting (structured for auto-sanitization)
+            logger.debug('Plugin config', { pluginId: p.id, config: p.config });
           }
           return `${p.id} (${formatTestCount(actualTestCount, false)})${configSummary}`;
         })
@@ -1126,12 +1126,14 @@ export async function synthesize({
         // Don't show language suffix for English (en) - it's the default
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
           const displayId = langKey === 'en' ? plugin.id : `${plugin.id} (${langKey})`;
+          // For intent plugin, requested should equal generated (same as single-language behavior)
+          const requested = plugin.id === 'intent' ? result.generated : result.requested;
           // Aggregate counts for duplicate plugin IDs (e.g., multiple policy plugins)
           if (pluginResults[displayId]) {
-            pluginResults[displayId].requested += result.requested;
+            pluginResults[displayId].requested += requested;
             pluginResults[displayId].generated += result.generated;
           } else {
-            pluginResults[displayId] = { ...result };
+            pluginResults[displayId] = { requested, generated: result.generated };
           }
         }
       } else {
