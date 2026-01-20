@@ -123,22 +123,20 @@ function generateReport(
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated, error }]) => {
-      const status = error ? chalk.red(`Failed: ${error.slice(0, 20)}...`) : getStatus(requested, generated);
-      table.push([rowIndex++, 'Plugin', id, requested, generated, status]);
+    .forEach(([id, { requested, generated }]) => {
+      table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
     });
 
   Object.entries(strategyResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated, error }]) => {
-      const status = error ? chalk.red(`Failed: ${error.slice(0, 20)}...`) : getStatus(requested, generated);
+    .forEach(([id, { requested, generated }]) => {
       table.push([
         rowIndex++,
         'Strategy',
         id,
         requested,
         generated,
-        status,
+        getStatus(requested, generated),
       ]);
     });
 
