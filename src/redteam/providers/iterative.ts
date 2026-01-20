@@ -646,7 +646,7 @@ export async function runRedteamConversation({
           : undefined,
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
-      guardrails: targetResponse.guardrails,
+      guardrails: targetResponse?.guardrails,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
@@ -757,7 +757,7 @@ class RedteamIterativeProvider implements ApiProvider {
         provider: this.redteamProvider,
         jsonOnly: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,
         jsonOnly: true,
       }),

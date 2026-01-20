@@ -325,4 +325,5 @@ async function run(): Promise<void> {
   }
 }
 
+// biome-ignore lint/nursery/noFloatingPromises: FIXME
 run();

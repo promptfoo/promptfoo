@@ -71,6 +71,7 @@ describe('cross-session-leak strategy exclusions', () => {
       purpose: 'p',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
