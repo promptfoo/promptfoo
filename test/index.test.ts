@@ -104,6 +104,7 @@ describe('index.ts exports', () => {
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'PartialGenerationError',
     'PluginConfigSchema',
     'PolicyObjectSchema',
     'ProvidersSchema',

@@ -41,7 +41,12 @@ import { pluginMatchesStrategyTargets } from './strategies/util';
 import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
-import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
+import type {
+  FailedPluginInfo,
+  RedteamPluginObject,
+  RedteamStrategyObject,
+  SynthesizeOptions,
+} from './types';
 
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
   if (!metadata || metadata.policy === undefined || metadata.policy === null) {
@@ -647,6 +652,7 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
   injectVar: string;
+  failedPlugins: FailedPluginInfo[];
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1219,5 +1225,10 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar };
+  // Calculate failed plugins (those that generated 0 tests when they should have generated some)
+  const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
+    .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
+    .map(([pluginId, { requested }]) => ({ pluginId, requested }));
+
+  return { purpose, entities, testCases: finalTestCases, injectVar, failedPlugins };
 }
