@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Test to verify that language generation failures are properly tracked
@@ -136,7 +136,7 @@ describe('Language timeout count mismatch fix', () => {
     languageResults.forEach((result, index) => {
       const lang = languages[index];
       if (result.status === 'fulfilled') {
-        const { tests, requested, generated } = result.value;
+        const { requested, generated } = result.value;
         resultsPerLanguage[lang || 'default'] = { requested, generated };
       } else {
         const errorMsg =
