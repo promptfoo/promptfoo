@@ -13,10 +13,10 @@ vi.mock('../../src/providers/providerRegistry', () => ({
 }));
 
 import {
-  TransformersEmbeddingProvider,
-  TransformersTextGenerationProvider,
   disposePipelines,
   pipelineCache,
+  TransformersEmbeddingProvider,
+  TransformersTextGenerationProvider,
 } from '../../src/providers/transformers';
 
 describe('TransformersEmbeddingProvider', () => {
