@@ -428,6 +428,12 @@
         "SHAREPOINT_TENANT_ID": {
           "type": "string"
         },
+        "VERCEL_AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_BASE_URL": {
+          "type": "string"
+        },
         "VERTEX_API_HOST": {
           "type": "string"
         },
@@ -1661,6 +1667,12 @@
                       "type": "string"
                     },
                     "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_BASE_URL": {
                       "type": "string"
                     },
                     "VERTEX_API_HOST": {
