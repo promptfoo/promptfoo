@@ -4613,8 +4613,8 @@ describe('runEval', () => {
         registers: {},
       });
 
-      // Should have measured latency (>= 50ms since we added a delay)
-      expect(results[0].latencyMs).toBeGreaterThanOrEqual(50);
+      // Should have measured latency (>= 45ms accounting for timer precision)
+      expect(results[0].latencyMs).toBeGreaterThanOrEqual(45);
     });
 
     it('should respect provider latencyMs of 0', async () => {
