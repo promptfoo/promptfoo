@@ -56,6 +56,14 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         }
       }
     }
+
+    // Copy sessionId from metadata to vars for display if not already present
+    if (result.metadata?.sessionId && !result.vars?.sessionId) {
+      result.vars = result.vars || {};
+      result.vars.sessionId = result.metadata.sessionId;
+      varsForHeader.add('sessionId');
+    }
+
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 

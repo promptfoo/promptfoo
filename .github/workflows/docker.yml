@@ -64,7 +64,7 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -184,7 +184,7 @@ jobs:
     needs: [test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -229,7 +229,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.platforms.digest-suffix }}
           path: ${{ runner.temp }}/digests/*
@@ -243,7 +243,7 @@ jobs:
       manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
@@ -315,7 +315,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
           subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'

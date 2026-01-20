@@ -75,6 +75,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
+  VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
 
@@ -733,9 +734,9 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
-): Record<string, string | object>[] {
+): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | object>[] = [{}];
+  const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
     let values: Array<string | object> = [];
@@ -766,7 +767,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, string | object>[] = [];
+    const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -988,7 +989,7 @@ class Evaluator {
       }
     }
 
-    this.evalRecord.addPrompts(prompts);
+    await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1408,17 +1409,34 @@ class Evaluator {
 
         if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
+          // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
+          // This is the number of test evaluations for THIS prompt, not global progress
+          const promptEvalCount =
+            metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+          // Warn if user has a metric named __count (it will be overridden)
+          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+            logger.warn(
+              "Metric name '__count' is reserved for derived metrics and will be overridden.",
+            );
+          }
+          // Create evaluation context with named scores and __count for average calculations
+          const evalContext: Record<string, number> = {
+            ...metrics.namedScores,
+            __count: promptEvalCount,
+          };
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
             try {
               if (typeof metric.value === 'function') {
-                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+                metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
               } else {
-                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                const evaluatedValue = math.evaluate(metric.value, evalContext);
                 metrics.namedScores[metric.name] = evaluatedValue;
               }
+              // Update context with the new derived metric value for subsequent metrics
+              evalContext[metric.name] = metrics.namedScores[metric.name];
             } catch (error) {
               logger.debug(
                 `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
@@ -2184,6 +2202,9 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Reset cliState.maxConcurrency to prevent stale state between evaluations
+      cliState.maxConcurrency = undefined;
     }
   }
 }

@@ -106,19 +106,11 @@ Variables are automatically mapped from column headers.
 
 Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
 
-1. Install the `xlsx` package as a peer dependency:
+1. Install the `read-excel-file` package as a peer dependency:
 
    ```bash
-   # Install latest version from npm (recommended)
-   npm install xlsx
-
-   # OR install specific version from SheetJS CDN
-   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
+   npm install read-excel-file
    ```
-
-   **Why two options?**
-   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
-   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
 
 2. Use Excel files just like CSV files:
    ```yaml title="promptfooconfig.yaml"
@@ -412,6 +404,25 @@ tests:
       document: file://docs/report.pdf
       data: file://data/config.yaml
 ```
+
+### Path Resolution
+
+`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+
+```yaml title="src/tests/promptfooconfig.yaml"
+tests:
+  - vars:
+      # Resolved as src/tests/data/input.json
+      data: file://./data/input.json
+
+      # Also works - resolved as src/tests/data/input.json
+      data2: file://data/input.json
+
+      # Parent directory - resolved as src/shared/context.json
+      shared: file://../shared/context.json
+```
+
+Without the `file://` prefix, values are passed as plain strings to your provider.
 
 ### Supported File Types
 

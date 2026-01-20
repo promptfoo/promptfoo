@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 
 import Cal, { getCalApi } from '@calcom/embed-react';
+import Head from '@docusaurus/Head';
 import { useColorMode } from '@docusaurus/theme-common';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -408,11 +410,34 @@ function Contact(): React.ReactElement {
 }
 
 export default function Page(): React.ReactElement {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Contact Enterprise Sales"
       description="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team about red teaming, guardrails, and compliance."
     >
+      <Head>
+        <meta property="og:title" content="Book a Demo - Promptfoo" />
+        <meta
+          property="og:description"
+          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/contact-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/contact`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Book a Demo - Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/contact-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/contact`} />
+      </Head>
       <Contact />
     </Layout>
   );

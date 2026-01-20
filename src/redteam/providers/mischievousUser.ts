@@ -37,7 +37,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
-    finalTargetResponse: ProviderResponse,
+    finalTargetResponse: ProviderResponse | undefined,
     sessionId: string,
   ) {
     return {
@@ -49,7 +49,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
         redteamHistory: messagesToRedteamHistory(messages),
         sessionId,
       },
-      guardrails: finalTargetResponse.guardrails,
+      guardrails: finalTargetResponse?.guardrails,
       sessionId,
     };
   }

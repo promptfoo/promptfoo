@@ -107,6 +107,7 @@ import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { createTrueFoundryProvider } from './truefoundry';
+import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -141,42 +142,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new MemoryPoisoningProvider(providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('adaline:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      if (splits.length < 4) {
-        throw new Error(
-          `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
-        );
-      }
-      const providerName = splits[1];
-      const modelType = splits[2];
-      const modelName = splits[3];
-
-      try {
-        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-          './adaline.gateway'
-        );
-        if (modelType === 'embedding' || modelType === 'embeddings') {
-          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-        }
-        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
-          throw new Error(
-            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
-              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
-          );
-        }
-        throw error;
-      }
     },
   },
   {
@@ -482,6 +447,20 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createCloudflareAiProvider } = await import('./cloudflare-ai');
       return createCloudflareAiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
+      return createCloudflareGatewayProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });
@@ -983,6 +962,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('replicate:'),
     create: async (
       providerPath: string,
@@ -1081,6 +1071,19 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createDockerProvider } = await import('./docker');
       return createDockerProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('vercel:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVercelProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });

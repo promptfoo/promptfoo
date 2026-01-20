@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -995,17 +995,21 @@ export default function StrategyConfigDialog({
           {/* Mode description */}
           <Alert variant="info" className="py-2">
             <Info className="size-4" />
-            <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
-            <AlertDescription className="text-sm text-muted-foreground">
-              {modeInfo.description}
-            </AlertDescription>
+            <AlertContent>
+              <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
+              <AlertDescription className="text-sm text-muted-foreground">
+                {modeInfo.description}
+              </AlertDescription>
+            </AlertContent>
           </Alert>
 
           {/* Ordering warnings */}
           {orderingWarnings.map((warning, idx) => (
             <Alert key={idx} variant="warning" className="py-2">
               <AlertTriangle className="size-4" />
-              <AlertDescription className="text-sm">{warning}</AlertDescription>
+              <AlertContent>
+                <AlertDescription className="text-sm">{warning}</AlertDescription>
+              </AlertContent>
             </Alert>
           ))}
 

@@ -338,6 +338,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -400,6 +401,19 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ].sort(),
 ] as const satisfies readonly Plugin[]);
 
+export const MINIMAL_TEST_PLUGINS: ReadonlySet<Plugin> = new Set([
+  'harmful:hate',
+  'harmful:self-harm',
+] as const satisfies readonly Plugin[]);
+
+export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...DEFAULT_PLUGINS,
+  'bola',
+  'bfla',
+  'rbac',
+  'rag-source-attribution',
+] as const satisfies readonly Plugin[]);
+
 export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([
     ...DEFAULT_PLUGINS,
@@ -440,6 +454,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'reasoning-dos',
   'religion',
   'special-token-injection',

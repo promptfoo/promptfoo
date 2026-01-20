@@ -60,29 +60,90 @@ export interface OpenCodeToolConfig {
   todowrite?: boolean;
   todoread?: boolean;
   webfetch?: boolean;
+  /** Prompt user for input during execution */
+  question?: boolean;
+  /** Load SKILL.md files into conversation */
+  skill?: boolean;
+  /** Code intelligence queries (experimental - requires OPENCODE_EXPERIMENTAL_LSP_TOOL=true) */
+  lsp?: boolean;
   [key: string]: boolean | undefined; // MCP tools: mcp_*
 }
 
 /**
+ * Permission value type - simple or pattern-based
+ * Pattern-based permissions use glob patterns as keys (e.g., "*.ts": "allow")
+ */
+export type OpenCodePermissionValue =
+  | 'ask'
+  | 'allow'
+  | 'deny'
+  | Record<string, 'ask' | 'allow' | 'deny'>;
+
+/**
  * Permission configuration for specific tools
+ *
+ * Supports both simple values ('ask', 'allow', 'deny') and pattern-based
+ * configuration using glob patterns for granular control.
+ *
+ * @example
+ * ```yaml
+ * permission:
+ *   bash: allow  # Simple: allow all bash commands
+ *   edit:
+ *     "*.md": allow      # Pattern: allow editing markdown files
+ *     "src/**": ask      # Pattern: ask for src directory
+ *   external_directory: deny  # Deny access outside working dir
+ * ```
  */
 export interface OpenCodePermissionConfig {
-  bash?: 'ask' | 'allow' | 'deny' | Record<string, 'ask' | 'allow' | 'deny'>;
-  edit?: 'ask' | 'allow' | 'deny';
-  webfetch?: 'ask' | 'allow' | 'deny';
+  /** Shell command execution permission */
+  bash?: OpenCodePermissionValue;
+  /** File editing permission */
+  edit?: OpenCodePermissionValue;
+  /** Web fetching permission */
+  webfetch?: OpenCodePermissionValue;
+  /** Prevents infinite agent loops (added in v1.1.1) */
+  doom_loop?: OpenCodePermissionValue;
+  /** Access to directories outside the working directory (added in v1.1.1) */
+  external_directory?: OpenCodePermissionValue;
 }
 
 /**
  * Custom agent configuration
+ *
+ * Defines a specialized agent with specific capabilities, model settings,
+ * and tool access controls.
  */
 export interface OpenCodeAgentConfig {
+  /** Required description explaining the agent's purpose */
   description: string;
+  /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
+  /** Model ID to use for this agent (overrides global model) */
   model?: string;
+  /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
+  /** Nucleus sampling parameter (0.0-1.0) */
+  top_p?: number;
+  /** Tool configuration for this agent */
   tools?: OpenCodeToolConfig;
+  /** Permission configuration for this agent */
   permission?: OpenCodePermissionConfig;
+  /** Custom system prompt for the agent */
   prompt?: string;
+  /**
+   * Maximum agentic iterations before forcing text-only response
+   * @deprecated Use `steps` instead (deprecated in v1.1.1)
+   */
+  maxSteps?: number;
+  /** Maximum agentic iterations before forcing text-only response (replaces maxSteps) */
+  steps?: number;
+  /** Hex color code for visual identification (e.g., "#ff5500") */
+  color?: string;
+  /** Disable this agent */
+  disable?: boolean;
+  /** Hide this agent from @ autocomplete (subagents only) */
+  hidden?: boolean;
 }
 
 /**
@@ -97,12 +158,26 @@ export interface OpenCodeMCPLocalConfig {
 }
 
 /**
+ * OAuth configuration for MCP remote servers
+ */
+export interface OpenCodeMCPOAuthConfig {
+  /** OAuth client ID */
+  clientId: string;
+  /** OAuth client secret */
+  clientSecret?: string;
+  /** OAuth scope(s) to request */
+  scope?: string;
+}
+
+/**
  * MCP remote server configuration
  */
 export interface OpenCodeMCPRemoteConfig {
   type: 'remote';
   url: string;
   headers?: Record<string, string>;
+  /** OAuth configuration for authenticated MCP servers */
+  oauth?: OpenCodeMCPOAuthConfig;
   enabled?: boolean;
   timeout?: number;
 }
@@ -489,6 +564,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         todowrite: false,
         todoread: false,
         webfetch: false,
+        question: false,
+        skill: false,
+        lsp: false,
       };
     }
 
@@ -505,6 +583,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       todowrite: false,
       todoread: false,
       webfetch: false,
+      question: false,
+      skill: false,
+      lsp: false,
     };
   }
 
@@ -665,10 +746,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
                 description: config.custom_agent.description,
                 model: config.custom_agent.model,
                 temperature: config.custom_agent.temperature,
+                top_p: config.custom_agent.top_p,
                 tools: config.custom_agent.tools,
                 permission: config.custom_agent.permission,
                 prompt: config.custom_agent.prompt,
                 mode: config.custom_agent.mode ?? 'primary',
+                // Use 'steps' if provided, fall back to deprecated 'maxSteps'
+                maxSteps: config.custom_agent.steps ?? config.custom_agent.maxSteps,
+                color: config.custom_agent.color,
+                disable: config.custom_agent.disable,
+                hidden: config.custom_agent.hidden,
               },
             };
             logger.debug(

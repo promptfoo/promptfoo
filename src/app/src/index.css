@@ -210,6 +210,9 @@
   --z-dropdown: 1400;
   --z-tooltip: 1500;
 
+  /* Layout dimensions */
+  --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
+
   /* Design tokens - Light mode (aligned with MUI theme) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
   --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */

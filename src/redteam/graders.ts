@@ -80,6 +80,7 @@ import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
+import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
 import { RbacGrader } from './plugins/rbac';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
@@ -196,6 +197,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
+  'promptfoo:redteam:rag-source-attribution': new RagSourceAttributionGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),

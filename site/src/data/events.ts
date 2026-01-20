@@ -84,14 +84,54 @@ function getEventStatus(endDate: string): EventStatus {
 export const events: Event[] = [
   // Future Events (2026)
   {
+    id: 'bsides-seattle-2026',
+    slug: 'bsides-seattle-2026',
+    name: 'Promptfoo at BSides Seattle 2026',
+    shortName: 'BSides Seattle 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-02-27T09:00:00-08:00', // PST
+    endDate: '2026-02-28T18:00:00-08:00', // PST
+    location: {
+      venue: 'Building 92 (Microsoft Campus)',
+      city: 'Redmond',
+      state: 'WA',
+      country: 'USA',
+    },
+    description:
+      'Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps.',
+    fullDescription:
+      'Meet the Promptfoo team for live demos of AI red teaming: prompt injection, jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and leave with a testing plan you can run in CI.',
+    cardImage: '/img/events/bsides-seattle-2026.jpg',
+    heroImage: '/img/events/bsides-seattle-2026.jpg',
+    highlights: [
+      {
+        icon: '🌲',
+        title: 'PNW Community',
+        description: 'Connect with Seattle security pros',
+      },
+      {
+        icon: '🛠️',
+        title: 'Workshops',
+        description: 'Hands-on AI security training',
+      },
+      {
+        icon: '🤝',
+        title: 'Networking',
+        description: 'Meet security researchers',
+      },
+    ],
+    customPageUrl: '/events/bsides-seattle-2026',
+  },
+  {
     id: 'rsa-2026',
     slug: 'rsa-2026',
     name: 'Promptfoo at RSA Conference 2026',
     shortName: 'RSA 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-23',
-    endDate: '2026-03-26',
+    startDate: '2026-03-23T09:00:00-07:00', // PDT
+    endDate: '2026-03-26T18:00:00-07:00', // PDT
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -99,9 +139,9 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Meet the Promptfoo team at RSA Conference 2026. See live AI red teaming demos and learn how enterprises secure their AI applications.',
+      'Meet Promptfoo at RSAC for executive-ready AI security: red teaming, guardrails, and reporting your leadership can act on.',
     fullDescription:
-      'Join us at RSA Conference 2026 for live AI red teaming demonstrations, security consultations, and the latest in LLM vulnerability research. Meet our security experts and see how Fortune 500 companies protect their AI applications.',
+      'Meet Promptfoo to see how security teams build an AI security program that scales: continuous red teaming, runtime guardrails, and reporting that tracks risk reduction over time.',
     cardImage: '/img/events/rsa-2026.jpg',
     heroImage: '/img/events/rsa-2026.jpg',
     highlights: [
@@ -130,18 +170,18 @@ export const events: Event[] = [
     shortName: 'BSides SF 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-03-21',
-    endDate: '2026-03-22',
+    startDate: '2026-03-21T09:00:00-07:00', // PDT
+    endDate: '2026-03-22T18:00:00-07:00', // PDT
     location: {
-      venue: 'City View at Metreon',
+      venue: 'City View at the Metreon',
       city: 'San Francisco',
       state: 'CA',
       country: 'USA',
     },
     description:
-      'Join us at BSides SF 2026 for hands-on AI security workshops and community discussions.',
+      'Practitioner-led AI security during RSA week. Fast demos, deep conversations, and concrete red teaming takeaways.',
     fullDescription:
-      'Connect with the Promptfoo team and the security community at BSides SF 2026. Experience hands-on workshops, participate in AI security challenges, and learn about the latest threats to LLM applications.',
+      'Stop by to compare notes on prompt injection, agent abuse, and the testing workflows security teams actually run. We show quick demos, then go deep on how to reproduce issues and prevent regressions.',
     cardImage: '/img/events/bsides-sf-2026.jpg',
     heroImage: '/img/events/bsides-sf-2026.jpg',
     highlights: [
@@ -163,6 +203,126 @@ export const events: Event[] = [
     ],
     customPageUrl: '/events/bsides-sf-2026',
   },
+  {
+    id: 'humanx-2026',
+    slug: 'humanx-2026',
+    name: 'Promptfoo at HumanX 2026',
+    shortName: 'HumanX 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-04-06T09:00:00-07:00', // PDT
+    endDate: '2026-04-09T18:00:00-07:00', // PDT
+    location: {
+      venue: 'Moscone Center South',
+      city: 'San Francisco',
+      state: 'CA',
+      country: 'USA',
+    },
+    description:
+      'For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down.',
+    fullDescription:
+      'AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live demos on testing and securing LLM features across copilots, RAG, and agents, before launch and continuously in production.',
+    cardImage: '/img/events/humanx-2026.jpg',
+    heroImage: '/img/events/humanx-2026.jpg',
+    highlights: [
+      {
+        icon: '🧠',
+        title: 'AI Leadership',
+        description: 'Connect with AI executives and innovators',
+      },
+      {
+        icon: '🎯',
+        title: 'Live Demos',
+        description: 'See AI security testing in action',
+      },
+      {
+        icon: '🤝',
+        title: 'Networking',
+        description: 'Meet enterprise AI teams',
+      },
+    ],
+    customPageUrl: '/events/humanx-2026',
+  },
+  {
+    id: 'gartner-security-2026',
+    slug: 'gartner-security-2026',
+    name: 'Promptfoo at Gartner Security & Risk Management Summit 2026',
+    shortName: 'Gartner Security 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-06-01T09:00:00-04:00', // EDT
+    endDate: '2026-06-03T18:00:00-04:00', // EDT
+    location: {
+      venue: 'Gaylord National Resort & Convention Center',
+      city: 'National Harbor',
+      state: 'MD',
+      country: 'USA',
+    },
+    description:
+      'Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting.',
+    fullDescription:
+      'If you are building an AI security program, we can help you move from ad hoc testing to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime guardrails, and reporting security leadership can track.',
+    cardImage: '/img/events/gartner-security-2026.jpg',
+    heroImage: '/img/events/gartner-security-2026.jpg',
+    highlights: [
+      {
+        icon: '📊',
+        title: 'Analyst Briefings',
+        description: 'Meet with Gartner analysts',
+      },
+      {
+        icon: '🏢',
+        title: 'Enterprise Focus',
+        description: 'Solutions for large organizations',
+      },
+      {
+        icon: '🔒',
+        title: 'Risk Management',
+        description: 'AI governance and compliance',
+      },
+    ],
+    customPageUrl: '/events/gartner-security-2026',
+  },
+  {
+    id: 'blackhat-2026',
+    slug: 'blackhat-2026',
+    name: 'Promptfoo at Black Hat USA 2026',
+    shortName: 'Black Hat 2026',
+    status: 'upcoming',
+    type: 'conference',
+    startDate: '2026-08-01T09:00:00-07:00', // PDT
+    endDate: '2026-08-06T18:00:00-07:00', // PDT
+    location: {
+      venue: 'Mandalay Bay Convention Center',
+      city: 'Las Vegas',
+      state: 'NV',
+      country: 'USA',
+    },
+    description:
+      'See live AI attack demos at Black Hat USA: prompt injection, jailbreaks, data exfiltration, and how to automate LLM red teaming at scale.',
+    fullDescription:
+      'Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM vulnerabilities with automated red teaming, repeatable evals, and production guardrails.',
+    cardImage: '/img/events/blackhat-2026.jpg',
+    heroImage: '/img/events/blackhat-2026.jpg',
+    highlights: [
+      {
+        icon: '🎯',
+        title: 'Attack Demos',
+        description: 'Prompt injection, jailbreaks, data exfiltration',
+      },
+      {
+        icon: '🤖',
+        title: 'Red Team Automation',
+        description: 'Generate application-specific attack variants',
+      },
+      {
+        icon: '🔄',
+        title: 'CI/CD Integration',
+        description: 'Turn findings into regression tests',
+      },
+    ],
+    customPageUrl: '/events/blackhat-2026',
+  },
 
   // Past Events (2025)
   {
@@ -172,8 +332,8 @@ export const events: Event[] = [
     shortName: 'ScaleUp:AI 2025',
     status: 'past',
     type: 'webinar',
-    startDate: '2025-12-03',
-    endDate: '2025-12-03',
+    startDate: '2025-12-03T09:00:00-05:00', // EST
+    endDate: '2025-12-03T18:00:00-05:00', // EST
     location: {
       venue: 'Insight Partners',
       city: 'New York',
@@ -216,10 +376,10 @@ export const events: Event[] = [
     slug: 'blackhat-2025',
     name: 'Promptfoo at Black Hat USA 2025',
     shortName: 'Black Hat 2025',
-    status: getEventStatus('2025-08-07'),
+    status: getEventStatus('2025-08-07T18:00:00-07:00'),
     type: 'conference',
-    startDate: '2025-08-05',
-    endDate: '2025-08-07',
+    startDate: '2025-08-05T09:00:00-07:00', // PDT
+    endDate: '2025-08-07T18:00:00-07:00', // PDT
     location: {
       venue: 'Mandalay Bay Convention Center',
       city: 'Las Vegas',
@@ -275,10 +435,10 @@ export const events: Event[] = [
     slug: 'defcon-2025',
     name: 'Promptfoo Party at DEF CON 33',
     shortName: 'DEF CON 33',
-    status: getEventStatus('2025-08-09'),
+    status: getEventStatus('2025-08-09T23:59:00-07:00'),
     type: 'party',
-    startDate: '2025-08-09',
-    endDate: '2025-08-09',
+    startDate: '2025-08-09T20:00:00-07:00', // PDT
+    endDate: '2025-08-09T23:59:00-07:00', // PDT
     location: {
       venue: 'Millennium FANDOM Bar',
       city: 'Las Vegas',
@@ -318,8 +478,8 @@ export const events: Event[] = [
     shortName: 'RSA 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-28',
-    endDate: '2025-05-01',
+    startDate: '2025-04-28T09:00:00-07:00', // PDT
+    endDate: '2025-05-01T18:00:00-07:00', // PDT
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -359,8 +519,8 @@ export const events: Event[] = [
     shortName: 'BSides SF 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-26',
-    endDate: '2025-04-27',
+    startDate: '2025-04-26T09:00:00-07:00', // PDT
+    endDate: '2025-04-27T18:00:00-07:00', // PDT
     location: {
       venue: 'City View at Metreon',
       city: 'San Francisco',
@@ -393,8 +553,8 @@ export const events: Event[] = [
     shortName: 'BSides Seattle 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-18',
-    endDate: '2025-04-19',
+    startDate: '2025-04-18T09:00:00-07:00', // PDT
+    endDate: '2025-04-19T18:00:00-07:00', // PDT
     location: {
       venue: 'Building 92 (Microsoft Visitor Center)',
       city: 'Redmond',
@@ -427,8 +587,8 @@ export const events: Event[] = [
     shortName: 'Telecom Talks 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-04-09',
-    endDate: '2025-04-09',
+    startDate: '2025-04-09T09:00:00-07:00', // PDT
+    endDate: '2025-04-09T18:00:00-07:00', // PDT
     location: {
       venue: 'SRI International',
       city: 'Menlo Park',
@@ -460,10 +620,10 @@ export const events: Event[] = [
     slug: 'sector-2025',
     name: 'Promptfoo at SecTor 2025',
     shortName: 'SecTor 2025',
-    status: getEventStatus('2025-10-02'),
+    status: getEventStatus('2025-10-02T18:00:00-04:00'),
     type: 'conference',
-    startDate: '2025-09-30',
-    endDate: '2025-10-02',
+    startDate: '2025-09-30T09:00:00-04:00', // EDT
+    endDate: '2025-10-02T18:00:00-04:00', // EDT
     location: {
       venue: 'Metro Toronto Convention Centre',
       city: 'Toronto',
@@ -495,10 +655,10 @@ export const events: Event[] = [
     slug: 'ai-security-summit-2025',
     name: 'Promptfoo at AI Security Summit 2025',
     shortName: 'AI Security Summit 2025',
-    status: getEventStatus('2025-10-23'),
+    status: getEventStatus('2025-10-23T18:00:00-07:00'),
     type: 'conference',
-    startDate: '2025-10-22',
-    endDate: '2025-10-23',
+    startDate: '2025-10-22T09:00:00-07:00', // PDT
+    endDate: '2025-10-23T18:00:00-07:00', // PDT
     location: {
       venue: 'Westin St. Francis',
       city: 'San Francisco',
