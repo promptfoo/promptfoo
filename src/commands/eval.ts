@@ -6,7 +6,6 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
@@ -339,11 +338,28 @@ export async function doEval(
       disableCache();
     }
 
+    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+    // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
+    // For resume mode, include persisted value as "explicit", with fallback to config when
+    // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
+    const explicitMaxConcurrency = resumeRaw
+      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency)
+      : (cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency);
+
     if (delay > 0) {
       maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
+    } else if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
     // Apply filtering only when not resuming, to preserve test indices
@@ -411,6 +427,16 @@ export async function doEval(
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
         basePath: cliState.basePath,
       });
+      // Also update cliState.config so redteam providers can access the grader
+      if (cliState.config) {
+        // Normalize string shorthand to object
+        if (typeof cliState.config.defaultTest === 'string') {
+          cliState.config.defaultTest = {};
+        }
+        cliState.config.defaultTest = cliState.config.defaultTest || {};
+        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+      }
     }
     if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {
@@ -436,12 +462,11 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
 
-        ${validationError.toString()}
+        ${z.prettifyError(testSuiteSchema.error)}
 
       Please review your promptfooconfig.yaml configuration.`),
       );
@@ -669,7 +694,7 @@ export async function doEval(
 
     // Now wait for share to complete and show spinner (as the last output)
     let shareableUrl: string | null = null;
-    if (sharePromise) {
+    if (sharePromise != null) {
       // Determine org context for spinner text
       const orgContext = await getOrgContext();
       const orgSuffix = orgContext
@@ -986,10 +1011,9 @@ export function evalCommand(
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
       } catch (err) {
-        const validationError = fromError(err);
         logger.error(dedent`
         Invalid command options:
-        ${validationError.toString()}
+        ${err instanceof z.ZodError ? z.prettifyError(err) : err}
         `);
         process.exitCode = 1;
         return;

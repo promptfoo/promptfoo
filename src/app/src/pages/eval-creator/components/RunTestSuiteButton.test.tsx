@@ -48,6 +48,7 @@ describe('RunTestSuiteButton', () => {
   it('should be enabled when there is at least one prompt and one test', () => {
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
     render(<RunTestSuiteButton />);
@@ -70,6 +71,7 @@ describe('RunTestSuiteButton', () => {
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
 
@@ -102,6 +104,7 @@ describe('RunTestSuiteButton', () => {
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
 

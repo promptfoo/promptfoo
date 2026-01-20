@@ -576,7 +576,7 @@ async function processJsonResults(
   }
 
   // Now wait for share to complete and show spinner (like evals)
-  if (sharePromise) {
+  if (sharePromise != null) {
     if (process.stdout.isTTY && !isCI()) {
       const spinner = ora({
         text: 'Sharing model audit...',
@@ -809,7 +809,7 @@ export function modelScanCommand(program: Command): void {
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid model audit options provided:');
-          for (const err of error.errors) {
+          for (const err of error.issues) {
             logger.error(`  - ${err.path.join('.')}: ${err.message}`);
           }
           process.exitCode = 1;

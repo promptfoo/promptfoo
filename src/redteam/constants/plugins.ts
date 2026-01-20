@@ -338,6 +338,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -410,6 +411,7 @@ export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
   'bola',
   'bfla',
   'rbac',
+  'rag-source-attribution',
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
@@ -452,6 +454,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'reasoning-dos',
   'religion',
   'special-token-injection',

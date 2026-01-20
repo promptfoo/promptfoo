@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -949,7 +949,9 @@ export default function ResultsView({
           </DialogHeader>
           <div className="space-y-4">
             <Alert variant="warning">
-              <AlertDescription>This action cannot be undone.</AlertDescription>
+              <AlertContent>
+                <AlertDescription>This action cannot be undone.</AlertDescription>
+              </AlertContent>
             </Alert>
             <p className="text-sm text-muted-foreground">You are about to permanently delete:</p>
             <div className="mt-2 p-3 bg-muted/50 rounded-md border border-border">

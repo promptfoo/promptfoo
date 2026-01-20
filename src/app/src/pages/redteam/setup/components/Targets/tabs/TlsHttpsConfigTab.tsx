@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
@@ -392,11 +392,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <div className="rounded-lg border border-border p-4 space-y-4">
                 <Alert variant="info">
                   <Info className="size-4" />
-                  <AlertDescription>
-                    Upload a JKS file to automatically extract the certificate and private key for
-                    TLS configuration. The jks-js library will be used to convert the JKS content to
-                    PEM format.
-                  </AlertDescription>
+                  <AlertContent>
+                    <AlertDescription>
+                      Upload a JKS file to automatically extract the certificate and private key for
+                      TLS configuration. The jks-js library will be used to convert the JKS content
+                      to PEM format.
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
 
                 <div className="space-y-2">
@@ -590,11 +592,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     {selectedTarget.config.tls?.jksExtractConfigured && (
                       <Alert variant="success">
                         <Check className="size-4" />
-                        <AlertDescription>
-                          JKS extraction configured. The certificate and private key will be
-                          extracted from the JKS file on the backend using the provided password and
-                          key alias.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            JKS extraction configured. The certificate and private key will be
+                            extracted from the JKS file on the backend using the provided password
+                            and key alias.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                   </div>
@@ -890,10 +894,12 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               {selectedTarget.config.tls?.rejectUnauthorized === false && (
                 <Alert variant="warning">
                   <AlertTriangle className="size-4" />
-                  <AlertDescription>
-                    Disabling certificate verification is dangerous and should never be used in
-                    production!
-                  </AlertDescription>
+                  <AlertContent>
+                    <AlertDescription>
+                      Disabling certificate verification is dangerous and should never be used in
+                      production!
+                    </AlertDescription>
+                  </AlertContent>
                 </Alert>
               )}
 

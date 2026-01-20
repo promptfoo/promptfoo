@@ -213,13 +213,13 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
     });
-    const emailSchema = z.string().email('Please enter a valid email address');
+    const emailSchema = z.email();
     try {
       email = await input({
         message: 'Redteam evals require email verification. Please enter your work email:',
         validate: (input: string) => {
           const result = emailSchema.safeParse(input);
-          return result.success || result.error.errors[0].message;
+          return result.success || result.error.issues[0].message;
         },
       });
     } catch (error) {

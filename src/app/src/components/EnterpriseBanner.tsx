@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { Info } from 'lucide-react';
@@ -54,19 +54,21 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
   return (
     <Alert variant="info" className={cn(className)}>
       <Info className="size-4" />
-      <AlertDescription>
-        You're using the community edition of Promptfoo's red teaming suite. For advanced
-        capabilities and support, learn more about{' '}
-        <a
-          href="https://www.promptfoo.dev/docs/enterprise/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-bold underline text-primary hover:text-primary/80"
-        >
-          Promptfoo Enterprise
-        </a>
-        .
-      </AlertDescription>
+      <AlertContent>
+        <AlertDescription>
+          You're using the community edition of Promptfoo's red teaming suite. For advanced
+          capabilities and support, learn more about{' '}
+          <a
+            href="https://www.promptfoo.dev/docs/enterprise/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold underline text-primary hover:text-primary/80"
+          >
+            Promptfoo Enterprise
+          </a>
+          .
+        </AlertDescription>
+      </AlertContent>
     </Alert>
   );
 };

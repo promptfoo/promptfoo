@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
+import { StrategyConfigSchema } from '../../src/redteam/types';
 
 import type {
   BaseRedteamMetadata,
@@ -271,5 +272,84 @@ describe('redteam types', () => {
     expect(partialOptions.remote).toBe(false);
     expect(partialOptions.sharing).toBe(true);
     expect(partialOptions.testGenerationInstructions).toBe('test instructions');
+  });
+
+  describe('StrategyConfigSchema numTests validation', () => {
+    it('should accept valid positive numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 5 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(5);
+      }
+    });
+
+    it('should accept numTests: 0', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 0 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(0);
+      }
+    });
+
+    it('should accept missing numTests (undefined)', () => {
+      const result = StrategyConfigSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBeUndefined();
+      }
+    });
+
+    it('should reject negative numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: -1 });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-integer numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 1.5 });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject string numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: '5' });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept numTests with other strategy config fields', () => {
+      const result = StrategyConfigSchema.safeParse({
+        enabled: true,
+        plugins: ['plugin1', 'plugin2'],
+        numTests: 10,
+        customField: 'value',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(10);
+        expect(result.data.enabled).toBe(true);
+        expect(result.data.plugins).toEqual(['plugin1', 'plugin2']);
+      }
+    });
+
+    it('should reject Infinity numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: Infinity });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject -Infinity numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: -Infinity });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject NaN numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: NaN });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept large but finite numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 10000 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(10000);
+      }
+    });
   });
 });

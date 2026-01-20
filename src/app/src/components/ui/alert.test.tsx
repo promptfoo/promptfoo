@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Alert, AlertDescription, AlertTitle } from './alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from './alert';
 
 describe('Alert', () => {
   it('renders with default variant', () => {
@@ -82,6 +82,26 @@ describe('AlertDescription', () => {
   });
 });
 
+describe('AlertContent', () => {
+  it('renders content correctly', () => {
+    render(<AlertContent>Content wrapper</AlertContent>);
+    const content = screen.getByText('Content wrapper');
+    expect(content).toBeInTheDocument();
+  });
+
+  it('applies flex-1 class', () => {
+    render(<AlertContent>Content</AlertContent>);
+    const content = screen.getByText('Content');
+    expect(content).toHaveClass('flex-1');
+  });
+
+  it('applies custom className', () => {
+    render(<AlertContent className="custom-content">Content</AlertContent>);
+    const content = screen.getByText('Content');
+    expect(content).toHaveClass('custom-content');
+  });
+});
+
 describe('Alert composition', () => {
   it('renders complete alert with title and description', () => {
     render(
@@ -94,6 +114,25 @@ describe('Alert composition', () => {
     const alert = screen.getByRole('alert');
     const title = screen.getByText('Warning');
     const description = screen.getByText('This is a warning message');
+
+    expect(alert).toBeInTheDocument();
+    expect(title).toBeInTheDocument();
+    expect(description).toBeInTheDocument();
+  });
+
+  it('renders complete alert with AlertContent wrapper', () => {
+    render(
+      <Alert variant="info">
+        <AlertContent>
+          <AlertTitle>Info</AlertTitle>
+          <AlertDescription>This is an info message</AlertDescription>
+        </AlertContent>
+      </Alert>,
+    );
+
+    const alert = screen.getByRole('alert');
+    const title = screen.getByText('Info');
+    const description = screen.getByText('This is an info message');
 
     expect(alert).toBeInTheDocument();
     expect(title).toBeInTheDocument();

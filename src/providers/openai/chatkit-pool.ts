@@ -186,7 +186,7 @@ export class ChatKitBrowserPool {
     }
 
     // Prevent multiple concurrent initializations
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       return this.initPromise;
     }
 
