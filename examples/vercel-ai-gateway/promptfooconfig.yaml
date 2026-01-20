@@ -23,13 +23,13 @@ providers:
       maxTokens: 200
 
   # Anthropic via Vercel AI Gateway
-  - id: vercel:anthropic/claude-3-5-haiku-latest
+  - id: vercel:anthropic/claude-haiku-4.5
     config:
       temperature: 0.7
       maxTokens: 200
 
   # Google via Vercel AI Gateway
-  - id: vercel:google/gemini-2.0-flash
+  - id: vercel:google/gemini-2.5-flash
     config:
       temperature: 0.7
       maxTokens: 200

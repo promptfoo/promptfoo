@@ -67,10 +67,10 @@ describe('VercelAiProvider', () => {
     });
 
     it('should create a provider with custom options', () => {
-      const provider = new VercelAiProvider('anthropic/claude-sonnet-4-20250514', {
+      const provider = new VercelAiProvider('anthropic/claude-sonnet-4.5', {
         config: { temperature: 0.7, maxTokens: 1024 },
       });
-      expect(provider.modelName).toBe('anthropic/claude-sonnet-4-20250514');
+      expect(provider.modelName).toBe('anthropic/claude-sonnet-4.5');
       expect(provider.config).toEqual({ temperature: 0.7, maxTokens: 1024 });
     });
   });
@@ -93,6 +93,66 @@ describe('VercelAiProvider', () => {
     it('should return correct string representation', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       expect(provider.toString()).toBe('[Vercel AI Gateway Provider openai/gpt-4o-mini]');
+    });
+  });
+
+  describe('configuration options', () => {
+    it('should store apiKeyEnvar in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { apiKeyEnvar: 'MY_CUSTOM_API_KEY' },
+      });
+      expect(provider.config.apiKeyEnvar).toBe('MY_CUSTOM_API_KEY');
+    });
+
+    it('should store headers in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { headers: { 'X-Custom-Header': 'test-value' } },
+      });
+      expect(provider.config.headers).toEqual({ 'X-Custom-Header': 'test-value' });
+    });
+
+    it('should store baseUrl in config', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { baseUrl: 'https://custom-gateway.example.com' },
+      });
+      expect(provider.config.baseUrl).toBe('https://custom-gateway.example.com');
+    });
+
+    it('should store all config options together', () => {
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          apiKeyEnvar: 'MY_API_KEY',
+          baseUrl: 'https://custom.example.com',
+          headers: { 'X-Test': 'value' },
+          temperature: 0.5,
+          maxTokens: 1000,
+          topP: 0.9,
+          topK: 40,
+          frequencyPenalty: 0.1,
+          presencePenalty: 0.2,
+          stopSequences: ['\n\n'],
+          timeout: 30000,
+          streaming: true,
+          responseSchema: { type: 'object' },
+        },
+      });
+      expect(provider.config).toEqual({
+        apiKey: 'test-key',
+        apiKeyEnvar: 'MY_API_KEY',
+        baseUrl: 'https://custom.example.com',
+        headers: { 'X-Test': 'value' },
+        temperature: 0.5,
+        maxTokens: 1000,
+        topP: 0.9,
+        topK: 40,
+        frequencyPenalty: 0.1,
+        presencePenalty: 0.2,
+        stopSequences: ['\n\n'],
+        timeout: 30000,
+        streaming: true,
+        responseSchema: { type: 'object' },
+      });
     });
   });
 
@@ -137,6 +197,31 @@ describe('VercelAiProvider', () => {
         total: 20,
         numRequests: 1,
       });
+    });
+
+    it('should parse JSON chat messages from prompt', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        text: 'Response to chat',
+        usage: { promptTokens: 10, completionTokens: 15 },
+        finishReason: 'stop',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o');
+      const chatPrompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello!' },
+      ]);
+      await provider.callApi(chatPrompt);
+
+      expect(vi.mocked(generateText)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'Hello!' },
+          ],
+        }),
+      );
     });
 
     it('should pass config options to generateText', async () => {
@@ -242,7 +327,7 @@ describe('VercelAiProvider', () => {
         finishReason: Promise.resolve('stop'),
       } as any);
 
-      const provider = new VercelAiProvider('anthropic/claude-sonnet-4-20250514', {
+      const provider = new VercelAiProvider('anthropic/claude-sonnet-4.5', {
         config: {
           streaming: true,
           temperature: 0.5,
@@ -430,7 +515,8 @@ describe('VercelAiProvider', () => {
       expect(vi.mocked(generateObject)).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: [{ role: 'user', content: 'Generate data' }],
-          schema: testSchema,
+          // OpenAI requires additionalProperties: false, so provider auto-adds it
+          schema: { ...testSchema, additionalProperties: false },
           temperature: 0.5,
         }),
       );
@@ -579,7 +665,7 @@ describe('VercelAiEmbeddingProvider', () => {
       const result = await provider.callEmbeddingApi('Test text');
 
       expect(result).toEqual({
-        error: 'Embedding API call error: Embedding API error',
+        error: 'API call error: Embedding API error',
       });
     });
 

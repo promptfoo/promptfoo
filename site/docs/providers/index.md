@@ -76,7 +76,7 @@ providers:
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                                   |
 | [TrueFoundry](./truefoundry.md)                     | Unified LLM Gateway for 1000+ models                         | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5` |
-| [Vercel AI Gateway](./vercel.md)                    | Unified AI Gateway with 0% markup and built-in failover      | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4-20250514`        |
+| [Vercel AI Gateway](./vercel.md)                    | Unified AI Gateway with 0% markup and built-in failover      | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4.5`               |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                               |
 | [vLLM](./vllm.md)                                   | Local                                                        | Compatible with OpenAI syntax                                                   |
 | [Ollama](./ollama.md)                               | Local                                                        | `ollama:chat:llama3.3`                                                          |

@@ -7,7 +7,7 @@ description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Verc
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 ## Setup
 
@@ -28,8 +28,8 @@ The Vercel provider uses the format: `vercel:<provider>/<model>`
 ```yaml
 providers:
   - vercel:openai/gpt-4o-mini
-  - vercel:anthropic/claude-sonnet-4-20250514
-  - vercel:google/gemini-2.0-flash
+  - vercel:anthropic/claude-sonnet-4.5
+  - vercel:google/gemini-2.5-flash
 ```
 
 ### Embedding Models
@@ -57,7 +57,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4.5
     config:
       # Authentication
       apiKey: ${VERCEL_AI_GATEWAY_API_KEY}
@@ -132,9 +132,8 @@ tests:
   - vars:
       text: 'I love this product!'
     assert:
-      - type: equals
-        value: positive
-        transform: output.sentiment
+      - type: javascript
+        value: output.sentiment === 'positive'
 ```
 
 ## Streaming
@@ -143,7 +142,7 @@ Enable streaming for real-time responses:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4.5
     config:
       streaming: true
       maxTokens: 2000
@@ -153,17 +152,18 @@ providers:
 
 The Vercel AI Gateway supports models from these providers:
 
-| Provider   | Example Models                                                   |
-| ---------- | ---------------------------------------------------------------- |
-| OpenAI     | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview`       |
-| Anthropic  | `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-haiku` |
-| Google     | `google/gemini-2.0-flash`, `google/gemini-1.5-pro`               |
-| Mistral    | `mistral/mistral-large`, `mistral/mistral-small`                 |
-| Cohere     | `cohere/command-r-plus`, `cohere/command-r`                      |
-| Groq       | `groq/llama-3.1-70b-versatile`                                   |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar`                       |
+| Provider   | Example Models                                              |
+| ---------- | ----------------------------------------------------------- |
+| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`      |
+| Anthropic  | `anthropic/claude-sonnet-4.5`, `anthropic/claude-haiku-4.5` |
+| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`          |
+| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`         |
+| Cohere     | `cohere/command-a`                                          |
+| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`              |
+| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`        |
+| xAI        | `xai/grok-3`, `xai/grok-4`                                  |
 
-For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers).
+For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
 
 ## Embedding Models
 
@@ -188,7 +188,9 @@ Supported embedding models:
 | Provider | Example Models                                                   |
 | -------- | ---------------------------------------------------------------- |
 | OpenAI   | `openai/text-embedding-3-small`, `openai/text-embedding-3-large` |
-| Cohere   | `cohere/embed-english-v3.0`, `cohere/embed-multilingual-v3.0`    |
+| Google   | `google/gemini-embedding-001`, `google/text-embedding-005`       |
+| Cohere   | `cohere/embed-v4.0`                                              |
+| Voyage   | `voyage/voyage-3.5`, `voyage/voyage-code-3`                      |
 
 ## Examples
 
@@ -199,10 +201,10 @@ providers:
   - id: vercel:openai/gpt-4o-mini
     config:
       temperature: 0.7
-  - id: vercel:anthropic/claude-sonnet-4-20250514
+  - id: vercel:anthropic/claude-sonnet-4.5
     config:
       temperature: 0.7
-  - id: vercel:google/gemini-2.0-flash
+  - id: vercel:google/gemini-2.5-flash
     config:
       temperature: 0.7
 
@@ -275,6 +277,6 @@ LOG_LEVEL=debug promptfoo eval
 ## Related Links
 
 - [Vercel AI SDK Documentation](https://ai-sdk.dev/)
-- [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway)
-- [Supported Providers](https://vercel.com/docs/ai-sdk/ai-gateway/supported-providers)
+- [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
+- [Supported Providers](https://vercel.com/docs/ai-gateway/models-and-providers)
 - [promptfoo Provider Guide](/docs/providers/)

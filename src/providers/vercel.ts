@@ -65,25 +65,18 @@ interface VercelProviderOptions extends ProviderOptions {
  * Resolves the API key from config, environment variables, or defaults.
  */
 function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | undefined {
-  // 1. Explicit apiKey in config
   if (config.apiKey) {
     return config.apiKey;
   }
-
-  // 2. Custom env var name from config
   if (config.apiKeyEnvar) {
     return (
       (env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
-      getEnvString(config.apiKeyEnvar) ??
-      undefined
+      getEnvString(config.apiKeyEnvar)
     );
   }
-
-  // 3. Default env vars
   return (
     (env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
-    getEnvString('VERCEL_AI_GATEWAY_API_KEY') ??
-    undefined
+    getEnvString('VERCEL_AI_GATEWAY_API_KEY')
   );
 }
 
@@ -94,8 +87,7 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
   return (
     config.baseUrl ??
     (env?.VERCEL_AI_GATEWAY_BASE_URL as string | undefined) ??
-    getEnvString('VERCEL_AI_GATEWAY_BASE_URL') ??
-    undefined
+    getEnvString('VERCEL_AI_GATEWAY_BASE_URL')
   );
 }
 
@@ -108,26 +100,12 @@ async function createGatewayInstance(
 ): Promise<ReturnType<typeof import('ai').createGateway>> {
   try {
     const { createGateway } = await import('ai');
-    const apiKey = resolveApiKey(config, env);
-    const baseUrl = resolveBaseUrl(config, env);
 
-    const gatewayOptions: {
-      apiKey?: string;
-      baseURL?: string;
-      headers?: Record<string, string>;
-    } = {};
-
-    if (apiKey) {
-      gatewayOptions.apiKey = apiKey;
-    }
-    if (baseUrl) {
-      gatewayOptions.baseURL = baseUrl;
-    }
-    if (config.headers) {
-      gatewayOptions.headers = config.headers;
-    }
-
-    return createGateway(gatewayOptions);
+    return createGateway({
+      apiKey: resolveApiKey(config, env),
+      baseURL: resolveBaseUrl(config, env),
+      headers: config.headers,
+    });
   } catch (error) {
     throw new Error(
       `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
@@ -152,10 +130,67 @@ function mapTokenUsage(usage?: {
 }
 
 /**
+ * Picks defined generation options from config.
+ */
+function pickGenerateOptions(config: VercelAiConfig) {
+  const {
+    temperature,
+    maxTokens,
+    topP,
+    topK,
+    frequencyPenalty,
+    presencePenalty,
+    stopSequences,
+    maxRetries,
+  } = config;
+  return Object.fromEntries(
+    Object.entries({
+      temperature,
+      maxTokens,
+      topP,
+      topK,
+      frequencyPenalty,
+      presencePenalty,
+      stopSequences,
+      maxRetries,
+    }).filter(([, v]) => v !== undefined),
+  );
+}
+
+/**
+ * Creates an AbortController with timeout and returns cleanup function.
+ */
+function createTimeoutController(timeoutMs: number): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
+/**
+ * Handles common error cases and returns appropriate ProviderResponse.
+ */
+function handleApiError(error: unknown, timeoutMs: number, context: string): ProviderResponse {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { error: `Request timed out after ${timeoutMs}ms` };
+  }
+
+  logger.error(`Vercel AI Gateway ${context} error: ${errorMessage}`);
+  return { error: `API call error: ${errorMessage}` };
+}
+
+/**
  * Vercel AI Gateway provider using the official Vercel AI SDK.
  *
  * Provider format: vercel:<provider>/<model>
- * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4-20250514
+ * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4.5
  */
 export class VercelAiProvider implements ApiProvider {
   public modelName: string;
@@ -202,56 +237,12 @@ export class VercelAiProvider implements ApiProvider {
    * Handles streaming API calls using streamText().
    */
   private async callApiStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
+    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const { signal, cleanup } = createTimeoutController(timeout);
+
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { streamText } = await import('ai');
-
-      const model = gateway(this.modelName);
-
-      const streamOptions: {
-        model: ReturnType<typeof gateway>;
-        messages: ChatMessage[];
-        temperature?: number;
-        maxTokens?: number;
-        topP?: number;
-        topK?: number;
-        frequencyPenalty?: number;
-        presencePenalty?: number;
-        stopSequences?: string[];
-        abortSignal?: AbortSignal;
-      } = {
-        model,
-        messages,
-      };
-
-      // Add optional parameters
-      if (this.config.temperature !== undefined) {
-        streamOptions.temperature = this.config.temperature;
-      }
-      if (this.config.maxTokens !== undefined) {
-        streamOptions.maxTokens = this.config.maxTokens;
-      }
-      if (this.config.topP !== undefined) {
-        streamOptions.topP = this.config.topP;
-      }
-      if (this.config.topK !== undefined) {
-        streamOptions.topK = this.config.topK;
-      }
-      if (this.config.frequencyPenalty !== undefined) {
-        streamOptions.frequencyPenalty = this.config.frequencyPenalty;
-      }
-      if (this.config.presencePenalty !== undefined) {
-        streamOptions.presencePenalty = this.config.presencePenalty;
-      }
-      if (this.config.stopSequences) {
-        streamOptions.stopSequences = this.config.stopSequences;
-      }
-
-      // Set up timeout using AbortController
-      const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      streamOptions.abortSignal = controller.signal;
 
       logger.debug('Calling Vercel AI Gateway (streaming)', {
         model: this.modelName,
@@ -259,19 +250,23 @@ export class VercelAiProvider implements ApiProvider {
         maxTokens: this.config.maxTokens,
       });
 
-      const result = streamText(streamOptions);
+      const result = streamText({
+        model: gateway(this.modelName),
+        messages,
+        ...pickGenerateOptions(this.config),
+        abortSignal: signal,
+      });
 
-      // Collect streamed text chunks
       let output = '';
-      for await (const chunk of result.textStream) {
-        output += chunk;
+      try {
+        for await (const chunk of result.textStream) {
+          output += chunk;
+        }
+      } finally {
+        cleanup();
       }
 
-      clearTimeout(timeoutId);
-
-      // Get final usage and finish reason
-      const usage = await result.usage;
-      const finishReason = await result.finishReason;
+      const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
 
       logger.debug('Vercel AI Gateway streaming response received', {
         model: this.modelName,
@@ -279,98 +274,44 @@ export class VercelAiProvider implements ApiProvider {
         finishReason,
       });
 
-      return {
-        output,
-        tokenUsage: mapTokenUsage(usage),
-        finishReason,
-      };
+      return { output, tokenUsage: mapTokenUsage(usage), finishReason };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Handle abort/timeout errors
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          error: `Request timed out after ${this.config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        };
-      }
-
-      logger.error(`Vercel AI Gateway streaming API call error: ${errorMessage}`);
-      return {
-        error: `API call error: ${errorMessage}`,
-      };
+      return handleApiError(error, timeout, 'streaming API call');
     }
   }
 
   /**
    * Handles structured output API calls using generateObject().
-   * Uses the AI SDK's generateObject to get JSON output conforming to a schema.
    */
   private async callApiStructured(messages: ChatMessage[]): Promise<ProviderResponse> {
+    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const { signal, cleanup } = createTimeoutController(timeout);
+
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
-      const { generateObject } = await import('ai');
-      const { jsonSchema } = await import('ai');
+      const { generateObject, jsonSchema } = await import('ai');
 
-      const model = gateway(this.modelName);
-
-      // Convert JSON Schema to AI SDK schema format
-      const schema = jsonSchema<Record<string, unknown>>(
-        this.config.responseSchema as Parameters<typeof jsonSchema>[0],
-      );
-
-      const generateOptions: {
-        model: ReturnType<typeof gateway>;
-        messages: ChatMessage[];
-        schema: ReturnType<typeof jsonSchema>;
-        temperature?: number;
-        maxTokens?: number;
-        topP?: number;
-        topK?: number;
-        frequencyPenalty?: number;
-        presencePenalty?: number;
-        abortSignal?: AbortSignal;
-      } = {
-        model,
-        messages,
-        schema,
-      };
-
-      // Add optional parameters
-      if (this.config.temperature !== undefined) {
-        generateOptions.temperature = this.config.temperature;
-      }
-      if (this.config.maxTokens !== undefined) {
-        generateOptions.maxTokens = this.config.maxTokens;
-      }
-      if (this.config.topP !== undefined) {
-        generateOptions.topP = this.config.topP;
-      }
-      if (this.config.topK !== undefined) {
-        generateOptions.topK = this.config.topK;
-      }
-      if (this.config.frequencyPenalty !== undefined) {
-        generateOptions.frequencyPenalty = this.config.frequencyPenalty;
-      }
-      if (this.config.presencePenalty !== undefined) {
-        generateOptions.presencePenalty = this.config.presencePenalty;
-      }
-
-      // Set up timeout using AbortController
-      const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      generateOptions.abortSignal = controller.signal;
+      // OpenAI requires additionalProperties: false for strict mode
+      const schema = jsonSchema<Record<string, unknown>>({
+        ...this.config.responseSchema,
+        additionalProperties: this.config.responseSchema?.additionalProperties ?? false,
+      } as Parameters<typeof jsonSchema>[0]);
 
       logger.debug('Calling Vercel AI Gateway (structured output)', {
         model: this.modelName,
         temperature: this.config.temperature,
         maxTokens: this.config.maxTokens,
-        hasSchema: true,
       });
 
-      const result = await generateObject(generateOptions);
+      const result = await generateObject({
+        model: gateway(this.modelName),
+        messages,
+        schema,
+        ...pickGenerateOptions(this.config),
+        abortSignal: signal,
+      });
 
-      clearTimeout(timeoutId);
+      cleanup();
 
       logger.debug('Vercel AI Gateway structured output response received', {
         model: this.modelName,
@@ -384,19 +325,8 @@ export class VercelAiProvider implements ApiProvider {
         finishReason: result.finishReason,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Handle abort/timeout errors
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          error: `Request timed out after ${this.config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        };
-      }
-
-      logger.error(`Vercel AI Gateway structured output API call error: ${errorMessage}`);
-      return {
-        error: `API call error: ${errorMessage}`,
-      };
+      cleanup();
+      return handleApiError(error, timeout, 'structured output API call');
     }
   }
 
@@ -448,56 +378,12 @@ export class VercelAiProvider implements ApiProvider {
    * Handles non-streaming API calls using generateText().
    */
   private async callApiNonStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
+    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const { signal, cleanup } = createTimeoutController(timeout);
+
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { generateText } = await import('ai');
-
-      const model = gateway(this.modelName);
-
-      const generateOptions: {
-        model: ReturnType<typeof gateway>;
-        messages: ChatMessage[];
-        temperature?: number;
-        maxTokens?: number;
-        topP?: number;
-        topK?: number;
-        frequencyPenalty?: number;
-        presencePenalty?: number;
-        stopSequences?: string[];
-        abortSignal?: AbortSignal;
-      } = {
-        model,
-        messages,
-      };
-
-      // Add optional parameters
-      if (this.config.temperature !== undefined) {
-        generateOptions.temperature = this.config.temperature;
-      }
-      if (this.config.maxTokens !== undefined) {
-        generateOptions.maxTokens = this.config.maxTokens;
-      }
-      if (this.config.topP !== undefined) {
-        generateOptions.topP = this.config.topP;
-      }
-      if (this.config.topK !== undefined) {
-        generateOptions.topK = this.config.topK;
-      }
-      if (this.config.frequencyPenalty !== undefined) {
-        generateOptions.frequencyPenalty = this.config.frequencyPenalty;
-      }
-      if (this.config.presencePenalty !== undefined) {
-        generateOptions.presencePenalty = this.config.presencePenalty;
-      }
-      if (this.config.stopSequences) {
-        generateOptions.stopSequences = this.config.stopSequences;
-      }
-
-      // Set up timeout using AbortController
-      const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      generateOptions.abortSignal = controller.signal;
 
       logger.debug('Calling Vercel AI Gateway', {
         model: this.modelName,
@@ -505,9 +391,14 @@ export class VercelAiProvider implements ApiProvider {
         maxTokens: this.config.maxTokens,
       });
 
-      const result = await generateText(generateOptions);
+      const result = await generateText({
+        model: gateway(this.modelName),
+        messages,
+        ...pickGenerateOptions(this.config),
+        abortSignal: signal,
+      });
 
-      clearTimeout(timeoutId);
+      cleanup();
 
       logger.debug('Vercel AI Gateway response received', {
         model: this.modelName,
@@ -521,19 +412,8 @@ export class VercelAiProvider implements ApiProvider {
         finishReason: result.finishReason,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Handle abort/timeout errors
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          error: `Request timed out after ${this.config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        };
-      }
-
-      logger.error(`Vercel AI Gateway API call error: ${errorMessage}`);
-      return {
-        error: `API call error: ${errorMessage}`,
-      };
+      cleanup();
+      return handleApiError(error, timeout, 'API call');
     }
   }
 }
@@ -592,28 +472,22 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       }
     }
 
+    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const { signal, cleanup } = createTimeoutController(timeout);
+
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
       const { embed } = await import('ai');
 
-      const model = gateway.textEmbeddingModel(this.modelName);
-
-      // Set up timeout using AbortController
-      const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      logger.debug('Calling Vercel AI Gateway for embedding', {
-        model: this.modelName,
-      });
+      logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
       const result = await embed({
-        model,
+        model: gateway.textEmbeddingModel(this.modelName),
         value: input,
-        abortSignal: controller.signal,
+        abortSignal: signal,
       });
 
-      clearTimeout(timeoutId);
+      cleanup();
 
       logger.debug('Vercel AI Gateway embedding response received', {
         model: this.modelName,
@@ -622,12 +496,9 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       const response: ProviderEmbeddingResponse = {
         embedding: result.embedding,
-        tokenUsage: {
-          total: result.usage?.tokens,
-        },
+        tokenUsage: { total: result.usage?.tokens },
       };
 
-      // Cache the response
       if (isCacheEnabled()) {
         try {
           await cache.set(cacheKey, JSON.stringify(response));
@@ -638,19 +509,8 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       return response;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Handle abort/timeout errors
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          error: `Embedding request timed out after ${this.config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        };
-      }
-
-      logger.error(`Vercel AI Gateway embedding error: ${errorMessage}`);
-      return {
-        error: `Embedding API call error: ${errorMessage}`,
-      };
+      cleanup();
+      return handleApiError(error, timeout, 'embedding');
     }
   }
 }
