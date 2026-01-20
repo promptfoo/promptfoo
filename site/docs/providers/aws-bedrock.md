@@ -648,6 +648,8 @@ Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials mu
 
 :::
 
+Nova Reel is available in **us-east-1** region.
+
 #### Basic Configuration
 
 ```yaml
