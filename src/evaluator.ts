@@ -52,6 +52,8 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isPromptAllowed } from './util/promptMatching';
+import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -238,38 +240,22 @@ function updateAssertionMetrics(
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
- * prompt labels. Providers can be configured with a `prompts` attribute, which
- * corresponds to an array of prompt labels. Labels can either refer to a group
- * (for example from a file) or to individual prompts. If the attribute is
- * present, this function validates that the prompt labels fit the matching
- * criteria of the provider. Examples:
+ * prompt references. Providers and tests can be configured with a `prompts` attribute,
+ * which corresponds to an array of prompt labels or IDs. References can either match
+ * exactly or use wildcard patterns. Examples:
  *
- * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
- * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ * - `prompts: ['examplePrompt']` matches prompt with label OR id 'examplePrompt'
+ * - `prompts: ['exampleGroup:*']` matches any prompt with label/id starting with 'exampleGroup:'
+ * - `prompts: ['exampleGroup']` matches 'exampleGroup' exactly OR any label/id starting with 'exampleGroup:'
  *
  * If no `prompts` attribute is present, all prompts are allowed by default.
  *
  * @param prompt - The prompt object to check.
- * @param allowedPrompts - The list of allowed prompt labels.
+ * @param allowedPrompts - The list of allowed prompt labels or IDs.
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
-  const promptLabel = prompt.label;
-  return (
-    !Array.isArray(allowedPrompts) ||
-    allowedPrompts.some((allowedPrompt) => {
-      if (allowedPrompt === promptLabel) {
-        return true;
-      }
-
-      if (allowedPrompt.endsWith('*')) {
-        const prefix = allowedPrompt.slice(0, -1);
-        return promptLabel.startsWith(prefix);
-      }
-
-      return promptLabel.startsWith(`${allowedPrompt}:`);
-    })
-  );
+  return isPromptAllowed(prompt, allowedPrompts);
 }
 
 /**
@@ -316,12 +302,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // Deep clone vars to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
   // Crescendo) may add runtime variables like sessionId to vars during execution.
-  // Without this copy, those mutations would persist to the stored testCase, causing
-  // test matching to fail when using --filter-errors-only or --filter-failing.
-  const vars = { ...(test.vars || {}) };
+  // Without this deep clone, mutations to nested objects would persist to the stored
+  // testCase, causing non-deterministic behavior where test execution order affects results.
+  const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -678,8 +664,13 @@ function buildProviderErrorContext({
   })();
   const errorMessage = String(error);
   const stack = (error as Error)?.stack;
-  const errorWithStack =
-    stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+  // Stack traces typically start with the error message, so check if stack already contains
+  // the message to avoid duplication like "Error: msg\n\nError: msg\n    at ..."
+  const errorWithStack = stack
+    ? stack.startsWith(errorMessage)
+      ? stack // Stack already contains the message
+      : `${errorMessage}\n\n${stack}`
+    : errorMessage;
 
   return {
     errorWithStack,
@@ -1150,6 +1141,10 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
+      // If the test case doesn't have prompts filter, use the one from defaultTest
+      testCase.prompts =
+        testCase.prompts ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.prompts : undefined);
       // If the test case doesn't have a provider, use the one from defaultTest
       // Note: defaultTest.provider may be a raw config object that needs to be loaded
       if (
@@ -1178,6 +1173,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1209,9 +1208,18 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
+              // Provider-level prompt filtering
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+                continue;
+              }
+              // Test-level prompt filtering
+              if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
               runEvalOptions.push({
