@@ -109,8 +109,8 @@ function getStatus(requested: number, generated: number): string {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
-  strategyResults: Record<string, { requested: number; generated: number }>,
+  pluginResults: Record<string, { requested: number; generated: number; error?: string }>,
+  strategyResults: Record<string, { requested: number; generated: number; error?: string }>,
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -123,20 +123,22 @@ function generateReport(
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
+    .forEach(([id, { requested, generated, error }]) => {
+      const status = error ? chalk.red(`Failed: ${error.slice(0, 20)}...`) : getStatus(requested, generated);
+      table.push([rowIndex++, 'Plugin', id, requested, generated, status]);
     });
 
   Object.entries(strategyResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated }]) => {
+    .forEach(([id, { requested, generated, error }]) => {
+      const status = error ? chalk.red(`Failed: ${error.slice(0, 20)}...`) : getStatus(requested, generated);
       table.push([
         rowIndex++,
         'Strategy',
         id,
         requested,
         generated,
-        getStatus(requested, generated),
+        status,
       ]);
     });
 
@@ -968,7 +970,7 @@ export async function synthesize({
 
       // Generate tests for each language in parallel using Promise.allSettled
       const allPluginTests: TestCase[] = [];
-      const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
+      const resultsPerLanguage: Record<string, { requested: number; generated: number; error?: string }> = {};
 
       const languagePromises = languages.map(async (lang) => {
         const pluginTests = await action({
@@ -1020,19 +1022,27 @@ export async function synthesize({
 
       const languageResults = await Promise.allSettled(languagePromises);
 
-      for (const result of languageResults) {
+      languageResults.forEach((result, index) => {
+        const lang = languages[index];
         if (result.status === 'fulfilled') {
-          const { lang, tests, requested, generated } = result.value;
+          const { tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
-          // Handle rejected promise
+          // Track failed language with error reason
+          const errorMsg =
+            result.reason instanceof Error ? result.reason.message : String(result.reason);
+          resultsPerLanguage[lang || 'default'] = {
+            requested: plugin.numTests,
+            generated: 0,
+            error: errorMsg,
+          };
           logger.warn(
-            `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
+            `[Language Processing] Error generating tests for ${plugin.id} in language ${lang || 'default'}: ${result.reason}`,
           );
         }
-      }
+      });
 
       logger.debug(
         `[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`,
