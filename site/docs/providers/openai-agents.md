@@ -32,7 +32,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5.1-mini
+        model: gpt-4o-mini
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
@@ -73,7 +73,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5.1-mini',
+  model: 'gpt-4o-mini',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -108,12 +108,12 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-5.1-mini
+        model: gpt-4o-mini
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5.1-mini
+            model: gpt-4o-mini
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
