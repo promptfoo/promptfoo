@@ -332,6 +332,31 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle Luma Ray video model
+      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
+      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
+      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
+        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
+        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
+        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        const videoModelName = modelName.includes('luma.ray')
+          ? modelName
+          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+        return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
+      // Handle Nova Reel video model
+      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
+      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      if (
+        modelType.includes('amazon.nova-reel') ||
+        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+      ) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
+      }
+
       // Handle Bedrock Agents
       if (modelType === 'agents') {
         const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
