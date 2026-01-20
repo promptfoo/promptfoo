@@ -67,14 +67,6 @@ function transformResult(
   }
 }
 
-/**
- * Deduplicates test cases based on vars and strategyId.
- * @deprecated Use deduplicateTestCases from '../../util/comparison' instead
- */
-export function deduplicateTests(tests: TestCase[]): TestCase[] {
-  return deduplicateTestCases(tests);
-}
-
 async function getFailedTestCases(
   pluginId: string,
   targetId: string,
@@ -168,7 +160,7 @@ async function getFailedTestCases(
     allTestCases.push(...localTestCases);
 
     // Deduplicate combined results from both cloud and local
-    return deduplicateTests(allTestCases);
+    return deduplicateTestCases(allTestCases);
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
     return [];
@@ -232,7 +224,7 @@ export async function addRetryTestCases(
     }
   }
 
-  const deduped = deduplicateTests(retryTestCases);
+  const deduped = deduplicateTestCases(retryTestCases);
 
   // Mark all retry tests with retry: true flag, preserve original strategyId (even if undefined)
   const marked = deduped.map((test) => ({
