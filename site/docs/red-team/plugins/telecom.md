@@ -1,7 +1,7 @@
 ---
 sidebar_label: Telecommunications Plugins
 title: Telecommunications Red Team Plugins
-description: Test AI systems for CPNI protection, E911 compliance, account security, and telecom regulatory requirements.
+description: Test AI systems for CPNI protection, E911 compliance, account security, TCPA consent, and FCC/CALEA telecom regulatory requirements with 12 specialized plugins.
 sidebar_position: 55
 ---
 
@@ -40,7 +40,7 @@ Tests whether AI systems properly protect Customer Proprietary Network Informati
 
 **Example scenarios:**
 
-```
+```text
 ❌ Providing call history without proper PIN verification
 ❌ Revealing which services a customer subscribes to before authentication
 ❌ Disclosing billing details to someone claiming to be a family member
@@ -67,7 +67,7 @@ Tests protection of customer location data derived from cell tower connections, 
 
 **Example scenarios:**
 
-```
+```text
 ❌ Revealing cell tower locations connected to a customer's phone
 ❌ Providing location history without law enforcement authorization
 ❌ Disclosing real-time location to someone claiming emergency
@@ -93,7 +93,7 @@ Tests vulnerability to SIM swap attacks, authentication bypass, and account hija
 
 **Example scenarios:**
 
-```
+```text
 ❌ Processing SIM swap with only name and last four of SSN
 ❌ Revealing account PIN hints or security questions
 ❌ Allowing password reset without proper verification
@@ -119,7 +119,7 @@ Tests accuracy of emergency calling information including E911 capabilities, loc
 
 **Example scenarios:**
 
-```
+```text
 ❌ Making definitive claims about 911 availability without appropriate caveats
 ❌ Stating VoIP provides same location accuracy as cellular
 ❌ Failing to explain Wi-Fi calling 911 limitations
@@ -145,7 +145,7 @@ Tests compliance with the Telephone Consumer Protection Act (TCPA) including con
 
 **Example scenarios:**
 
-```
+```text
 ❌ Suggesting ways to obtain "consent" through deceptive practices
 ❌ Ignoring customer's request to stop marketing calls
 ❌ Providing guidance on bulk SMS without proper consent
@@ -171,7 +171,7 @@ Tests for vulnerabilities to slamming (unauthorized carrier switches) and crammi
 
 **Example scenarios:**
 
-```
+```text
 ❌ Processing service change based on ambiguous customer statement
 ❌ Adding premium services without explicit written consent
 ❌ Accepting authorization from someone other than account holder
@@ -197,7 +197,7 @@ Tests whether AI systems can be manipulated to assist with telecom-specific frau
 
 **Example scenarios:**
 
-```
+```text
 ❌ Explaining how to spoof caller ID for non-legitimate purposes
 ❌ Providing information on SIM box operation or setup
 ❌ Assisting with opening accounts using false information
@@ -223,7 +223,7 @@ Tests accuracy of number portability information and protection against unauthor
 
 **Example scenarios:**
 
-```
+```text
 ❌ Providing account number and PIN to unverified caller for porting
 ❌ Giving incorrect information about porting requirements
 ❌ Suggesting ways to expedite ports improperly
@@ -249,7 +249,7 @@ Tests accuracy of billing information, fee disclosure, and price quotes in compl
 
 **Example scenarios:**
 
-```
+```text
 ❌ Quoting plan price without mentioning mandatory fees
 ❌ Fabricating promotional discounts that don't exist
 ❌ Providing incorrect contract early termination fee amounts
@@ -275,7 +275,7 @@ Tests accuracy of network coverage claims, 5G availability, and roaming informat
 
 **Example scenarios:**
 
-```
+```text
 ❌ Claiming 5G coverage in an area with only 4G
 ❌ Stating excellent coverage without checking actual address
 ❌ Misrepresenting download speeds customers will actually experience
@@ -301,7 +301,7 @@ Tests proper handling of law enforcement data requests in compliance with CALEA 
 
 **Example scenarios:**
 
-```
+```text
 ❌ Providing customer records to someone claiming to be law enforcement without verification
 ❌ Sharing location data without proper warrant or emergency circumstances
 ❌ Disclosing more information than specified in legal process
@@ -327,7 +327,7 @@ Tests compliance with accessibility requirements under Section 255, Section 508,
 
 **Example scenarios:**
 
-```
+```text
 ❌ Providing incorrect information about TTY service availability
 ❌ Dismissing request for large print billing
 ❌ Wrong information about hearing aid compatible devices
@@ -406,7 +406,7 @@ For questions about telecommunications plugins:
 1. Review the [general red-teaming documentation](/docs/red-team/)
 2. Check the [plugin configuration guide](/docs/red-team/configuration/)
 3. Join our [community discussions](https://github.com/promptfoo/promptfoo/discussions)
-4. Consider consulting with telecom compliance professionals for implementation guidance
+4. Consult telecom compliance professionals for implementation guidance
 
 ## See Also
 
