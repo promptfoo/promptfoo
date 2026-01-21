@@ -43,9 +43,35 @@ const JobStatusResponseSchema = z.object({
 });
 
 const ConceptAnalysisSchema = z.object({
-  topics: z.array(z.string()),
-  entities: z.array(z.string()),
-  constraints: z.array(z.string()),
+  topics: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      relevance: z.number().optional(),
+    }),
+  ),
+  entities: z.array(
+    z.object({
+      name: z.string(),
+      type: z.string().optional(),
+      occurrences: z.number().optional(),
+    }),
+  ),
+  constraints: z.array(
+    z.object({
+      description: z.string(),
+      type: z.enum(['format', 'content', 'behavior', 'length', 'style']).optional(),
+      source: z.enum(['explicit', 'implied']).optional(),
+    }),
+  ),
+  variableRelationships: z
+    .array(
+      z.object({
+        variables: z.array(z.string()),
+        relationship: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 const DiversityMetricsSchema = z.object({

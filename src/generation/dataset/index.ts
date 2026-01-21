@@ -276,10 +276,9 @@ export async function generateDataset(
     }
   }
 
-  // Combine edge cases into test cases
-  if (edgeCases && edgeCases.length > 0) {
-    finalTestCases = [...finalTestCases, ...edgeCases.map((ec) => ec.vars)];
-  }
+  // Note: Edge cases are NOT merged into testCases here.
+  // They are returned separately in the result so callers can decide how to handle them.
+  // This avoids duplication when callers merge them back.
 
   progress.stop();
 

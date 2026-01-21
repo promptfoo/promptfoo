@@ -340,3 +340,51 @@ export function cleanupOldJobs(maxAgeMs: number = 60 * 60 * 1000): number {
 
   return cleaned;
 }
+
+/**
+ * Auto-cleanup interval reference.
+ * Stored so it can be cancelled if needed (e.g., during tests).
+ */
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Starts automatic cleanup of old generation jobs.
+ * Runs every 15 minutes by default, cleaning up jobs older than 1 hour.
+ *
+ * @param intervalMs - Cleanup check interval in milliseconds (default: 15 minutes)
+ * @param maxAgeMs - Maximum age before cleanup in milliseconds (default: 1 hour)
+ */
+export function startAutoCleanup(
+  intervalMs: number = 15 * 60 * 1000,
+  maxAgeMs: number = 60 * 60 * 1000,
+): void {
+  // Don't start multiple cleanup intervals
+  if (cleanupIntervalId) {
+    return;
+  }
+
+  cleanupIntervalId = setInterval(() => {
+    cleanupOldJobs(maxAgeMs);
+  }, intervalMs);
+
+  // Ensure the interval doesn't prevent Node.js from exiting
+  if (typeof cleanupIntervalId.unref === 'function') {
+    cleanupIntervalId.unref();
+  }
+
+  logger.debug('Auto-cleanup started for generation jobs');
+}
+
+/**
+ * Stops automatic cleanup of generation jobs.
+ */
+export function stopAutoCleanup(): void {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+    logger.debug('Auto-cleanup stopped for generation jobs');
+  }
+}
+
+// Start auto-cleanup when this module is loaded
+startAutoCleanup();

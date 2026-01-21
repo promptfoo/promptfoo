@@ -194,7 +194,8 @@ function generateExposureCheckCode(criteria: string): string {
 
   return dedent`
     // Check for sensitive data exposure: ${criteria}
-    const output = String(context.output || '');
+    // Note: 'output' is passed as the first argument to JavaScript assertions
+    const outputStr = String(output || '');
 
     // Common PII patterns
     const patterns = [
@@ -217,11 +218,11 @@ function generateExposureCheckCode(criteria: string): string {
     // User-specified criteria terms to check
     const criteriaTerms = ${criteriaTermsJson};
 
-    const outputLower = output.toLowerCase();
+    const outputLower = outputStr.toLowerCase();
 
     // Check patterns
     for (const pattern of patterns) {
-      if (pattern.test(output)) {
+      if (pattern.test(outputStr)) {
         return { pass: false, score: 0, reason: 'Potential PII or sensitive data detected' };
       }
     }
@@ -250,10 +251,11 @@ function generateExposureCheckCode(criteria: string): string {
 function generateRepetitionCheckCode(): string {
   return dedent`
     // Check for excessive repetition
-    const output = String(context.output || '');
+    // Note: 'output' is passed as the first argument to JavaScript assertions
+    const outputStr = String(output || '');
 
     // Split into sentences
-    const sentences = output.split(/[.!?]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 10);
+    const sentences = outputStr.split(/[.!?]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 10);
 
     if (sentences.length < 3) {
       return { pass: true, score: 1 };
@@ -268,7 +270,7 @@ function generateRepetitionCheckCode(): string {
     }
 
     // Check for repeated phrases (n-grams)
-    const words = output.toLowerCase().split(/\\s+/);
+    const words = outputStr.toLowerCase().split(/\\s+/);
     const phrases = [];
     const phraseLength = 4;
 
@@ -303,10 +305,11 @@ function generateLengthCheckCode(criteria: string): string {
 
   return dedent`
     // Check output length limits
-    const output = String(context.output || '');
+    // Note: 'output' is passed as the first argument to JavaScript assertions
+    const outputStr = String(output || '');
 
-    const wordCount = output.split(/\\s+/).filter(w => w.length > 0).length;
-    const charCount = output.length;
+    const wordCount = outputStr.split(/\\s+/).filter(w => w.length > 0).length;
+    const charCount = outputStr.length;
 
     const maxWords = ${maxWords};
     const maxChars = ${maxChars};
