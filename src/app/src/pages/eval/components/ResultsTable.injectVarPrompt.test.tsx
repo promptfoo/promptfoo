@@ -6,8 +6,8 @@
  * provider-reported prompts or redteam final prompts in inject variable cells.
  */
 
-import { describe, expect, it } from 'vitest';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { describe, expect, it } from 'vitest';
 
 /**
  * Simulates the inject variable cell rendering logic from ResultsTable
