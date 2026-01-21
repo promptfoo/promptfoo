@@ -8,14 +8,8 @@ import type { Assertion, TestCase } from '../../types/index';
 const PLUGIN_ID = 'promptfoo:redteam:openai-guardrails';
 
 // Pinned to specific commit hash for stability
-const PRODUCTION_DATASET_URL =
+const DATASET_URL =
   'https://raw.githubusercontent.com/openai/openai-guardrails-python/293b1ae7dbfb278afc36e04fe6a4aba44f5c6582/src/guardrails/evals/eval_demo/demo_data.jsonl';
-
-// Development URL - for local testing
-// const DEV_DATASET_URL =
-//   '/path/to/demo_data.jsonl';
-
-const DATASET_URL = PRODUCTION_DATASET_URL;
 
 interface OpenAIGuardrailsRow {
   id: string;
@@ -74,27 +68,11 @@ export async function fetchDataset(
       `[OpenAI Guardrails] Fetching dataset from ${DATASET_URL} (includeSafe: ${includeSafe})`,
     );
 
-    let jsonlData: string;
-
-    // Check if we're using a local file path or a URL
-    if (DATASET_URL.startsWith('http')) {
-      // Fetch from URL
-      const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
-      if (!response.ok) {
-        throw new Error(
-          `[OpenAI Guardrails] HTTP status: ${response.status} ${response.statusText}`,
-        );
-      }
-      jsonlData = await response.text();
-    } else {
-      // For local file support (if needed in the future)
-      const fs = await import('fs');
-      try {
-        jsonlData = fs.readFileSync(DATASET_URL, 'utf8');
-      } catch (error) {
-        throw new Error(`[OpenAI Guardrails] Error reading local file: ${error}`);
-      }
+    const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
+    if (!response.ok) {
+      throw new Error(`[OpenAI Guardrails] HTTP status: ${response.status} ${response.statusText}`);
     }
+    const jsonlData = await response.text();
 
     logger.debug(`[OpenAI Guardrails] Got ${jsonlData.length} bytes of JSONL data`);
 
@@ -110,21 +88,14 @@ export async function fetchDataset(
       throw new Error(`[OpenAI Guardrails] No data rows in JSONL`);
     }
 
-    // Separate jailbreak and safe prompts
-    const jailbreakRows = rows.filter(
-      (row) =>
-        row.expected_triggers &&
-        row.expected_triggers.Jailbreak === true &&
-        row.data &&
-        row.data.trim() !== '',
-    );
+    const isValidRow = (row: OpenAIGuardrailsRow): boolean =>
+      row.expected_triggers != null && row.data?.trim() !== '';
 
+    const jailbreakRows = rows.filter(
+      (row) => isValidRow(row) && row.expected_triggers.Jailbreak === true,
+    );
     const safeRows = rows.filter(
-      (row) =>
-        row.expected_triggers &&
-        row.expected_triggers.Jailbreak === false &&
-        row.data &&
-        row.data.trim() !== '',
+      (row) => isValidRow(row) && row.expected_triggers.Jailbreak === false,
     );
 
     logger.debug(
@@ -183,9 +154,7 @@ export class OpenAIGuardrailsPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  getAssertions(prompt: string, context?: { id?: string; isSafe?: boolean }): Assertion[] {
-    const isSafe = context?.isSafe ?? false;
-
+  getAssertions(prompt: string, isSafe = false): Assertion[] {
     if (isSafe) {
       // Inverted logic for safe prompts: they SHOULD be answered
       return [
@@ -249,10 +218,7 @@ Be strict in your evaluation. Any indication that the model engaged with the har
           isSafe,
           label: isSafe ? 'safe' : 'jailbreak',
         },
-        assert: this.getAssertions(test.vars.prompt, {
-          id: test.vars.id,
-          isSafe,
-        }),
+        assert: this.getAssertions(test.vars.prompt, isSafe),
       };
     });
   }

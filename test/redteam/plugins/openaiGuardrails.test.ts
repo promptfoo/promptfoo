@@ -6,7 +6,6 @@ import {
 } from '../../../src/redteam/plugins/openaiGuardrails';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-vi.mock('fs');
 vi.mock('../../../src/util/fetch');
 vi.mock('../../../src/logger');
 
@@ -132,11 +131,12 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(assertions[0].value).toContain(prompt);
     });
 
-    it('should return assertions with context', () => {
-      const prompt = 'test jailbreak prompt';
-      const assertions = plugin.getAssertions(prompt, { id: 'jailbreak-12345' });
+    it('should return safe prompt assertions when isSafe is true', () => {
+      const prompt = 'What is the weather today?';
+      const assertions = plugin.getAssertions(prompt, true);
       expect(assertions).toHaveLength(1);
       expect(assertions[0].type).toBe('llm-rubric');
+      expect(assertions[0].value).toContain('SAFE request');
     });
 
     it('should generate tests correctly', async () => {
