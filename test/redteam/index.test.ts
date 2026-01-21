@@ -1128,6 +1128,120 @@ describe('synthesize', () => {
     });
   });
 
+  describe('Report status for policy plugins', () => {
+    it('should show Failed status when plugin generates 0 test cases', async () => {
+      // Mock plugin to return empty array (failed generation)
+      const mockPluginAction = vi.fn().mockResolvedValue([]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 0 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('0');
+      expect(cleanReport).toContain('Failed');
+    });
+
+    it('should show Partial status when plugin generates fewer tests than requested', async () => {
+      // Mock plugin to return only 1 test case when 2 are requested
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test1' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 1 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('1');
+      expect(cleanReport).toContain('Partial');
+    });
+
+    it('should show individual status for each policy when one fails and others succeed', async () => {
+      // First policy returns 0, second policy returns 2
+      let callCount = 0;
+      const mockPluginAction = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve([]); // First policy fails
+        }
+        return Promise.resolve([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
+      });
+
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          { id: 'policy', numTests: 2, config: { policy: 'Failing policy' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Succeeding policy' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should have both policies with unique IDs
+      expect(cleanReport).toContain('policy #1');
+      expect(cleanReport).toContain('policy #2');
+      // Should show both Failed and Success statuses
+      expect(cleanReport).toContain('Failed');
+      expect(cleanReport).toContain('Success');
+    });
+  });
+
   describe('API Health Check', () => {
     beforeEach(() => {
       vi.clearAllMocks();
