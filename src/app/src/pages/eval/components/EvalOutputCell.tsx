@@ -784,7 +784,7 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
             aria-label="Mark test passed"
@@ -801,7 +801,7 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
             aria-label="Mark test failed"
