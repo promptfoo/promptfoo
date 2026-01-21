@@ -32,6 +32,7 @@ import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
+import { getHumanRating } from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -150,15 +151,12 @@ function EvalOutputCell({
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
-    output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
-      ?.pass ?? null,
+    getHumanRating(output)?.pass ?? null,
   );
 
   // Update activeRating when output changes
   React.useEffect(() => {
-    const humanRating = output.gradingResult?.componentResults?.find(
-      (result) => result.assertion?.type === 'human',
-    )?.pass;
+    const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
   }, [output]);
 
@@ -786,7 +784,7 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
             aria-label="Mark test passed"
@@ -803,7 +801,7 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
             aria-label="Mark test failed"

@@ -56,8 +56,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   retryErrors: z.boolean().optional(),
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
-  // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-  // resume: z.union([z.string(), z.boolean()]).optional(),
+  resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -483,70 +482,103 @@ export async function doEval(
         : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
-    // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-    /*
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
       ? AbortSignal.any([previousAbortSignal, abortController.signal])
       : abortController.signal;
-    let sigintHandler: ((...args: any[]) => void) | undefined;
+
     let paused = false;
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    let forceExitTimeout: NodeJS.Timeout | undefined;
+
+    const cleanupHandler = () => {
+      if (sigintHandler) {
+        process.removeListener('SIGINT', sigintHandler);
+        sigintHandler = undefined;
+      }
+      if (forceExitTimeout) {
+        clearTimeout(forceExitTimeout);
+        forceExitTimeout = undefined;
+      }
+      // Restore original abort signal for watch mode
+      evaluateOptions.abortSignal = previousAbortSignal;
+    };
 
     // Only set up pause/resume handler when writing to database
     if (cmdObj.write !== false) {
       sigintHandler = () => {
-        if (paused) {
-          // Second Ctrl+C: force exit
+        // Atomic check-and-set to handle rapid successive SIGINTs safely
+        const wasPaused = paused;
+        paused = true;
+
+        if (wasPaused) {
+          // Second Ctrl+C: immediate force exit
+          // Clear the timeout to avoid resource leak
+          if (forceExitTimeout) {
+            clearTimeout(forceExitTimeout);
+            forceExitTimeout = undefined;
+          }
+          // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
+          // Database will recover on next run via WAL replay
           logger.warn('Force exiting...');
           process.exit(130);
         }
-        paused = true;
-        logger.info(
-          chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
-        );
+
+        logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
         abortController.abort();
+
+        // Set a timeout for force exit if evaluate() hangs after abort signal
+        // Note: This covers the evaluation phase only. Shutdown (telemetry/logger)
+        // is covered by main.ts signal handling.
+        forceExitTimeout = setTimeout(() => {
+          // Skip closeDbIfOpen() - could block, defeating the timeout
+          logger.warn('Evaluation shutdown timed out, force exiting...');
+          process.exit(130);
+        }, 10000).unref();
       };
-      process.once('SIGINT', sigintHandler);
+
+      // Use process.on instead of process.once to handle second Ctrl+C
+      process.on('SIGINT', sigintHandler);
     }
-    */
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret;
+    try {
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
 
-    // Post-evaluation cleanup for retry-errors mode
-    // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-    if (retryErrors && (cliState as any)._retryErrorResultIds) {
-      const errorResultIds = (cliState as any)._retryErrorResultIds as string[];
-      try {
-        await deleteErrorResults(errorResultIds);
-        await recalculatePromptMetrics(ret);
-        logger.debug(
-          `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-        );
-      } catch (cleanupError) {
-        // Cleanup failure is non-fatal - retry itself succeeded
-        logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
-          error: cleanupError,
-        });
-      } finally {
-        // Clear the stored error result IDs
-        delete (cliState as any)._retryErrorResultIds;
-        // Clear retry mode flags
-        cliState.retryMode = false;
+      // Post-evaluation cleanup for retry-errors mode
+      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Skip if evaluation was paused - no point cleaning up incomplete retry
+      if (retryErrors && (cliState as any)._retryErrorResultIds && !paused) {
+        const errorResultIds = (cliState as any)._retryErrorResultIds as string[];
+        try {
+          await deleteErrorResults(errorResultIds);
+          await recalculatePromptMetrics(ret);
+          logger.debug(
+            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+          );
+        } catch (cleanupError) {
+          // Cleanup failure is non-fatal - retry itself succeeded
+          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+            error: cleanupError,
+          });
+        } finally {
+          // Clear the stored error result IDs
+          delete (cliState as any)._retryErrorResultIds;
+          // Clear retry mode flags
+          cliState.retryMode = false;
+        }
       }
+    } finally {
+      cleanupHandler(); // Always cleanup, even if evaluate() throws
     }
 
-    // Cleanup signal handler
-    /*
-    if (sigintHandler) {
-      process.removeListener('SIGINT', sigintHandler);
-    }
     // Clear resume flag after run completes
     cliState.resume = false;
 
@@ -554,13 +586,10 @@ export async function doEval(
     if (paused && cmdObj.write !== false) {
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(
-        `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
-      );
+      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
       printBorder();
       return ret;
     }
-      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();

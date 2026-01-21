@@ -774,6 +774,7 @@ export const TestCaseSchema = z.object({
   // z.intersection() generates allOf with additionalProperties:false in each sub-schema,
   // causing validation errors for properties defined in other sub-schemas.
   // See: https://github.com/colinhacks/zod/issues/4564
+  // Use catchall(z.any()) to allow provider-specific options (like response_format, temperature)
   options: z
     .object({
       ...PromptConfigSchema.shape,
@@ -786,6 +787,7 @@ export const TestCaseSchema = z.object({
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
     })
+    .catchall(z.any())
     .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
@@ -1317,6 +1319,7 @@ export const EvalResultsFilterMode = z.enum([
   'highlights',
   'errors',
   'passes',
+  'user-rated',
 ]);
 
 export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

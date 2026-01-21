@@ -326,6 +326,11 @@ export async function runEval({
   Object.assign(vars, registers);
 
   // Initialize these outside try block so they're in scope for the catch
+  // Merge test.options into prompt.config (test options override prompt config)
+  const mergedPromptConfig = {
+    ...(prompt.config ?? {}),
+    ...(test.options ?? {}),
+  };
   const setup = {
     provider: {
       id: provider.id(),
@@ -335,7 +340,7 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: prompt.config,
+      config: mergedPromptConfig,
     },
     vars,
   };
@@ -377,12 +382,18 @@ export async function runEval({
         testSuite,
       );
 
+      // Create a prompt object with merged config for the provider
+      // This allows test.options to override prompt.config for per-test structured output
+      const promptWithMergedConfig = {
+        ...prompt,
+        config: mergedPromptConfig,
+      };
       const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
+        prompt: promptWithMergedConfig,
         filters,
         originalProvider: provider,
         test,
@@ -1711,12 +1722,29 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // User interruption or max duration timeout
-        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        // Distinguish between max-duration timeout and user SIGINT
         if (evalTimedOut) {
+          // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
+          // User SIGINT: early exit, skip comparisons/afterAll/telemetry
+          // Results already persisted by addResult() calls during evaluation
+          // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          if (progressBarManager) {
+            progressBarManager.stop();
+          }
+          if (ciProgressReporter) {
+            ciProgressReporter.finish();
+          }
+          // Persist vars and prompts so UI/export shows correct headers
+          this.evalRecord.setVars(Array.from(vars));
+          await this.evalRecord.addPrompts(prompts);
+          updateSignalFile(this.evalRecord.id);
+          return this.evalRecord;
         }
       } else {
         if (ciProgressReporter) {
