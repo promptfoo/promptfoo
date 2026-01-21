@@ -1,11 +1,15 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 
 import type {
   ApiProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -86,7 +90,31 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'huggingface',
+      operationName: 'completion',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.max_new_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor (Huggingface doesn't return token usage by default)
+    const resultExtractor = (_response: ProviderResponse): GenAISpanResult => {
+      return {};
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+  }
+
+  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
       parameters: {
@@ -97,12 +125,18 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
     const url = this.config.apiEndpoint
       ? this.config.apiEndpoint
-      : `https://api-inference.huggingface.co/models/${this.modelName}`;
+      : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
     logger.debug(`Huggingface API request: ${url}`, { params });
 
-    let response;
+    interface HuggingfaceTextGenerationResponse {
+      error?: string;
+      generated_text?: string;
+      [0]?: { generated_text?: string };
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceTextGenerationResponse> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<HuggingfaceTextGenerationResponse>(
         url,
         {
           method: 'POST',
@@ -174,12 +208,17 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
       parameters: {},
     };
 
-    let response;
+    interface HuggingfaceTextClassificationResponse {
+      error?: string;
+      [0]?: Array<{ label: string; score: number }>;
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceTextClassificationResponse> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<HuggingfaceTextClassificationResponse>(
         url,
         {
           method: 'POST',
@@ -272,13 +311,17 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
       },
     };
 
-    let response;
+    interface HuggingfaceFeatureExtractionResponse {
+      error?: string;
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceFeatureExtractionResponse | number[]> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       logger.debug('Huggingface API request', { url, params });
-      response = await fetchWithCache(
+      response = await fetchWithCache<HuggingfaceFeatureExtractionResponse | number[]>(
         url,
         {
           method: 'POST',
@@ -291,7 +334,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
@@ -361,12 +404,19 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
       },
     };
 
-    let response;
+    interface HuggingfaceSentenceSimilarityResponse {
+      error?: string;
+      [0]?: number;
+    }
+
+    let response:
+      | FetchWithCacheResult<HuggingfaceSentenceSimilarityResponse | number[]>
+      | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<HuggingfaceSentenceSimilarityResponse | number[]>(
         url,
         {
           method: 'POST',
@@ -379,7 +429,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
         REQUEST_TIMEOUT_MS,
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
@@ -441,12 +491,22 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       },
     };
 
-    let response;
+    interface HuggingfaceTokenClassificationResponse {
+      error?: string;
+    }
+
+    let response:
+      | FetchWithCacheResult<
+          HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+        >
+      | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<
+        HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+      >(
         url,
         {
           method: 'POST',
@@ -459,7 +519,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };

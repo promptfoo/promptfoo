@@ -33,8 +33,28 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           id: result.response.audio.id,
           expiresAt: result.response.audio.expiresAt,
           data: result.response.audio.data,
+          blobRef: result.response.audio.blobRef,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,
+          sampleRate: result.response.audio.sampleRate,
+          channels: result.response.audio.channels,
+          duration: result.response.audio.duration,
+        }
+      : undefined,
+    video: result.response?.video
+      ? {
+          id: result.response.video.id,
+          blobRef: result.response.video.blobRef,
+          storageRef: result.response.video.storageRef,
+          url: result.response.video.url,
+          format: result.response.video.format,
+          size: result.response.video.size,
+          duration: result.response.video.duration,
+          thumbnail: result.response.video.thumbnail,
+          spritesheet: result.response.video.spritesheet,
+          model: result.response.video.model,
+          aspectRatio: result.response.video.aspectRatio,
+          resolution: result.response.video.resolution,
         }
       : undefined,
   };
@@ -47,17 +67,24 @@ export function convertTestResultsToTableRow(
   const row = {
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
-    vars: results[0].testCase.vars
-      ? Object.values(varsForHeader)
-          .map((varName) => {
-            const varValue = results[0].testCase.vars?.[varName] || '';
-            if (typeof varValue === 'string') {
-              return varValue;
-            }
-            return JSON.stringify(varValue);
-          })
-          .flat()
-      : [],
+    vars: Object.values(varsForHeader)
+      .map((varName) => {
+        // For sessionId, check metadata first if not in testCase.vars
+        if (varName === 'sessionId') {
+          const varValue =
+            results[0].testCase.vars?.sessionId || results[0].metadata?.sessionId || '';
+          if (typeof varValue === 'string') {
+            return varValue;
+          }
+          return JSON.stringify(varValue);
+        }
+        const varValue = results[0].testCase.vars?.[varName] || '';
+        if (typeof varValue === 'string') {
+          return varValue;
+        }
+        return JSON.stringify(varValue);
+      })
+      .flat(),
     test: results[0].testCase,
     testIdx: results[0].testIdx,
   };

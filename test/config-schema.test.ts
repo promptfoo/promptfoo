@@ -3,10 +3,28 @@ import * as path from 'path';
 
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('config-schema.json', () => {
   let schema: any;
   let ajv: Ajv;
+
+  // Helper to resolve $ref references in the schema
+  const resolveRef = (obj: any): any => {
+    if (!obj || typeof obj !== 'object') {
+      return obj;
+    }
+    if (obj.$ref && typeof obj.$ref === 'string') {
+      // Parse $ref like "#/definitions/__schema32"
+      const refPath = obj.$ref.replace('#/', '').split('/');
+      let resolved = schema;
+      for (const part of refPath) {
+        resolved = resolved?.[part];
+      }
+      return resolved;
+    }
+    return obj;
+  };
 
   beforeAll(() => {
     // Read the schema file
@@ -163,7 +181,8 @@ describe('config-schema.json', () => {
       const properties = schema.definitions?.PromptfooConfigSchema?.properties;
       expect(properties).toHaveProperty('redteam');
 
-      const redteamConfig = properties?.redteam;
+      // Resolve $ref if the property is a reference
+      const redteamConfig = resolveRef(properties?.redteam);
       expect(redteamConfig).toBeDefined();
       expect(redteamConfig.type).toBe('object');
       expect(redteamConfig.properties).toHaveProperty('plugins');

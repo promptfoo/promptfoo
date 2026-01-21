@@ -1,22 +1,25 @@
 import React, { useEffect, useState } from 'react';
 
-import JsonTextField from '@app/components/JsonTextField';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { JsonTextarea } from '@app/components/ui/json-textarea';
+import { Label } from '@app/components/ui/label';
+import { cn } from '@app/lib/utils';
 
 interface ProviderConfigDialogProps {
   open: boolean;
   providerId: string;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
   onClose: () => void;
-  onSave: (providerId: string, config: Record<string, any>) => void;
+  onSave: (providerId: string, config: Record<string, unknown>) => void;
 }
 
 const ProviderConfigDialog = ({
@@ -26,12 +29,12 @@ const ProviderConfigDialog = ({
   onClose,
   onSave,
 }: ProviderConfigDialogProps) => {
-  const [localConfig, setLocalConfig] = useState<Record<string, any>>(config);
+  const [localConfig, setLocalConfig] = useState<Record<string, unknown>>(config);
   const isAzureProvider = providerId.startsWith('azure:');
   const isBedrockAgentProvider = providerId.startsWith('bedrock-agent:');
 
   // Helper function to check if a value has content
-  const hasContent = (val: any): boolean => {
+  const hasContent = (val: unknown): boolean => {
     return val !== undefined && val !== null && val !== '';
   };
 
@@ -40,6 +43,7 @@ const ProviderConfigDialog = ({
   const isAgentAliasIdValid = !isBedrockAgentProvider || hasContent(localConfig.agentAliasId);
 
   // Reset local config when the dialog opens or providerId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalConfig(config);
   }, [open, providerId, config]);
@@ -64,168 +68,169 @@ const ProviderConfigDialog = ({
   }, [localConfig, isAzureProvider, isBedrockAgentProvider]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        Provider Configuration
-        <Typography
-          variant="subtitle1"
-          color="text.secondary"
-          sx={{ mt: 1, fontSize: '0.9rem', fontFamily: 'monospace' }}
-        >
-          {providerId}
-        </Typography>
-      </DialogTitle>
-      <DialogContent>
-        {isAzureProvider && (
-          <Box mb={2}>
-            <Alert severity={isDeploymentIdValid ? 'info' : 'warning'}>
-              {isDeploymentIdValid
-                ? 'Azure OpenAI requires a deployment ID that matches your deployment name in the Azure portal.'
-                : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Provider Configuration</DialogTitle>
+          <p className="text-sm text-muted-foreground font-mono mt-1">{providerId}</p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {isAzureProvider && (
+            <Alert variant={isDeploymentIdValid ? 'default' : 'destructive'}>
+              <AlertDescription>
+                {isDeploymentIdValid
+                  ? 'Azure OpenAI requires a deployment ID that matches your deployment name in the Azure portal.'
+                  : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
+              </AlertDescription>
             </Alert>
-          </Box>
-        )}
+          )}
 
-        {isBedrockAgentProvider && (
-          <Box mb={2}>
-            <Alert severity={isAgentIdValid && isAgentAliasIdValid ? 'info' : 'warning'}>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                Amazon Bedrock Agent Configuration
-              </Typography>
-              {isAgentIdValid && isAgentAliasIdValid ? (
-                <Box component="ul" sx={{ m: 0, pl: 2 }}>
-                  <li>
-                    <strong>Agent ID:</strong> {localConfig.agentId || 'Not specified'}
-                  </li>
-                  {localConfig.agentAliasId && (
-                    <li>
-                      <strong>Agent Alias:</strong> {localConfig.agentAliasId}
-                    </li>
+          {isBedrockAgentProvider && (
+            <Alert variant={isAgentIdValid && isAgentAliasIdValid ? 'default' : 'destructive'}>
+              <AlertContent>
+                <AlertTitle className="font-semibold">
+                  Amazon Bedrock Agent Configuration
+                </AlertTitle>
+                <AlertDescription>
+                  {isAgentIdValid && isAgentAliasIdValid ? (
+                    <ul className="mt-2 ml-4 list-disc space-y-1 text-sm">
+                      <li>
+                        <strong>Agent ID:</strong>{' '}
+                        {(localConfig.agentId as string) || 'Not specified'}
+                      </li>
+                      {localConfig.agentAliasId ? (
+                        <li>
+                          <strong>Agent Alias:</strong> {localConfig.agentAliasId as string}
+                        </li>
+                      ) : null}
+                      {localConfig.region ? (
+                        <li>
+                          <strong>Region:</strong> {localConfig.region as string}
+                        </li>
+                      ) : null}
+                      {localConfig.knowledgeBaseConfigurations ? (
+                        <li>
+                          <strong>Knowledge Bases:</strong>{' '}
+                          {
+                            (Array.isArray(localConfig.knowledgeBaseConfigurations)
+                              ? localConfig.knowledgeBaseConfigurations
+                                  .map(
+                                    (kb: { knowledgeBaseId?: string }) =>
+                                      kb.knowledgeBaseId || 'Unknown',
+                                  )
+                                  .join(', ')
+                              : 'Configured') as string
+                          }
+                        </li>
+                      ) : null}
+                      {localConfig.enableTrace ? (
+                        <li>
+                          <strong>Tracing:</strong> Enabled
+                        </li>
+                      ) : null}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm">
+                      You must specify both agentId and agentAliasId for Bedrock Agents. These are
+                      the agent ID and alias ID of your deployed agent in the AWS console.
+                    </p>
                   )}
-                  {localConfig.region && (
-                    <li>
-                      <strong>Region:</strong> {localConfig.region}
-                    </li>
-                  )}
-                  {localConfig.knowledgeBaseConfigurations && (
-                    <li>
-                      <strong>Knowledge Bases:</strong>{' '}
-                      {Array.isArray(localConfig.knowledgeBaseConfigurations)
-                        ? localConfig.knowledgeBaseConfigurations
-                            .map((kb: any) => kb.knowledgeBaseId || 'Unknown')
-                            .join(', ')
-                        : 'Configured'}
-                    </li>
-                  )}
-                  {localConfig.enableTrace && (
-                    <li>
-                      <strong>Tracing:</strong> Enabled
-                    </li>
-                  )}
-                </Box>
-              ) : (
-                <Typography variant="body2">
-                  You must specify both agentId and agentAliasId for Bedrock Agents. These are the
-                  agent ID and alias ID of your deployed agent in the AWS console.
-                </Typography>
-              )}
+                </AlertDescription>
+              </AlertContent>
             </Alert>
-          </Box>
-        )}
+          )}
 
-        {configKeys.map((key) => {
-          const value = localConfig[key];
-          let handleChange;
-          const isDeploymentId = isAzureProvider && key === 'deployment_id';
-          const isAgentId = isBedrockAgentProvider && key === 'agentId';
-          const isAgentAliasId = isBedrockAgentProvider && key === 'agentAliasId';
-          const isRequired = isDeploymentId || isAgentId || isAgentAliasId;
-          const isValid = !isRequired || hasContent(value);
+          {configKeys.map((key) => {
+            const value = localConfig[key];
+            let handleChange;
+            const isDeploymentId = isAzureProvider && key === 'deployment_id';
+            const isAgentId = isBedrockAgentProvider && key === 'agentId';
+            const isAgentAliasId = isBedrockAgentProvider && key === 'agentAliasId';
+            const isRequired = isDeploymentId || isAgentId || isAgentAliasId;
+            const isValid = !isRequired || hasContent(value);
 
-          if (
-            typeof value === 'number' ||
-            typeof value === 'boolean' ||
-            typeof value === 'string'
-          ) {
-            if (typeof value === 'number') {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: Number.parseFloat(e.target.value) });
-            } else if (typeof value === 'boolean') {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
-            } else {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-                const trimmed = e.target.value.trim();
-                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                  try {
-                    setLocalConfig({ ...localConfig, [key]: JSON.parse(trimmed) });
-                  } catch {
+            if (
+              typeof value === 'number' ||
+              typeof value === 'boolean' ||
+              typeof value === 'string'
+            ) {
+              if (typeof value === 'number') {
+                handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+                  setLocalConfig({ ...localConfig, [key]: Number.parseFloat(e.target.value) });
+              } else if (typeof value === 'boolean') {
+                handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+                  setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
+              } else {
+                handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const trimmed = e.target.value.trim();
+                  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    try {
+                      setLocalConfig({ ...localConfig, [key]: JSON.parse(trimmed) });
+                    } catch {
+                      setLocalConfig({ ...localConfig, [key]: trimmed });
+                    }
+                  } else if (trimmed === 'null') {
+                    setLocalConfig({ ...localConfig, [key]: null });
+                  } else if (trimmed === 'undefined') {
+                    setLocalConfig({ ...localConfig, [key]: undefined });
+                  } else {
                     setLocalConfig({ ...localConfig, [key]: trimmed });
                   }
-                } else if (trimmed === 'null') {
-                  setLocalConfig({ ...localConfig, [key]: null });
-                } else if (trimmed === 'undefined') {
-                  setLocalConfig({ ...localConfig, [key]: undefined });
-                } else {
-                  setLocalConfig({ ...localConfig, [key]: trimmed });
-                }
-              };
-            }
+                };
+              }
 
-            return (
-              <Box key={key} my={2}>
-                <TextField
-                  label={isRequired ? `${key} (Required)` : key}
-                  value={value === undefined ? '' : value}
-                  onChange={handleChange}
-                  fullWidth
-                  required={isRequired}
-                  error={isRequired && !isValid}
-                  helperText={
-                    isRequired && !isValid
-                      ? isDeploymentId
+              return (
+                <div key={key} className="space-y-2">
+                  <Label htmlFor={key}>
+                    {key}
+                    {isRequired && <span className="text-destructive ml-1">*</span>}
+                  </Label>
+                  <Input
+                    id={key}
+                    type={typeof value === 'number' ? 'number' : 'text'}
+                    value={value === undefined ? '' : String(value)}
+                    onChange={handleChange}
+                    className={cn(isRequired && !isValid && 'border-destructive')}
+                  />
+                  {isRequired && !isValid && (
+                    <p className="text-sm text-destructive">
+                      {isDeploymentId
                         ? 'This field is required for Azure OpenAI'
                         : isAgentId || isAgentAliasId
                           ? 'This field is required for Bedrock Agents'
-                          : 'This field is required'
-                      : ''
-                  }
-                  InputLabelProps={{ shrink: true }}
-                  type={typeof value === 'number' ? 'number' : 'text'}
-                  variant={isRequired ? 'outlined' : undefined}
-                  color={isRequired ? 'primary' : undefined}
-                  focused={isRequired && !isValid}
-                />
-              </Box>
-            );
-          } else {
-            return (
-              <Box key={key} my={2}>
-                <JsonTextField
+                          : 'This field is required'}
+                    </p>
+                  )}
+                </div>
+              );
+            } else {
+              return (
+                <JsonTextarea
+                  key={key}
                   label={key}
-                  defaultValue={JSON.stringify(value)}
+                  defaultValue={JSON.stringify(value, null, 2)}
                   onChange={(parsed) => {
                     setLocalConfig({ ...localConfig, [key]: parsed });
                   }}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  InputLabelProps={{ shrink: true }}
                 />
-              </Box>
-            );
-          }
-        })}
+              );
+            }
+          })}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!isDeploymentIdValid || !isAgentIdValid || !isAgentAliasIdValid}
+          >
+            Save
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleSave}
-          disabled={!isDeploymentIdValid || !isAgentIdValid || !isAgentAliasIdValid}
-        >
-          Save
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

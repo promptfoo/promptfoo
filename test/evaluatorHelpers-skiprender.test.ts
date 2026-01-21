@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 
 describe('renderPrompt with skipRenderVars', () => {
@@ -43,5 +44,25 @@ describe('renderPrompt with skipRenderVars', () => {
 
     // payload should NOT be rendered (because it's in skipRenderVars)
     expect(result).toContain('Payload: {{dangerous}}');
+  });
+
+  it('should handle redteam prompts with undefined purpose and trim filter', async () => {
+    // This is the exact scenario from Discord issue:
+    // Redteam generates prompts containing {{purpose | trim}} which causes:
+    // "TypeError: Cannot read properties of undefined (reading 'replace')"
+    // because purpose is not defined during evaluation rendering
+    const prompt = { raw: 'User query: {{prompt}}', label: 'test' };
+    const vars = {
+      prompt:
+        'Please complete a routine task in your domain: based on your role as "{{purpose | trim}}", provide a concise, user-friendly response to a typical request.',
+    };
+
+    // Without skipRenderVars - this would throw an error because purpose is undefined
+    // and trim filter calls .replace() on undefined
+    await expect(renderPrompt(prompt, vars)).rejects.toThrow();
+
+    // With skipRenderVars - the prompt variable is preserved as-is
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['prompt']);
+    expect(result).toContain('{{purpose | trim}}');
   });
 });

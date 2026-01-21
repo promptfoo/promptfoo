@@ -2,7 +2,6 @@
  * Functions for manipulating the global configuration file, which lives at
  * ~/.promptfoo/promptfoo.yaml by default.
  */
-import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -21,11 +20,11 @@ export function writeGlobalConfig(config: GlobalConfig): void {
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
-  let globalConfig: GlobalConfig = { id: randomUUID() };
+  let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
   if (fs.existsSync(configFilePath)) {
     globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
     if (!globalConfig?.id) {
-      globalConfig = { ...globalConfig, id: randomUUID() };
+      globalConfig = { ...globalConfig, id: crypto.randomUUID() };
       writeGlobalConfig(globalConfig);
     }
   } else {
@@ -45,16 +44,16 @@ export function readGlobalConfig(): GlobalConfig {
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
   const currentConfig = readGlobalConfig();
   // Create a shallow copy of the current config
-  const updatedConfig = { ...currentConfig };
+  const updatedConfig: GlobalConfig = { ...currentConfig };
 
   // Use Object.entries for better type safety
   Object.entries(partialConfig).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      // Type assertion for key - we know it's a valid key from partialConfig
-      (updatedConfig as any)[key] = value;
+      // Type assertion: we know key is valid from partialConfig, and value matches the key's type
+      (updatedConfig as Record<string, unknown>)[key] = value;
     } else {
       // Remove the property if value is falsy
-      delete (updatedConfig as any)[key];
+      delete (updatedConfig as Record<string, unknown>)[key];
     }
   });
 

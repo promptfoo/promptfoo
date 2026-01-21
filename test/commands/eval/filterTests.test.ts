@@ -1,13 +1,16 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 
 import type { TestCase, TestSuite } from '../../../src/types/index';
 
-jest.mock('../../../src/models/eval', () => ({
-  findById: jest.fn(),
+vi.mock('../../../src/models/eval', () => ({
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 describe('filterTests', () => {
@@ -37,7 +40,7 @@ describe('filterTests', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     const mockEval = {
       id: 'eval-123',
       createdAt: new Date().getTime(),
@@ -46,7 +49,7 @@ describe('filterTests', () => {
       resultsCount: 0,
       prompts: [],
       persisted: true,
-      toEvaluateSummary: jest.fn().mockResolvedValue({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         version: 2,
         timestamp: new Date().toISOString(),
         results: [
@@ -57,9 +60,15 @@ describe('filterTests', () => {
             testCase: mockTestSuite.tests![0],
           },
           {
-            vars: { var1: 'test3' },
+            vars: { var1: 'test2' },
             success: false,
             failureReason: ResultFailureReason.ERROR,
+            testCase: mockTestSuite.tests![1],
+          },
+          {
+            vars: { var1: 'test3' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
             testCase: mockTestSuite.tests![2],
           },
         ],
@@ -83,7 +92,7 @@ describe('filterTests', () => {
         },
       }),
     };
-    jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
   });
 
   it('should return all tests if no options provided', async () => {
@@ -122,13 +131,14 @@ describe('filterTests', () => {
 
   describe('failing filter', () => {
     it('should filter failing tests when failing option is provided', async () => {
+      // --filter-failing returns all non-successful results (failures + errors)
       const result = await filterTests(mockTestSuite, { failing: 'eval-123' });
-      expect(result).toHaveLength(2);
-      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+      expect(result).toHaveLength(3);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
     });
 
     it('should match failing tests when provider paths differ', async () => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
       const absPath = path.join(process.cwd(), 'provider.js');
       const mockEval = {
         id: 'eval-123',
@@ -138,7 +148,7 @@ describe('filterTests', () => {
         resultsCount: 0,
         prompts: [],
         persisted: true,
-        toEvaluateSummary: jest.fn().mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
           version: 2,
           timestamp: new Date().toISOString(),
           results: [
@@ -167,7 +177,7 @@ describe('filterTests', () => {
         }),
       };
 
-      jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+      vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       const testSuite = {
         ...mockTestSuite,
@@ -188,7 +198,77 @@ describe('filterTests', () => {
     it('should filter error tests when errorsOnly option is provided', async () => {
       const result = await filterTests(mockTestSuite, { errorsOnly: 'eval-123' });
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars?.var1).toBe('test3');
+      expect(result[0]?.vars?.var1).toBe('test2');
+    });
+  });
+
+  describe('failing only filter', () => {
+    it('should filter assertion failures only, excluding errors', async () => {
+      // --filter-failing-only returns only assertion failures, not errors
+      const result = await filterTests(mockTestSuite, { failingOnly: 'eval-123' });
+      expect(result).toHaveLength(2);
+      // test1 and test3 have ASSERT failures, test2 has ERROR
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+
+    it('should return empty when all failures are errors', async () => {
+      vi.resetAllMocks();
+      const mockEval = {
+        id: 'eval-456',
+        createdAt: new Date().getTime(),
+        config: {},
+        results: [],
+        resultsCount: 0,
+        prompts: [],
+        persisted: true,
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: [
+            {
+              vars: { var1: 'test1' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              testCase: mockTestSuite.tests![0],
+            },
+            {
+              vars: { var1: 'test2' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              testCase: mockTestSuite.tests![1],
+            },
+          ],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 2,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+            },
+          },
+        }),
+      };
+      vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+      const result = await filterTests(mockTestSuite, { failingOnly: 'eval-456' });
+      expect(result).toHaveLength(0);
+    });
+
+    it('should combine failingOnly and errorsOnly when both provided', async () => {
+      // When both are provided, it should be a union of assertion failures and errors
+      const result = await filterTests(mockTestSuite, {
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+      });
+      // Should include all 3 tests: test1 (ASSERT), test2 (ERROR), test3 (ASSERT)
+      expect(result).toHaveLength(3);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3', 'test2']);
     });
   });
 
@@ -206,6 +286,12 @@ describe('filterTests', () => {
       };
       const result = await filterTests(testSuite, { pattern: 'test' });
       expect(result).toHaveLength(3);
+    });
+
+    it('should throw error for invalid regex pattern', async () => {
+      await expect(filterTests(mockTestSuite, { pattern: '[invalid' })).rejects.toThrow(
+        /Invalid regex pattern "\[invalid"/,
+      );
     });
   });
 

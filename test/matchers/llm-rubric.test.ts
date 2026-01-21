@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import path from 'path';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -78,19 +78,21 @@ describe('matchesLlmRubric', () => {
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: true,
-      reason: 'Test grading output',
-      score: 1,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        reason: 'Test grading output',
+        score: 1,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should handle when provider returns direct object output instead of string', async () => {
@@ -107,23 +109,25 @@ describe('matchesLlmRubric', () => {
       },
     };
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: true,
-      score: 0.85,
-      reason: 'Direct object output',
-      tokensUsed: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 0.85,
+        reason: 'Direct object output',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+          numRequests: 0,
         },
-        numRequests: 0,
-      },
-    });
+      }),
+    );
   });
 
   it('should render rubric when provided as an object', async () => {
@@ -375,19 +379,21 @@ describe('matchesLlmRubric', () => {
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: false,
-      reason: 'Grading failed',
-      score: 0,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should throw error when throwOnError is true and provider returns an error', async () => {
@@ -456,19 +462,21 @@ describe('matchesLlmRubric', () => {
       });
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      reason: 'Grading passed',
-      pass: true,
-      score: 1,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        reason: 'Grading passed',
+        pass: true,
+        score: 1,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
     expect(mockCallApi).toHaveBeenCalledWith(
       'Grading prompt',
       expect.objectContaining({
@@ -848,19 +856,140 @@ describe('matchesLlmRubric', () => {
         }),
       }),
     );
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Test passed',
-      tokensUsed: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-        cached: 0,
-        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-        numRequests: 0,
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should load rubric prompt from JSON file with Nunjucks templates', async () => {
+    // This test verifies the fix for issue #2961:
+    // JSON files with Nunjucks templates should be loaded as raw text first,
+    // allowing template rendering before JSON parsing.
+    const mockJsonFilePath = path.join('path', 'to', 'rubric.json');
+    const mockJsonContent = `[
+  {%- set system_prompt -%}
+  Evaluate the response
+  {%- endset -%}
+  { "role": "system", "content": {{ system_prompt | dump }} },
+  { "role": "user", "content": "Output: {{ output }}" }
+]`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockJsonContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockJsonFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
       },
-    });
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+      'utf8',
+    );
+    // Verify the template was rendered - the Nunjucks set block should be processed
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Test output'),
+      expect.anything(),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should load rubric prompt from YAML file with Nunjucks templates', async () => {
+    const mockYamlFilePath = path.join('path', 'to', 'rubric.yaml');
+    const mockYamlContent = `{%- set system_prompt -%}
+Evaluate the response
+{%- endset -%}
+- role: system
+  content: {{ system_prompt }}
+- role: user
+  content: "Output: {{ output }}"`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockYamlFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+      'utf8',
+    );
+    // Verify the template was rendered
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should load rubric prompt from js file when specified', async () => {

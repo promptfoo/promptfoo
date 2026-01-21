@@ -1,4 +1,4 @@
-import fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
@@ -37,6 +37,7 @@ interface SystemError extends Error {
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
+  abortSignal?: AbortSignal,
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString: string | undefined;
@@ -53,6 +54,13 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
+  // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const combinedSignal = abortSignal
+    ? options.signal
+      ? AbortSignal.any([options.signal, abortSignal])
+      : abortSignal
+    : options.signal;
+
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
@@ -60,6 +68,7 @@ export async function fetchWithProxy(
       ...(options.headers as Record<string, string>),
       'x-promptfoo-version': VERSION,
     },
+    signal: combinedSignal,
   };
 
   if (typeof url === 'string') {
@@ -102,7 +111,7 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
@@ -127,7 +136,30 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return await monkeyPatchFetch(finalUrl, finalOptions);
+  // Transient error retry logic (502/503/504 with matching status text)
+  const maxTransientRetries = options.disableTransientRetries ? 0 : 3;
+
+  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+
+    if (
+      !options.disableTransientRetries &&
+      isTransientError(response) &&
+      attempt < maxTransientRetries
+    ) {
+      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      logger.debug(
+        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+      );
+      await sleep(backoffMs);
+      continue;
+    }
+
+    return response;
+  }
+
+  // This should be unreachable, but TypeScript needs it
+  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(
@@ -136,10 +168,16 @@ export function fetchWithTimeout(
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const controller = new AbortController();
-    const { signal } = controller;
+    const timeoutController = new AbortController();
+
+    // Combine timeout signal with any incoming abort signal
+    // The composite signal will abort if EITHER signal aborts
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeoutController.signal])
+      : timeoutController.signal;
+
     const timeoutId = setTimeout(() => {
-      controller.abort();
+      timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
     }, timeout);
 
@@ -203,6 +241,28 @@ export async function handleRateLimit(response: Response): Promise<void> {
 }
 
 /**
+ * Check if a response indicates a transient server error that should be retried.
+ * Matches specific status codes with their expected status text to avoid
+ * retrying permanent failures (e.g., some APIs return 502 for auth errors).
+ */
+export function isTransientError(response: Response): boolean {
+  if (!response?.statusText) {
+    return false;
+  }
+  const statusText = response.statusText.toLowerCase();
+  switch (response.status) {
+    case 502:
+      return statusText.includes('bad gateway');
+    case 503:
+      return statusText.includes('service unavailable');
+    case 504:
+      return statusText.includes('gateway timeout');
+    default:
+      return false;
+  }
+}
+
+/**
  * Fetch with automatic retries and rate limit handling
  */
 export type { FetchOptions } from './types';
@@ -221,7 +281,12 @@ export async function fetchWithRetries(
   for (let i = 0; i <= maxRetries; i++) {
     let response;
     try {
-      response = await fetchWithTimeout(url, options, timeout);
+      // Disable transient retries in fetchWithProxy to avoid double-retrying
+      response = await fetchWithTimeout(
+        url,
+        { ...options, disableTransientRetries: true },
+        timeout,
+      );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
@@ -238,6 +303,11 @@ export async function fetchWithRetries(
 
       return response;
     } catch (error) {
+      // Don't retry on abort - propagate immediately
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+
       let errorMessage;
       if (error instanceof Error) {
         // Extract as much detail as possible from the error

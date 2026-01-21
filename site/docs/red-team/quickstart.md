@@ -28,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node 20 or later](https://nodejs.org/en/download/package-manager/)
+- Install [Node.js 20+](https://nodejs.org/en/download/package-manager/)
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project
@@ -233,7 +233,7 @@ prompts:
   # - file://path/to/prompt.txt
 
 targets:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     label: 'travel-agent-mini'
 ```
 

@@ -343,6 +343,10 @@ providers:
     prompts: [claude_prompt]
 ```
 
+Prompt filters match labels exactly, support group prefixes (e.g. `group` matches `group:...`), and allow wildcard prefixes like `group:*`.
+
+The `prompts` field also works when providers are defined in external files (`file://provider.yaml`).
+
 ## CSV Prompts
 
 Define multiple prompts in CSV format:

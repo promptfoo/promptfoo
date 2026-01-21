@@ -5,6 +5,8 @@
  * on filtered evaluation results.
  */
 
+import { sql } from 'drizzle-orm';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -27,7 +29,7 @@ describe('calculateFilteredMetrics', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('basic metrics aggregation', () => {
@@ -40,8 +42,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics).toHaveLength(1);
@@ -119,8 +120,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 3,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics).toHaveLength(3);
@@ -146,8 +146,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].tokenUsage).toMatchObject({
@@ -197,8 +196,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].tokenUsage).toMatchObject({
@@ -222,8 +220,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].namedScores).toHaveProperty('accuracy');
@@ -246,8 +243,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].namedScores).toEqual({});
@@ -307,8 +303,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].namedScores.accuracy).toBeCloseTo(1.6, 1); // 0.9 + 0.7
@@ -328,8 +323,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].assertPassCount).toBeGreaterThan(0);
@@ -371,8 +365,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics[0].assertPassCount).toBe(0);
@@ -388,13 +381,12 @@ describe('calculateFilteredMetrics', () => {
       });
 
       // Filter for only errors
-      const whereSql = `eval_id = '${eval_.id}' AND failure_reason = ${ResultFailureReason.ERROR}`;
+      const whereSql = sql`eval_id = ${eval_.id} AND failure_reason = ${ResultFailureReason.ERROR}`;
 
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
         whereSql,
-        whereParams: [],
       });
 
       // Only error results
@@ -410,13 +402,12 @@ describe('calculateFilteredMetrics', () => {
       });
 
       // Filter for errors when there are none
-      const whereSql = `eval_id = '${eval_.id}' AND failure_reason = ${ResultFailureReason.ERROR}`;
+      const whereSql = sql`eval_id = ${eval_.id} AND failure_reason = ${ResultFailureReason.ERROR}`;
 
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
         whereSql,
-        whereParams: [],
       });
 
       expect(metrics[0].testPassCount).toBe(0);
@@ -437,7 +428,7 @@ describe('calculateFilteredMetrics', () => {
 
       // Mock a WHERE clause that would return too many results
       // We can't actually create 50k+ results in the test, but we can test the check
-      const whereSql = `eval_id = '${eval_.id}'`;
+      const whereSql = sql`eval_id = ${eval_.id}`;
 
       // This should succeed (10 results < 50000)
       await expect(
@@ -445,7 +436,6 @@ describe('calculateFilteredMetrics', () => {
           evalId: eval_.id,
           numPrompts: 1,
           whereSql,
-          whereParams: [],
         }),
       ).resolves.toBeDefined();
     });
@@ -457,8 +447,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: 'nonexistent-eval-id',
         numPrompts: 2,
-        whereSql: "eval_id = 'nonexistent-eval-id'",
-        whereParams: [],
+        whereSql: sql`eval_id = ${'nonexistent-eval-id'}`,
       });
 
       expect(metrics).toHaveLength(2);
@@ -489,14 +478,15 @@ describe('calculateFilteredMetrics', () => {
         resultTypes: ['success'],
       });
 
-      // Invalid SQL syntax
-      const whereSql = 'INVALID SQL SYNTAX HERE';
+      // Invalid SQL syntax - using sql.raw to simulate malformed SQL fragment
+      // Note: In practice, with SQL fragments this is harder to achieve,
+      // but we test the error handling path
+      const whereSql = sql`INVALID SQL SYNTAX HERE`;
 
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
         whereSql,
-        whereParams: [],
       });
 
       // Should fallback to empty metrics
@@ -514,8 +504,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1,
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       expect(metrics).toHaveLength(1);
@@ -551,8 +540,7 @@ describe('calculateFilteredMetrics', () => {
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
         numPrompts: 1, // Only expect 1 prompt
-        whereSql: `eval_id = '${eval_.id}'`,
-        whereParams: [],
+        whereSql: sql`eval_id = ${eval_.id}`,
       });
 
       // Should not crash, and should handle the out-of-range index gracefully

@@ -1,0 +1,148 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API - Tool/Function Calling'
+
+prompts:
+  - 'Get the weather for {{city}}. Use the get_weather tool.'
+
+providers:
+  # Claude with tools (native format) - via inference profile
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (Tools)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      # Native Converse API tool format
+      tools:
+        - toolSpec:
+            name: get_weather
+            description: Get the current weather for a city
+            inputSchema:
+              json:
+                type: object
+                properties:
+                  city:
+                    type: string
+                    description: The city name
+                  unit:
+                    type: string
+                    enum: ['celsius', 'fahrenheit']
+                    description: Temperature unit
+                required:
+                  - city
+      toolChoice: auto
+
+  # Claude with OpenAI-compatible tool format
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (OpenAI Format)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      # OpenAI-compatible format
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get the current weather for a city
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: The city name
+                unit:
+                  type: string
+                  enum: ['celsius', 'fahrenheit']
+                  description: Temperature unit
+              required:
+                - city
+      toolChoice: auto
+
+  # Claude with Anthropic tool format
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (Anthropic Format)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      # Anthropic-compatible format
+      tools:
+        - name: get_weather
+          description: Get the current weather for a city
+          input_schema:
+            type: object
+            properties:
+              city:
+                type: string
+                description: The city name
+              unit:
+                type: string
+                enum: ['celsius', 'fahrenheit']
+                description: Temperature unit
+            required:
+              - city
+      toolChoice: auto
+
+  # Nova with tools
+  - id: bedrock:converse:amazon.nova-pro-v1:0
+    label: Nova Pro (Tools)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      tools:
+        - toolSpec:
+            name: get_weather
+            description: Get the current weather for a city
+            inputSchema:
+              json:
+                type: object
+                properties:
+                  city:
+                    type: string
+                    description: The city name
+                  unit:
+                    type: string
+                    enum: ['celsius', 'fahrenheit']
+                    description: Temperature unit
+                required:
+                  - city
+      toolChoice: auto
+
+defaultTest:
+  options:
+    # Extract the tool call input
+    transform: |
+      try {
+        const parsed = JSON.parse(output);
+        return parsed.input?.city || parsed.city || output;
+      } catch {
+        return output;
+      }
+
+tests:
+  - vars:
+      city: Tokyo
+    assert:
+      - type: contains-any
+        value:
+          - Tokyo
+          - tool_use
+          - get_weather
+  - vars:
+      city: Paris
+    assert:
+      - type: contains-any
+        value:
+          - Paris
+          - tool_use
+          - get_weather
+  - vars:
+      city: New York
+    assert:
+      - type: contains-any
+        value:
+          - New York
+          - tool_use
+          - get_weather

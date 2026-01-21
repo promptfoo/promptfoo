@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
 import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -17,7 +16,6 @@ import { ProviderOptionsSchema } from '../../validators/providers';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
-import type { ZodError } from 'zod-validation-error';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
@@ -107,7 +105,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   try {
     payload = TestPayloadSchema.parse(req.body);
   } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+    res.status(400).json({ error: z.prettifyError(e as z.ZodError) });
     return;
   }
 
@@ -125,8 +123,14 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
   });
 
-  // Use refactored function with optional prompt
-  const result = await testProviderConnectivity(loadedProvider, payload.prompt);
+  // Use refactored function with optional prompt and inputs
+  // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+  // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+  const result = await testProviderConnectivity({
+    provider: loadedProvider,
+    prompt: payload.prompt,
+    inputs: providerOptions.inputs || providerOptions.config?.inputs,
+  });
 
   res.status(200).json({
     testResult: {
@@ -153,7 +157,7 @@ providersRouter.post(
     try {
       providerOptions = ProviderOptionsSchema.parse(body);
     } catch (e) {
-      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      res.status(400).json({ error: z.prettifyError(e as z.ZodError) });
       return;
     }
     invariant(providerOptions.id, 'Provider ID (`id`) is required');
@@ -281,7 +285,7 @@ providersRouter.post(
       if (error instanceof z.ZodError) {
         res.status(400).json({
           success: false,
-          error: fromZodError(error).toString(),
+          error: z.prettifyError(error),
         });
         return;
       }
@@ -345,7 +349,7 @@ providersRouter.post(
       if (error instanceof z.ZodError) {
         res.status(400).json({
           success: false,
-          error: fromZodError(error).toString(),
+          error: z.prettifyError(error),
         });
         return;
       }
@@ -364,7 +368,7 @@ providersRouter.post(
 // Test multi-turn session functionality
 providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
-  const { provider: providerOptions, sessionConfig } = body;
+  const { provider: providerOptions, sessionConfig, mainInputVariable } = body;
 
   try {
     const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
@@ -382,8 +386,15 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       },
     });
 
-    // Use refactored function
-    const result = await testProviderSession(loadedProvider, sessionConfig);
+    // Use refactored function with inputs passed explicitly
+    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
+    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+    const result = await testProviderSession({
+      provider: loadedProvider,
+      sessionConfig,
+      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+      mainInputVariable,
+    });
 
     res.json(result);
   } catch (error) {

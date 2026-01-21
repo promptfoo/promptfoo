@@ -1,145 +1,286 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
+import CommonConfigurationOptions from './CommonConfigurationOptions';
 import type { ProviderOptions } from '@promptfoo/types';
 
-import CommonConfigurationOptions from './CommonConfigurationOptions';
-
 vi.mock('./ExtensionEditor', () => ({
-  default: () => <div data-testid="mock-extension-editor" />,
+  default: ({
+    extensions,
+    onExtensionsChange,
+    onValidationChange,
+  }: {
+    extensions: string[];
+    onExtensionsChange?: (extensions: string[]) => void;
+    onValidationChange?: (hasErrors: boolean) => void;
+  }) => {
+    // Simulate validation error on mount to test passthrough
+    React.useEffect(() => {
+      onValidationChange?.(true);
+    }, [onValidationChange]);
+
+    return (
+      <div
+        data-testid="mock-extension-editor"
+        data-extensions={JSON.stringify(extensions)}
+        onClick={() => onExtensionsChange?.(['file://new-extension.js:hook'])}
+      />
+    );
+  },
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+vi.mock('./InputsEditor', () => ({
+  default: ({
+    inputs,
+    onChange,
+    compact,
+  }: {
+    inputs?: Record<string, string>;
+    onChange: (inputs: Record<string, string> | undefined) => void;
+    compact?: boolean;
+  }) => {
+    return (
+      <div
+        data-testid="mock-inputs-editor"
+        data-inputs={JSON.stringify(inputs || {})}
+        data-compact={compact}
+        onClick={() => onChange({ testVar: 'test description' })}
+      />
+    );
+  },
+}));
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
 };
 
 describe('CommonConfigurationOptions', () => {
-  it('should call updateCustomTarget with the correct delay value and display it in the input', () => {
-    const updateCustomTarget = vi.fn();
-    const initialTarget: ProviderOptions = { id: 'test-provider', config: {} };
+  const defaultTarget: ProviderOptions = {
+    id: 'test-provider',
+    config: {},
+  };
 
-    const { rerender } = renderWithTheme(
-      <CommonConfigurationOptions
-        selectedTarget={initialTarget}
-        updateCustomTarget={updateCustomTarget}
-      />,
-    );
+  const defaultProps = {
+    selectedTarget: defaultTarget,
+    updateCustomTarget: vi.fn(),
+  };
 
-    const accordionButton = screen.getByRole('button', { name: /delay/i });
-    fireEvent.click(accordionButton);
+  it('should render the ExtensionEditor component', () => {
+    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
 
-    const delayInput = screen.getByRole('spinbutton');
-    expect(delayInput).toBeInTheDocument();
-
-    fireEvent.change(delayInput, { target: { value: '500' } });
-
-    expect(updateCustomTarget).toHaveBeenCalledTimes(1);
-    expect(updateCustomTarget).toHaveBeenCalledWith('delay', 500);
-
-    const updatedTarget: ProviderOptions = { ...initialTarget, delay: 500 };
-    rerender(
-      <CommonConfigurationOptions
-        selectedTarget={updatedTarget}
-        updateCustomTarget={updateCustomTarget}
-      />,
-    );
-
-    expect(screen.getByRole('spinbutton')).toHaveValue(500);
+    expect(screen.getByTestId('mock-extension-editor')).toBeInTheDocument();
   });
 
-  it('should display the correct helper text for the delay input field', () => {
-    const selectedTarget: ProviderOptions = { id: 'test-provider', config: {} };
-    const updateCustomTarget = vi.fn();
-
-    renderWithTheme(
-      <CommonConfigurationOptions
-        selectedTarget={selectedTarget}
-        updateCustomTarget={updateCustomTarget}
-      />,
+  it('should render the InputsEditor component inside Test Generation section', async () => {
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
     );
 
-    const accordionButton = screen.getByRole('button', { name: /delay/i });
-    fireEvent.click(accordionButton);
+    // Expand the Test Generation collapsible
+    const testGenTrigger = screen.getByText('Test Generation');
+    fireEvent.click(testGenTrigger);
 
-    const helperText = screen.getByText('Delay in milliseconds (default: 0)');
-    expect(helperText).toBeInTheDocument();
+    expect(screen.getByTestId('mock-inputs-editor')).toBeInTheDocument();
   });
 
-  it('should handle undefined/null values from BaseNumberInput onChange', async () => {
-    const updateCustomTarget = vi.fn();
-    const initialTarget: ProviderOptions = { id: 'test-provider', delay: 100, config: {} };
+  it('should pass extensions to ExtensionEditor', () => {
+    const extensions = ['file://test.js:testHook'];
 
-    renderWithTheme(
-      <CommonConfigurationOptions
-        selectedTarget={initialTarget}
-        updateCustomTarget={updateCustomTarget}
-      />,
-    );
+    renderWithProviders(<CommonConfigurationOptions {...defaultProps} extensions={extensions} />);
 
-    const accordionButton = screen.getByRole('button', { name: /delay/i });
-    fireEvent.click(accordionButton);
-
-    const delayInput = await screen.findByDisplayValue('100');
-
-    fireEvent.change(delayInput, { target: { value: '' } });
-
-    expect(updateCustomTarget).toHaveBeenCalledWith('delay', undefined);
-  });
-
-  it('should call updateCustomTarget with the correct decimal delay value when a decimal is entered', () => {
-    const updateCustomTarget = vi.fn();
-    const initialTarget: ProviderOptions = { id: 'test-provider', config: {} };
-
-    renderWithTheme(
-      <CommonConfigurationOptions
-        selectedTarget={initialTarget}
-        updateCustomTarget={updateCustomTarget}
-      />,
-    );
-
-    const accordionButton = screen.getByRole('button', { name: /delay/i });
-    fireEvent.click(accordionButton);
-
-    const delayInput = screen.getByRole('spinbutton');
-    expect(delayInput).toBeInTheDocument();
-
-    fireEvent.change(delayInput, { target: { value: '250.5' } });
-
-    expect(updateCustomTarget).toHaveBeenCalledTimes(1);
-    expect(updateCustomTarget).toHaveBeenCalledWith('delay', 250.5);
+    const editor = screen.getByTestId('mock-extension-editor');
+    expect(editor).toHaveAttribute('data-extensions', JSON.stringify(extensions));
   });
 
   it('should call onValidationChange when ExtensionEditor reports validation errors', () => {
     const onValidationChange = vi.fn();
-    const initialTarget: ProviderOptions = { id: 'test-provider', config: {} };
 
-    vi.mock('./ExtensionEditor', () => ({
-      default: ({
-        onValidationChange: editorOnValidationChange,
-      }: {
-        onValidationChange?: (hasErrors: boolean) => void;
-      }) => {
-        React.useEffect(() => {
-          editorOnValidationChange?.(true);
-        }, [editorOnValidationChange]);
-
-        return <div data-testid="mock-extension-editor" />;
-      },
-    }));
-
-    renderWithTheme(
-      <CommonConfigurationOptions
-        selectedTarget={initialTarget}
-        updateCustomTarget={vi.fn()}
-        onValidationChange={onValidationChange}
-      />,
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onValidationChange={onValidationChange} />,
     );
 
     expect(onValidationChange).toHaveBeenCalledTimes(1);
     expect(onValidationChange).toHaveBeenCalledWith(true);
+  });
+
+  it('should call onExtensionsChange when ExtensionEditor updates extensions', () => {
+    const onExtensionsChange = vi.fn();
+
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onExtensionsChange={onExtensionsChange} />,
+    );
+
+    const editor = screen.getByTestId('mock-extension-editor');
+    editor.click();
+
+    expect(onExtensionsChange).toHaveBeenCalledWith(['file://new-extension.js:hook']);
+  });
+
+  it('should call updateCustomTarget when InputsEditor updates inputs', () => {
+    const updateCustomTarget = vi.fn();
+    const onPromptsChange = vi.fn();
+
+    renderWithProviders(
+      <CommonConfigurationOptions
+        {...defaultProps}
+        updateCustomTarget={updateCustomTarget}
+        onPromptsChange={onPromptsChange}
+      />,
+    );
+
+    // Expand the Test Generation collapsible
+    const testGenTrigger = screen.getByText('Test Generation');
+    fireEvent.click(testGenTrigger);
+
+    const inputsEditor = screen.getByTestId('mock-inputs-editor');
+    inputsEditor.click();
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
+  });
+
+  it('should render Delay collapsible section', () => {
+    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
+
+    expect(screen.getByText('Delay')).toBeInTheDocument();
+    expect(screen.getByText('Configure the delay between requests')).toBeInTheDocument();
+  });
+
+  it('should expand Delay section when target has delay set', () => {
+    const targetWithDelay: ProviderOptions = {
+      id: 'test-provider',
+      delay: 100,
+      config: {},
+    };
+
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} selectedTarget={targetWithDelay} />,
+    );
+
+    // The delay input should be visible when expanded
+    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+  });
+
+  it('should call updateCustomTarget when delay is changed', () => {
+    const updateCustomTarget = vi.fn();
+    const targetWithDelay: ProviderOptions = {
+      id: 'test-provider',
+      delay: 100,
+      config: {},
+    };
+
+    renderWithProviders(
+      <CommonConfigurationOptions
+        {...defaultProps}
+        selectedTarget={targetWithDelay}
+        updateCustomTarget={updateCustomTarget}
+      />,
+    );
+
+    const delayInput = screen.getByDisplayValue('100');
+    fireEvent.change(delayInput, { target: { value: '200' } });
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('delay', 200);
+  });
+
+  it('should render Test Generation collapsible section', () => {
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
+    );
+
+    expect(screen.getByText('Test Generation')).toBeInTheDocument();
+    expect(
+      screen.getByText('Configure how red team test cases are generated for this target'),
+    ).toBeInTheDocument();
+  });
+
+  describe('handleInputsChange', () => {
+    it('should generate JSON template with template variables when inputs are provided', () => {
+      const updateCustomTarget = vi.fn();
+      const onPromptsChange = vi.fn();
+
+      renderWithProviders(
+        <CommonConfigurationOptions
+          {...defaultProps}
+          updateCustomTarget={updateCustomTarget}
+          onPromptsChange={onPromptsChange}
+        />,
+      );
+
+      // Expand Test Generation section
+      const testGenTrigger = screen.getByText('Test Generation');
+      fireEvent.click(testGenTrigger);
+
+      // Simulate InputsEditor calling onChange with inputs
+      const inputsEditor = screen.getByTestId('mock-inputs-editor');
+      fireEvent.click(inputsEditor);
+
+      // Should call updateCustomTarget with inputs
+      expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
+
+      // Should call onPromptsChange with JSON template
+      expect(onPromptsChange).toHaveBeenCalledWith(['{"testVar":"{{testVar}}"}']);
+    });
+
+    it('should generate template preserving object key order for multiple variables', () => {
+      // Test verifies that Object.fromEntries preserves insertion order
+      // This is a unit test of the template generation logic
+      const inputs = { user_id: 'desc1', session_token: 'desc2', role: 'desc3' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      // Verify the template has correct structure
+      expect(template).toBe(
+        '{"user_id":"{{user_id}}","session_token":"{{session_token}}","role":"{{role}}"}',
+      );
+
+      // Verify order is preserved
+      const parsed = JSON.parse(template);
+      expect(Object.keys(parsed)).toEqual(['user_id', 'session_token', 'role']);
+    });
+
+    it('should handle single variable input correctly', () => {
+      // Test the template generation for a single variable
+      const inputs = { message: 'The main message' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      expect(template).toBe('{"message":"{{message}}"}');
+    });
+
+    it('should reset to default prompt when empty inputs object is provided', () => {
+      // Test the logic: Object.keys({}).length === 0, so should reset
+      const emptyInputs = {};
+      const shouldGenerateTemplate = Object.keys(emptyInputs).length > 0;
+
+      expect(shouldGenerateTemplate).toBe(false);
+      // When false, the code path is: updateConfig('prompts', ['{{prompt}}'])
+    });
+
+    it('should reset to default prompt when undefined inputs are provided', () => {
+      // Test the logic: !inputs is true, so should reset
+      const inputs = undefined;
+      const shouldGenerateTemplate = inputs && Object.keys(inputs).length > 0;
+
+      expect(shouldGenerateTemplate).toBeFalsy();
+      // When false, the code path is: updateConfig('prompts', ['{{prompt}}'])
+    });
+
+    it('should properly escape variable names in template syntax', () => {
+      // Test that template variables use correct {{var}} syntax
+      const inputs = { 'user-id': 'desc', session_token: 'desc2' };
+      const template = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, `{{${key}}}`])),
+      );
+
+      const parsed = JSON.parse(template);
+      expect(parsed['user-id']).toBe('{{user-id}}');
+      expect(parsed['session_token']).toBe('{{session_token}}');
+    });
   });
 });

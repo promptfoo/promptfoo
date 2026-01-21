@@ -1,12 +1,13 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doRedteamRun } from '../../../redteam/shared';
-import type { RedteamRunOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { RedteamRunOptions } from '../../../redteam/types';
 
 /**
  * Run a redteam scan to test AI systems for vulnerabilities
@@ -54,14 +55,14 @@ export function registerRedteamRunTool(server: McpServer) {
       force: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force generation even if no changes are detected'),
       maxConcurrency: z
         .number()
         .min(1)
         .max(10)
         .optional()
-        .default(DEFAULT_MAX_CONCURRENCY)
+        .prefault(DEFAULT_MAX_CONCURRENCY)
         .describe('Maximum number of concurrent API calls (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
       filterProviders: z
@@ -76,12 +77,12 @@ export function registerRedteamRunTool(server: McpServer) {
       remote: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force remote inference wherever possible'),
       progressBar: z
         .boolean()
         .optional()
-        .default(true)
+        .prefault(true)
         .describe('Show progress bar during execution'),
     },
     async (args) => {
@@ -125,9 +126,13 @@ export function registerRedteamRunTool(server: McpServer) {
 
         logger.debug(`Running redteam scan with config: ${configPath || 'promptfooconfig.yaml'}`);
 
-        // Run the redteam scan
+        // Run the redteam scan with timeout protection
         const startTime = Date.now();
-        const evalResult = await doRedteamRun(options);
+        const evalResult = await withTimeout(
+          doRedteamRun(options),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Redteam scan timed out. This may indicate provider connectivity issues, missing API credentials, or a very large test suite.',
+        );
         const endTime = Date.now();
 
         if (!evalResult) {
@@ -217,6 +222,20 @@ export function registerRedteamRunTool(server: McpServer) {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Redteam scan failed: ${errorMessage}`);
+
+        // Handle timeout specifically
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'redteam_run',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'The scan took too long. Try reducing the test scope, checking API credentials, or increasing timeout.',
+            },
+            'Redteam scan timed out',
+          );
+        }
 
         const errorData = {
           configuration: {

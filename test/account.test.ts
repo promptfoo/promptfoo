@@ -1,21 +1,23 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuthor, getUserEmail, setUserEmail } from '../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 
-jest.mock('../src/globalConfig/globalConfig', () => ({
-  writeGlobalConfig: jest.fn(),
-  readGlobalConfig: jest.fn(),
-  writeGlobalConfigPartial: jest.fn(),
+vi.mock('../src/globalConfig/globalConfig', () => ({
+  writeGlobalConfig: vi.fn(),
+  readGlobalConfig: vi.fn(),
+  writeGlobalConfigPartial: vi.fn(),
 }));
 
 describe('accounts module', () => {
   beforeEach(() => {
     delete process.env.PROMPTFOO_AUTHOR;
-    jest.resetModules();
+    vi.resetModules();
+    vi.clearAllMocks();
   });
 
   describe('getUserEmail', () => {
     it('should return the email from global config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -23,7 +25,7 @@ describe('accounts module', () => {
     });
 
     it('should return null if no email is set in global config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       expect(getUserEmail()).toBeNull();
@@ -32,7 +34,7 @@ describe('accounts module', () => {
 
   describe('setUserEmail', () => {
     it('should write the email to global config', () => {
-      const writeGlobalConfigSpy = jest.mocked(writeGlobalConfigPartial);
+      const writeGlobalConfigSpy = vi.mocked(writeGlobalConfigPartial);
       setUserEmail('test@example.com');
       expect(writeGlobalConfigSpy).toHaveBeenCalledWith({ account: { email: 'test@example.com' } });
     });
@@ -45,7 +47,7 @@ describe('accounts module', () => {
     });
 
     it('should return the email if environment variable is not set', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -53,7 +55,7 @@ describe('accounts module', () => {
     });
 
     it('should return null if neither environment variable nor email is set', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       expect(getAuthor()).toBeNull();

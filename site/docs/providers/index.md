@@ -13,9 +13,9 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-sonnet-4-20250514
-  - openai:gpt-4.1
-  - openai:o4-mini
+  - anthropic:messages:claude-sonnet-4-5-20250929
+  - openai:gpt-5
+  - openai:gpt-5-mini
   - google:gemini-2.5-pro
   - vertex:gemini-2.5-pro
 ```
@@ -24,24 +24,27 @@ providers:
 
 | API Providers                                       | Description                                                  | Syntax & Example                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models            | `openai:gpt-4.1` or `openai:o4-mini`                                            |
-| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-20250514`                                   |
+| [OpenAI](./openai.md)                               | GPT models including GPT-5.1 and reasoning models            | `openai:gpt-5.1` or `openai:o4-mini`                                            |
+| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-5-20250929`                                 |
 | [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                     | `file://path/to/custom_provider.js`                                             |
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                             |
 | [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                             |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                         |
+| [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
+| [OpenAI ChatKit](./openai-chatkit.md)               | ChatKit workflows from Agent Builder                         | `openai:chatkit:wf_xxxxx`                                                       |
+| [OpenAI Codex SDK](./openai-codex-sdk.md)           | OpenAI Codex SDK for code generation and analysis            | `openai:codex-sdk`                                                              |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                      |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                               |
-| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0`                            |
+| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`                          |
 | [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows         | `bedrock-agent:YOUR_AGENT_ID`                                                   |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                   | `azureopenai:gpt-4o-custom-deployment-name`                                     |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models              | `cerebras:llama-4-scout-17b-16e-instruct`                                       |
-| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers                     | Compatible with OpenAI syntax                                                   |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                   | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                    |
+| [Cloudflare AI Gateway](./cloudflare-gateway.md)    | Route requests through Cloudflare AI Gateway                 | `cloudflare-gateway:openai:gpt-5.2`                                             |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                                | `cloudera:llama-2-13b-chat`                                                     |
 | [CometAPI](./cometapi.md)                           | 500+ AI models from multiple providers via unified API       | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                         |
 | [Cohere](./cohere.md)                               | Cohere's language models                                     | `cohere:command`                                                                |
@@ -52,32 +55,35 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                       | `f5:path-name`                                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                    | `fal:image:fal-ai/fast-sdxl`                                                    |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                        | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`                              |
-| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more          | `github:openai/gpt-4.1` or `github:anthropic/claude-3.7-sonnet`                 |
+| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more          | `github:openai/gpt-5` or `github:anthropic/claude-3.7-sonnet`                   |
 | [Google AI Studio](./google.md)                     | Gemini models, Live API, and Imagen image generation         | `google:gemini-2.5-pro`, `google:image:imagen-4.0-generate-preview-06-06`       |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                                   | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`                              |
 | [Groq](./groq.md)                                   | High-performance inference API                               | `groq:llama-3.3-70b-versatile`                                                  |
-| [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-4.1`, `helicone:anthropic/claude-sonnet-4`                 |
+| [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                   |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
-| [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-4.1`, `litellm:embedding:text-embedding-3-small`                   |
+| [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
+| [QuiverAI](./quiverai.md)                           | Chat completions optimized for SVG vector graphics           | `quiverai:arrow-0.5` or `quiverai:chat:arrow-0.5`                               |
 | [Replicate](./replicate.md)                         | Various hosted models                                        | `replicate:stability-ai/sdxl`                                                   |
 | [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                        | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                              |
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                                   |
 | [TrueFoundry](./truefoundry.md)                     | Unified LLM Gateway for 1000+ models                         | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5` |
+| [Vercel AI Gateway](./vercel.md)                    | Unified AI Gateway with 0% markup and built-in failover      | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4.5`               |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                               |
 | [vLLM](./vllm.md)                                   | Local                                                        | Compatible with OpenAI syntax                                                   |
 | [Ollama](./ollama.md)                               | Local                                                        | `ollama:chat:llama3.3`                                                          |
 | [LocalAI](./localai.md)                             | Local                                                        | `localai:gpt4all-j`                                                             |
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                           | Uses OpenAI provider with custom endpoint                                       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                        | `llama:7b`                                                                      |
+| [Transformers.js](./transformers.md)                | Local ONNX inference via Transformers.js                     | `transformers:text-generation:Xenova/gpt2`                                      |
 | [MCP (Model Context Protocol)](./mcp.md)            | Direct MCP server integration for testing agentic systems    | `mcp` with server configuration                                                 |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                                                 | Compatible with OpenAI syntax                                                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                                    | `ws://example.com/ws`                                                           |
@@ -101,7 +107,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-4.1` or `anthropic:claude-sonnet-4-20250514`
+   Example: `openai:gpt-5` or `anthropic:claude-sonnet-4-5-20250929`
 
 2. Object format with configuration:
 
@@ -115,7 +121,7 @@ Providers are specified using various syntax options:
    Example:
 
    ```yaml
-   - id: openai:gpt-4.1
+   - id: openai:gpt-5
      config:
        temperature: 0.7
        max_tokens: 150
@@ -126,7 +132,7 @@ Providers are specified using various syntax options:
    Load a single provider:
 
    ```yaml title="provider.yaml"
-   id: openai:chat:gpt-4.1
+   id: openai:chat:gpt-5
    config:
      temperature: 0.7
    ```
@@ -134,10 +140,10 @@ Providers are specified using various syntax options:
    Or multiple providers:
 
    ```yaml title="providers.yaml"
-   - id: openai:gpt-4.1
+   - id: openai:gpt-5
      config:
        temperature: 0.7
-   - id: anthropic:messages:claude-sonnet-4-20250514
+   - id: anthropic:messages:claude-sonnet-4-5-20250929
      config:
        max_tokens: 1000
    ```
@@ -163,7 +169,7 @@ You can also specify API keys in your configuration file:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       apiKey: your_api_key_here
 ```
@@ -234,7 +240,7 @@ Example:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0.7
       max_tokens: 150
@@ -254,7 +260,7 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0.7
       mcp:
@@ -271,7 +277,7 @@ You can connect a single provider to multiple MCP servers:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true

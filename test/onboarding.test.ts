@@ -1,62 +1,72 @@
-import fs from 'fs';
 import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types/index';
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
+// Create hoisted mocks for inquirer modules
+const mockSelect = vi.hoisted(() => vi.fn());
+const mockCheckbox = vi.hoisted(() => vi.fn());
+const mockConfirm = vi.hoisted(() => vi.fn());
+const mockFs = vi.hoisted(() => ({
+  existsSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
 }));
 
-jest.mock('fs/promises', () => ({
-  mkdtemp: jest.fn(),
-  rm: jest.fn(),
+vi.mock('fs', () => ({
+  default: mockFs,
+  ...mockFs,
 }));
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('fs/promises', () => ({
+  mkdtemp: vi.fn(),
+  rm: vi.fn(),
 }));
 
-jest.mock('better-sqlite3');
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+}));
 
-jest.mock('@inquirer/select', () => ({
+vi.mock('better-sqlite3');
+
+vi.mock('@inquirer/select', () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: mockSelect,
 }));
 
-jest.mock('@inquirer/checkbox', () => ({
+vi.mock('@inquirer/checkbox', () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: mockCheckbox,
 }));
 
-jest.mock('@inquirer/confirm', () => ({
+vi.mock('@inquirer/confirm', () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: mockConfirm,
 }));
 
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
-jest.mock('../src/telemetry', () => ({
-  record: jest.fn(),
+vi.mock('../src/telemetry', () => ({
+  default: { record: vi.fn() },
+  record: vi.fn(),
 }));
 
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetch: jest.fn(),
+vi.mock('../src/util/fetch/index.ts', () => ({
+  fetch: vi.fn(),
 }));
 
-jest.mock('../src/redteam/commands/init', () => ({
-  redteamInit: jest.fn(),
+vi.mock('../src/redteam/commands/init', () => ({
+  redteamInit: vi.fn(),
 }));
 
-jest.mock('../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvBool: jest.fn(() => false),
-  getEnvInt: jest.fn((_key, defaultValue) => defaultValue),
+vi.mock('../src/envars', () => ({
+  getEnvString: vi.fn(),
+  getEnvBool: vi.fn(() => false),
+  getEnvInt: vi.fn((_key: string, defaultValue: number) => defaultValue),
 }));
 
 describe('reportProviderAPIKeyWarnings', () => {
@@ -116,14 +126,9 @@ describe('reportProviderAPIKeyWarnings', () => {
 describe('createDummyFiles', () => {
   let tempDir: string;
 
-  const mockSelect = jest.requireMock('@inquirer/select').default;
-  const mockCheckbox = jest.requireMock('@inquirer/checkbox').default;
-  const mockConfirm = jest.requireMock('@inquirer/confirm').default;
-  const mockFs = jest.mocked(fs);
-
   beforeEach(() => {
     tempDir = '/fake/temp/dir';
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockConfirm.mockResolvedValue(true);
     mockFs.existsSync.mockReturnValue(false);
     mockFs.writeFileSync.mockImplementation(() => undefined);
@@ -136,10 +141,10 @@ describe('createDummyFiles', () => {
   it('should generate a valid YAML configuration file that matches TestSuiteConfigSchema', async () => {
     await createDummyFiles(tempDir, false);
 
-    const configCall = mockFs.writeFileSync.mock.calls.find((call) =>
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    const readmeCall = mockFs.writeFileSync.mock.calls.find((call) =>
+    const readmeCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('README.md'),
     );
 
@@ -172,10 +177,10 @@ describe('createDummyFiles', () => {
 
     await createDummyFiles(tempDir, true);
 
-    const configCall = mockFs.writeFileSync.mock.calls.find((call) =>
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    const contextCall = mockFs.writeFileSync.mock.calls.find((call) =>
+    const contextCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('context.py'),
     );
 
@@ -216,7 +221,7 @@ describe('createDummyFiles', () => {
   });
 
   it('should prompt for confirmation when files exist', async () => {
-    mockFs.existsSync.mockImplementation((path: fs.PathLike) =>
+    mockFs.existsSync.mockImplementation((path: string) =>
       path.toString().includes('promptfooconfig.yaml'),
     );
 

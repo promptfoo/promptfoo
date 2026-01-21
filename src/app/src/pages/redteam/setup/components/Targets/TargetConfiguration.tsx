@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
@@ -40,6 +37,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     validateRef.current = validator;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);
@@ -102,35 +100,38 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
       nextDisabled={!isProviderValid()}
       warningMessage={isProviderValid() ? undefined : getNextButtonTooltip()}
     >
-      <Stack direction="column" spacing={3}>
+      <div className="flex flex-col gap-6">
         {/* Validation Error Display */}
         {validationErrors && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              Please fix the following issues before continuing:
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1, fontWeight: 'medium' }}>
-              {validationErrors}
-            </Typography>
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                <p className="text-sm">Please fix the following issues before continuing:</p>
+                <p className="mt-2 text-sm font-medium">{validationErrors}</p>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
         {/* Documentation Alert for specific providers */}
         {hasSpecificDocumentation(providerType) && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            <Box>
-              <Typography variant="body2">
+          <Alert variant="info">
+            <Info className="size-4" />
+            <AlertContent>
+              <AlertDescription>
                 Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
-                <Link
+                <a
                   href={getProviderDocumentationUrl(providerType)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="text-primary hover:underline"
                 >
                   View the documentation
-                </Link>{' '}
+                </a>{' '}
                 for detailed setup instructions and examples.
-              </Typography>
-            </Box>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
@@ -150,7 +151,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
         />
 
         {promptRequired && <Prompts />}
-      </Stack>
+      </div>
     </PageWrapper>
   );
 }

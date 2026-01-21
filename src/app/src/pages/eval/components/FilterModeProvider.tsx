@@ -1,11 +1,20 @@
-import { createContext, useContext } from 'react';
-import type { EvalResultsFilterMode } from '@promptfoo/types';
+import { createContext, useContext, useMemo } from 'react';
+
 import { useSearchParamState } from '@app/hooks/useSearchParamState';
 import { z } from 'zod';
+import type { EvalResultsFilterMode } from '@promptfoo/types';
 
 export const DEFAULT_FILTER_MODE = 'all';
 
-const filterModeSchema = z.enum(['all', 'passes', 'failures', 'errors', 'different', 'highlights']);
+const filterModeSchema = z.enum([
+  'all',
+  'passes',
+  'failures',
+  'errors',
+  'different',
+  'highlights',
+  'user-rated',
+]);
 
 type FilterModeContextType = {
   filterMode: EvalResultsFilterMode;
@@ -27,14 +36,14 @@ export default function FilterModeProvider({ children }: { children: React.React
     filterModeSchema,
     DEFAULT_FILTER_MODE,
   );
-  return (
-    <FilterModeContext
-      value={{
-        filterMode: filterMode ?? DEFAULT_FILTER_MODE,
-        setFilterMode,
-      }}
-    >
-      {children}
-    </FilterModeContext>
+
+  const value = useMemo(
+    () => ({
+      filterMode: filterMode ?? DEFAULT_FILTER_MODE,
+      setFilterMode,
+    }),
+    [filterMode, setFilterMode],
   );
+
+  return <FilterModeContext value={value}>{children}</FilterModeContext>;
 }

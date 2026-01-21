@@ -5,6 +5,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type {
@@ -73,13 +74,17 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       `[AuthoritativeMarkupInjection] Sending request to ${getRemoteGenerationUrl()}: ${body}`,
     );
 
-    const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-      body,
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithProxy(
+      getRemoteGenerationUrl(),
+      {
+        body,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
       },
-      method: 'POST',
-    });
+      options?.abortSignal,
+    );
 
     const data = await response.json();
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
@@ -108,23 +113,31 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       prompt: renderedAttackerPrompt,
     });
 
+    const totalTokenUsage = createEmptyTokenUsage();
+
     // Call the target provider with the injected attack
     const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {
       response: targetResponse,
     });
 
     if (targetResponse.error) {
-      return targetResponse;
+      return {
+        ...targetResponse,
+        tokenUsage: totalTokenUsage,
+      };
     }
 
     return {
       ...targetResponse,
+      prompt: renderedAttackerPrompt,
       metadata: {
         ...targetResponse.metadata,
         redteamFinalPrompt: renderedAttackerPrompt,
       },
+      tokenUsage: totalTokenUsage,
     };
   }
 }

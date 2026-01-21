@@ -4,20 +4,25 @@ import { z } from 'zod';
 // Enums
 // ============================================================================
 
-export enum CodeScanSeverity {
-  CRITICAL = 'critical',
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low',
-  NONE = 'none',
-}
+export const CodeScanSeverity = {
+  CRITICAL: 'critical',
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+  NONE: 'none',
+} as const;
+export type CodeScanSeverity = (typeof CodeScanSeverity)[keyof typeof CodeScanSeverity];
 
-export enum FileChangeStatus {
-  ADDED = 'added',
-  MODIFIED = 'modified',
-  REMOVED = 'removed',
-  RENAMED = 'renamed',
-}
+// Zod schema for CodeScanSeverity validation
+export const CodeScanSeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'none']);
+
+export const FileChangeStatus = {
+  ADDED: 'added',
+  MODIFIED: 'modified',
+  REMOVED: 'removed',
+  RENAMED: 'renamed',
+} as const;
+export type FileChangeStatus = (typeof FileChangeStatus)[keyof typeof FileChangeStatus];
 
 // ============================================================================
 // Severity Utility Types
@@ -122,7 +127,7 @@ export function formatSeverity(
  * @returns Object with counts for each severity level
  */
 export function countBySeverity(comments: Array<{ severity?: CodeScanSeverity }>): SeverityCounts {
-  const validSeverities = [
+  const validSeverities: CodeScanSeverity[] = [
     CodeScanSeverity.CRITICAL,
     CodeScanSeverity.HIGH,
     CodeScanSeverity.MEDIUM,
@@ -161,13 +166,22 @@ export function validateSeverity(severity: string): CodeScanSeverity {
   // Normalize input: trim whitespace and convert to lowercase
   const normalized = severity.trim().toLowerCase();
 
-  // Validate against enum using zod
-  return z.nativeEnum(CodeScanSeverity).parse(normalized);
+  // Validate against schema using zod
+  return CodeScanSeveritySchema.parse(normalized);
 }
 
 // ============================================================================
 // Scan Request/Response Schemas (API endpoint payload)
 // ============================================================================
+
+/**
+ * Schema for a valid line range in a file's diff.
+ * Used for validating PR comment line numbers.
+ */
+export const LineRangeSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+});
 
 export const FileRecordSchema = z.object({
   path: z.string(),
@@ -181,6 +195,8 @@ export const FileRecordSchema = z.object({
   isText: z.boolean().optional(),
   skipReason: z.string().optional(),
   patch: z.string().optional(),
+  /** Valid line ranges in the NEW file (for PR comment validation) */
+  lineRanges: z.array(LineRangeSchema).optional(),
 });
 
 export const GitMetadataSchema = z.object({
@@ -196,7 +212,7 @@ export const GitMetadataSchema = z.object({
 });
 
 export const ScanConfigSchema = z.object({
-  minimumSeverity: z.nativeEnum(CodeScanSeverity),
+  minimumSeverity: CodeScanSeveritySchema,
   diffsOnly: z.boolean(),
   guidance: z.string().optional(),
 });
@@ -222,7 +238,7 @@ export const CommentSchema = z.object({
   line: z.number().nullable(),
   finding: z.string(),
   fix: z.string().nullable().optional(),
-  severity: z.nativeEnum(CodeScanSeverity).optional(),
+  severity: CodeScanSeveritySchema.optional(),
   aiAgentPrompt: z.string().nullable().optional(),
 });
 
@@ -247,6 +263,8 @@ export const ScanResponseSchema = z.object({
 // ============================================================================
 // TypeScript Types (inferred from schemas)
 // ============================================================================
+
+export type LineRange = z.infer<typeof LineRangeSchema>;
 
 // Scan Request/Response
 export type FileRecord = z.infer<typeof FileRecordSchema>;
@@ -281,6 +299,12 @@ export interface JsonRpcMessage {
 export interface SocketAuthCredentials {
   apiKey?: string;
   oidcToken?: string;
+  // Fork PR authentication (when OIDC unavailable due to GitHub blocking OIDC for forks)
+  forkPR?: {
+    owner: string;
+    repo: string;
+    number: number;
+  };
 }
 
 // GitHub types

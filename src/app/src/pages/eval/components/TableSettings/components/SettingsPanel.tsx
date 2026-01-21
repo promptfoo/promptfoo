@@ -1,21 +1,16 @@
 import React, { useCallback, useState } from 'react';
 
-import CodeIcon from '@mui/icons-material/Code';
-import DoneAllIcon from '@mui/icons-material/DoneAll';
-import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
-import ImageIcon from '@mui/icons-material/Image';
-import SpeedIcon from '@mui/icons-material/Speed';
-import TableRowsIcon from '@mui/icons-material/TableRows';
-import TextFormatIcon from '@mui/icons-material/TextFormat';
-import ViewListIcon from '@mui/icons-material/ViewList';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import Box from '@mui/material/Box';
-import { alpha } from '@mui/material/styles';
 import { useResultsViewSettingsStore } from '../../store';
-import { tokens } from '../tokens';
-import EnhancedRangeSlider from './EnhancedRangeSlider';
-import SettingItem from './SettingItem';
-import SettingsSection from './SettingsSection';
+import CompactSlider from './CompactSlider';
+import CompactToggle from './CompactToggle';
+
+const SectionHeader = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <span className="block text-[0.6875rem] font-semibold tracking-widest text-muted-foreground/60 mb-2 uppercase">
+      {children}
+    </span>
+  );
+};
 
 const SettingsPanel = () => {
   const {
@@ -25,6 +20,8 @@ const SettingsPanel = () => {
     setShowPrompts,
     showPassFail,
     setShowPassFail,
+    showPassReasons,
+    setShowPassReasons,
     showInferenceDetails,
     setShowInferenceDetails,
     maxTextLength,
@@ -41,7 +38,7 @@ const SettingsPanel = () => {
     setWordBreak,
   } = useResultsViewSettingsStore();
 
-  // Local state for slider
+  // Local state for text length slider
   const sanitizedMaxTextLength =
     maxTextLength === Number.POSITIVE_INFINITY
       ? Number.POSITIVE_INFINITY
@@ -52,12 +49,11 @@ const SettingsPanel = () => {
     sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
   );
 
-  // Handle slider changes
-  const handleSliderChange = useCallback((value: number) => {
+  const handleTextLengthChange = useCallback((value: number) => {
     setLocalMaxTextLength(value);
   }, []);
 
-  const handleSliderChangeCommitted = useCallback(
+  const handleTextLengthCommitted = useCallback(
     (value: number) => {
       const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
       setMaxTextLength(newValue);
@@ -65,159 +61,118 @@ const SettingsPanel = () => {
     [setMaxTextLength],
   );
 
+  const handleWordBreakChange = useCallback(
+    (checked: boolean) => {
+      setWordBreak(checked ? 'break-all' : 'break-word');
+    },
+    [setWordBreak],
+  );
+
   return (
-    <Box
-      sx={{
-        py: tokens.spacing.padding.compact,
-        px: tokens.spacing.padding.item,
-        height: '100%',
-        overflowY: 'auto',
-        '&::-webkit-scrollbar': {
-          width: '6px',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          backgroundColor: (theme) => alpha(theme.palette.text.secondary, 0.2),
-          borderRadius: '10px',
-        },
-        '&::-webkit-scrollbar-thumb:hover': {
-          backgroundColor: (theme) => alpha(theme.palette.text.secondary, 0.3),
-        },
-      }}
-    >
-      {/* Layout Section */}
-      <SettingsSection
-        title="Layout Options"
-        icon={<TableRowsIcon />}
-        description="Control how the table is displayed and organized"
-      >
-        <Box sx={{ my: tokens.spacing.margin.element / 2 }}>
-          <SettingItem
-            label="Sticky header"
-            checked={stickyHeader}
-            onChange={setStickyHeader}
-            icon={<ViewListIcon fontSize="small" />}
-            tooltipText="Keep the header at the top of the screen when scrolling through the table"
-          />
-        </Box>
-      </SettingsSection>
+    <div className="grid grid-cols-[1fr_1px_1fr] gap-5 p-5 pt-3">
+      {/* Left Column - Visibility */}
+      <div>
+        <SectionHeader>Show</SectionHeader>
 
-      {/* Content Formatting Section */}
-      <SettingsSection
-        title="Content Formatting"
-        icon={<TextFormatIcon />}
-        description="Control how text and data are formatted"
-      >
-        <Box sx={{ my: tokens.spacing.margin.element / 2 }}>
-          <SettingItem
-            label="Render Markdown content"
-            checked={renderMarkdown}
-            onChange={setRenderMarkdown}
-            icon={<TextFormatIcon fontSize="small" />}
-            tooltipText="Format model outputs using Markdown rendering"
-          />
+        <CompactToggle
+          label="Sticky header"
+          checked={stickyHeader}
+          onChange={setStickyHeader}
+          tooltipText="Keep the header fixed when scrolling"
+        />
 
-          <SettingItem
-            label="Prettify JSON outputs"
-            checked={prettifyJson}
-            onChange={setPrettifyJson}
-            icon={<CodeIcon fontSize="small" />}
-            tooltipText="Format JSON outputs with proper indentation and syntax highlighting"
-          />
-        </Box>
-      </SettingsSection>
+        <CompactToggle
+          label="Pass/fail indicators"
+          checked={showPassFail}
+          onChange={setShowPassFail}
+          tooltipText="Show success/failure status for each test"
+        />
 
-      {/* Text Display Section */}
-      <SettingsSection
-        title="Text Display"
-        icon={<FormatAlignLeftIcon />}
-        description="Control text length and appearance"
-      >
-        <Box sx={{ my: tokens.spacing.margin.element / 2 }}>
-          <SettingItem
-            label="Force line breaks"
-            checked={wordBreak === 'break-all'}
-            onChange={(checked: boolean) => setWordBreak(checked ? 'break-all' : 'break-word')}
-            icon={<FormatAlignLeftIcon fontSize="small" />}
-            tooltipText="Force lines to break at any character, making it easier to adjust column widths"
-          />
+        <CompactToggle
+          label="Pass reasons"
+          checked={showPassReasons}
+          onChange={setShowPassReasons}
+          tooltipText="Show reasons for passing assertions (e.g., from llm-rubric)"
+          disabled={!showPassFail}
+        />
 
-          <EnhancedRangeSlider
+        <CompactToggle
+          label="Inference details"
+          checked={showInferenceDetails}
+          onChange={setShowInferenceDetails}
+          tooltipText="Show latency, tokens, cost, etc."
+        />
+
+        <CompactToggle
+          label="Full prompts"
+          checked={showPrompts}
+          onChange={setShowPrompts}
+          tooltipText="Show the prompt that produced each output"
+        />
+      </div>
+
+      {/* Subtle Divider */}
+      <div className="bg-border/10 my-1" />
+
+      {/* Right Column - Formatting */}
+      <div>
+        <SectionHeader>Display</SectionHeader>
+
+        <CompactToggle
+          label="Render Markdown"
+          checked={renderMarkdown}
+          onChange={setRenderMarkdown}
+          tooltipText="Format outputs using Markdown"
+        />
+
+        <CompactToggle
+          label="Prettify JSON"
+          checked={prettifyJson}
+          onChange={setPrettifyJson}
+          tooltipText="Format JSON with indentation"
+        />
+
+        <CompactToggle
+          label="Force line breaks"
+          checked={wordBreak === 'break-all'}
+          onChange={handleWordBreakChange}
+          tooltipText="Break lines at any character for narrower columns"
+        />
+
+        <div className="mt-3">
+          <CompactSlider
+            label="Max text length"
             value={localMaxTextLength}
-            onChange={handleSliderChange}
-            onChangeCommitted={handleSliderChangeCommitted}
+            onChange={handleTextLengthChange}
+            onChangeCommitted={handleTextLengthCommitted}
             min={25}
             max={1001}
-            label="Maximum text length"
-            tooltipText="Maximum number of characters to display before truncating. 'Unlimited' means show all text."
+            tooltipText="Characters before truncating"
             unlimited
-            icon={<FormatAlignLeftIcon fontSize="small" />}
-          />
-        </Box>
-      </SettingsSection>
-
-      {/* Element Visibility Section */}
-      <SettingsSection
-        title="Element Visibility"
-        icon={<VisibilityIcon />}
-        description="Control what content appears in each table cell"
-      >
-        <Box sx={{ my: tokens.spacing.margin.element / 2 }}>
-          <SettingItem
-            label="Show full prompts in output cells"
-            checked={showPrompts}
-            onChange={setShowPrompts}
-            tooltipText="Display the final prompt that produced each output in its cell"
           />
 
-          <SettingItem
-            label="Show pass/fail indicators"
-            checked={showPassFail}
-            onChange={setShowPassFail}
-            icon={<DoneAllIcon fontSize="small" />}
-            tooltipText="Display success/failure status indicators for each test result"
-          />
-
-          <SettingItem
-            label="Show inference details"
-            checked={showInferenceDetails}
-            onChange={setShowInferenceDetails}
-            icon={<SpeedIcon fontSize="small" />}
-            tooltipText="Display detailed inference statistics such as latency, tokens used, cost, etc."
-          />
-        </Box>
-      </SettingsSection>
-
-      {/* Image Settings Section */}
-      <SettingsSection
-        title="Image Settings"
-        icon={<ImageIcon />}
-        description="Control how images are displayed in the table"
-      >
-        <Box sx={{ my: tokens.spacing.margin.element / 2 }}>
-          <EnhancedRangeSlider
+          <CompactSlider
+            label="Max image width"
             value={maxImageWidth}
             onChange={setMaxImageWidth}
             min={100}
             max={1000}
-            label="Maximum image width"
             unit="px"
-            tooltipText="Maximum width for displayed images in pixels"
-            icon={<ImageIcon fontSize="small" />}
+            tooltipText="Maximum image width in pixels"
           />
 
-          <EnhancedRangeSlider
+          <CompactSlider
+            label="Max image height"
             value={maxImageHeight}
             onChange={setMaxImageHeight}
             min={100}
             max={1000}
-            label="Maximum image height"
             unit="px"
-            tooltipText="Maximum height for displayed images in pixels"
-            icon={<ImageIcon fontSize="small" />}
+            tooltipText="Maximum image height in pixels"
           />
-        </Box>
-      </SettingsSection>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 };
 

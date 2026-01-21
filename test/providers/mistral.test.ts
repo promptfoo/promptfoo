@@ -1,34 +1,44 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
 
-jest.mock('../../src/cache', () => ({
-  ...jest.requireActual('../../src/cache'),
-  fetchWithCache: jest.fn(),
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
+vi.mock('../../src/cache', async () => ({
+  ...(await vi.importActual('../../src/cache')),
+  fetchWithCache: vi.fn(),
+  getCache: vi.fn(),
+  isCacheEnabled: vi.fn(),
 }));
 
-jest.mock('../../src/util');
+vi.mock('../../src/util');
 
 describe('Mistral', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(fetchWithCache).mockReset();
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn(),
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {
-        get: jest.fn(),
-        set: jest.fn(),
-      },
-    });
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
+          get: vi.fn(),
+          set: vi.fn(),
+        },
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
   });
 
   describe('MistralChatCompletionProvider', () => {
@@ -36,7 +46,7 @@ describe('Mistral', () => {
 
     beforeEach(() => {
       provider = new MistralChatCompletionProvider('mistral-tiny');
-      jest.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
     });
 
     it('should create a provider with default options', () => {
@@ -74,13 +84,13 @@ describe('Mistral', () => {
 
     it('should calculate cost correctly for Pixtral model', async () => {
       const pixtralProvider = new MistralChatCompletionProvider('pixtral-12b');
-      jest.spyOn(pixtralProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(pixtralProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
       const mockResponse = {
         choices: [{ message: { content: 'Image analysis response' } }],
         usage: { total_tokens: 2000, prompt_tokens: 800, completion_tokens: 1200 },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -99,7 +109,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Test output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -108,7 +118,7 @@ describe('Mistral', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/chat/completions'),
         expect.objectContaining({
           method: 'POST',
@@ -127,6 +137,7 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
@@ -135,13 +146,13 @@ describe('Mistral', () => {
 
     it('should calculate cost correctly for Magistral models', async () => {
       const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
-      jest.spyOn(magistralSmallProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(magistralSmallProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
       const mockResponse = {
         choices: [{ message: { content: 'Reasoning response' } }],
         usage: { total_tokens: 1000, prompt_tokens: 100, completion_tokens: 900 },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -156,25 +167,34 @@ describe('Mistral', () => {
     });
 
     it('should use cache when enabled', async () => {
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
-      jest.mocked(getCache).mockReturnValue({
-        get: jest.fn().mockResolvedValue({
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: vi.fn().mockResolvedValue({
           output: 'Cached output',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-          cached: true,
           cost: 0.000005,
         }),
-        set: jest.fn(),
-        wrap: jest.fn(),
-        del: jest.fn(),
-        reset: jest.fn(),
-        store: {
-          get: jest.fn(),
-          set: jest.fn(),
-        },
-      });
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        clear: vi.fn(),
+        stores: [
+          {
+            get: vi.fn(),
+            set: vi.fn(),
+          },
+        ] as any,
+        mget: vi.fn(),
+        mset: vi.fn(),
+        mdel: vi.fn(),
+        reset: vi.fn(),
+        ttl: vi.fn(),
+        on: vi.fn(),
+        removeAllListeners: vi.fn(),
+      } as any);
       const result = await provider.callApi('Test prompt');
 
+      expect(result.cached).toBe(true);
       expect(result).toEqual({
         output: 'Cached output',
         tokenUsage: {
@@ -186,7 +206,7 @@ describe('Mistral', () => {
         cached: true,
         cost: 0.000005,
       });
-      expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
+      expect(vi.mocked(fetchWithCache)).not.toHaveBeenCalled();
     });
 
     it('should not use cache when disabled', async () => {
@@ -194,8 +214,10 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Fresh output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest.mocked(isCacheEnabled).mockReturnValue(false);
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -210,11 +232,12 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/chat/completions'),
         expect.any(Object),
         expect.any(Number),
@@ -222,9 +245,11 @@ describe('Mistral', () => {
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return false;
+      });
       const mockError = new Error('API Error');
-      jest.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
 
       const result = await provider.callApi('Test prompt');
 
@@ -237,12 +262,12 @@ describe('Mistral', () => {
       const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
-      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -251,7 +276,7 @@ describe('Mistral', () => {
 
       await customProvider.callApi('Test prompt');
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         'https://custom.mistral.ai/v1/chat/completions',
         expect.any(Object),
         expect.any(Number),
@@ -262,12 +287,12 @@ describe('Mistral', () => {
       const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { apiHost: 'custom.mistral.ai' },
       });
-      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -276,7 +301,7 @@ describe('Mistral', () => {
 
       await customProvider.callApi('Test prompt');
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         'https://custom.mistral.ai/v1/chat/completions',
         expect.any(Object),
         expect.any(Number),
@@ -289,7 +314,7 @@ describe('Mistral', () => {
 
     beforeEach(() => {
       provider = new MistralEmbeddingProvider();
-      jest.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
     });
 
     it('should create a provider with default options', () => {
@@ -303,13 +328,16 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.objectContaining({
           method: 'POST',
@@ -328,6 +356,7 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.closeTo(0.0000005, 0.0000001), // Approximately 5 tokens * 0.1 / 1000000
       });
@@ -339,10 +368,15 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: true, status: 200, statusText: 'OK' });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -352,9 +386,10 @@ describe('Mistral', () => {
           total: 5,
           completion: 0,
           cached: 5,
+          numRequests: 1,
         },
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.any(Object),
         expect.any(Number),
@@ -367,10 +402,15 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      jest.mocked(isCacheEnabled).mockReturnValue(false);
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -380,10 +420,11 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.any(Number),
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.any(Object),
         expect.any(Number),
@@ -392,7 +433,7 @@ describe('Mistral', () => {
 
     it('should handle API errors', async () => {
       const mockError = new Error('API Error');
-      jest.mocked(fetchWithCache).mockRejectedValue(mockError);
+      vi.mocked(fetchWithCache).mockRejectedValue(mockError);
 
       await expect(provider.callEmbeddingApi('Test text')).rejects.toThrow('API Error');
     });
@@ -406,19 +447,22 @@ describe('Mistral', () => {
       const customProvider = new MistralEmbeddingProvider({
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
-      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         model: 'mistral-embed',
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await customProvider.callEmbeddingApi('Test text');
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         'https://custom.mistral.ai/v1/embeddings',
         expect.any(Object),
         expect.any(Number),

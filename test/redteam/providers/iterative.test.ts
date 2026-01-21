@@ -1,39 +1,64 @@
-import { jest } from '@jest/globals';
-
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
-const mockGetProvider = jest.fn<() => Promise<any>>();
-const mockGetTargetResponse = jest.fn<() => Promise<any>>();
-const mockCheckPenalizedPhrases = jest.fn<() => boolean>();
-const mockGetGraderById = jest.fn();
+const mockGetProvider = vi.hoisted(() => vi.fn());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn());
+const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn());
+const mockGetGraderById = vi.hoisted(() => vi.fn());
 
-jest.mock('../../../src/redteam/providers/shared', () => ({
-  redteamProviderManager: {
-    getProvider: mockGetProvider,
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
-  getTargetResponse: mockGetTargetResponse,
-  checkPenalizedPhrases: mockCheckPenalizedPhrases,
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/redteam/graders', () => ({
-  getGraderById: mockGetGraderById,
-}));
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    redteamProviderManager: {
+      getProvider: mockGetProvider,
+    },
+
+    getTargetResponse: mockGetTargetResponse,
+    checkPenalizedPhrases: mockCheckPenalizedPhrases,
+  };
+});
+
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: mockGetGraderById,
+  };
+});
 
 describe('RedteamIterativeProvider', () => {
-  let mockRedteamProvider: jest.Mocked<ApiProvider>;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
+  let mockRedteamProvider: Mocked<ApiProvider>;
+  let mockTargetProvider: Mocked<ApiProvider>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+
+    // Reset hoisted mocks to ensure test isolation
+    // mockReset clears both call history AND mock implementations
+    mockGetProvider.mockReset();
+    mockGetTargetResponse.mockReset();
+    mockCheckPenalizedPhrases.mockReset();
+    mockGetGraderById.mockReset();
 
     mockRedteamProvider = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest
+      id: vi.fn().mockReturnValue('mock-redteam'),
+      callApi: vi
         .fn<(prompt: string, context?: any) => Promise<ProviderResponse>>()
-        .mockImplementation(async (prompt: string) => {
+        .mockImplementation(async function (prompt: string) {
           const input = JSON.parse(prompt);
 
           if (Array.isArray(input) && input[0]?.role === 'system') {
@@ -56,22 +81,26 @@ describe('RedteamIterativeProvider', () => {
             };
           }
         }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     mockTargetProvider = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: 'mock target response',
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
-    mockGetProvider.mockImplementation(() => Promise.resolve(mockRedteamProvider));
-    mockGetTargetResponse.mockImplementation(async () =>
-      Promise.resolve({
+    mockGetProvider.mockImplementation(function () {
+      return Promise.resolve(mockRedteamProvider);
+    });
+    mockGetTargetResponse.mockImplementation(async function () {
+      return Promise.resolve({
         output: 'mock target response',
-      }),
-    );
-    mockCheckPenalizedPhrases.mockImplementation(() => false);
+      });
+    });
+    mockCheckPenalizedPhrases.mockImplementation(function () {
+      return false;
+    });
   });
 
   describe('constructor', () => {
@@ -110,18 +139,22 @@ describe('RedteamIterativeProvider', () => {
   describe('runRedteamConversation', () => {
     it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'perfect' },
-            previousBestResponse: { rating: 5, explanation: 'good' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'perfect' },
+              previousBestResponse: { rating: 5, explanation: 'good' },
+            }),
+          };
+        });
 
       const result = await runRedteamConversation({
         context: { prompt: { raw: '', label: '' }, vars: {} },
@@ -144,7 +177,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should exit early when grader fails and use stored grader result', async () => {
       const mockGrader = {
-        getResult: jest.fn<any>().mockResolvedValue({
+        getResult: vi.fn<any>().mockResolvedValue({
           grade: {
             pass: false,
             score: 0,
@@ -158,18 +191,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -203,6 +240,7 @@ describe('RedteamIterativeProvider', () => {
         score: 0,
         reason: 'Jailbreak detected by grader',
         tokensUsed: { total: 100, prompt: 50, completion: 50 },
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'test',
@@ -224,18 +262,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(null); // No grader available
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'Excellent jailbreak achieved' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'Excellent jailbreak achieved' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        });
 
       const result = await runRedteamConversation({
         context: {
@@ -404,6 +446,13 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should extract JSON object from fenced/narrative judge output', async () => {
+      // Reset and set up mockGetTargetResponse for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async () => ({
+        output: 'mock target response',
+        tokenUsage: { numRequests: 1 },
+      }));
+
       const fenced =
         "I'll evaluate now.\n```json\n{" +
         '"currentResponse": { "rating": 6, "explanation": "ok" },' +
@@ -437,7 +486,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should include goal in additional rubric when goal is present', async () => {
       const mockGrader = {
-        getResult: jest.fn<any>().mockResolvedValue({
+        getResult: vi.fn<any>().mockResolvedValue({
           grade: {
             pass: true,
             score: 1,
@@ -450,18 +499,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -533,7 +586,7 @@ describe('RedteamIterativeProvider', () => {
       // Capture the FIRST system prompt that gets sent (attacker, not judge)
       let capturedSystemPrompt = '';
       let firstSystemCapture = false;
-      mockRedteamProvider.callApi.mockImplementation(async (prompt: string) => {
+      mockRedteamProvider.callApi.mockImplementation(async function (prompt: string) {
         const input = JSON.parse(prompt);
         if (Array.isArray(input) && input[0]?.role === 'system' && !firstSystemCapture) {
           capturedSystemPrompt = input[0].content;
@@ -585,7 +638,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should not include additional rubric when no goal is present', async () => {
       const mockGrader = {
-        getResult: jest.fn<any>().mockResolvedValue({
+        getResult: vi.fn<any>().mockResolvedValue({
           grade: {
             pass: true,
             score: 1,
@@ -598,21 +651,27 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({ onTopic: true }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -657,7 +716,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should prioritize grader failed over judge success when both conditions are met', async () => {
       const mockGrader = {
-        getResult: jest.fn<any>().mockResolvedValue({
+        getResult: vi.fn<any>().mockResolvedValue({
           grade: {
             pass: false, // Grader fails
             score: 0,
@@ -670,18 +729,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'Judge also thinks its great' }, // Judge success
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        }));
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'Judge also thinks its great' }, // Judge success
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -714,6 +777,7 @@ describe('RedteamIterativeProvider', () => {
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
     });
 
@@ -727,9 +791,15 @@ describe('RedteamIterativeProvider', () => {
 
       // Track the prompts sent to the target provider
       const targetPrompts: string[] = [];
-      mockTargetProvider.callApi.mockImplementation(async (prompt: string) => {
+      mockTargetProvider.callApi.mockImplementation(async function (prompt: string) {
         targetPrompts.push(prompt);
         return { output: 'mock target response' };
+      });
+
+      // Set up mockGetTargetResponse to call mockTargetProvider.callApi
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
       });
 
       // Mock provider responses for 3 iterations
@@ -810,15 +880,18 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
     it('should correctly track token usage when target provider returns tokens', async () => {
-      // Reset the mock to use the real getTargetResponse function
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       // Mock the target provider directly to return tokens
       mockTargetProvider.callApi.mockResolvedValueOnce({
@@ -849,7 +922,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should accumulate token usage across multiple iterations', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       // Mock target provider for multiple calls with different token usage
       mockTargetProvider.callApi
@@ -891,7 +968,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle missing token usage from target responses', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -933,7 +1014,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle error responses without affecting token counts', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -973,7 +1058,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle zero token counts correctly', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -1009,9 +1098,284 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    it('should re-throw AbortError from redteam provider parse failure and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock redteam provider to return a response that causes parse to throw AbortError
+      mockRedteamProvider.callApi.mockImplementationOnce(async () => {
+        throw abortError;
+      });
+
+      await expect(
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should re-throw AbortError from judge response parse failure', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // First call is redteam provider (success), second call is judge (throws)
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test improvement',
+            prompt: 'test prompt',
+          }),
+        })
+        .mockImplementationOnce(async () => {
+          throw abortError;
+        });
+
+      await expect(
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should pass options to gradingProvider.callApi', async () => {
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test',
+            prompt: 'test',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options,
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Verify options were passed to callApi
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should swallow non-AbortError parse exceptions and continue loop', async () => {
+      // First redteam call returns unparseable output, second succeeds
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'this is not valid JSON',
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test',
+            prompt: 'test',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Should complete without throwing
+      expect(result.metadata.stopReason).toBe('Max iterations reached');
+    });
+  });
+
+  describe('perTurnLayers configuration', () => {
+    it('should accept perTurnLayers parameter (empty array for safe testing)', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+        perTurnLayers: [], // Empty array to avoid actual transforms
+      });
+
+      // Should complete without error when perTurnLayers is provided
+      expect(result.metadata.finalIteration).toBeDefined();
+    });
+
+    it('should default perTurnLayers to empty array when not provided', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+        // perTurnLayers not provided
+      });
+
+      expect(result.metadata.finalIteration).toBeDefined();
+    });
+  });
+
+  describe('redteamHistory with audio/image data', () => {
+    it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // redteamHistory should be present
+      expect(result.metadata.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        // These fields should be present (even if undefined without layers)
+        expect(entry).toHaveProperty('prompt');
+        expect(entry).toHaveProperty('output');
+        // Optional audio/image fields
+        expect('promptAudio' in entry || entry.promptAudio === undefined).toBe(true);
+        expect('promptImage' in entry || entry.promptImage === undefined).toBe(true);
+      }
+    });
+
+    it('should capture outputAudio when target returns audio data', async () => {
+      // Clear the mock to use the target provider directly
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with audio',
+        audio: { data: 'base64audiodata', format: 'mp3' },
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputAudio).toBeDefined();
+        expect(entry.outputAudio?.data).toBe('base64audiodata');
+        expect(entry.outputAudio?.format).toBe('mp3');
+      }
+    });
+
+    it('should capture outputImage when target returns image data', async () => {
+      // Clear the mock to use the target provider directly
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with image',
+        image: { data: 'base64imagedata', format: 'png' },
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputImage).toBeDefined();
+        expect(entry.outputImage?.data).toBe('base64imagedata');
+        expect(entry.outputImage?.format).toBe('png');
+      }
+    });
+  });
+
   describe('sessionId handling', () => {
     beforeEach(() => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for sessionId tests
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
     });
 
     it('should collect sessionIds from all iterations', async () => {

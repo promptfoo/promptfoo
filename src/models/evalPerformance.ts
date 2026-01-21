@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
@@ -21,22 +22,30 @@ interface CountCacheEntry {
 }
 
 // Simple in-memory cache for counts with 5-minute TTL
-const countCache = new Map<string, CountCacheEntry>();
+const distinctCountCache = new Map<string, CountCacheEntry>();
+const totalRowCountCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Get the count of distinct test indices for an eval.
+ * This represents the number of unique test cases (rows in the UI table).
+ *
+ * Use getTotalResultRowCount() if you need the total number of result rows
+ * (which may be higher when there are multiple prompts/providers per test case).
+ */
 export async function getCachedResultsCount(evalId: string): Promise<number> {
-  const cacheKey = `count:${evalId}`;
-  const cached = countCache.get(cacheKey);
+  const cacheKey = `distinct:${evalId}`;
+  const cached = distinctCountCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    logger.debug(`Using cached count for eval ${evalId}: ${cached.count}`);
+    logger.debug(`Using cached distinct count for eval ${evalId}: ${cached.count}`);
     return cached.count;
   }
 
   const db = getDb();
   const start = Date.now();
 
-  // Use COUNT(*) with the composite index on (eval_id, test_idx)
+  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
   const result = db
     .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
@@ -46,19 +55,58 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   const count = Number(result[0]?.count ?? 0);
   const duration = Date.now() - start;
 
-  logger.debug(`Count query for eval ${evalId} took ${duration}ms`);
+  logger.debug(`Distinct count query for eval ${evalId}: ${count} in ${duration}ms`);
 
   // Cache the result
-  countCache.set(cacheKey, { count, timestamp: Date.now() });
+  distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
+
+  return count;
+}
+
+/**
+ * Get the total count of all result rows for an eval.
+ * This counts every result row in the database, including multiple results
+ * per test case (e.g., when using multiple prompts or providers).
+ *
+ * Use this for progress tracking when iterating over all results (e.g., sharing).
+ */
+export async function getTotalResultRowCount(evalId: string): Promise<number> {
+  const cacheKey = `total:${evalId}`;
+  const cached = totalRowCountCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    logger.debug(`Using cached total row count for eval ${evalId}: ${cached.count}`);
+    return cached.count;
+  }
+
+  const db = getDb();
+  const start = Date.now();
+
+  // Count all result rows - use this when iterating over all results
+  const result = db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(evalResultsTable)
+    .where(sql`eval_id = ${evalId}`)
+    .all();
+
+  const count = Number(result[0]?.count ?? 0);
+  const duration = Date.now() - start;
+
+  logger.debug(`Total row count query for eval ${evalId}: ${count} in ${duration}ms`);
+
+  // Cache the result
+  totalRowCountCache.set(cacheKey, { count, timestamp: Date.now() });
 
   return count;
 }
 
 export function clearCountCache(evalId?: string) {
   if (evalId) {
-    countCache.delete(`count:${evalId}`);
+    distinctCountCache.delete(`distinct:${evalId}`);
+    totalRowCountCache.delete(`total:${evalId}`);
   } else {
-    countCache.clear();
+    distinctCountCache.clear();
+    totalRowCountCache.clear();
   }
 }
 
@@ -90,6 +138,13 @@ export async function queryTestIndicesOptimized(
     baseQuery = sql`${baseQuery} AND success = 1`;
   } else if (mode === 'highlights') {
     baseQuery = sql`${baseQuery} AND json_extract(grading_result, '$.comment') LIKE '!highlight%'`;
+  } else if (mode === 'user-rated') {
+    // Check if componentResults array contains an entry with assertion.type = 'human'
+    baseQuery = sql`${baseQuery} AND EXISTS (
+      SELECT 1
+      FROM json_each(grading_result, '$.componentResults')
+      WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+    )`;
   }
 
   // For search queries, only search in response field if no filters

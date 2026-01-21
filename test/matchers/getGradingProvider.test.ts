@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getGradingProvider } from '../../src/matchers';
 import { loadApiProvider } from '../../src/providers/index';
@@ -31,7 +31,7 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', 'openai:gpt-4', null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', { basePath: undefined });
       expect(result).toBe(mockProvider);
     });
 
@@ -55,6 +55,7 @@ describe('getGradingProvider', () => {
 
       expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
         options: providerOptions,
+        basePath: undefined,
       });
       expect(result).toBe(mockProvider);
     });
@@ -69,7 +70,7 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('embedding', providerMap, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:embedding');
+      expect(loadApiProvider).toHaveBeenCalledWith('openai:embedding', { basePath: undefined });
       expect(result).toBe(mockProvider);
     });
 
@@ -81,7 +82,7 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('classification', providerMap, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', { basePath: undefined });
       expect(result).toBe(mockProvider);
     });
 
@@ -93,7 +94,9 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', providerMap, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('anthropic:claude-3-sonnet');
+      expect(loadApiProvider).toHaveBeenCalledWith('anthropic:claude-3-sonnet', {
+        basePath: undefined,
+      });
       expect(result).toBe(mockProvider);
     });
   });
@@ -117,7 +120,9 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+        basePath: undefined,
+      });
       expect(result).toBe(azureProvider);
     });
 
@@ -137,7 +142,9 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+        basePath: undefined,
+      });
       expect(result).toBe(azureProvider);
     });
 
@@ -161,7 +168,9 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+        basePath: undefined,
+      });
       expect(result).toBe(azureProvider);
     });
 
@@ -184,7 +193,9 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+        basePath: undefined,
+      });
       expect(result).toBe(azureProvider);
     });
 
@@ -262,6 +273,7 @@ describe('getGradingProvider', () => {
             deploymentName: 'gpt-4o',
           },
         },
+        basePath: undefined,
       });
       expect(result).toBe(azureProvider);
     });
@@ -286,7 +298,7 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', 'openai:gpt-4o', null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4o');
+      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4o', { basePath: undefined });
       expect(result).toBe(explicitProvider);
     });
 
@@ -363,7 +375,7 @@ describe('getGradingProvider', () => {
 
       const result = await getGradingProvider('text', 'openai:gpt-4', null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4');
+      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', { basePath: undefined });
       expect(result).toBe(explicitProvider);
     });
   });

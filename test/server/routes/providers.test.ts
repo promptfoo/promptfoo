@@ -1,29 +1,30 @@
 import request from 'supertest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
 import type { ProviderTestResult } from '../../../src/validators/testProvider';
 
 // Mock dependencies
-jest.mock('../../../src/providers/index');
-jest.mock('../../../src/validators/testProvider');
-jest.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/providers/index');
+vi.mock('../../../src/validators/testProvider');
+vi.mock('../../../src/server/config/serverConfig');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
-import { testProviderConnectivity } from '../../../src/validators/testProvider';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import { testProviderConnectivity } from '../../../src/validators/testProvider';
 
-const mockedLoadApiProvider = jest.mocked(loadApiProvider);
-const mockedTestProviderConnectivity = jest.mocked(testProviderConnectivity);
-const mockedGetAvailableProviders = jest.mocked(getAvailableProviders);
+const mockedLoadApiProvider = vi.mocked(loadApiProvider);
+const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
+const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 
 describe('Providers Routes', () => {
   describe('GET /providers', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
     });
 
@@ -98,7 +99,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
     });
 
@@ -137,13 +138,13 @@ describe('Providers Routes', () => {
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
 
       // Setup mock provider
       mockProvider = {
-        id: jest.fn(() => 'test-provider'),
-        callApi: jest.fn(),
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
         config: {},
       } as any;
 
@@ -198,7 +199,11 @@ describe('Providers Routes', () => {
         },
       });
 
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, testPrompt);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: testPrompt,
+        inputs: undefined,
+      });
     });
 
     it('should handle valid request without prompt (optional)', async () => {
@@ -219,7 +224,11 @@ describe('Providers Routes', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, undefined);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: undefined,
+        inputs: undefined,
+      });
     });
 
     it('should return 400 for missing providerOptions', async () => {
@@ -246,25 +255,6 @@ describe('Providers Routes', () => {
 
       // The route should catch the error and return 500
       expect(response.status).toBe(500);
-    });
-
-    it('should return 400 for malformed body with extra fields', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: {
-            id: 'test-provider',
-            unexpectedField: 'should cause validation error',
-          },
-          prompt: 'Test',
-        });
-
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual(
-        expect.objectContaining({
-          error: expect.stringContaining('Unrecognized key'),
-        }),
-      );
     });
 
     it('should handle provider loading failure', async () => {

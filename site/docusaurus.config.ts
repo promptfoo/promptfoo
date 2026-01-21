@@ -81,11 +81,13 @@ const config: Config = {
           showLastUpdateTime: true,
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -94,13 +96,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
-                anonymizeIP: true,
-              },
+        // gtag disabled in preset - added as standalone plugin below for production only
       } satisfies Preset.Options,
     ],
   ],
@@ -145,42 +141,22 @@ const config: Config = {
               description: 'Secure proxy for Model Context Protocol communications',
             },
             {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
+            },
+            {
               to: '/docs/getting-started/',
               label: 'Evaluations',
               description: 'Test and evaluate your prompts, models, and RAG pipelines',
             },
           ],
         },
-        /*
         {
           type: 'custom-navMenuCard',
           label: 'Solutions',
           position: 'left',
           items: [
-            {
-              to: '/solutions/',
-              label: 'Overview',
-              description: 'Comprehensive AI security solutions',
-            },
-            {
-              type: 'section-header',
-              label: 'By Role',
-            },
-            {
-              to: '/solutions/security-leaders/',
-              label: 'Security Leaders',
-              description: 'AI security governance and compliance',
-            },
-            {
-              to: '/solutions/developers/',
-              label: 'Developers',
-              description: 'Secure AI development tools',
-            },
-            {
-              to: '/solutions/ai-teams/',
-              label: 'AI Product Teams',
-              description: 'End-to-end AI security testing',
-            },
             {
               type: 'section-header',
               label: 'By Industry',
@@ -188,21 +164,20 @@ const config: Config = {
             {
               to: '/solutions/healthcare/',
               label: 'Healthcare',
-              description: 'HIPAA-compliant AI security',
+              description: 'HIPAA-compliant medical AI security',
             },
             {
               to: '/solutions/finance/',
-              label: 'Finance',
-              description: 'Financial services AI protection',
+              label: 'Financial Services',
+              description: 'FINRA-aligned security testing',
             },
             {
               to: '/solutions/insurance/',
               label: 'Insurance',
-              description: 'Insurance industry AI security',
+              description: 'PHI protection & compliance',
             },
           ],
         },
-        */
         {
           type: 'custom-navMenuCard',
           label: 'Company',
@@ -214,23 +189,29 @@ const config: Config = {
               description: 'Learn about our mission and team',
             },
             {
-              href: '/blog/',
-              label: 'Blog',
-              description: 'Latest insights on AI security and testing',
-            },
-            {
               href: '/press/',
               label: 'Press',
               description: 'Media coverage and press releases',
+            },
+            {
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
             },
             {
               href: '/careers/',
               label: 'Careers',
               description: 'Join our growing team',
             },
+            {
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
+            },
           ],
         },
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: '/contact/',
@@ -290,6 +271,23 @@ const config: Config = {
             {
               label: 'Status',
               href: 'https://status.promptfoo.app/',
+            },
+          ],
+        },
+        {
+          title: 'Solutions',
+          items: [
+            {
+              label: 'Healthcare',
+              to: '/solutions/healthcare/',
+            },
+            {
+              label: 'Financial Services',
+              to: '/solutions/finance/',
+            },
+            {
+              label: 'Insurance',
+              to: '/solutions/insurance/',
             },
           ],
         },
@@ -354,12 +352,20 @@ const config: Config = {
               to: '/press/',
             },
             {
+              label: 'Events',
+              to: '/events/',
+            },
+            {
               label: 'Contact',
               to: '/contact/',
             },
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',
@@ -439,6 +445,18 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
+    ...(process.env.NODE_ENV === 'development'
+      ? []
+      : [
+          [
+            '@docusaurus/plugin-google-gtag',
+            {
+              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
+              anonymizeIP: true,
+            },
+          ],
+        ]),
     [
       '@docusaurus/plugin-client-redirects',
       {

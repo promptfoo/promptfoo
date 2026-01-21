@@ -4,14 +4,19 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import { hasGoogleDefaultCredentials } from './google/util';
 import {
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
+  DefaultGitHubGradingJsonProvider,
+  DefaultGitHubGradingProvider,
+  DefaultGitHubSuggestionsProvider,
+} from './github/defaults';
+import {
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from './google/ai.studio';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
@@ -24,20 +29,16 @@ import {
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
 import {
-  DefaultGitHubGradingProvider,
-  DefaultGitHubGradingJsonProvider,
-  DefaultGitHubSuggestionsProvider,
-} from './github/defaults';
-import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
 
-import type { ApiProvider, DefaultProviders } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, DefaultProviders } from '../types/index';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',
@@ -126,10 +127,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
+      // Azure doesn't have web search by default
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
     const anthropicProviders = getAnthropicProviders(env);
+
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: anthropicProviders.gradingJsonProvider,
@@ -138,6 +141,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
+      webSearchProvider: anthropicProviders.webSearchProvider,
     };
   } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
     logger.debug('Using Google AI Studio default providers');
@@ -180,6 +184,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
+      // Mistral doesn't have web search
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -200,6 +205,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else {
     logger.debug('Using OpenAI default providers');
+
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
@@ -207,6 +213,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
+      webSearchProvider: OpenAiWebSearchProvider,
     };
   }
 

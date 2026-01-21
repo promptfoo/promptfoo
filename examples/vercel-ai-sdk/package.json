@@ -1,0 +1,9 @@
+{
+  "name": "vercel-ai-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "ai": "^6.0.42",
+    "@ai-sdk/openai": "^3.0.0"
+  }
+}

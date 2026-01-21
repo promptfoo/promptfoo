@@ -1,10 +1,11 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { runAssertions } from '../../../assertions/index';
 import logger from '../../../logger';
+import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
 import type { Assertion, AtomicTestCase } from '../../../types/index';
-import { createToolResponse } from '../utils';
 
 /**
  * Run an assertion against an LLM output to test grading logic
@@ -41,7 +42,10 @@ export function registerRunAssertionTool(server: McpServer) {
           metric: z.string().optional().describe('Name this assertion as a metric'),
           provider: z.any().optional().describe('LLM provider config for model-graded assertions'),
           transform: z.string().optional().describe('Transform the output before assertion'),
-          config: z.record(z.any()).optional().describe('Additional assertion configuration'),
+          config: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe('Additional assertion configuration'),
         })
         .describe(
           dedent`
@@ -59,7 +63,7 @@ export function registerRunAssertionTool(server: McpServer) {
           `,
         ),
       vars: z
-        .record(z.any())
+        .record(z.string(), z.any())
         .optional()
         .describe(
           dedent`

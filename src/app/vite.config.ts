@@ -1,11 +1,72 @@
 /// <reference types="vitest" />
 
+import { fileURLToPath } from 'node:url';
+import os from 'os';
 import path from 'path';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import packageJson from '../../package.json';
+import { defineConfig, type Plugin } from 'vitest/config';
+import packageJson from '../../package.json' with { type: 'json' };
+
+/**
+ * Plugin to replace Node.js modules with browser-compatible versions.
+ * This allows us to avoid bundling heavy Node polyfills by providing
+ * lightweight browser implementations.
+ */
+function browserModulesPlugin(): Plugin {
+  // Map of Node module paths to their browser replacements
+  const replacements: Array<{ nodePath: string; browserPath: string; patterns: string[] }> = [
+    {
+      // logger.ts uses fs, path, winston - replace with console-based logger
+      nodePath: path.resolve(__dirname, '../logger.ts'),
+      browserPath: path.resolve(__dirname, '../logger.browser.ts'),
+      patterns: ['./logger', '../logger', '/logger'],
+    },
+    {
+      // createHash.ts uses Node crypto - replace with pure JS SHA-256
+      nodePath: path.resolve(__dirname, '../util/createHash.ts'),
+      browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
+      patterns: ['./createHash', '../createHash', '/createHash'],
+    },
+  ];
+
+  return {
+    name: 'browser-modules',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!importer) {
+        return null;
+      }
+
+      for (const { nodePath, browserPath, patterns } of replacements) {
+        // Check if source matches any of the patterns
+        const matches = patterns.some((p) => source === p || source.endsWith(p));
+        if (!matches) {
+          continue;
+        }
+
+        // Resolve the import path
+        const resolvedPath = path.resolve(path.dirname(importer), source);
+
+        // Check if it matches the node module path (with or without .ts extension)
+        if (
+          resolvedPath === nodePath ||
+          resolvedPath === nodePath.replace('.ts', '') ||
+          resolvedPath + '.ts' === nodePath
+        ) {
+          return browserPath;
+        }
+      }
+      return null;
+    },
+  };
+}
+
+// Calculate max forks for test parallelization
+const cpuCount = os.cpus().length;
+const maxForks = Math.max(cpuCount - 2, 2);
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -14,10 +75,7 @@ const API_PORT = process.env.API_PORT || '15500';
 if (process.env.NODE_ENV === 'development') {
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
-  process.env.VITE_PUBLIC_PROMPTFOO_SHARE_API_URL = `http://localhost:${API_PORT}`;
 } else {
-  process.env.VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL = 'https://app.promptfoo.dev';
-  process.env.VITE_PUBLIC_PROMPTFOO_SHARE_API_URL = 'https://api.promptfoo.dev';
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
 }
@@ -29,8 +87,12 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(),
-    nodePolyfills(), // Removed vm exclusion - we need it for new Function() calls
+    browserModulesPlugin(),
+    react({
+      babel: {
+        plugins: [['babel-plugin-react-compiler', {}]],
+      },
+    }),
   ],
   resolve: {
     alias: {
@@ -46,32 +108,13 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    // Minification settings
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        // Keep console statements - useful for a local development tool
-        drop_console: false,
-        drop_debugger: process.env.NODE_ENV === 'production',
-      },
-    },
     rollupOptions: {
-      onwarn(warning, warn) {
-        // Suppress eval warnings from vm-browserify polyfill
-        if (warning.code === 'EVAL' && warning.id?.includes('vm-browserify')) {
-          return;
-        }
-        warn(warning);
-      },
       output: {
         // Manual chunking to split vendor libraries
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-mui-core': ['@mui/material', '@mui/system'],
-          'vendor-mui-icons': ['@mui/icons-material'],
-          'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
+          'vendor-utils': ['js-yaml', 'diff'],
           'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
@@ -83,15 +126,30 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
-    globals: true,
-    // Enable CSS processing for MUI X v8
+    globals: false,
+    // Enable CSS processing for component styles
     css: true,
-    // Force vitest to transform MUI packages including CSS imports
-    server: {
-      deps: {
-        inline: ['@mui/x-data-grid', '@mui/x-charts'],
-      },
-    },
+
+    // Memory leak prevention settings
+    // Use forks (child processes) instead of threads for better memory isolation
+    pool: 'forks',
+    // Vitest 4: poolOptions are now top-level
+    maxWorkers: maxForks,
+    isolate: true, // Each test file gets a clean environment
+    execArgv: [
+      '--max-old-space-size=2048', // 2GB per worker for frontend tests
+    ],
+
+    // Timeouts to prevent stuck tests from hanging forever
+    testTimeout: 30_000, // 30s per test
+    hookTimeout: 30_000, // 30s for beforeAll/afterAll hooks
+    teardownTimeout: 10_000, // 10s for cleanup
+
+    // Limit concurrent tests within each worker to prevent memory spikes
+    maxConcurrency: 5,
+
+    // Fail fast on first error in CI
+    bail: process.env.CI ? 1 : 0,
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
       if (type === 'stderr') {
@@ -138,5 +196,6 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
+    'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
 });

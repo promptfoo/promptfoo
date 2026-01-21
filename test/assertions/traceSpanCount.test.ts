@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleTraceSpanCount } from '../../src/assertions/traceSpanCount';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
@@ -10,6 +11,9 @@ const mockProvider: ApiProvider = {
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',
+  evaluationId: 'test-evaluation-id',
+  testCaseId: 'test-test-case-id',
+  metadata: { test: 'value' },
   spans: [
     {
       spanId: 'span-1',
@@ -72,7 +76,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*llm*', max: 3 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -96,7 +105,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*llm*', max: 1 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -120,7 +134,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*retrieval*', min: 1 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -144,7 +163,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*retrieval*', min: 2 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -168,7 +192,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*', min: 3, max: 10 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -216,7 +245,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*LLM*', max: 5 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -255,7 +289,13 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*', max: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: { traceId: 'empty-trace', spans: [] },
+        trace: {
+          traceId: 'empty-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [],
+        },
       },
     };
 
@@ -291,7 +331,12 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { max: 5 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 

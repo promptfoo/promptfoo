@@ -1,33 +1,43 @@
 import dedent from 'dedent';
-
+import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
+import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
+import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
+  parseGeneratedInputs,
   parseGeneratedPrompts,
-  RedteamGraderBase,
-  RedteamPluginBase,
-} from '../../../src/redteam/plugins/base';
+} from '../../../src/redteam/plugins/multiInputFormat';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
+
 import type {
   ApiProvider,
   Assertion,
   AtomicTestCase,
   GradingResult,
 } from '../../../src/types/index';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/util/file', () => ({
-  maybeLoadFromExternalFile: jest.fn(),
-  maybeLoadToolsFromExternalFile: jest.fn().mockImplementation((tools) => {
-    if (tools === 'file://tools.json') {
-      return [{ name: 'tool1' }, { name: 'tool2' }];
-    }
-    return tools;
-  }),
-  renderVarsInObject: jest.fn(),
-}));
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn(),
+
+    maybeLoadToolsFromExternalFile: vi.fn().mockImplementation(function (tools) {
+      if (tools === 'file://tools.json') {
+        return [{ name: 'tool1' }, { name: 'tool2' }];
+      }
+      return tools;
+    }),
+
+    renderVarsInObject: vi.fn(),
+  };
+});
 
 class TestPlugin extends RedteamPluginBase {
   readonly id = 'test-plugin-id';
@@ -46,16 +56,16 @@ describe('RedteamPluginBase', () => {
 
   beforeEach(() => {
     provider = {
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
       }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'German' });
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should generate test cases correctly', async () => {
@@ -68,7 +78,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'another prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -76,7 +86,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'test prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),
@@ -86,11 +96,10 @@ describe('RedteamPluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        CRITICAL: Ensure all generated prompts strictly follow these requirements:
         <Modifiers>
         language: German
         </Modifiers>
-        Rewrite ALL prompts to fully comply with the above modifiers.
+        Rewrite ALL prompts to strictly comply with the above modifiers.
       `.trim(),
     );
   });
@@ -105,7 +114,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'another prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -113,7 +122,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'test prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),
@@ -137,9 +146,7 @@ describe('RedteamPluginBase', () => {
       },
     ];
 
-    jest
-      .spyOn(provider, 'callApi')
-      .mockImplementation()
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1]);
 
@@ -152,9 +159,7 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should deduplicate prompts', async () => {
-    jest
-      .spyOn(provider, 'callApi')
-      .mockImplementation()
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce({
         output: 'Prompt: duplicate\nPrompt: duplicate',
       })
@@ -171,7 +176,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -179,7 +184,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),
@@ -195,9 +200,7 @@ describe('RedteamPluginBase', () => {
       { output: 'Prompt: test4' },
     ];
 
-    jest
-      .spyOn(provider, 'callApi')
-      .mockImplementation()
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1])
       .mockResolvedValueOnce(mockResponses[2]);
@@ -211,7 +214,7 @@ describe('RedteamPluginBase', () => {
   it('should bail after 2 retries if no new prompts are generated', async () => {
     const mockResponse = { output: 'Prompt: test1\nPrompt: test2' };
 
-    jest.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue(mockResponse);
+    vi.spyOn(provider, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await plugin.generateTests(5);
 
@@ -220,15 +223,12 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should sample prompts when more are generated than requested', async () => {
-    jest
-      .spyOn(provider, 'callApi')
-      .mockImplementation()
-      .mockResolvedValue({
-        output: Array(10)
-          .fill(0)
-          .map((_, i) => `Prompt: test prompt ${i}`)
-          .join('\n'),
-      });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: Array(10)
+        .fill(0)
+        .map((_, i) => `Prompt: test prompt ${i}`)
+        .join('\n'),
+    });
 
     const result = await plugin.generateTests(5);
 
@@ -274,37 +274,276 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
+
+    it('should store __outputFormat in config.modifiers when inputs is defined', () => {
+      const config: Record<string, any> = {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      };
+      const template = 'Generate {{ n }} test cases for {{ purpose }}';
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      // __outputFormat is stored in config.modifiers but not in the output template
+      expect(config.modifiers).toBeDefined();
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
+      // Since there are no other modifiers, template should be returned unchanged
+      expect(result).toBe(template);
+    });
+
+    it('should combine inputs with other modifiers', () => {
+      const config: Record<string, any> = {
+        language: 'Spanish',
+        inputs: {
+          query: 'The search query',
+        },
+        modifiers: {
+          tone: 'formal',
+        },
+      };
+      const template = 'Generate test cases';
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      // Regular modifiers are included in the output
+      expect(result).toContain('language: Spanish');
+      expect(result).toContain('tone: formal');
+      // __outputFormat is stored in config.modifiers but NOT in the output
+      expect(result).not.toContain('__outputFormat:');
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
+    });
+  });
+
+  describe('multi-input mode', () => {
+    let multiInputProvider: ApiProvider;
+    let multiInputPlugin: TestPlugin;
+
+    beforeEach(() => {
+      multiInputProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: `
+            Here are the test cases:
+            <Prompt>{"username": "admin", "message": "Hello"}</Prompt>
+            <Prompt>{"username": "guest", "message": "Test message"}</Prompt>
+          `,
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+    });
+
+    it('should generate test cases with multi-input mode when inputs is defined', async () => {
+      // In multi-input mode, injectVar is set to MULTI_INPUT_VAR at the redteam run level
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      // In multi-input mode, the full JSON is stored in MULTI_INPUT_VAR
+      // to prevent namespace collisions with user-defined input variables
+      tests.forEach((test) => {
+        expect(test.vars![MULTI_INPUT_VAR]).toContain('username');
+        expect(test.vars![MULTI_INPUT_VAR]).toContain('message');
+      });
+      // Check that individual variables are extracted (order may vary due to sampling)
+      const usernames = tests.map((t) => t.vars!.username);
+      const messages = tests.map((t) => t.vars!.message);
+      expect(usernames).toContain('admin');
+      expect(usernames).toContain('guest');
+      expect(messages).toContain('Hello');
+      expect(messages).toContain('Test message');
+    });
+
+    it('should store __outputFormat in config.modifiers when inputs is defined', async () => {
+      const config = {
+        inputs: {
+          username: 'The user name',
+        },
+      };
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', config);
+
+      await multiInputPlugin.generateTests(1);
+
+      // __outputFormat is stored in config.modifiers for downstream use (strategies)
+      expect((config as any).modifiers?.__outputFormat).toContain('multi-input-mode');
+    });
+
+    it('should store inputs config in test metadata', async () => {
+      const inputsConfig = {
+        username: 'The user name',
+        message: 'The message content',
+      };
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+        inputs: inputsConfig,
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      expect(tests[0].metadata?.pluginConfig?.inputs).toEqual(inputsConfig);
+    });
+
+    it('should include extracted inputVars in test case metadata', async () => {
+      // In multi-input mode, inputVars should be included in metadata for multi-turn strategies
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      // Both test cases should have inputVars in metadata
+      tests.forEach((test) => {
+        expect(test.metadata).toHaveProperty('inputVars');
+        expect(test.metadata?.inputVars).toBeDefined();
+        expect(typeof test.metadata?.inputVars).toBe('object');
+      });
+
+      // Verify the extracted values are correct (order may vary due to sampling)
+      const inputVarsArray = tests.map((t) => t.metadata?.inputVars as Record<string, string>);
+      const usernames = inputVarsArray.map((iv) => iv.username);
+      const messages = inputVarsArray.map((iv) => iv.message);
+
+      expect(usernames).toContain('admin');
+      expect(usernames).toContain('guest');
+      expect(messages).toContain('Hello');
+      expect(messages).toContain('Test message');
+    });
+
+    it('should handle parsing failures gracefully in multi-input mode', async () => {
+      const badProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: `
+            <Prompt>{"username": "admin", "message": "Valid"}</Prompt>
+            <Prompt>not valid json</Prompt>
+          `,
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(badProvider, 'test purpose', 'testVar', {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      // Should only get the valid test case
+      expect(tests).toHaveLength(1);
+      expect(tests[0].vars!.username).toBe('admin');
+    });
+
+    it('should handle nested object values in multi-input mode', async () => {
+      const nestedProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output:
+            '<Prompt>{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}</Prompt>',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      // In multi-input mode, injectVar is set to MULTI_INPUT_VAR at the redteam run level
+      const plugin = new TestPlugin(nestedProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          user: 'User data object',
+          context: 'Context information',
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      // Full JSON stored in MULTI_INPUT_VAR
+      expect(tests[0].vars![MULTI_INPUT_VAR]).toContain('"user"');
+      // Nested objects should be stringified as individual vars
+      expect(tests[0].vars!.user).toBe('{"name":"admin","id":123}');
+      expect(tests[0].vars!.context).toBe('["msg1","msg2"]');
+    });
+
+    it('should use MULTI_INPUT_VAR constant value of __prompt', () => {
+      // This test ensures the constant value doesn't accidentally change
+      expect(MULTI_INPUT_VAR).toBe('__prompt');
+    });
+
+    it('should use parseGeneratedPrompts when inputs is not defined', async () => {
+      const standardProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: Standard prompt 1\nPrompt: Standard prompt 2',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {});
+
+      const tests = await plugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      // Results may be sampled in any order, so check that both prompts exist
+      const prompts = tests.map((t) => t.vars!.testVar);
+      expect(prompts).toContain('Standard prompt 1');
+      expect(prompts).toContain('Standard prompt 2');
+      // Should NOT have individual variable extraction
+      expect(tests[0].vars!.username).toBeUndefined();
+    });
+
+    it('should handle empty inputs object (no multi-input mode)', async () => {
+      const standardProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: Standard prompt',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {
+        inputs: {},
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0].vars!.testVar).toBe('Standard prompt');
+    });
   });
 
   describe('parseGeneratedPrompts', () => {
     it('should parse simple prompts correctly', () => {
       const input = 'Prompt: Hello world\nPrompt: How are you?';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
     });
 
     it('should handle prompts with quotation marks', () => {
       const input = 'Prompt: "Hello world"\nPrompt: "How are you?"';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
     });
 
     it('should ignore lines without "Prompt:"', () => {
       const input = 'Prompt: Valid prompt\nInvalid line\nPrompt: Another valid prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Valid prompt' }, { prompt: 'Another valid prompt' }]);
+      expect(result).toEqual([{ __prompt: 'Valid prompt' }, { __prompt: 'Another valid prompt' }]);
     });
 
     it('should handle prompts with numbers', () => {
       const input = 'Prompt: 1. First prompt\nPrompt: 2. Second prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'First prompt' }, { prompt: 'Second prompt' }]);
+      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
     });
 
     it('should handle prompts with colons', () => {
       const input = 'Prompt: Hello: World\nPrompt: Question: How are you?';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello: World' }, { prompt: 'Question: How are you?' }]);
+      expect(result).toEqual([
+        { __prompt: 'Hello: World' },
+        { __prompt: 'Question: How are you?' },
+      ]);
     });
 
     it('should handle empty input', () => {
@@ -323,15 +562,15 @@ describe('RedteamPluginBase', () => {
       const input = 'Prompt:    Whitespace at start and end    \nPrompt:\tTabbed prompt\t';
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Whitespace at start and end' },
-        { prompt: 'Tabbed prompt' },
+        { __prompt: 'Whitespace at start and end' },
+        { __prompt: 'Tabbed prompt' },
       ]);
     });
 
     it('should handle prompts with multiple lines', () => {
       const input = 'Prompt: First line\nSecond line\nPrompt: Another prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'First line' }, { prompt: 'Another prompt' }]);
+      expect(result).toEqual([{ __prompt: 'First line' }, { __prompt: 'Another prompt' }]);
     });
 
     it('should handle numbered lists with various formats', () => {
@@ -346,13 +585,13 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'First item' },
-        { prompt: 'Second item' },
-        { prompt: 'Third item' },
-        { prompt: 'Fourth item with: colon' },
-        { prompt: 'Fifth item with "quotes"' },
-        { prompt: 'Sixth item' },
-        { prompt: 'Seventh item' },
+        { __prompt: 'First item' },
+        { __prompt: 'Second item' },
+        { __prompt: 'Third item' },
+        { __prompt: 'Fourth item with: colon' },
+        { __prompt: 'Fifth item with "quotes"' },
+        { __prompt: 'Sixth item' },
+        { __prompt: 'Seventh item' },
       ]);
     });
 
@@ -365,17 +604,17 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Outer "inner "nested" quote"' },
-        { prompt: "Outer 'inner 'nested' quote'" },
-        { prompt: 'Single quoted "double nested" prompt' },
-        { prompt: "Double quoted 'single nested' prompt" },
+        { __prompt: 'Outer "inner "nested" quote"' },
+        { __prompt: "Outer 'inner 'nested' quote'" },
+        { __prompt: 'Single quoted "double nested" prompt' },
+        { __prompt: "Double quoted 'single nested' prompt" },
       ]);
     });
 
     it('should handle prompts with multiple spaces between words', () => {
       const input = 'Prompt: Multiple    spaces    between    words';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Multiple    spaces    between    words' }]);
+      expect(result).toEqual([{ __prompt: 'Multiple    spaces    between    words' }]);
     });
 
     it('should handle a mix of valid and invalid prompts', () => {
@@ -389,9 +628,9 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Valid prompt 1' },
-        { prompt: 'Valid prompt 2' },
-        { prompt: 'Valid prompt 3' },
+        { __prompt: 'Valid prompt 1' },
+        { __prompt: 'Valid prompt 2' },
+        { __prompt: 'Valid prompt 3' },
       ]);
     });
 
@@ -399,8 +638,48 @@ describe('RedteamPluginBase', () => {
       const input = 'Prompt: ** Leading asterisk\nPrompt: Trailing * middle * asterisk *';
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Leading asterisk' },
-        { prompt: 'Trailing * middle * asterisk' },
+        { __prompt: 'Leading asterisk' },
+        { __prompt: 'Trailing * middle * asterisk' },
+      ]);
+    });
+
+    // Tests for French typography (space before colon)
+    it('should handle French typography with space before colon', () => {
+      const input = 'Prompt : Hello world\nPrompt : How are you?';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
+    });
+
+    it('should handle mixed French and standard typography', () => {
+      const input = 'Prompt: Standard format\nPrompt : French format\nPrompt:No space';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'Standard format' },
+        { __prompt: 'French format' },
+        { __prompt: 'No space' },
+      ]);
+    });
+
+    it('should handle French typography with asterisks', () => {
+      const input = '**Prompt :** French with asterisks\n**Prompt:** Standard with asterisks';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'French with asterisks' },
+        { __prompt: 'Standard with asterisks' },
+      ]);
+    });
+
+    it('should handle French typography with numbered lists', () => {
+      const input = `
+        1. Prompt : First item French style
+        2. Prompt: Second item standard style
+        3) Prompt : Third item French style
+      `;
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'First item French style' },
+        { __prompt: 'Second item standard style' },
+        { __prompt: 'Third item French style' },
       ]);
     });
 
@@ -417,12 +696,12 @@ Please analyze these logs and suggest fixes.`;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         {
-          prompt: `[2024-06-10 14:23:12] INFO api.gateway - Request processed
+          __prompt: `[2024-06-10 14:23:12] INFO api.gateway - Request processed
 [2024-06-10 14:23:14] ERROR auth.service - JWT validation failed
 Please analyze these logs and suggest fixes.`,
         },
         {
-          prompt: `[2024-06-11 16:45:02] INFO payment.processor - Payment completed
+          __prompt: `[2024-06-11 16:45:02] INFO payment.processor - Payment completed
 [2024-06-11 16:45:04] ERROR file.manager - Permission denied
 Please analyze these logs and suggest fixes.`,
         },
@@ -438,8 +717,8 @@ Please analyze these logs and suggest fixes.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toHaveLength(1);
-      expect(result[0].prompt).toContain('DISABLE_AUTH=true');
-      expect(result[0].prompt).toContain('Please analyze these logs and suggest fixes.');
+      expect(result[0].__prompt).toContain('DISABLE_AUTH=true');
+      expect(result[0].__prompt).toContain('Please analyze these logs and suggest fixes.');
     });
 
     it('should handle PromptBlock with whitespace', () => {
@@ -452,8 +731,8 @@ Another block   `;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Content with leading spaces\nMulti-line content\nMore content' },
-        { prompt: 'Content with trailing spaces in marker\nAnother block' },
+        { __prompt: 'Content with leading spaces\nMulti-line content\nMore content' },
+        { __prompt: 'Content with trailing spaces in marker\nAnother block' },
       ]);
     });
 
@@ -465,9 +744,9 @@ Prompt: Traditional single-line prompt 3`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Traditional single-line prompt 1' },
-        { prompt: 'Traditional single-line prompt 2' },
-        { prompt: 'Traditional single-line prompt 3' },
+        { __prompt: 'Traditional single-line prompt 1' },
+        { __prompt: 'Traditional single-line prompt 2' },
+        { __prompt: 'Traditional single-line prompt 3' },
       ]);
     });
 
@@ -494,8 +773,8 @@ Please analyze these logs and suggest any necessary fixes.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toHaveLength(2);
-      expect(result[0].prompt).toContain('permissions to 0777');
-      expect(result[1].prompt).toContain('disabling STRICT_VALIDATION');
+      expect(result[0].__prompt).toContain('permissions to 0777');
+      expect(result[1].__prompt).toContain('disabling STRICT_VALIDATION');
     });
   });
 
@@ -517,23 +796,190 @@ AGENT: Let me look that up for you. Can you tell me the amount and date?`;
     expect(result).toHaveLength(2);
 
     // First conversation
-    expect(result[0].prompt).toContain('AGENT: Hello, how can I help');
-    expect(result[0].prompt).toContain("CUSTOMER: I'm looking to update");
-    expect(result[0].prompt).toContain('phone number');
-    expect(result[0].prompt.split('\n')).toHaveLength(5); // Multi-line conversation
+    expect(result[0].__prompt).toContain('AGENT: Hello, how can I help');
+    expect(result[0].__prompt).toContain("CUSTOMER: I'm looking to update");
+    expect(result[0].__prompt).toContain('phone number');
+    expect(result[0].__prompt.split('\n')).toHaveLength(5); // Multi-line conversation
 
     // Second conversation
-    expect(result[1].prompt).toContain('AGENT: Hello, how can I help');
-    expect(result[1].prompt).toContain('CUSTOMER: I have a question');
-    expect(result[1].prompt).toContain('monthly statement');
-    expect(result[1].prompt.split('\n')).toHaveLength(5); // Multi-line conversation
+    expect(result[1].__prompt).toContain('AGENT: Hello, how can I help');
+    expect(result[1].__prompt).toContain('CUSTOMER: I have a question');
+    expect(result[1].__prompt).toContain('monthly statement');
+    expect(result[1].__prompt.split('\n')).toHaveLength(5); // Multi-line conversation
 
     // Ensure "Prompt:" prefix is removed from both
-    expect(result[0].prompt).not.toContain('Prompt:');
-    expect(result[1].prompt).not.toContain('Prompt:');
+    expect(result[0].__prompt).not.toContain('Prompt:');
+    expect(result[1].__prompt).not.toContain('Prompt:');
 
     // Ensure prompts are properly separated
-    expect(result[0].prompt).not.toEqual(result[1].prompt);
+    expect(result[0].__prompt).not.toEqual(result[1].__prompt);
+  });
+});
+
+describe('parseGeneratedInputs', () => {
+  it('should parse JSON from <Prompt> tags with valid inputs', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const generatedOutput = `
+      Here are the test cases:
+      <Prompt>{"username": "admin", "message": "Hello world"}</Prompt>
+      <Prompt>{"username": "guest", "message": "Test message"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(result[0].__prompt).toBe('{"username": "admin", "message": "Hello world"}');
+    expect(result[1].__prompt).toBe('{"username": "guest", "message": "Test message"}');
+  });
+
+  it('should return empty array when no <Prompt> tags found', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = 'No prompt tags here';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toEqual([]);
+  });
+
+  it('should skip entries with missing required keys', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const generatedOutput = `
+      <Prompt>{"username": "admin", "message": "Complete"}</Prompt>
+      <Prompt>{"username": "admin"}</Prompt>
+      <Prompt>{"message": "Missing username"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe('{"username": "admin", "message": "Complete"}');
+  });
+
+  it('should skip entries with invalid JSON', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = `
+      <Prompt>{"username": "valid"}</Prompt>
+      <Prompt>not valid json</Prompt>
+      <Prompt>{"broken": json}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe('{"username": "valid"}');
+  });
+
+  it('should handle entries with extra keys beyond inputs', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = '<Prompt>{"username": "admin", "extra": "ignored"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    // The full JSON is returned, extra keys are fine as long as required keys exist
+    expect(result[0].__prompt).toBe('{"username": "admin", "extra": "ignored"}');
+  });
+
+  it('should handle complex nested JSON values', () => {
+    const inputs = {
+      user: 'User data object',
+      context: 'Context information',
+    };
+    const generatedOutput = `
+      <Prompt>{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe(
+      '{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}',
+    );
+  });
+
+  it('should handle LLM-style output with explanatory text', () => {
+    const inputs = { username: 'The user name', query: 'The search query' };
+    const generatedOutput = `
+      I've generated the following test cases for you:
+
+      1. First test case (admin user):
+      <Prompt>{"username": "admin", "query": "SELECT * FROM users"}</Prompt>
+
+      2. Second test case (guest user):
+      <Prompt>{"username": "guest", "query": "DROP TABLE users"}</Prompt>
+
+      These test cases cover SQL injection scenarios.
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      username: 'admin',
+      query: 'SELECT * FROM users',
+    });
+    expect(JSON.parse(result[1].__prompt)).toEqual({
+      username: 'guest',
+      query: 'DROP TABLE users',
+    });
+  });
+
+  it('should handle multiline JSON in <Prompt> tags', () => {
+    const inputs = { username: 'The user name', message: 'The message' };
+    const generatedOutput = `
+      <Prompt>
+        {
+          "username": "admin",
+          "message": "Hello world"
+        }
+      </Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    const parsed = JSON.parse(result[0].__prompt);
+    expect(parsed.username).toBe('admin');
+    expect(parsed.message).toBe('Hello world');
+  });
+
+  it('should handle case-insensitive <Prompt> tags', () => {
+    const inputs = { key: 'The key' };
+    const generatedOutput = `
+      <PROMPT>{"key": "value1"}</PROMPT>
+      <prompt>{"key": "value2"}</prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+  });
+
+  it('should handle empty inputs config', () => {
+    const inputs = {};
+    const generatedOutput = '<Prompt>{"username": "admin"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    // With no required keys, any valid JSON should pass
+    expect(result).toHaveLength(1);
+  });
+
+  it('should handle special characters in JSON values', () => {
+    const inputs = { message: 'The message content' };
+    const generatedOutput =
+      '<Prompt>{"message": "Hello \\"world\\" with special chars: \\n\\t"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    const parsed = JSON.parse(result[0].__prompt);
+    expect(parsed.message).toContain('world');
+  });
+
+  it('should handle multiple inputs for complex redteam scenarios', () => {
+    const inputs = {
+      userId: 'The user ID',
+      action: 'The action to perform',
+      targetResource: 'The target resource',
+      context: 'Additional context',
+    };
+    const generatedOutput = `
+      <Prompt>{"userId": "user123", "action": "delete", "targetResource": "/admin/users", "context": "unauthorized"}</Prompt>
+      <Prompt>{"userId": "admin", "action": "read", "targetResource": "/api/secrets", "context": "elevated"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      userId: 'user123',
+      action: 'delete',
+      targetResource: '/admin/users',
+      context: 'unauthorized',
+    });
+    expect(JSON.parse(result[1].__prompt)).toEqual({
+      userId: 'admin',
+      action: 'read',
+      targetResource: '/api/secrets',
+      context: 'elevated',
+    });
   });
 });
 
@@ -552,7 +998,7 @@ describe('RedteamGraderBase', () => {
     mockTest = {
       metadata: { purpose: 'test-purpose', harmCategory: 'test-harm' },
     } as AtomicTestCase;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should throw an error if test is missing purpose metadata', async () => {
@@ -574,7 +1020,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const testWithGoal = {
       ...mockTest,
@@ -609,7 +1055,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     await grader.getResult(
       'test prompt',
@@ -639,7 +1085,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const result = await grader.getResult(
       'test prompt',
@@ -663,7 +1109,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithExamples = {
         ...mockTest,
@@ -701,7 +1147,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithoutExamples = {
         ...mockTest,
@@ -731,7 +1177,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithMultipleExamples = {
         ...mockTest,
@@ -786,7 +1232,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithSpecialChars = {
         ...mockTest,
@@ -825,7 +1271,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       // Create plugin with graderExamples in config
       const configWithGraderExamples = {
@@ -836,10 +1282,10 @@ describe('RedteamGraderBase', () => {
       };
 
       const testProvider: ApiProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
 
       const pluginWithExamples = new TestPlugin(
@@ -885,7 +1331,7 @@ describe('RedteamGraderBase', () => {
         score: 0,
         reason: 'Test failed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       // Full integration test: plugin config -> test generation -> grading
       const fullConfig = {
@@ -908,10 +1354,10 @@ describe('RedteamGraderBase', () => {
       };
 
       const testProvider: ApiProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
 
       const plugin = new TestPlugin(testProvider, 'Financial assistant', 'testVar', fullConfig);
@@ -956,7 +1402,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithEmptyExamples = {
         ...mockTest,
@@ -987,7 +1433,7 @@ describe('RedteamGraderBase', () => {
 
   describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
-    let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+    let maybeLoadFromExternalFileSpy: MockInstance;
     let ToolGrader: any;
 
     beforeEach(() => {
@@ -997,9 +1443,9 @@ describe('RedteamGraderBase', () => {
         },
       };
 
-      maybeLoadFromExternalFileSpy = jest
+      maybeLoadFromExternalFileSpy = vi
         .mocked(maybeLoadFromExternalFile)
-        .mockImplementation((input) => {
+        .mockImplementation(function (input) {
           if (input === 'file://tools.json') {
             return [{ name: 'tool1' }, { name: 'tool2' }];
           }
@@ -1022,7 +1468,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const toolGrader = new ToolGrader();
       await toolGrader.getResult('test prompt', 'test output', mockTest, toolProvider);
@@ -1045,7 +1491,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const toolGrader = new ToolGrader();
 
@@ -1099,7 +1545,7 @@ describe('RedteamGraderBase', () => {
       ];
 
       for (const response of refusalResponses) {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         const result = await grader.getResult(
           'test prompt',
           response,
@@ -1126,7 +1572,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const validResponses = [
         'Here is a valid response',
@@ -1151,10 +1597,10 @@ describe('RedteamGraderBase', () => {
 
     beforeEach(() => {
       testProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt\nPrompt: another prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
     });
 
@@ -1234,7 +1680,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithGuidance = {
         ...mockTest,
@@ -1273,7 +1719,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithoutGuidance = {
         ...mockTest,
@@ -1304,7 +1750,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBoth = {
         ...mockTest,
@@ -1341,7 +1787,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithTemplate = {
         ...mockTest,
@@ -1381,7 +1827,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithContext = class extends RedteamGraderBase {
         id = 'test-grader-context';
@@ -1416,7 +1862,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithInsights = class extends RedteamGraderBase {
         id = 'test-grader-insights';
@@ -1451,7 +1897,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithAllTrace = class extends RedteamGraderBase {
         id = 'test-grader-all-trace';
@@ -1478,7 +1924,7 @@ describe('RedteamGraderBase', () => {
         },
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       expect(rubricCall).toContain('Summary: Full trace summary');
       expect(rubricCall).toContain('Insights: Detailed insights');
       expect(rubricCall).toContain('requestId');
@@ -1490,7 +1936,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithCustomProps = class extends RedteamGraderBase {
         id = 'test-grader-custom-props';
@@ -1516,7 +1962,7 @@ describe('RedteamGraderBase', () => {
         } as any,
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       // All properties from gradingContext should be available
       expect(rubricCall).toContain('Summary: Trace summary from context');
       expect(rubricCall).toContain('Custom: Custom value');
@@ -1529,7 +1975,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1552,7 +1998,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1575,7 +2021,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderMerge = class extends RedteamGraderBase {
         id = 'test-grader-merge';
@@ -1597,7 +2043,7 @@ describe('RedteamGraderBase', () => {
         },
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       // Both should be available in the rubric
       expect(rubricCall).toContain('Category: from-rendered-value');
       expect(rubricCall).toContain('Summary: from-grading-context');
@@ -1611,7 +2057,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1634,7 +2080,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1663,7 +2109,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithAll = {
         ...mockTest,
@@ -1707,7 +2153,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const minimalTest = {
         ...mockTest,
@@ -1737,7 +2183,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const beforeTime = new Date();
 
@@ -1778,10 +2224,10 @@ describe('RedteamGraderBase', () => {
 
     beforeEach(() => {
       _testProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
     });
 
@@ -1791,7 +2237,7 @@ describe('RedteamGraderBase', () => {
         score: 0,
         reason: 'Test failed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBoth = {
         ...mockTest,
@@ -1859,7 +2305,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithEmptyGuidance = {
         ...mockTest,
@@ -1891,7 +2337,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithDeprecatedAlias = {
         ...mockTest,
@@ -1921,7 +2367,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBothFields = {
         ...mockTest,

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import * as cloudModule from '../../src/util/cloud';
 import {
@@ -14,27 +15,31 @@ import {
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
 
-jest.mock('../../src/util/fetch/index.ts');
-jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/util/server');
-jest.mock('../../src/util/cloud', () => ({
-  ...jest.requireActual('../../src/util/cloud'),
-  cloudCanBuildFormattedConfig: jest.fn().mockResolvedValue(true),
-}));
+vi.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/globalConfig/cloud');
+vi.mock('../../src/util/server');
+vi.mock('../../src/util/cloud', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/util/cloud')>('../../src/util/cloud');
+  return {
+    ...actual,
+    cloudCanBuildFormattedConfig: vi.fn().mockResolvedValue(true),
+  };
+});
 
 describe('cloud utils', () => {
-  const mockFetchWithProxy = jest.mocked(fetchWithProxy);
-  const mockCloudConfig = cloudConfig as jest.Mocked<typeof cloudConfig>;
-  const mockCheckServerFeatureSupport = jest.mocked(checkServerFeatureSupport);
-  let mockMakeRequest: jest.SpyInstance;
+  const mockFetchWithProxy = vi.mocked(fetchWithProxy);
+  const mockCloudConfig = vi.mocked(cloudConfig);
+  const mockCheckServerFeatureSupport = vi.mocked(checkServerFeatureSupport);
+  let mockMakeRequest: MockInstance;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
 
-    mockMakeRequest = jest.spyOn(cloudModule, 'makeRequest');
+    mockMakeRequest = vi.spyOn(cloudModule, 'makeRequest');
   });
 
   afterEach(() => {

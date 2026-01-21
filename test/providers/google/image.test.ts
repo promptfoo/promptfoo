@@ -1,31 +1,41 @@
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/providers/google/util', () => ({
-  getGoogleClient: jest.fn(),
-  loadCredentials: jest.fn(),
-  resolveProjectId: jest.fn(),
-}));
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGoogleClient: vi.fn(),
+    loadCredentials: vi.fn(),
+    resolveProjectId: vi.fn(),
+    createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
+  };
+});
 
-describe('GoogleImageProvider', () => {
-  const mockFetchWithCache = fetchWithCache as jest.Mock;
-  const utilMocks = require('../../../src/providers/google/util');
-  const mockGetGoogleClient = utilMocks.getGoogleClient as jest.Mock;
-  const mockLoadCredentials = utilMocks.loadCredentials as jest.Mock;
-  const mockResolveProjectId = utilMocks.resolveProjectId as jest.Mock;
+describe('GoogleImageProvider', async () => {
+  const mockFetchWithCache = fetchWithCache as Mock;
+  const utilMocks = await import('../../../src/providers/google/util');
+  const mockGetGoogleClient = utilMocks.getGoogleClient as Mock;
+  const mockLoadCredentials = utilMocks.loadCredentials as Mock;
+  const mockResolveProjectId = utilMocks.resolveProjectId as Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.GOOGLE_API_KEY = 'test-api-key';
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
 
     // Set up default mock behaviors
-    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockLoadCredentials.mockImplementation(function (creds) {
+      return creds;
+    });
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
@@ -101,7 +111,7 @@ describe('GoogleImageProvider', () => {
       });
 
       const mockClient = {
-        request: jest.fn().mockResolvedValue({
+        request: vi.fn().mockResolvedValue({
           data: {
             predictions: [
               {
@@ -185,7 +195,7 @@ describe('GoogleImageProvider', () => {
 
       // Mock the API response to extract the model path from the request
       const mockClient = {
-        request: jest.fn().mockResolvedValue({
+        request: vi.fn().mockResolvedValue({
           data: {
             predictions: [{ bytesBase64Encoded: 'test', mimeType: 'image/png' }],
           },

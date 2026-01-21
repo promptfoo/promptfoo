@@ -1,4 +1,6 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
+
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
@@ -260,7 +262,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles scoring function errors', async () => {
-    const mockScoringFunction = jest.fn().mockImplementation(() => {
+    const mockScoringFunction = vi.fn().mockImplementation(() => {
       throw new Error('Scoring function failed');
     });
 
@@ -276,7 +278,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles invalid scoring function return value', async () => {
-    const mockScoringFunction = jest.fn().mockReturnValue('invalid');
+    const mockScoringFunction = vi.fn().mockReturnValue('invalid');
 
     assertionsResult.addResult({
       index: 0,
@@ -314,7 +316,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles scoring function with async GradingResult', async () => {
-    const mockScoringFunction = jest.fn().mockResolvedValue({
+    const mockScoringFunction = vi.fn().mockResolvedValue({
       pass: true,
       score: 0.9,
       reason: 'Async scoring result',

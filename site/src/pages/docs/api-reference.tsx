@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
+
 import { useTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
 export default function ApiReference() {
   const theme = useTheme();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: theme.palette.mode is only used for initial setup; dynamic theme changes are handled by the second useEffect
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';

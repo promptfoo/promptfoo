@@ -1,33 +1,68 @@
-import { getGraderById } from '../../../../src/redteam/graders';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
-jest.mock('../../../../src/providers/promptfoo', () => ({
-  PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
-    id: () => 'mock-unblocking',
-    callApi: jest.fn(),
-    delay: 0,
+import type { Message } from '../../../../src/redteam/providers/shared';
+
+// Hoisted mocks for getGraderById
+const mockGetGraderById = vi.hoisted(() => vi.fn());
+
+// Hoisted mock for applyRuntimeTransforms
+const mockApplyRuntimeTransforms = vi.hoisted(() =>
+  vi.fn().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
   })),
+);
+
+vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function () {
+      return {
+        id: () => 'mock-unblocking',
+        callApi: vi.fn(),
+        delay: 0,
+      };
+    }),
+  };
+});
+
+vi.mock('../../../../src/util/server', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    checkServerFeatureSupport: vi.fn(),
+  };
+});
+
+vi.mock('../../../../src/redteam/providers/shared', async () => ({
+  ...(await vi.importActual('../../../../src/redteam/providers/shared')),
+  tryUnblocking: vi.fn(),
 }));
 
-jest.mock('../../../../src/util/server', () => ({
-  checkServerFeatureSupport: jest.fn(),
-}));
+vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: mockGetGraderById,
+  };
+});
 
-jest.mock('../../../../src/redteam/providers/shared', () => ({
-  ...jest.requireActual('../../../../src/redteam/providers/shared'),
-  tryUnblocking: jest.fn(),
-}));
+vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn(() => false),
+  };
+});
 
-jest.mock('../../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(),
-}));
-
-jest.mock('../../../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn(() => false),
-}));
+vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    applyRuntimeTransforms: mockApplyRuntimeTransforms,
+  };
+});
 
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
@@ -79,22 +114,22 @@ describe('CustomProvider', () => {
   let mockTargetProvider: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create fresh mocks for each test
     mockRedTeamProvider = {
       id: () => 'mock-redteam',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockScoringProvider = {
       id: () => 'mock-scoring',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockTargetProvider = {
       id: () => 'mock-target',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
 
     customProvider = new CustomProvider({
@@ -107,7 +142,7 @@ describe('CustomProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -117,25 +152,27 @@ describe('CustomProvider', () => {
     });
 
     // Mock server feature support to return true so unblocking logic runs
-    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
 
     // Set up default getGraderById mock
-    jest.mocked(getGraderById).mockReset();
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: false,
-        },
-      })),
-    } as any);
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: false,
+          },
+        })),
+      } as any;
+    });
 
     // Set up default tryUnblocking mock
-    jest.mocked(tryUnblocking).mockReset();
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(tryUnblocking).mockReset();
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should initialize with default config values', () => {
@@ -210,7 +247,7 @@ describe('CustomProvider', () => {
   });
 
   it('should include sessionId from target response when stateful is true', async () => {
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
 
     const provider = new CustomProvider({
       injectVar: 'objective',
@@ -221,15 +258,18 @@ describe('CustomProvider', () => {
       stateful: true,
     });
 
-    jest.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
       generatedQuestion: 'attack prompt',
     });
-    jest.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
-      output: 'target response',
-      sessionId: 'response-session-id',
+    vi.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
+      response: {
+        output: 'target response',
+        sessionId: 'response-session-id',
+      },
+      transformResult: undefined,
     });
-    jest.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
-    jest.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
       value: false,
       metadata: 0,
       rationale: '',
@@ -283,7 +323,7 @@ describe('CustomProvider', () => {
         });
 
       // Mock unblocking analysis - detects blocking question
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'Our company registration number is REG123456789',
       });
@@ -339,7 +379,7 @@ describe('CustomProvider', () => {
       });
 
       // Mock unblocking analysis - no blocking detected
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: false,
       });
 
@@ -360,13 +400,15 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true, // Pass means no jailbreak detected
-        },
-      })),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true, // Pass means no jailbreak detected
+          },
+        })),
+      } as any;
+    });
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CustomProvider({
@@ -437,7 +479,7 @@ describe('CustomProvider', () => {
     };
 
     // Mock unblocking to return false so it doesn't interfere
-    jest.mocked(tryUnblocking).mockResolvedValue({
+    vi.mocked(tryUnblocking).mockResolvedValue({
       success: false,
     });
 
@@ -477,13 +519,15 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true,
-        },
-      })),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true,
+          },
+        })),
+      } as any;
+    });
 
     const testProvider = new CustomProvider({
       injectVar: 'objective',
@@ -785,27 +829,29 @@ describe('CustomProvider', () => {
 
     // Capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(
-        async (
-          _prompt: string,
-          _output: string,
-          _test: any,
-          _provider: any,
-          _value: any,
-          additionalRubric?: string,
-        ) => {
-          capturedAdditionalRubric = additionalRubric;
-          return {
-            grade: {
-              pass: false,
-              score: 0,
-              reason: 'Jailbreak detected',
-            },
-          };
-        },
-      ),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(
+          async (
+            _prompt: string,
+            _output: string,
+            _test: any,
+            _provider: any,
+            _value: any,
+            additionalRubric?: string,
+          ) => {
+            capturedAdditionalRubric = additionalRubric;
+            return {
+              grade: {
+                pass: false,
+                score: 0,
+                reason: 'Jailbreak detected',
+              },
+            };
+          },
+        ),
+      } as any;
+    });
 
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
@@ -852,12 +898,17 @@ describe('CustomProvider', () => {
       tokensUsed: { total: 15, prompt: 8, completion: 7 },
     };
 
+    const testRubric = 'Test grading rubric';
+
     // Mock grader to fail (jailbreak success)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: mockGraderResult,
-      })),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: mockGraderResult,
+          rubric: testRubric,
+        })),
+      } as any;
+    });
 
     const prompt = 'test prompt';
     const context = {
@@ -903,8 +954,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Verify storedGraderResult is included in metadata
-    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
+    expect(result.metadata?.storedGraderResult).toEqual({
+      ...mockGraderResult,
+      assertion: { type: 'mock-grader', value: testRubric },
+    });
     expect(result.metadata?.stopReason).toBe('Grader failed');
     // Verify it's actually a successful attack
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
@@ -921,16 +975,21 @@ describe('CustomProvider', () => {
       strategyText: 'Test strategy',
     });
 
+    const testRubric = 'Test grading rubric';
+
     // Mock grader to pass (no jailbreak)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true,
-          score: 1,
-          reason: 'No jailbreak detected',
-        },
-      })),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'No jailbreak detected',
+          },
+          rubric: testRubric,
+        })),
+      } as any;
+    });
 
     const prompt = 'test prompt';
     const context = {
@@ -981,6 +1040,7 @@ describe('CustomProvider', () => {
       pass: true,
       score: 1,
       reason: 'No jailbreak detected',
+      assertion: { type: 'mock-grader', value: testRubric },
     });
   });
 
@@ -1007,13 +1067,20 @@ describe('CustomProvider', () => {
       reason: 'No jailbreak on second turn',
     };
 
+    const testRubric = 'Test grading rubric';
+
+    // Create the mock getResult function outside mockImplementation so it persists across calls
+    const mockGetResult = vi
+      .fn()
+      .mockResolvedValueOnce({ grade: firstGraderResult, rubric: testRubric })
+      .mockResolvedValueOnce({ grade: secondGraderResult, rubric: testRubric });
+
     // Mock grader to fail on first turn, pass on second
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest
-        .fn()
-        .mockResolvedValueOnce({ grade: firstGraderResult })
-        .mockResolvedValueOnce({ grade: secondGraderResult }),
-    } as any);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: mockGetResult,
+      } as any;
+    });
 
     const prompt = 'test prompt';
     const context = {
@@ -1049,8 +1116,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
+    expect(result.metadata?.storedGraderResult).toEqual({
+      ...secondGraderResult,
+      assertion: { type: 'mock-grader', value: testRubric },
+    });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
@@ -1077,7 +1147,7 @@ describe('CustomProvider', () => {
 
     // Capture the system prompt that gets sent
     let capturedSystemPrompt = '';
-    mockRedTeamProvider.callApi.mockImplementation(async (prompt: string) => {
+    mockRedTeamProvider.callApi.mockImplementation(async function (prompt: string) {
       const input = JSON.parse(prompt);
       if (Array.isArray(input) && input[0]?.role === 'system') {
         capturedSystemPrompt = input[0].content;
@@ -1113,5 +1183,247 @@ describe('CustomProvider', () => {
     );
     expect(capturedSystemPrompt).toContain('language: Spanish');
     expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass options to red team provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await testProvider.callApi('test prompt', context, options);
+
+      // Red team provider should be called with options
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should pass options to scoring provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'Not a refusal',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await testProvider.callApi('test prompt', context, options);
+
+      // Scoring provider should be called with options
+      expect(mockScoringProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should re-throw AbortError and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 3,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      // Mock red team provider to throw AbortError
+      mockRedTeamProvider.callApi.mockRejectedValue(abortError);
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await expect(testProvider.callApi('test prompt', context)).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+  });
+
+  describe('perTurnLayers configuration', () => {
+    it('should accept _perTurnLayers in config', () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        redteamProvider: mockRedTeamProvider,
+        _perTurnLayers: [{ id: 'audio' }, { id: 'image' }],
+      });
+
+      expect(provider['perTurnLayers']).toEqual([{ id: 'audio' }, { id: 'image' }]);
+    });
+
+    it('should default perTurnLayers to empty array when not provided', () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      expect(provider['perTurnLayers']).toEqual([]);
+    });
+
+    it('should not apply transforms when perTurnLayers is empty', async () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        // No _perTurnLayers provided - defaults to empty
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      const result = await provider.callApi('test prompt', context);
+
+      // Verify redteamHistory exists but promptAudio/promptImage are undefined
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
+        expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
+      }
+    });
+
+    it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
+      // Configure the hoisted mock to return audio/image data for this test
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        transformedPrompt: 'transformed prompt',
+        audio: { data: 'base64-audio-data', format: 'mp3' },
+        image: { data: 'base64-image-data', format: 'png' },
+      });
+
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        _perTurnLayers: [{ id: 'audio' }],
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        audio: { data: 'response-audio-data', format: 'wav' },
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      const result = await provider.callApi('test prompt', context);
+
+      // Verify redteamHistory is populated
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
   });
 });

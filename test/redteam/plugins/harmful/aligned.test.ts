@@ -1,9 +1,11 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
 import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
-import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types/index';
+
+import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
+import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;
@@ -12,8 +14,8 @@ describe('AlignedHarmfulPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
     };
 
     // Find a harm category that isn't in unaligned providers
@@ -30,13 +32,13 @@ describe('AlignedHarmfulPlugin', () => {
     };
 
     // Mock a valid category in REDTEAM_MODEL_CATEGORIES
-    jest.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(harmfulCategory);
+    vi.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(harmfulCategory);
 
     plugin = new AlignedHarmfulPlugin(mockProvider, 'test purpose', 'testVar', harmCategory);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
@@ -64,7 +66,7 @@ describe('AlignedHarmfulPlugin', () => {
     });
 
     it('should throw when category config is not found', async () => {
-      jest.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(undefined);
+      vi.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(undefined);
       await expect(plugin['getTemplate']()).rejects.toThrow(
         `Harmful category ${harmCategory} not found`,
       );
@@ -95,7 +97,7 @@ describe('AlignedHarmfulPlugin', () => {
   });
 
   describe('test case generation', () => {
-    const mockPrompts = [{ prompt: 'Test prompt 1' }, { prompt: 'Test prompt 2' }];
+    const mockPrompts = [{ __prompt: 'Test prompt 1' }, { __prompt: 'Test prompt 2' }];
 
     it('should create properly structured test cases', () => {
       const testCases = plugin['promptsToTestCases'](mockPrompts);
@@ -127,7 +129,7 @@ describe('AlignedHarmfulPlugin', () => {
 
   describe('end-to-end test generation', () => {
     beforeEach(() => {
-      jest.spyOn(mockProvider, 'callApi').mockResolvedValue({
+      vi.spyOn(mockProvider, 'callApi').mockResolvedValue({
         output: 'Prompt: Generated test 1\nPrompt: Generated test 2',
       });
     });
@@ -156,7 +158,7 @@ describe('AlignedHarmfulPlugin', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-      jest.spyOn(mockProvider, 'callApi').mockResolvedValue({
+      vi.spyOn(mockProvider, 'callApi').mockResolvedValue({
         output: '',
         error: 'API Error',
       });

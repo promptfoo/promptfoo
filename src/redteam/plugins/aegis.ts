@@ -1,7 +1,7 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
