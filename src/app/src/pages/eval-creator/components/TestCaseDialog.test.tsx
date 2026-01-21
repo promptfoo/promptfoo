@@ -6,6 +6,16 @@ import TestCaseForm from './TestCaseDialog';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
 
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+  }),
+}));
+
+vi.mock('./generation', () => ({
+  GenerateAssertionsDialog: vi.fn(() => null),
+}));
+
 vi.mock('./VarsForm', () => ({
   default: vi.fn(() => <div data-testid="mock-vars-form" />),
 }));

@@ -134,7 +134,11 @@ const TestCaseForm = ({
             <AssertsForm
               key={assertsFormKey}
               onAdd={(newAsserts) => setAsserts(newAsserts)}
-              initialValues={asserts as Assertion[]}
+              initialValues={
+                ((initialValues?.assert || []).filter(
+                  (item) => item.type !== 'assert-set',
+                ) as Assertion[]) || []
+              }
             />
           </div>
         </div>
