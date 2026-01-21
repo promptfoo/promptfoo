@@ -523,6 +523,8 @@ export class CustomProvider implements ApiProvider {
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined,
+              { iteration: roundNum, traceparent: context?.traceparent },
             );
             graderPassed = grade.pass;
             storedGraderResult = {
@@ -762,7 +764,7 @@ export class CustomProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    _roundNum: number,
+    roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
@@ -874,7 +876,12 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      context ? { ...context, iteration: roundNum } : undefined,
+      options,
+    );
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,

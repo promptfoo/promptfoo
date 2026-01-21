@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
+import { withMCPToolCallSpan } from '../../tracing/targetTracer';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 import {
   applyQueryParams,
@@ -386,81 +387,90 @@ export class MCPClient {
     for (const [serverKey, client] of this.clients.entries()) {
       const serverTools = this.tools.get(serverKey) || [];
       if (serverTools.some((tool) => tool.name === name)) {
-        // Proactively refresh token if close to expiration (with locking)
-        await this.refreshOAuthTokenIfNeeded(serverKey);
+        // Execute tool call within a span for distributed tracing
+        return withMCPToolCallSpan(
+          { toolName: name, serverKey },
+          async () => {
+            // Proactively refresh token if close to expiration (with locking)
+            await this.refreshOAuthTokenIfNeeded(serverKey);
 
-        // Get the current client (may have changed after token refresh)
-        let currentClient = this.clients.get(serverKey) || client;
-        let retried = false;
+            // Get the current client (may have changed after token refresh)
+            let currentClient = this.clients.get(serverKey) || client;
+            let retried = false;
 
-        while (true) {
-          try {
-            const result = await currentClient.callTool(
-              { name, arguments: args },
-              undefined, // use default result schema
-              requestOptions,
-            );
-
-            // Handle different content types appropriately
-            let content = '';
-            if (result?.content) {
-              if (typeof result.content === 'string') {
-                // Try to parse JSON first, fall back to raw string
-                try {
-                  const parsed = JSON.parse(result.content);
-                  content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                } catch {
-                  content = result.content;
-                }
-              } else if (Buffer.isBuffer(result.content)) {
-                content = result.content.toString();
-              } else {
-                content = JSON.stringify(result.content);
-              }
-            }
-
-            return {
-              content,
-            };
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-
-            // Check if this is an auth error and we have OAuth config for this server
-            // This is a fallback in case the proactive refresh didn't catch an expired token
-            const isAuthError =
-              errorMessage.includes('401') ||
-              errorMessage.includes('Unauthorized') ||
-              errorMessage.includes('authorization_endpoint') ||
-              errorMessage.includes('token');
-
-            const oauthConfig = this.oauthConfigs.get(serverKey);
-            if (!retried && isAuthError && oauthConfig) {
-              logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
-              retried = true;
+            while (true) {
               try {
-                await this.performTokenRefresh(serverKey, oauthConfig);
-                // Get the new client after reconnection
-                const newClient = this.clients.get(serverKey);
-                if (newClient) {
-                  currentClient = newClient;
-                  continue; // Retry with new token
+                const result = await currentClient.callTool(
+                  { name, arguments: args },
+                  undefined, // use default result schema
+                  requestOptions,
+                );
+
+                // Handle different content types appropriately
+                let content = '';
+                if (result?.content) {
+                  if (typeof result.content === 'string') {
+                    // Try to parse JSON first, fall back to raw string
+                    try {
+                      const parsed = JSON.parse(result.content);
+                      content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                    } catch {
+                      content = result.content;
+                    }
+                  } else if (Buffer.isBuffer(result.content)) {
+                    content = result.content.toString();
+                  } else {
+                    content = JSON.stringify(result.content);
+                  }
                 }
-              } catch (refreshError) {
-                const refreshErrorMsg =
-                  refreshError instanceof Error ? refreshError.message : String(refreshError);
-                logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
+
+                return {
+                  content,
+                };
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+
+                // Check if this is an auth error and we have OAuth config for this server
+                // This is a fallback in case the proactive refresh didn't catch an expired token
+                const isAuthError =
+                  errorMessage.includes('401') ||
+                  errorMessage.includes('Unauthorized') ||
+                  errorMessage.includes('authorization_endpoint') ||
+                  errorMessage.includes('token');
+
+                const oauthConfig = this.oauthConfigs.get(serverKey);
+                if (!retried && isAuthError && oauthConfig) {
+                  logger.debug(
+                    `[MCP] Auth error for ${serverKey}, attempting reactive token refresh`,
+                  );
+                  retried = true;
+                  try {
+                    await this.performTokenRefresh(serverKey, oauthConfig);
+                    // Get the new client after reconnection
+                    const newClient = this.clients.get(serverKey);
+                    if (newClient) {
+                      currentClient = newClient;
+                      continue; // Retry with new token
+                    }
+                  } catch (refreshError) {
+                    const refreshErrorMsg =
+                      refreshError instanceof Error ? refreshError.message : String(refreshError);
+                    logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
+                  }
+                }
+
+                if (this.isDebugEnabled) {
+                  logger.error(`Error calling tool ${name}: ${errorMessage}`);
+                }
+                return {
+                  content: '',
+                  error: errorMessage,
+                };
               }
             }
-
-            if (this.isDebugEnabled) {
-              logger.error(`Error calling tool ${name}: ${errorMessage}`);
-            }
-            return {
-              content: '',
-              error: errorMessage,
-            };
-          }
-        }
+          },
+          (result) => ({ error: !!result.error }),
+        );
       }
     }
 

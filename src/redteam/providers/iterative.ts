@@ -469,12 +469,13 @@ export async function runRedteamConversation({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined,
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: graderTraceSummary,
-              }
-            : undefined,
+          {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: graderTraceSummary }
+              : {}),
+            iteration: i + 1,
+            traceparent: context?.traceparent,
+          },
         );
         storedGraderResult = {
           ...grade,

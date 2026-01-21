@@ -7,6 +7,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
@@ -90,58 +91,77 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'anthropic',
-      operationName: 'chat',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        // Optional request parameters
+        maxTokens: this.config.max_tokens,
+        temperature: this.config.temperature,
+        // Promptfoo context from test case if available
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+        // Request body for debugging/observability
+        requestBody: prompt,
+      };
 
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-        };
-      }
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
 
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+            cached: response.tokenUsage.cached,
+          };
+        }
 
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
+        // Extract finish reason if available
+        if (response.finishReason) {
+          result.finishReasons = [response.finishReason];
+        }
 
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
+        // Cache hit status
+        if (response.cached !== undefined) {
+          result.cacheHit = response.cached;
+        }
 
-      return result;
-    };
+        // Response body for debugging/observability
+        if (response.output !== undefined) {
+          result.responseBody =
+            typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+        }
 
-    // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context),
+        resultExtractor,
+      );
+    });
   }
 
   /**

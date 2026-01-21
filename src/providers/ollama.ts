@@ -2,6 +2,7 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
@@ -155,36 +156,52 @@ export class OllamaCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'ollama',
-      operationName: 'completion',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.num_predict,
-      stopSequences: this.config.stop,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'ollama',
+        operationName: 'completion',
+        model: this.modelName,
+        providerId: this.id(),
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        maxTokens: this.config.num_predict,
+        stopSequences: this.config.stop,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+      };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    });
   }
 
   private async callApiInternal(prompt: string): Promise<ProviderResponse> {
@@ -311,36 +328,56 @@ export class OllamaChatProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'ollama',
-      operationName: 'chat',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.num_predict,
-      stopSequences: this.config.stop,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'ollama',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        maxTokens: this.config.num_predict,
+        stopSequences: this.config.stop,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+      };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context),
+        resultExtractor,
+      );
+    });
   }
 
   private async callApiInternal(

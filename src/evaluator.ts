@@ -556,14 +556,15 @@ export async function runEval({
 
       // Fetch traces from external provider (Tempo, Jaeger, etc.) if configured
       // This enables the basic strategy to pull traces from external backends
-      if (traceId && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+      const tracingConfig = testSuite?.tracing;
+      if (traceId && isExternalTraceProvider(tracingConfig?.provider)) {
         try {
           logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
           // Default 7s delay to allow target app's OTLP exporter to flush spans to backend
           // Many OTLP exporters batch spans with 5-30s intervals by default
           await fetchTraceContext(traceId, {
-            providerConfig: testSuite?.tracing?.provider,
-            queryDelay: testSuite?.tracing?.queryDelay ?? 7000,
+            providerConfig: tracingConfig?.provider,
+            queryDelay: tracingConfig?.queryDelay ?? 7000,
             maxRetries: 5,
             retryDelayMs: 1000,
             includeInternalSpans: true,

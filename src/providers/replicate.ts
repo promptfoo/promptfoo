@@ -3,6 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -89,35 +90,51 @@ export class ReplicateProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'replicate',
-      operationName: 'chat',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.max_tokens || this.config.max_length || this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'replicate',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        maxTokens: this.config.max_tokens || this.config.max_length || this.config.max_new_tokens,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+      };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    });
   }
 
   protected async callApiInternal(prompt: string): Promise<ProviderResponse> {

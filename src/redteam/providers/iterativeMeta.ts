@@ -435,12 +435,13 @@ export async function runMetaAgentRedteam({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined, // skipRefusalCheck
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: gradingTraceSummary,
-              }
-            : undefined,
+          {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+            iteration: i + 1,
+            traceparent: context?.traceparent,
+          },
         );
         graderResult = {
           ...grade,

@@ -36,7 +36,7 @@ interface TempoSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
   status?: {
-    code?: number;
+    code?: number | string;
     message?: string;
   };
   events?: Array<{
@@ -122,6 +122,41 @@ function decodeId(id: string | undefined): string | undefined {
     return buffer.toString('hex').toLowerCase();
   } catch {
     return id.toLowerCase();
+  }
+}
+
+/**
+ * Normalize Tempo status codes to OTEL numeric codes:
+ * 0 = UNSET, 1 = OK, 2 = ERROR
+ */
+function normalizeStatusCode(code: number | string | undefined): number | undefined {
+  if (code === undefined || code === null) {
+    return undefined;
+  }
+
+  if (typeof code === 'number') {
+    return code;
+  }
+
+  // Handle strings like "1", "2"
+  const numeric = Number(code);
+  if (!Number.isNaN(numeric)) {
+    return numeric;
+  }
+
+  const upper = code.toUpperCase();
+  switch (upper) {
+    case 'STATUS_CODE_OK':
+    case 'OK':
+      return 1;
+    case 'STATUS_CODE_ERROR':
+    case 'ERROR':
+      return 2;
+    case 'STATUS_CODE_UNSET':
+    case 'UNSET':
+      return 0;
+    default:
+      return undefined;
   }
 }
 
@@ -212,7 +247,7 @@ export class TempoProvider implements TraceProvider {
             startTime,
             endTime,
             attributes,
-            statusCode: span.status?.code,
+            statusCode: normalizeStatusCode(span.status?.code),
             statusMessage: span.status?.message,
           });
         }

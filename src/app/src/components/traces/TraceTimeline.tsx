@@ -22,16 +22,18 @@ interface ProcessedSpan extends SpanData {
 }
 
 const getSpanStatus = (
-  statusCode?: number,
+  statusCode?: number | string | null,
 ): { bgClass: string; textClass: string; label: string } => {
   // From SpanStatusCode in @opentelemetry/api
-  if (statusCode === 1) {
+  // Handle numeric codes (1, 2), string numbers ("1", "2"), and string values ("ok", "error")
+  const code = typeof statusCode === 'string' ? statusCode.toLowerCase() : statusCode;
+  if (code === 1 || code === '1' || code === 'ok') {
     return {
       bgClass: 'bg-emerald-500',
       textClass: 'text-emerald-600 dark:text-emerald-400',
       label: 'OK',
     };
-  } else if (statusCode === 2) {
+  } else if (code === 2 || code === '2' || code === 'error') {
     return {
       bgClass: 'bg-red-500',
       textClass: 'text-red-600 dark:text-red-400',

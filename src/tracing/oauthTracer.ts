@@ -1,4 +1,11 @@
-import { context, propagation, ROOT_CONTEXT, type Span, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import {
+  context,
+  propagation,
+  ROOT_CONTEXT,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 import { getGenAITracer } from './genaiTracer';
 
 /**
@@ -97,10 +104,7 @@ function redactClientId(clientId: string): string {
 /**
  * Parse URL and extract HTTP semantic convention attributes.
  */
-function extractHttpAttributes(
-  urlString: string,
-  method: string,
-): Record<string, string | number> {
+function extractHttpAttributes(urlString: string, method: string): Record<string, string | number> {
   const attributes: Record<string, string | number> = {
     [HttpAttributes.REQUEST_METHOD]: method,
   };
@@ -199,6 +203,7 @@ export async function withOAuthSpan<T>(
   // Build attributes - start with standard HTTP attributes
   const attributes: Record<string, string | number | string[]> = {
     ...extractHttpAttributes(ctx.url, method),
+    'service.name': 'promptfoo-cli',
     [OAuthAttributes.OPERATION]: ctx.operation,
   };
 

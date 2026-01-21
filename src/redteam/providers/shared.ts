@@ -384,11 +384,12 @@ export async function createIterationContext({
     }
   }
 
-  // Create iteration-specific context with updated vars
+  // Create iteration-specific context with updated vars and iteration number
   const iterationContext = context
     ? {
         ...context,
         vars: iterationVars,
+        iteration: iterationNumber,
       }
     : undefined;
 

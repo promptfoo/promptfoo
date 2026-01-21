@@ -29,18 +29,18 @@ describe('TempoProvider', () => {
 
   describe('constructor', () => {
     it('should throw if endpoint is not provided', () => {
-      expect(() => new TempoProvider({ type: 'tempo' })).toThrow(
+      expect(() => new TempoProvider({ id: 'tempo' })).toThrow(
         'Tempo provider requires endpoint configuration',
       );
     });
 
     it('should create provider with endpoint', () => {
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       expect(provider.id).toBe('tempo');
     });
 
     it('should strip trailing slash from endpoint', () => {
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200/' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200/' });
       expect(provider.id).toBe('tempo');
     });
   });
@@ -92,7 +92,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123');
 
       expect(result).not.toBeNull();
@@ -120,7 +120,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('nonexistent');
 
       expect(result).toBeNull();
@@ -134,7 +134,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123');
 
       expect(result).toBeNull();
@@ -143,7 +143,7 @@ describe('TempoProvider', () => {
     it('should return null on fetch error', async () => {
       mockedFetchWithCache.mockRejectedValue(new Error('Network error'));
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123');
 
       expect(result).toBeNull();
@@ -175,7 +175,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123', { maxSpans: 10 });
 
       expect(result).not.toBeNull();
@@ -212,7 +212,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123', { spanFilter: ['llm.*'] });
 
       expect(result).not.toBeNull();
@@ -256,7 +256,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       // Filter for spans starting at 3ms or later (only 'late' at 5ms should match)
       const result = await provider.fetchTrace('abc123def456', { earliestStartTime: 3 });
 
@@ -274,7 +274,7 @@ describe('TempoProvider', () => {
       });
 
       const provider = new TempoProvider({
-        type: 'tempo',
+        id: 'tempo',
         endpoint: 'http://tempo:3200',
         auth: { token: 'my-secret-token' },
       });
@@ -302,7 +302,7 @@ describe('TempoProvider', () => {
       });
 
       const provider = new TempoProvider({
-        type: 'tempo',
+        id: 'tempo',
         endpoint: 'http://tempo:3200',
         auth: { username: 'user', password: 'pass' },
       });
@@ -331,7 +331,7 @@ describe('TempoProvider', () => {
       });
 
       const provider = new TempoProvider({
-        type: 'tempo',
+        id: 'tempo',
         endpoint: 'http://tempo:3200',
         headers: { 'X-Custom-Header': 'custom-value' },
       });
@@ -359,7 +359,7 @@ describe('TempoProvider', () => {
       });
 
       const provider = new TempoProvider({
-        type: 'tempo',
+        id: 'tempo',
         endpoint: 'http://tempo:3200',
         timeout: 30000,
       });
@@ -384,7 +384,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.healthCheck();
 
       expect(result).toBe(true);
@@ -405,7 +405,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.healthCheck();
 
       expect(result).toBe(false);
@@ -414,7 +414,7 @@ describe('TempoProvider', () => {
     it('should return false on error', async () => {
       mockedFetchWithCache.mockRejectedValue(new Error('Connection refused'));
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.healthCheck();
 
       expect(result).toBe(false);
@@ -462,7 +462,7 @@ describe('TempoProvider', () => {
         cached: false,
       });
 
-      const provider = new TempoProvider({ type: 'tempo', endpoint: 'http://tempo:3200' });
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
       const result = await provider.fetchTrace('abc123');
 
       expect(result).not.toBeNull();

@@ -980,9 +980,10 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string()).optional(),
         })
         .optional(),
+      // External provider for fetching traces (Tempo, Jaeger, etc.)
       provider: z
         .object({
-          type: z.enum(['tempo', 'jaeger', 'local']),
+          id: z.enum(['tempo', 'jaeger', 'local']),
           endpoint: z.string().optional(),
           auth: z
             .object({
@@ -995,6 +996,7 @@ export const TestSuiteSchema = z.object({
           timeout: z.number().optional(),
         })
         .optional(),
+      // Delay before querying external provider
       queryDelay: z.number().optional(),
     })
     .optional(),
@@ -1141,10 +1143,10 @@ export const TestSuiteConfigSchema = z.object({
         })
         .optional(),
 
-      // External trace provider for fetching traces (Tempo, Jaeger, etc.)
+      // External provider for fetching traces (Tempo, Jaeger, etc.)
       provider: z
         .object({
-          type: z.enum(['tempo', 'jaeger', 'local']).default('local'),
+          id: z.enum(['tempo', 'jaeger', 'local']),
           endpoint: z.string().optional(),
           auth: z
             .object({
@@ -1154,12 +1156,12 @@ export const TestSuiteConfigSchema = z.object({
             })
             .optional(),
           headers: z.record(z.string()).optional(),
-          timeout: z.number().default(10000),
+          timeout: z.number().optional(),
         })
         .optional(),
 
-      // Delay before querying external provider (allows spans to arrive)
-      queryDelay: z.number().optional(),
+      // Delay before querying external provider
+      queryDelay: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

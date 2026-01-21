@@ -24,6 +24,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
@@ -888,47 +889,66 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
     const stopSequences = this.config.stopSequences || this.config.stop;
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'bedrock',
-      operationName: 'chat',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens,
-      temperature,
-      topP,
-      stopSequences,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'bedrock',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        // Optional request parameters
+        maxTokens,
+        temperature,
+        topP,
+        stopSequences,
+        // Promptfoo context from test case if available
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+      };
 
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
 
-      // Extract finish reason if available from metadata
-      const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
-      if (stopReason) {
-        result.finishReasons = [stopReason];
-      }
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
 
-      return result;
-    };
+        // Extract finish reason if available from metadata
+        const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
+        if (stopReason) {
+          result.finishReasons = [stopReason];
+        }
 
-    // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context),
+        resultExtractor,
+      );
+    });
   }
 
   /**

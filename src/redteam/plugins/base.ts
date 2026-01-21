@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { withGraderSpan } from '../../tracing/graderTracer';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -22,6 +23,7 @@ import type {
   Assertion,
   AssertionValue,
   AtomicTestCase,
+  CallApiContextParams,
   GradingResult,
   PluginConfig,
   ResultSuggestion,
@@ -451,6 +453,10 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  /** Iteration/turn number (1-indexed) for multi-turn evaluations */
+  iteration?: number;
+  /** W3C Trace Context traceparent for linking grader span to evaluation trace */
+  traceparent?: string;
 }
 
 export abstract class RedteamGraderBase {
@@ -504,6 +510,47 @@ export abstract class RedteamGraderBase {
   }
 
   async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
+  ): Promise<{
+    grade: GradingResult;
+    rubric: string;
+    suggestions?: ResultSuggestion[];
+  }> {
+    return withGraderSpan(
+      {
+        graderId: this.id,
+        promptLabel: 'llm-rubric',
+        evalId: test.metadata?.evaluationId,
+        testIndex: test.vars?.__testIdx as number | undefined,
+        iteration: gradingContext?.iteration,
+        traceparent: gradingContext?.traceparent,
+      },
+      async () =>
+        this.getResultInternal(
+          prompt,
+          llmOutput,
+          test,
+          provider,
+          renderedValue,
+          additionalRubric,
+          skipRefusalCheck,
+          gradingContext,
+        ),
+      (result) => ({
+        pass: result.grade.pass,
+        score: result.grade.score,
+      }),
+    );
+  }
+
+  private async getResultInternal(
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
@@ -585,10 +632,22 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
-      ...test.options,
-      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    })) as GradingResult;
+    const grade = (await matchesLlmRubric(
+      finalRubric,
+      llmOutput,
+      {
+        ...test.options,
+        provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+      },
+      undefined, // vars
+      undefined, // assertion
+      undefined, // options
+      // Pass context with traceparent so LLM call is traced as child span
+      // Using type assertion since callProviderWithContext overrides prompt/vars anyway
+      gradingContext?.traceparent
+        ? ({ traceparent: gradingContext.traceparent } as CallApiContextParams)
+        : undefined,
+    )) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

@@ -12,8 +12,13 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { getTraceparent } from '../tracing/genaiTracer';
 import { withOAuthSpan } from '../tracing/oauthTracer';
+import {
+  type TargetSpanContext,
+  withHttpRequestSpan,
+  withTargetSpan,
+} from '../tracing/targetTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -1398,6 +1403,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
+  label?: string;
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
@@ -1415,6 +1421,7 @@ export class HttpProvider implements ApiProvider {
   private httpsAgentPromise?: Promise<Agent>;
 
   constructor(url: string, options: ProviderOptions) {
+    this.label = options.label;
     this.config = HttpProviderConfigSchema.parse(options.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
@@ -1842,36 +1849,22 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'http',
-      operationName: 'chat',
-      model: this.url,
+    // Set up tracing context for target span
+    const spanContext: TargetSpanContext = {
+      targetType: 'http',
+      url: this.url,
       providerId: this.id(),
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
+      label: this.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      // Promptfoo context from test case if available
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, options),
-      resultExtractor,
-    );
+    return withTargetSpan(spanContext, () => this.callApiInternal(prompt, context, options));
   }
 
   private async callApiInternal(
@@ -1916,15 +1909,6 @@ export class HttpProvider implements ApiProvider {
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
-
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      headers.tracestate = context.tracestate;
-    }
 
     this.validateContentTypeAndBody(headers, this.config.body);
 
@@ -1995,53 +1979,64 @@ export class HttpProvider implements ApiProvider {
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
-    const fetchOptions: any = {
-      method: renderedConfig.method,
-      headers: renderedConfig.headers,
-      ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(method !== 'GET' &&
-        renderedConfig.body != null && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : typeof renderedConfig.body === 'string'
-              ? renderedConfig.body.trim()
-              : String(renderedConfig.body),
-        }),
-    };
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
+    // Execute HTTP request within a span for distributed tracing
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await withHttpRequestSpan(
+        { method, url },
+        async () => {
+          // Add W3C Trace Context headers from current span
+          const traceparent = getTraceparent();
+          if (traceparent) {
+            headers.traceparent = traceparent;
+            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
+          }
+          if (context?.tracestate) {
+            headers.tracestate = context.tracestate;
+          }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+          const fetchOptions: any = {
+            method: renderedConfig.method,
+            headers,
+            ...(options?.abortSignal && { signal: options.abortSignal }),
+            ...(method !== 'GET' &&
+              renderedConfig.body != null && {
+                body: contentTypeIsJson(headers)
+                  ? typeof renderedConfig.body === 'string'
+                    ? renderedConfig.body // Already a JSON string, use as-is
+                    : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+                  : typeof renderedConfig.body === 'string'
+                    ? renderedConfig.body.trim()
+                    : String(renderedConfig.body),
+              }),
+          };
+
+          // Add HTTPS agent as dispatcher if configured
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+            logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+          }
+
+          const result = await fetchWithCache(
+            url,
+            fetchOptions,
+            REQUEST_TIMEOUT_MS,
+            'text',
+            context?.bustCache ?? context?.debug,
+            this.config.maxRetries,
+          );
+
+          return {
+            data: result.data,
+            cached: result.cached,
+            status: result.status,
+            statusText: result.statusText,
+            responseHeaders: result.headers,
+            latencyMs: result.latencyMs,
+          };
+        },
+        (result) => ({ httpStatusCode: result.status }),
+      );
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2139,15 +2134,6 @@ export class HttpProvider implements ApiProvider {
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
 
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      parsedRequest.headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      parsedRequest.headers.tracestate = context.tracestate;
-    }
-
     // Add OAuth Bearer token if configured
     if (this.config.auth?.type === 'oauth' && this.lastToken) {
       parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
@@ -2222,44 +2208,54 @@ export class HttpProvider implements ApiProvider {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
 
-    const fetchOptions: any = {
-      method: parsedRequest.method,
-      headers: parsedRequest.headers,
-      ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(bodyContent && { body: bodyContent }),
-    };
+    // Execute HTTP request within a span for distributed tracing
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await withHttpRequestSpan(
+        { method: parsedRequest.method, url },
+        async () => {
+          // Add W3C Trace Context headers from current span
+          const traceparent = getTraceparent();
+          if (traceparent) {
+            parsedRequest.headers.traceparent = traceparent;
+            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
+          }
+          if (context?.tracestate) {
+            parsedRequest.headers.tracestate = context.tracestate;
+          }
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
+          const fetchOptions: any = {
+            method: parsedRequest.method,
+            headers: parsedRequest.headers,
+            ...(options?.abortSignal && { signal: options.abortSignal }),
+            ...(bodyContent && { body: bodyContent }),
+          };
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+          // Add HTTPS agent as dispatcher if configured
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+            logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+          }
+
+          const result = await fetchWithCache(
+            url,
+            fetchOptions,
+            REQUEST_TIMEOUT_MS,
+            'text',
+            context?.bustCache ?? context?.debug,
+            this.config.maxRetries,
+          );
+
+          return {
+            data: result.data,
+            cached: result.cached,
+            status: result.status,
+            statusText: result.statusText,
+            responseHeaders: result.headers,
+            latencyMs: result.latencyMs,
+          };
+        },
+        (result) => ({ httpStatusCode: result.status }),
+      );
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,

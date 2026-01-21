@@ -740,6 +740,8 @@ async function runRedteamConversation({
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined,
+              { iteration: depth + 1, traceparent: context?.traceparent },
             );
             storedGraderResult = {
               ...grade,

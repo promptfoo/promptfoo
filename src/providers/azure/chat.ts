@@ -6,6 +6,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
@@ -209,58 +210,73 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'azure',
-      operationName: 'chat',
-      model: this.deploymentName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
-      frequencyPenalty: this.config.frequency_penalty,
-      presencePenalty: this.config.presence_penalty,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: 'azure',
+        operationName: 'chat',
+        model: this.deploymentName,
+        providerId: this.id(),
+        // Optional request parameters
+        maxTokens: this.config.max_tokens,
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        stopSequences: this.config.stop,
+        frequencyPenalty: this.config.frequency_penalty,
+        presencePenalty: this.config.presence_penalty,
+        // Promptfoo context from test case if available
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+      };
 
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-          completionDetails: {
-            reasoning: response.tokenUsage.completionDetails?.reasoning,
-            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
-            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
-          },
-        };
-      }
+      // Result extractor to set response attributes on the span
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
 
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+            cached: response.tokenUsage.cached,
+            completionDetails: {
+              reasoning: response.tokenUsage.completionDetails?.reasoning,
+              acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
+              rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
+            },
+          };
+        }
 
-      return result;
-    };
+        // Extract finish reason if available
+        if (response.finishReason) {
+          result.finishReasons = [response.finishReason];
+        }
 
-    // Wrap the API call in a span
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
-      resultExtractor,
-    );
+        return result;
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context, callApiOptions),
+        resultExtractor,
+      );
+    });
   }
 
   /**

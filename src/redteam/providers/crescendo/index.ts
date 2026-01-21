@@ -523,12 +523,13 @@ export class CrescendoProvider implements ApiProvider {
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
               undefined,
-              tracingOptions.includeInGrading
-                ? {
-                    traceContext: response.traceContext,
-                    traceSummary: gradingTraceSummary,
-                  }
-                : undefined,
+              {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                iteration: roundNum,
+                traceparent: context?.traceparent,
+              },
             );
 
             graderPassed = grade.pass;
@@ -788,7 +789,7 @@ export class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    _roundNum: number,
+    roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
     tracingOptions?: RedteamTracingOptions,
@@ -951,7 +952,12 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      context ? { ...context, iteration: roundNum } : undefined,
+      options,
+    );
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,

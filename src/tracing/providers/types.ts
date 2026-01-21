@@ -16,8 +16,8 @@ export interface TraceProviderAuth {
  * Configuration for an external trace provider
  */
 export interface TraceProviderConfig {
-  /** Provider type identifier */
-  type: 'tempo' | 'jaeger' | 'local';
+  /** Provider identifier */
+  id: 'tempo' | 'jaeger' | 'local';
 
   /** Base endpoint URL for the trace backend */
   endpoint?: string;

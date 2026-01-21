@@ -536,7 +536,7 @@ export class HydraProvider implements ApiProvider {
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
-        context,
+        context ? { ...context, iteration: turn } : undefined,
         options,
       );
       lastTargetResponse = targetResponse;
@@ -710,12 +710,13 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
-            tracingOptions.includeInGrading
-              ? {
-                  traceContext,
-                  traceSummary: gradingTraceSummary,
-                }
-              : undefined,
+            {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              iteration: turn,
+              traceparent: context?.traceparent,
+            },
           );
           graderResult = grade;
           storedGraderResult = {

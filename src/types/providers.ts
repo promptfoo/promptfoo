@@ -80,6 +80,11 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+  /**
+   * Iteration/turn number (1-indexed) for multi-turn evaluations.
+   * Used in red-team strategies to track conversation turns.
+   */
+  iteration?: number;
 }
 
 export interface CallApiOptionsParams {

@@ -16,6 +16,7 @@ export const handleRedteam = async ({
   provider,
   renderedValue,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -47,6 +48,10 @@ export const handleRedteam = async ({
     test,
     provider,
     renderedValue,
+    undefined, // additionalRubric
+    undefined, // skipRefusalCheck
+    // Pass traceparent for grader span tracing
+    providerCallContext?.traceparent ? { traceparent: providerCallContext.traceparent } : undefined,
   );
 
   return {

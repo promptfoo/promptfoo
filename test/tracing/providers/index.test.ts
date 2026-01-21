@@ -4,9 +4,9 @@ import { TempoProvider } from '../../../src/tracing/providers/tempo';
 
 describe('tracing/providers', () => {
   describe('createTraceProvider', () => {
-    it('should create TempoProvider for type "tempo"', () => {
+    it('should create TempoProvider for id "tempo"', () => {
       const provider = createTraceProvider({
-        type: 'tempo',
+        id: 'tempo',
         endpoint: 'http://tempo:3200',
       });
 
@@ -14,21 +14,21 @@ describe('tracing/providers', () => {
       expect(provider.id).toBe('tempo');
     });
 
-    it('should throw for type "local"', () => {
+    it('should throw for id "local"', () => {
       expect(() =>
         createTraceProvider({
-          type: 'local',
+          id: 'local',
         }),
-      ).toThrow('Local provider type should use TraceStore directly');
+      ).toThrow('Local provider id should use TraceStore directly');
     });
 
-    it('should throw for unknown provider type', () => {
+    it('should throw for unknown provider id', () => {
       expect(() =>
         createTraceProvider({
-          type: 'unknown' as any,
+          id: 'unknown' as any,
           endpoint: 'http://unknown:3200',
         }),
-      ).toThrow('Unknown trace provider type: unknown');
+      ).toThrow('Unknown trace provider id: unknown');
     });
   });
 
@@ -37,10 +37,10 @@ describe('tracing/providers', () => {
       expect(isExternalTraceProvider(undefined)).toBe(false);
     });
 
-    it('should return false for local type', () => {
+    it('should return false for local id', () => {
       expect(
         isExternalTraceProvider({
-          type: 'local',
+          id: 'local',
           endpoint: 'http://localhost:3200',
         }),
       ).toBe(false);
@@ -49,7 +49,7 @@ describe('tracing/providers', () => {
     it('should return false when endpoint is missing', () => {
       expect(
         isExternalTraceProvider({
-          type: 'tempo',
+          id: 'tempo',
         }),
       ).toBe(false);
     });
@@ -57,7 +57,7 @@ describe('tracing/providers', () => {
     it('should return true for tempo with endpoint', () => {
       expect(
         isExternalTraceProvider({
-          type: 'tempo',
+          id: 'tempo',
           endpoint: 'http://tempo:3200',
         }),
       ).toBe(true);
@@ -66,7 +66,7 @@ describe('tracing/providers', () => {
     it('should return true for jaeger with endpoint', () => {
       expect(
         isExternalTraceProvider({
-          type: 'jaeger',
+          id: 'jaeger',
           endpoint: 'http://jaeger:16686',
         }),
       ).toBe(true);
