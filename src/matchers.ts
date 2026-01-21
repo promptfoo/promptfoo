@@ -1544,9 +1544,26 @@ export async function matchesContextFaithfulness(
       verdicts.split('.').filter((answer) => answer.trim() !== '' && !answer.includes('yes'))
         .length / statements.length;
   } else {
-    score = (verdicts.split('verdict: no').length - 1) / statements.length;
+    // Use regex to find all verdict patterns (handles "verdict: no", "verdict:no", "verdict: no.", etc.)
+    const verdictPattern = /verdict\s*:\s*(yes|no)/gi;
+    const matches = [...verdicts.matchAll(verdictPattern)];
+
+    if (matches.length === 0) {
+      // No valid verdict format found - unable to determine faithfulness
+      return fail(
+        'Unable to determine faithfulness: no valid verdict format in response',
+        tokensUsed,
+      );
+    }
+
+    // Count "no" verdicts (unfaithful statements)
+    const noCount = matches.filter((match) => match[1].toLowerCase() === 'no').length;
+    score = noCount / statements.length;
   }
+  // Invert score (count was unfaithful ratio, we want faithful ratio)
   score = 1 - score;
+  // Clamp score to [0, 1] to handle edge cases where verdict count exceeds statement count
+  score = Math.max(0, Math.min(1, score));
   const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
