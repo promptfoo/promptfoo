@@ -38,7 +38,12 @@ import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
-import { isWithinInlineLimit, resolveVideoBytes, videoToBase64 } from './util/video';
+import {
+  isWithinInlineLimit,
+  resolveVideoBytes,
+  VIDEO_INLINE_LIMIT_BYTES,
+  videoToBase64,
+} from './util/video';
 
 import type {
   ApiClassificationProvider,
@@ -1980,13 +1985,14 @@ export async function matchesVideoRubric(
     };
   }
 
-  // Check if video is within inline limit (20MB)
+  // Check if video is within inline limit
   if (!isWithinInlineLimit(resolvedVideo.buffer)) {
     // TODO: Support Gemini File API for larger videos
+    const limitMB = VIDEO_INLINE_LIMIT_BYTES / 1024 / 1024;
     return {
       pass: false,
       score: 0,
-      reason: `Video size (${(resolvedVideo.buffer.length / 1024 / 1024).toFixed(1)}MB) exceeds 20MB inline limit. File API support coming soon.`,
+      reason: `Video size (${(resolvedVideo.buffer.length / 1024 / 1024).toFixed(1)}MB) exceeds ${limitMB}MB inline limit. File API support coming soon.`,
       assertion,
     };
   }

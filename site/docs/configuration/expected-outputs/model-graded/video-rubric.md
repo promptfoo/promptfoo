@@ -50,7 +50,7 @@ The grading model must support video understanding. By default, it uses:
 - `openai:video:sora-2` - OpenAI Sora
 - `vertex:video:veo-3.1-generate-preview` - Google Veo
 - `bedrock:video:amazon.nova-reel-v1:1` - Amazon Nova Reel
-- `luma:video:ray-2` - Luma Ray
+- `bedrock:video:luma.ray-v2:0` - Luma Ray 2 (via AWS Bedrock)
 - `azure:video:sora` - Azure AI Foundry Sora
 
 ## Overriding the grading provider

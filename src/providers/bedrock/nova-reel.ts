@@ -5,14 +5,12 @@
  * async invoke API. Videos are generated in 6-second increments up to 2 minutes.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { AwsBedrockGenericProvider } from './base';
+import { detectImageFormat, loadImageData } from './video-utils';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
@@ -56,37 +54,6 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   }
 
   /**
-   * Load image data from file:// path or return as-is if base64
-   */
-  private loadImageData(imagePath: string): { data?: string; error?: string } {
-    if (imagePath.startsWith('file://')) {
-      const filePath = imagePath.slice(7);
-      // Resolve to absolute path and validate no path traversal
-      const resolvedPath = path.resolve(filePath);
-      if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
-        return { error: `Invalid image path (path traversal detected): ${filePath}` };
-      }
-      if (!fs.existsSync(resolvedPath)) {
-        return { error: `Image file not found: ${resolvedPath}` };
-      }
-      return { data: fs.readFileSync(resolvedPath).toString('base64') };
-    }
-    // Assume it's already base64
-    return { data: imagePath };
-  }
-
-  /**
-   * Detect image format from path or data
-   */
-  private detectImageFormat(imagePath: string): 'png' | 'jpeg' {
-    const lowerPath = imagePath.toLowerCase();
-    if (lowerPath.includes('.png') || lowerPath.startsWith('ivborw')) {
-      return 'png';
-    }
-    return 'jpeg';
-  }
-
-  /**
    * Build model input based on task type
    */
   private buildModelInput(
@@ -121,12 +88,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       // Handle optional image input for image-to-video
       if (config.image) {
-        const { data, error } = this.loadImageData(config.image);
+        const { data, error } = loadImageData(config.image);
         if (error) {
           return { error };
         }
 
-        const format = this.detectImageFormat(config.image);
+        const format = detectImageFormat(config.image);
         textToVideoParams.images = [
           {
             format,

@@ -13,6 +13,12 @@ import { fetchWithProxy } from './fetch/index';
 
 import type { BlobRef } from '../blobs/types';
 
+/**
+ * Maximum video size (in bytes) that can be sent inline to Gemini.
+ * Videos larger than this require the File API (not yet supported).
+ */
+export const VIDEO_INLINE_LIMIT_BYTES = 20 * 1024 * 1024; // 20MB
+
 export interface VideoRef {
   blobRef?: BlobRef;
   storageRef?: { key?: string };
@@ -148,6 +154,5 @@ export function getVideoMimeType(format?: string): string {
  * Videos under 20MB can be sent inline; larger videos need the File API.
  */
 export function isWithinInlineLimit(buffer: Buffer): boolean {
-  const INLINE_LIMIT_BYTES = 20 * 1024 * 1024; // 20MB
-  return buffer.length < INLINE_LIMIT_BYTES;
+  return buffer.length < VIDEO_INLINE_LIMIT_BYTES;
 }
