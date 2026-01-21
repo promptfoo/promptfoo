@@ -31,6 +31,7 @@ export const FilterModeSelector = ({
   const options = showDifferentOption
     ? BASE_OPTIONS
     : BASE_OPTIONS.filter((o) => o.value !== 'different');
+
   return (
     <Select value={filterMode} onValueChange={onChange}>
       <SelectTrigger className="w-[140px] h-8 text-xs">
