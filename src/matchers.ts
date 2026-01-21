@@ -1957,7 +1957,7 @@ export async function matchesVideoRubric(
   rubric: string | object,
   video: VideoResponse,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
