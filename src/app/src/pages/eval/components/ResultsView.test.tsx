@@ -1692,6 +1692,11 @@ describe('ResultsView User-Rated Badge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -1757,18 +1762,12 @@ describe('ResultsView User-Rated Badge', () => {
     const userRatedBadge = screen.getByText('5 user-rated');
     expect(userRatedBadge).toBeInTheDocument();
 
-    const chipElement = userRatedBadge.closest('.MuiChip-root');
-    expect(chipElement).toBeInTheDocument();
-
-    const computedStyle = window.getComputedStyle(chipElement!);
-
-    expect(computedStyle.backgroundColor).toMatch(/rgba?\(156,\s*39,\s*176/);
-    expect(computedStyle.color).toMatch(/rgba?\(156,\s*39,\s*176/);
-    expect(computedStyle.fontWeight).toBe('500');
-
-    expect(computedStyle.borderColor || computedStyle.borderTopColor).toMatch(
-      /rgba?\(156,\s*39,\s*176/,
-    );
+    // Check for Tailwind purple styling classes on the Badge component
+    expect(userRatedBadge).toHaveClass('bg-purple-50');
+    expect(userRatedBadge).toHaveClass('text-purple-700');
+    expect(userRatedBadge).toHaveClass('border-purple-200');
+    expect(userRatedBadge).toHaveClass('font-medium');
+    expect(userRatedBadge).toHaveClass('cursor-pointer');
   });
 });
 
@@ -1861,6 +1860,11 @@ describe('ResultsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -1924,10 +1928,13 @@ describe('ResultsView', () => {
       />,
     );
 
-    const tooltipText = `${userRatedResultsCount} output${userRatedResultsCount !== 1 ? 's' : ''} with user ratings`;
-    const badge = screen.getByTitle(tooltipText);
+    // Find the badge by its text content
+    const badge = screen.getByText(`${userRatedResultsCount} user-rated`);
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveTextContent(`${userRatedResultsCount} user-rated`);
+
+    // Verify it has the purple styling classes
+    expect(badge).toHaveClass('bg-purple-50');
+    expect(badge).toHaveClass('text-purple-700');
   });
 });
 
