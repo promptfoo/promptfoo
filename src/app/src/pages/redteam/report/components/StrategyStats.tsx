@@ -13,19 +13,7 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 import { compareByASRDescending } from '../utils/utils';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 
 /**
  * Gets the progress bar color based on ASR percentage.
@@ -469,13 +457,13 @@ const StrategyStats = ({
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
                   </p>
-                  <p className="mb-4 min-h-[40px] text-sm text-muted-foreground">
+                  <p className="mb-4 min-h-10 text-sm text-muted-foreground">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
                   </p>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
-                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-red-100 dark:bg-red-950/30">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',

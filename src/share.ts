@@ -23,7 +23,6 @@ import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
   domain: string;
-  isPublicShare: boolean;
 }
 
 export interface ShareOptions {
@@ -77,29 +76,25 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
     `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${eval_.id}`,
   );
 
-  const isPublicShare =
-    !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
-
   const envAppBaseUrl = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
 
-  const domain = isPublicShare
-    ? envAppBaseUrl || getDefaultShareViewBaseUrl()
-    : cloudConfig.isEnabled()
-      ? cloudConfig.getAppUrl()
-      : typeof sharing === 'object' && sharing.appBaseUrl
-        ? sharing.appBaseUrl
-        : envAppBaseUrl || getDefaultShareViewBaseUrl();
+  // Determine domain: cloud config takes priority, then eval config, then env var, then default
+  const domain = cloudConfig.isEnabled()
+    ? cloudConfig.getAppUrl()
+    : typeof sharing === 'object' && sharing.appBaseUrl
+      ? sharing.appBaseUrl
+      : envAppBaseUrl || getDefaultShareViewBaseUrl();
 
-  logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
-  return { domain, isPublicShare };
+  logger.debug(`Share domain determined: domain=${domain}`);
+  return { domain };
 }
 
 // Helper functions
-function getResultSize(result: any): number {
+function getResultSize(result: unknown): number {
   return Buffer.byteLength(JSON.stringify(result), 'utf8');
 }
 
-function findLargestResultSize(results: any[], sampleSize: number = 1000): number {
+function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000): number {
   // Get the result size of the first sampleSize results
   const sampleSizes = results.slice(0, Math.min(sampleSize, results.length)).map(getResultSize);
   // find the largest result size
@@ -181,7 +176,7 @@ async function sendEvalRecord(
 }
 
 async function sendChunkOfResults(
-  chunk: any[],
+  chunk: EvalResult[],
   url: string,
   evalId: string,
   headers: Record<string, string>,

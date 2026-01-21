@@ -1500,6 +1500,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-source-attribution/',
+    name: 'RAG Source Attribution',
+    pluginId: 'rag-source-attribution',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
     link: '/docs/red-team/plugins/rbac/',

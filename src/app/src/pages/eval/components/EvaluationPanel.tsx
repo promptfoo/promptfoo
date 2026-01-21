@@ -94,9 +94,9 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 {hasMetrics && <td className="px-4 py-3">{result.assertion?.metric || ''}</td>}
                 <td className="px-4 py-3">
                   {result.pass ? (
-                    <CircleCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <CircleCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
                   ) : (
-                    <CircleX className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <CircleX className="size-5 text-red-600 dark:text-red-400" />
                   )}
                 </td>
                 <td className="px-4 py-3 tabular-nums">{result.score?.toFixed(2)}</td>
@@ -113,13 +113,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       variant="ghost"
                       size="icon"
                       onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
-                      className="absolute right-2 top-2 h-7 w-7 bg-background shadow-sm hover:shadow"
+                      className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
                       aria-label={`Copy assertion value ${i}`}
                     >
                       {copiedAssertions[valueKey] ? (
-                        <Check className="h-3.5 w-3.5" />
+                        <Check className="size-3.5" />
                       ) : (
-                        <Copy className="h-3.5 w-3.5" />
+                        <Copy className="size-3.5" />
                       )}
                     </Button>
                   )}
@@ -139,13 +139,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                           e.stopPropagation();
                           copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
                         }}
-                        className="absolute right-2 top-2 h-7 w-7 bg-background shadow-sm hover:shadow"
+                        className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
                         aria-label={`Copy assertion reason ${i}`}
                       >
                         {copiedAssertions[`reason-${i}`] ? (
-                          <Check className="h-3.5 w-3.5" />
+                          <Check className="size-3.5" />
                         ) : (
-                          <Copy className="h-3.5 w-3.5" />
+                          <Copy className="size-3.5" />
                         )}
                       </Button>
                     )}
@@ -192,7 +192,7 @@ function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResu
                   <span>{result.assertion?.type || 'Assertion'} - Full Grading Prompt</span>
                   <ChevronDown
                     className={cn(
-                      'h-4 w-4 text-muted-foreground transition-transform',
+                      'size-4 text-muted-foreground transition-transform',
                       openItems[i] && 'rotate-180',
                     )}
                   />

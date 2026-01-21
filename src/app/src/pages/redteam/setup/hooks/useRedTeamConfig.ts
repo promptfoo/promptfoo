@@ -33,8 +33,8 @@ export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
 interface RedTeamConfigState {
   config: Config;
   providerType: string | undefined; // UI state, not persisted in config
-  updateConfig: (section: keyof Config, value: any) => void;
-  updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
+  updateConfig: <K extends keyof Config>(section: K, value: Config[K]) => void;
+  updatePlugins: (plugins: Config['plugins']) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;

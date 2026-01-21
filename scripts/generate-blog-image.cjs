@@ -149,4 +149,5 @@ async function main() {
     process.exit(1);
   }
 }
+// biome-ignore lint/nursery/noFloatingPromises: convert this to ESM
 main();

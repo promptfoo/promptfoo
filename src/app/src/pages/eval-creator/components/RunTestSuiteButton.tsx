@@ -27,6 +27,9 @@ const RunTestSuiteButton = () => {
 
   const isDisabled =
     isRunning ||
+    !providers ||
+    !Array.isArray(providers) ||
+    providers.length === 0 ||
     !prompts ||
     prompts.length === 0 ||
     !tests ||
@@ -109,7 +112,7 @@ const RunTestSuiteButton = () => {
     <Button onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
         <span className="flex items-center gap-2">
-          <Spinner className="h-4 w-4" />
+          <Spinner className="size-4" />
           {progressPercent.toFixed(0)}% complete
         </span>
       ) : (

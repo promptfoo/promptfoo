@@ -61,11 +61,11 @@ export default function FrameworkPluginResult({
       )}
     >
       <div className="flex w-5 shrink-0 items-center justify-center">
-        {type === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
+        {type === 'failed' && <XCircle className="size-4 text-destructive" />}
         {type === 'passed' && (
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+          <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-500" />
         )}
-        {type === 'untested' && <Info className="h-4 w-4 text-muted-foreground" />}
+        {type === 'untested' && <Info className="size-4 text-muted-foreground" />}
       </div>
       <div className="flex flex-1 items-center justify-between">
         <span

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Alert, AlertDescription, AlertTitle } from './alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from './alert';
 
 describe('Alert', () => {
   it('renders with default variant', () => {
@@ -19,19 +19,19 @@ describe('Alert', () => {
   it('renders with warning variant', () => {
     render(<Alert variant="warning">Warning alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-yellow-500/50', 'bg-yellow-50');
+    expect(alert).toHaveClass('border-amber-200', 'bg-amber-50');
   });
 
   it('renders with success variant', () => {
     render(<Alert variant="success">Success alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-green-500/50', 'bg-green-50');
+    expect(alert).toHaveClass('border-emerald-200', 'bg-emerald-50');
   });
 
   it('renders with info variant', () => {
     render(<Alert variant="info">Info alert</Alert>);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveClass('border-blue-500/50', 'bg-blue-50');
+    expect(alert).toHaveClass('border-blue-200', 'bg-blue-50');
   });
 
   it('applies custom className', () => {
@@ -82,6 +82,26 @@ describe('AlertDescription', () => {
   });
 });
 
+describe('AlertContent', () => {
+  it('renders content correctly', () => {
+    render(<AlertContent>Content wrapper</AlertContent>);
+    const content = screen.getByText('Content wrapper');
+    expect(content).toBeInTheDocument();
+  });
+
+  it('applies flex-1 class', () => {
+    render(<AlertContent>Content</AlertContent>);
+    const content = screen.getByText('Content');
+    expect(content).toHaveClass('flex-1');
+  });
+
+  it('applies custom className', () => {
+    render(<AlertContent className="custom-content">Content</AlertContent>);
+    const content = screen.getByText('Content');
+    expect(content).toHaveClass('custom-content');
+  });
+});
+
 describe('Alert composition', () => {
   it('renders complete alert with title and description', () => {
     render(
@@ -94,6 +114,25 @@ describe('Alert composition', () => {
     const alert = screen.getByRole('alert');
     const title = screen.getByText('Warning');
     const description = screen.getByText('This is a warning message');
+
+    expect(alert).toBeInTheDocument();
+    expect(title).toBeInTheDocument();
+    expect(description).toBeInTheDocument();
+  });
+
+  it('renders complete alert with AlertContent wrapper', () => {
+    render(
+      <Alert variant="info">
+        <AlertContent>
+          <AlertTitle>Info</AlertTitle>
+          <AlertDescription>This is an info message</AlertDescription>
+        </AlertContent>
+      </Alert>,
+    );
+
+    const alert = screen.getByRole('alert');
+    const title = screen.getByText('Info');
+    const description = screen.getByText('This is an info message');
 
     expect(alert).toBeInTheDocument();
     expect(title).toBeInTheDocument();

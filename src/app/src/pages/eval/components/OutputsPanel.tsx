@@ -1,6 +1,5 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
 import Citations from './Citations';
 
 interface CodeDisplayProps {
@@ -19,6 +18,7 @@ type CodeDisplayComponent = React.FC<CodeDisplayProps>;
 interface OutputsPanelProps {
   output?: string;
   replayOutput?: string | null;
+  providerPrompt?: string;
   redteamFinalPrompt?: string;
   copiedFields: Record<string, boolean>;
   hoveredElement: string | null;
@@ -32,6 +32,7 @@ interface OutputsPanelProps {
 export function OutputsPanel({
   output,
   replayOutput,
+  providerPrompt,
   redteamFinalPrompt,
   copiedFields,
   hoveredElement,
@@ -41,19 +42,22 @@ export function OutputsPanel({
   CodeDisplay,
   citations,
 }: OutputsPanelProps) {
+  // Use providerPrompt if available, fall back to redteamFinalPrompt for backward compat
+  const actualPrompt = providerPrompt || redteamFinalPrompt;
+  const promptTitle = providerPrompt ? 'Actual Prompt Sent' : 'Modified User Input (Red Team)';
+  const promptKey = providerPrompt ? 'providerPrompt' : 'redteamFinalPrompt';
+
   return (
-    <Box>
-      {redteamFinalPrompt && (
+    <div>
+      {actualPrompt && (
         <CodeDisplay
-          content={redteamFinalPrompt}
-          title="Modified User Input (Red Team)"
-          onCopy={() => onCopy('redteamFinalPrompt', redteamFinalPrompt)}
-          copied={copiedFields['redteamFinalPrompt'] || false}
-          onMouseEnter={() => onMouseEnter('redteamFinalPrompt')}
+          content={actualPrompt}
+          title={promptTitle}
+          onCopy={() => onCopy(promptKey, actualPrompt)}
+          copied={copiedFields[promptKey] || false}
+          onMouseEnter={() => onMouseEnter(promptKey)}
           onMouseLeave={onMouseLeave}
-          showCopyButton={
-            hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']
-          }
+          showCopyButton={hoveredElement === promptKey || copiedFields[promptKey]}
         />
       )}
       {replayOutput && (
@@ -79,6 +83,6 @@ export function OutputsPanel({
         />
       )}
       {citations && <Citations citations={citations} />}
-    </Box>
+    </div>
   );
 }
