@@ -76,7 +76,7 @@ function TrustBar() {
     <section className={styles.trustBar}>
       <div className="container">
         {/*<div className={styles.trustBarHeading}>
-          Trusted by 85 of the Fortune 500 to test AI before deployment
+          Trusted by {SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500 to test AI before deployment
         </div>*/}
         <div
           className={styles.marquee}
@@ -102,8 +102,8 @@ function BridgeSection() {
     <section className={styles.bridgeSection}>
       <div className="container">
         <div className={styles.bridgeStatement}>
-          <strong>85 of the Fortune 500</strong> use Promptfoo in their AI development lifecycle.{' '}
-          Here's how:
+          <strong>{SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500</strong> use Promptfoo in
+          their AI development lifecycle. Here's how:
         </div>
       </div>
     </section>
@@ -448,7 +448,7 @@ function SolutionSection() {
             <h4>Test Everything</h4>
             <p>Create thousands of context-aware attacks tailored to your application.</p>
             <ul className={styles.solutionList}>
-              <li>Real-time threat intel from 200K+ user community</li>
+              <li>Real-time threat intel from {SITE_CONSTANTS.USER_COUNT_SHORT}+ user community</li>
               <li>Deep automation that scales beyond human-curated tests</li>
               <li>Customize attack flows to your business</li>
             </ul>
@@ -763,7 +763,7 @@ function PersonaSection() {
         'You need a solution that actually works at enterprise scale, integrates with your existing tools, and your team will adopt. Promptfoo delivers the depth you need without the complexity.',
       benefits: [
         {
-          title: 'Proven at global scale - 85 of the Fortune 500',
+          title: `Proven at global scale - ${SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500`,
           description:
             'Leading healthcare, telecommunications, retail, and enterprise software companies trust us with their AI security.',
         },
@@ -779,8 +779,7 @@ function PersonaSection() {
         },
         {
           title: 'Real-time threat intelligence',
-          description:
-            'Community of 200K+ users provides early warning. New attack vectors deployed automatically.',
+          description: `Community of ${SITE_CONSTANTS.USER_COUNT_SHORT}+ users provides early warning. New attack vectors deployed automatically.`,
         },
       ],
       cta: { text: 'Schedule Demo', link: '/contact/' },
@@ -803,8 +802,7 @@ function PersonaSection() {
         },
         {
           title: 'Built on open source',
-          description:
-            '200,000+ developers in the community. 200+ contributors from companies like OpenAI, Google, Microsoft, Amazon.',
+          description: `${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers in the community. 200+ contributors from companies like OpenAI, Google, Microsoft, Amazon.`,
         },
         {
           title: 'Fast and unblocking',
@@ -918,8 +916,7 @@ function FAQSection() {
     },
     {
       question: 'How do you stay current with new threats?',
-      answer:
-        "Our open source community of 200,000+ users provides real-time threat intelligence. When new attack vectors emerge, they're rapidly integrated into the platform. Contributors from companies like OpenAI, Anthropic, Google, Microsoft, and Amazon help us stay ahead.",
+      answer: `Our open source community of ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users provides real-time threat intelligence. When new attack vectors emerge, they're rapidly integrated into the platform. Contributors from companies like OpenAI, Anthropic, Google, Microsoft, and Amazon help us stay ahead.`,
     },
   ];
 
@@ -982,7 +979,7 @@ export default function Home(): React.ReactElement {
   return (
     <Layout
       title="Build Secure AI Applications"
-      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by 85 of the Fortune 500 and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
+      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by ${SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500 and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
       wrapperClassName="homepage-wrapper"
     >
       <Head>

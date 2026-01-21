@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import Box from '@mui/material/Box';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -39,6 +39,7 @@ function ProviderConfigEditor({
   onTargetTested,
   onSessionTested,
 }: ProviderConfigEditorProps) {
+  const { config, updateConfig } = useRedTeamConfig();
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -77,7 +78,8 @@ function ProviderConfigEditor({
     } else if (field === 'body') {
       updatedTarget.config.body = value;
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      if (bodyStr.includes('{{prompt}}')) {
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
+      if (bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
         setBodyError(
@@ -98,7 +100,8 @@ function ProviderConfigEditor({
       }
     } else if (field === 'request') {
       updatedTarget.config.request = value;
-      if (value && !value.includes('{{prompt}}')) {
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
+      if (value && !value.includes('{{prompt}}') && !hasInputs) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
         setBodyError(null);
@@ -111,6 +114,17 @@ function ProviderConfigEditor({
       updatedTarget.delay = value;
     } else if (field === 'config') {
       updatedTarget.config = value;
+    } else if (field === 'inputs') {
+      // Handle top-level inputs field for multi-variable input configuration
+      if (value === undefined) {
+        delete updatedTarget.inputs;
+      } else {
+        updatedTarget.inputs = value;
+        // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
+        if (Object.keys(value).length > 0) {
+          setBodyError(null);
+        }
+      }
     } else {
       updatedTarget.config[field] = value;
     }
@@ -246,7 +260,7 @@ function ProviderConfigEditor({
   }, [onValidationRequest, validate]);
 
   return (
-    <Box>
+    <div>
       {providerType === 'custom' && (
         <CustomTargetConfiguration
           selectedTarget={provider}
@@ -254,6 +268,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -324,6 +339,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -337,6 +353,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -350,6 +367,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -370,19 +388,25 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
-      <Box sx={{ mt: 3 }}>
+      <div className="mt-6">
         <CommonConfigurationOptions
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
+          testGenerationInstructions={config.testGenerationInstructions ?? ''}
+          onTestGenerationInstructionsChange={(instructions) =>
+            updateConfig('testGenerationInstructions', instructions)
+          }
+          onPromptsChange={(prompts) => updateConfig('prompts', prompts)}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 

@@ -10,14 +10,14 @@ export const rollDice = tool({
     'Roll dice for D&D mechanics: attack rolls, damage, saving throws, ability checks, initiative',
   parameters: z.object({
     sides: z.number().describe('Number of sides on the die (e.g., 4, 6, 8, 10, 12, 20, 100)'),
-    count: z.number().default(1).describe('Number of dice to roll'),
+    count: z.number().prefault(1).describe('Number of dice to roll'),
     modifier: z
       .number()
-      .default(0)
+      .prefault(0)
       .describe('Modifier to add to the total (e.g., +5 for STR bonus)'),
     purpose: z
       .string()
-      .default('')
+      .prefault('')
       .describe('What the roll is for (e.g., "attack roll", "fire damage", "DEX save")'),
   }),
   execute: async ({ sides, count, modifier, purpose }) => {
@@ -61,7 +61,7 @@ export const checkInventory = tool({
   name: 'check_inventory',
   description: 'Check what items, equipment, and gold the player character has',
   parameters: z.object({
-    playerId: z.string().default('player1').describe('The player ID'),
+    playerId: z.string().prefault('player1').describe('The player ID'),
   }),
   execute: async ({ playerId }) => {
     // Mock inventory - in a real game this would query a database
@@ -192,7 +192,7 @@ export const checkCharacterStats = tool({
   name: 'check_character_stats',
   description: 'View player character stats, abilities, HP, AC, and other D&D 5e attributes',
   parameters: z.object({
-    playerId: z.string().default('player1').describe('The player ID'),
+    playerId: z.string().prefault('player1').describe('The player ID'),
   }),
   execute: async ({ playerId }) => {
     // Mock character - in a real game this would query a database

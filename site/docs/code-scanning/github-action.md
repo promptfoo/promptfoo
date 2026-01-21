@@ -48,8 +48,28 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
 | `guidance`         | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
 | `guidance-file`    | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
+| `enable-fork-prs`  | Enable scanning PRs from forked repositories                     | `false`                     |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
+
+### Triggering Additional Scans
+
+If you made changes to your PR and want to run another scan, you can trigger a new scan by commenting on the PR with `@promptfoo-scanner`.
+
+### Fork Pull Requests
+
+By default, code scanning is disabled for fork PRs. This is because any GitHub user can open a fork PR on public repositories.
+
+To trigger a scan on a fork PR, a maintainer with `write` permissions on the repository can comment on the PR with `@promptfoo-scanner`.
+
+To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your workflow file (`.github/workflows/promptfoo-code-scan.yml` in the main branch):
+
+```yaml
+- name: Run Promptfoo Code Scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    enable-fork-prs: true
+```
 
 ### Examples
 

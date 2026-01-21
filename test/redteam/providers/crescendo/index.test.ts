@@ -157,6 +157,9 @@ describe('CrescendoProvider', () => {
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
+    });
 
     // Mock server feature support to return true so unblocking logic runs
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -176,6 +179,14 @@ describe('CrescendoProvider', () => {
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    // Set up default renderPrompt mock to return a valid prompt string
+    vi.mocked(evaluatorHelpers.renderPrompt).mockReset();
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (prompt) => {
+      // Return the raw prompt as a simple string by default
+      const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
+      return rawPrompt;
+    });
   });
 
   afterEach(() => {
@@ -1799,6 +1810,9 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
+    });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
     mockGetGraderById.mockImplementation(function () {
@@ -2071,6 +2085,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -2407,6 +2424,9 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
