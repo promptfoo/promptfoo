@@ -1,4 +1,5 @@
 import deepEqual from 'fast-deep-equal';
+import logger from '../logger';
 import { type EvaluateResult, type TestCase } from '../types';
 import { providerToIdentifier } from './provider';
 
@@ -90,13 +91,36 @@ export function deduplicateTestCases(tests: TestCase[]): TestCase[] {
 }
 
 export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
-  const providersMatch = testCase.provider
-    ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
-    : true;
+  const testProviderId = testCase.provider ? providerToIdentifier(testCase.provider) : undefined;
+  const resultProviderId = providerToIdentifier(result.provider);
+
+  // Provider matching rules:
+  // 1. If test doesn't specify a provider, any result matches
+  // 2. If test has provider but result doesn't, still match (result provider info may be missing,
+  //    e.g., agentic providers store target provider, or cloud results may not include provider)
+  // 3. If both have providers, they must match
+  const providersMatch =
+    !testProviderId || !resultProviderId || testProviderId === resultProviderId;
 
   // Filter out runtime variables like _conversation and sessionId when matching.
   // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
   const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
-  return varsMatch(testVars, resultVars) && providersMatch;
+  const doVarsMatch = varsMatch(testVars, resultVars);
+  const isMatch = doVarsMatch && providersMatch;
+
+  // Log matching details at debug level for troubleshooting filter issues
+  if (!isMatch) {
+    const varKeys = testVars ? Object.keys(testVars).join(', ') : 'none';
+    logger.debug(
+      `[resultIsForTestCase] No match: vars=${doVarsMatch}, providers=${providersMatch}`,
+      {
+        testProvider: testProviderId || 'none',
+        resultProvider: resultProviderId || 'none',
+        testVarKeys: varKeys,
+      },
+    );
+  }
+
+  return isMatch;
 }
