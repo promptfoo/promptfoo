@@ -43,7 +43,7 @@ interface SessionEndpointConfigProps {
     url?: string;
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
-    body?: Record<string, any> | string;
+    body?: Record<string, unknown> | string;
     responseParser?: string;
   };
   onUpdate: (session: SessionEndpointConfigProps['session']) => void;
@@ -56,7 +56,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
       : [{ key: '', value: '' }],
   );
 
-  const updateSession = (field: string, value: any) => {
+  const updateSession = (field: string, value: unknown) => {
     onUpdate({
       ...session,
       [field]: value,
@@ -515,12 +515,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="endpoint"
-                  checked={selectedTarget.config.sessionSource === 'endpoint'}
+                  checked={selectedTarget.config?.sessionSource === 'endpoint'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     updateCustomTarget('sessionParser', undefined);
                     // Initialize session endpoint config if not present
-                    if (!selectedTarget.config.session) {
+                    if (!selectedTarget.config?.session) {
                       updateCustomTarget('session', {
                         url: '',
                         method: 'POST',
@@ -593,7 +593,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Client-generated session ID configuration */}
-          {selectedTarget.config.sessionSource === 'client' && (
+          {selectedTarget.config?.sessionSource === 'client' && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -626,9 +626,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Session endpoint configuration */}
-          {selectedTarget.config.sessionSource === 'endpoint' && (
+          {selectedTarget.config?.sessionSource === 'endpoint' && (
             <SessionEndpointConfig
-              session={selectedTarget.config.session}
+              session={selectedTarget.config?.session as SessionEndpointConfigProps['session']}
               onUpdate={(session) => {
                 updateCustomTarget('session', session);
                 setTestResult(null);

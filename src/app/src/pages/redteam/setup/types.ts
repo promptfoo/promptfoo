@@ -113,7 +113,7 @@ export interface ProviderOptions {
         }>
       | string;
     stateful?: boolean;
-    sessionSource?: 'client' | 'server';
+    sessionSource?: 'client' | 'server' | 'endpoint';
     streamResponse?: string;
   };
 }
