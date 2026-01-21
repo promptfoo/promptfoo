@@ -167,6 +167,7 @@ describe('index.ts exports', () => {
       assertions: index.assertions,
       cache: index.cache,
       evaluate: index.evaluate,
+      generation: index.generation,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
       redteam: index.redteam,
