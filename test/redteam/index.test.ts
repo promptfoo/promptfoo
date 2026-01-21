@@ -1233,9 +1233,9 @@ describe('synthesize', () => {
 
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
-      // Should have both policies with display format "policy [hash]"
-      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]/);
-      // Inline policies show hash, not text
+      // Should have both policies with display format "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Inline policies show hash and preview
       // Should show both Failed and Success statuses
       expect(cleanReport).toContain('Failed');
       expect(cleanReport).toContain('Success');
@@ -3017,11 +3017,11 @@ describe('Language configuration', () => {
       // Strip ANSI codes for easier assertion
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy plugin should have its own row with display format "policy [hash]"
-      // Inline policies show hash, not text
-      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]/);
+      // Each policy plugin should have its own row with display format "policy [hash]: preview..."
+      // Inline policies show hash and preview
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
       // Count unique policy rows (should be 3)
-      const policyMatches = cleanReport.match(/policy \[[a-f0-9]{12}\]/g);
+      const policyMatches = cleanReport.match(/policy \[[a-f0-9]{12}\]:/g);
       expect(policyMatches?.length).toBe(3);
       // Each should show 2 requested, 2 generated
       const twoMatches = cleanReport.match(/\b2\b/g);
@@ -3058,9 +3058,9 @@ describe('Language configuration', () => {
       const cleanReport = stripAnsi(reportMessage || '');
 
       // Each policy should have separate rows for each language
-      // Display format: "(Lang) policy [hash]"
-      const hmongMatches = cleanReport.match(/\(Hmong\) policy \[[a-f0-9]{12}\]/g);
-      const zuluMatches = cleanReport.match(/\(Zulu\) policy \[[a-f0-9]{12}\]/g);
+      // Display format: "(Lang) policy [hash]: preview..."
+      const hmongMatches = cleanReport.match(/\(Hmong\) policy \[[a-f0-9]{12}\]:/g);
+      const zuluMatches = cleanReport.match(/\(Zulu\) policy \[[a-f0-9]{12}\]:/g);
       expect(hmongMatches?.length).toBe(2); // 2 policies in Hmong
       expect(zuluMatches?.length).toBe(2); // 2 policies in Zulu
       // Each should show 1 requested, 1 generated
@@ -3111,8 +3111,8 @@ describe('Language configuration', () => {
       // Named policy should show just the name (no hash in display)
       expect(cleanReport).toMatch(/Secret Protection Policy/);
       expect(cleanReport).not.toMatch(/Secret Protection Policy \[[a-f0-9]/); // No hash after name
-      // Inline policy should show: "policy [hash]"
-      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]/);
+      // Inline policy should show: "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
     });
 
     it('should work correctly with both built-in plugins and policy plugins', async () => {
@@ -3173,8 +3173,8 @@ describe('Language configuration', () => {
       // Named policy should show just the name
       expect(cleanReport).toMatch(/Data Protection Policy/);
       expect(cleanReport).not.toMatch(/Data Protection Policy \[/); // No ID after name
-      // Inline policy should show "policy [hash]"
-      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]/);
+      // Inline policy should show "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
       // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)
       const pluginRows = cleanReport.match(/│\s+\d+\s+│\s+Plugin/g);
       expect(pluginRows?.length).toBe(4);

@@ -106,8 +106,8 @@ function getShortId(id: string): string {
  *
  * For policy plugins:
  * - Cloud policy with name: key=uuid, display="Policy Name"
- * - Cloud policy without name: key=uuid, display="policy [shortId]"
- * - Inline policy: key=hash, display="policy [hash]"
+ * - Cloud policy without name: key=uuid, display="policy [shortId]: preview..."
+ * - Inline policy: key=hash, display="policy [hash]: preview..."
  *
  * @param plugin - The plugin configuration.
  * @returns An object with `key` (unique identifier) and `display` (human-readable string).
@@ -126,17 +126,21 @@ function getPluginKeyAndDisplay(plugin: { id: string; config?: Record<string, an
       if (policyConfig.name) {
         return { key: policyId, display: policyConfig.name };
       }
-      // Otherwise display policy [shortId]
+      // Otherwise display policy [shortId]: preview...
       const shortId = getShortId(policyId);
-      return { key: policyId, display: `policy [${shortId}]` };
+      const policyText = policyConfig.text
+        ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
+        : '';
+      const preview = policyText.length > 20 ? policyText.slice(0, 20) + '...' : policyText;
+      return { key: policyId, display: preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]` };
     }
 
     // For inline string policies, use hash as key
     if (typeof policyConfig === 'string') {
       const policyText = policyConfig.trim().replace(/\n+/g, ' ');
       const hash = makeInlinePolicyIdSync(policyText);
-      // Hash is already 12 chars
-      return { key: hash, display: `policy [${hash}]` };
+      const preview = policyText.length > 20 ? policyText.slice(0, 20) + '...' : policyText;
+      return { key: hash, display: `policy [${hash}]: ${preview}` };
     }
 
     // Fallback for edge cases
