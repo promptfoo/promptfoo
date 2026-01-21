@@ -1080,6 +1080,7 @@ async function generatePressTemplate() {
 // Generate Satori JSX template for Store page OG image
 async function generateStoreTemplate() {
   const logoBase64 = await getLogoAsBase64();
+  const tshirtImage = await getImageAsBase64('/img/store-tshirt.webp', 350, 450);
 
   return {
     type: 'div',
@@ -1259,7 +1260,7 @@ async function generateStoreTemplate() {
                   ],
                 },
               },
-              // Right side - shopping bag icon
+              // Right side - t-shirt product image
               {
                 type: 'div',
                 props: {
@@ -1267,70 +1268,25 @@ async function generateStoreTemplate() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: 300,
+                    width: 350,
                   },
                   children: [
-                    // Large shopping bag SVG as inline element
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          width: 200,
-                          height: 200,
-                          backgroundColor: 'rgba(255, 122, 122, 0.1)',
-                          borderRadius: 24,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '2px solid rgba(255, 122, 122, 0.2)',
-                        },
-                        children: [
-                          {
-                            type: 'svg',
-                            props: {
-                              width: 120,
-                              height: 120,
-                              viewBox: '0 0 24 24',
-                              fill: 'none',
-                              children: [
-                                {
-                                  type: 'path',
-                                  props: {
-                                    d: 'M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z',
-                                    stroke: '#ff7a7a',
-                                    strokeWidth: 1.5,
-                                    strokeLinecap: 'round',
-                                    strokeLinejoin: 'round',
-                                    fill: 'rgba(255, 122, 122, 0.1)',
-                                  },
-                                },
-                                {
-                                  type: 'path',
-                                  props: {
-                                    d: 'M3 6h18',
-                                    stroke: '#ff7a7a',
-                                    strokeWidth: 1.5,
-                                    strokeLinecap: 'round',
-                                    strokeLinejoin: 'round',
-                                  },
-                                },
-                                {
-                                  type: 'path',
-                                  props: {
-                                    d: 'M16 10a4 4 0 01-8 0',
-                                    stroke: '#ff7a7a',
-                                    strokeWidth: 1.5,
-                                    strokeLinecap: 'round',
-                                    strokeLinejoin: 'round',
-                                  },
-                                },
-                              ],
+                    tshirtImage
+                      ? {
+                          type: 'img',
+                          props: {
+                            src: tshirtImage,
+                            width: 320,
+                            height: 400,
+                            style: {
+                              objectFit: 'contain',
+                              borderRadius: 16,
+                              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
                             },
                           },
-                        ],
-                      },
-                    },
-                  ],
+                        }
+                      : null,
+                  ].filter(Boolean),
                 },
               },
             ],
