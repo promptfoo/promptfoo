@@ -50,6 +50,7 @@ export default function ModelAuditHistory() {
   const [scanToDelete, setScanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchHistoricalScans(abortController.signal);
@@ -84,6 +85,7 @@ export default function ModelAuditHistory() {
     }
   }, [scanToDelete, deleteHistoricalScan]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns = useMemo<ColumnDef<HistoricalScan>[]>(
     () => [
       {
@@ -149,9 +151,9 @@ export default function ModelAuditHistory() {
               className="gap-1.5 min-w-[100px] justify-center"
             >
               {hasErrors ? (
-                <ErrorIcon className="h-3.5 w-3.5" />
+                <ErrorIcon className="size-3.5" />
               ) : (
-                <CheckCircleIcon className="h-3.5 w-3.5" />
+                <CheckCircleIcon className="size-3.5" />
               )}
               {hasErrors ? 'Issues Found' : 'Clean'}
             </Badge>
@@ -196,14 +198,14 @@ export default function ModelAuditHistory() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
                   setScanToDelete(row.original.id);
                   setDeleteDialogOpen(true);
                 }}
               >
-                <DeleteIcon className="h-4 w-4" />
+                <DeleteIcon className="size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Delete</TooltipContent>
@@ -220,8 +222,8 @@ export default function ModelAuditHistory() {
       <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
         <div className="container max-w-7xl mx-auto px-4 py-10">
           <div className="flex items-start gap-4">
-            <div className="shrink-0 w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <HistoryIcon className="h-7 w-7 text-primary" />
+            <div className="shrink-0 size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <HistoryIcon className="size-7 text-primary" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Scan History</h1>
@@ -238,7 +240,7 @@ export default function ModelAuditHistory() {
         {/* Toolbar */}
         <div className="flex justify-between items-center">
           <Button size="sm" onClick={handleNewScan}>
-            <AddIcon className="h-4 w-4 mr-2" />
+            <AddIcon className="size-4 mr-2" />
             New Scan
           </Button>
         </div>
@@ -259,7 +261,7 @@ export default function ModelAuditHistory() {
               </p>
               <Button asChild>
                 <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
-                  <AddIcon className="h-4 w-4 mr-2" />
+                  <AddIcon className="size-4 mr-2" />
                   New Scan
                 </RouterLink>
               </Button>
@@ -368,7 +370,7 @@ export default function ModelAuditHistory() {
                 </>
               ) : (
                 <>
-                  <DeleteIcon className="h-4 w-4 mr-2" />
+                  <DeleteIcon className="size-4 mr-2" />
                   Delete
                 </>
               )}

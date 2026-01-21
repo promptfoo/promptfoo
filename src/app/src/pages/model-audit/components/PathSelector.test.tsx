@@ -1,6 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore } from '../stores';
@@ -11,8 +10,6 @@ vi.mock('../stores');
 
 const mockCallApi = vi.mocked(callApi);
 const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
-
-const theme = createTheme();
 
 describe('PathSelector', () => {
   const onAddPath = vi.fn();
@@ -42,9 +39,7 @@ describe('PathSelector', () => {
 
       render(
         <TooltipProvider delayDuration={0}>
-          <ThemeProvider theme={theme}>
-            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-          </ThemeProvider>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
         </TooltipProvider>,
       );
 
@@ -80,9 +75,7 @@ describe('PathSelector', () => {
 
       render(
         <TooltipProvider delayDuration={0}>
-          <ThemeProvider theme={theme}>
-            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-          </ThemeProvider>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
         </TooltipProvider>,
       );
 
@@ -121,9 +114,7 @@ describe('PathSelector', () => {
 
       render(
         <TooltipProvider delayDuration={0}>
-          <ThemeProvider theme={theme}>
-            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-          </ThemeProvider>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
         </TooltipProvider>,
       );
 
@@ -163,9 +154,7 @@ describe('PathSelector', () => {
 
       render(
         <TooltipProvider delayDuration={0}>
-          <ThemeProvider theme={theme}>
-            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-          </ThemeProvider>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
         </TooltipProvider>,
       );
 
@@ -204,9 +193,7 @@ describe('PathSelector', () => {
 
     render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>
+        <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
       </TooltipProvider>,
     );
 
@@ -233,9 +220,7 @@ describe('PathSelector', () => {
 
     render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
       </TooltipProvider>,
     );
 
@@ -256,9 +241,7 @@ describe('PathSelector', () => {
 
     render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
       </TooltipProvider>,
     );
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
@@ -26,6 +27,9 @@ const RunTestSuiteButton = () => {
 
   const isDisabled =
     isRunning ||
+    !providers ||
+    !Array.isArray(providers) ||
+    providers.length === 0 ||
     !prompts ||
     prompts.length === 0 ||
     !tests ||
@@ -77,7 +81,7 @@ const RunTestSuiteButton = () => {
             clearInterval(intervalId);
             setIsRunning(false);
             if (progressData.evalId) {
-              navigate(`/eval/${progressData.evalId}`);
+              navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
           } else if (['failed', 'error'].includes(progressData.status)) {
             clearInterval(intervalId);
@@ -108,7 +112,7 @@ const RunTestSuiteButton = () => {
     <Button onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
         <span className="flex items-center gap-2">
-          <Spinner className="h-4 w-4" />
+          <Spinner className="size-4" />
           {progressPercent.toFixed(0)}% complete
         </span>
       ) : (

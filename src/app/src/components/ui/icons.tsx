@@ -8,6 +8,7 @@
 
 export {
   AlertCircle as AlertCircleIcon,
+  AlertTriangle as AlertTriangleIcon,
   AlertTriangle as WarningIcon,
   ArrowLeft as ArrowBackIcon,
   ArrowRight as ArrowForwardIcon,
@@ -40,9 +41,12 @@ export {
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   Github as GitHubIcon,
+  Globe as GlobeIcon,
+  Globe as LanguageIcon,
   HardDrive as HardDriveIcon,
   History as HistoryIcon,
   Info as InfoIcon,
+  Key as KeyIcon,
   Lock as LockIcon,
   Minus as RemoveIcon,
   // Platform icons
@@ -64,6 +68,7 @@ export {
   Shield as SecurityIcon,
   ShieldAlert as ShieldAlertIcon,
   ShieldCheck as ShieldCheckIcon,
+  Terminal as TerminalIcon,
   Trash2 as DeleteIcon,
   Trash2 as TrashIcon,
   Upload as UploadIcon,

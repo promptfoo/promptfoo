@@ -12,24 +12,15 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
+import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
-
-type Eval = {
-  createdAt: number;
-  datasetId: string;
-  description: string | null;
-  evalId: string;
-  isRedteam: number;
-  label: string;
-  numTests: number;
-  passRate: number;
-};
 
 interface EvalsTableProps {
   onEvalSelected: (evalId: string) => void;
@@ -50,7 +41,7 @@ export default function EvalsTable({
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
   }
 
-  const [evals, setEvals] = useState<Eval[]>([]);
+  const [evals, setEvals] = useState<EvalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -66,7 +57,7 @@ export default function EvalsTable({
       if (!response.ok) {
         throw new Error('Failed to fetch evals');
       }
-      const body = (await response.json()) as { data: Eval[] };
+      const body = (await response.json()) as { data: EvalSummary[] };
       setEvals(body.data);
       setError(null);
     } catch (err) {
@@ -80,6 +71,7 @@ export default function EvalsTable({
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchEvals(abortController.signal);
@@ -105,7 +97,7 @@ export default function EvalsTable({
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
+    return evals.some(({ isRedteam }) => isRedteam);
   }, [evals]);
 
   // Get selected eval IDs from row selection state
@@ -174,7 +166,7 @@ export default function EvalsTable({
   }, [rows]);
 
   // Column definitions
-  const columns: ColumnDef<Eval>[] = useMemo(
+  const columns: ColumnDef<EvalSummary>[] = useMemo(
     () => [
       {
         accessorKey: 'evalId',
@@ -186,7 +178,7 @@ export default function EvalsTable({
           }
           return (
             <Link
-              to={`/eval/${evalId}`}
+              to={EVAL_ROUTES.DETAIL(evalId)}
               onClick={(e) => {
                 e.preventDefault();
                 onEvalSelected(evalId);
@@ -212,10 +204,10 @@ export default function EvalsTable({
         ? [
             {
               id: 'type',
-              accessorFn: (row) => (row.isRedteam === 1 ? 'Red Team' : 'Eval'),
+              accessorFn: (row) => (row.isRedteam ? 'Red Team' : 'Eval'),
               header: 'Type',
               cell: ({ row }) => {
-                const isRedteam = row.original.isRedteam === 1;
+                const isRedteam = row.original.isRedteam;
                 return (
                   <Badge
                     variant={isRedteam ? 'destructive' : 'secondary'}
@@ -236,7 +228,7 @@ export default function EvalsTable({
                 ],
               },
               size: 100,
-            } as ColumnDef<Eval>,
+            } as ColumnDef<EvalSummary>,
           ]
         : []),
       {
@@ -245,22 +237,26 @@ export default function EvalsTable({
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;
           return (
-            <Tooltip title={text} placement="top" arrow>
-              <span
-                className="text-sm block"
-                style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {text}
-              </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="text-sm block"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {text}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">{text}</TooltipContent>
             </Tooltip>
           );
         },
+        size: 250,
       },
       {
         accessorKey: 'passRate',
@@ -304,7 +300,7 @@ export default function EvalsTable({
         onClick={handleDeleteSelected}
         data-testid="delete-selected-button"
       >
-        <DeleteIcon className="h-4 w-4 mr-1.5" />
+        <DeleteIcon className="size-4 mr-1.5" />
         Delete ({selectedEvalIds.length})
       </Button>
     ) : null;
@@ -352,7 +348,7 @@ export default function EvalsTable({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <DeleteIcon className="h-4 w-4 mr-1.5" />
+              <DeleteIcon className="size-4 mr-1.5" />
               Delete
             </Button>
           </DialogFooter>

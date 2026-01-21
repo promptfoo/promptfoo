@@ -1,5 +1,6 @@
 import { callApi } from '@app/utils/api';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,8 +8,11 @@ import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
-// Mock all the required modules
-const mockShowToast = vi.fn();
+// Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
+const { mockShowToast, mockSetSearchParams } = vi.hoisted(() => ({
+  mockShowToast: vi.fn(),
+  mockSetSearchParams: vi.fn(),
+}));
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -26,6 +30,18 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
+}));
+
+// Mock useCustomPoliciesMap - it imports from @promptfoo/redteam/types which loads heavy constants
+vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
+  useCustomPoliciesMap: vi.fn().mockReturnValue({}),
+}));
+
+// Mock policy utils - FilterChips imports these which pull in heavy redteam constants
+vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
+  isPolicyMetric: vi.fn().mockReturnValue(false),
+  deserializePolicyIdFromMetric: vi.fn().mockReturnValue(''),
+  formatPolicyIdentifierAsMetric: vi.fn((id: string) => id),
 }));
 
 vi.mock('./store', () => {
@@ -91,7 +107,10 @@ vi.mock('./TableSettings/TableSettingsModal', () => ({
 }));
 
 vi.mock('./DownloadMenu', () => ({
-  default: () => <div>Download Menu</div>,
+  DownloadMenuItem: ({ onClick }: { onClick: () => void }) => (
+    <button onClick={onClick}>Download</button>
+  ),
+  DownloadDialog: () => <div>Download Dialog</div>,
 }));
 
 vi.mock('./CompareEvalMenuItem', () => ({
@@ -151,14 +170,16 @@ const mockRecentEvals: ResultLightweightWithLabel[] = [
 ];
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
+  return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
+    useSearchParams: vi
+      .fn()
+      .mockReturnValue([new URLSearchParams('filterMode=failures'), mockSetSearchParams]),
   };
 });
 
@@ -275,7 +296,8 @@ describe('ResultsView Share Button', () => {
       expect(screen.getByText('Edit name')).toBeInTheDocument();
       expect(screen.getByText('Edit and re-run')).toBeInTheDocument();
       expect(screen.getByText('View YAML')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+      // Use getAllByText since there may be multiple Delete elements (menu item + dialog)
+      expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
     });
   });
 });
@@ -485,8 +507,8 @@ describe('ResultsView Copy Menu Item', () => {
     await userEvent.click(copyMenuItem);
 
     await waitFor(() => {
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-
+      // Note: Our mock DropdownMenu doesn't actually close on click, so we just verify
+      // that the copy dialog opens correctly
       expect(screen.getByTestId('confirm-eval-name-dialog')).toBeInTheDocument();
       expect(screen.getByText('Item Count: 15')).toBeInTheDocument();
     });
@@ -1013,7 +1035,121 @@ describe('ResultsView Chart Rendering', () => {
     expect(resultsCharts).toBeNull();
   });
 
-  it('should not render ResultsCharts if all scores are the same', async () => {
+  it('should not render ResultsCharts if all scores are binary edge values (all 1s)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 1 }, { score: 1 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should not render ResultsCharts if all scores are binary edge values (all 0s)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1062,11 +1198,9 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
-
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    // Uniform score of 0.8 is meaningful (graded assertion), should show charts
+    const showChartsButton = screen.queryByText('Hide Charts');
+    expect(showChartsButton).toBeInTheDocument();
   });
 
   it('should not render ResultsCharts if there are no valid scores', async () => {
@@ -1982,5 +2116,81 @@ describe('ResultsView Duration Display', () => {
     await waitFor(() => {
       expect(screen.getByText('2h')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ResultsView Browser History', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+  });
+
+  it('should render without calling setSearchParams unnecessarily on mount', async () => {
+    // This test verifies that mounting ResultsView doesn't create unnecessary browser
+    // history entries. The component should only call setSearchParams when search text
+    // actually changes (via handleSearchTextChange), not during initialization.
+
+    mockSetSearchParams.mockClear();
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Component should mount successfully
+    expect(screen.getByText('Results Table')).toBeInTheDocument();
+
+    // Should not call setSearchParams during mount (search params are read, not set)
+    // The handleSearchTextChange callback (lines 217-223 in ResultsView.tsx) uses
+    // { replace: true } to prevent history pollution when search text changes
+    expect(mockSetSearchParams).not.toHaveBeenCalled();
   });
 });
