@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -38,6 +39,7 @@ function ProviderConfigEditor({
   onTargetTested,
   onSessionTested,
 }: ProviderConfigEditorProps) {
+  const { config, updateConfig } = useRedTeamConfig();
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -397,6 +399,11 @@ function ProviderConfigEditor({
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
+          testGenerationInstructions={config.testGenerationInstructions ?? ''}
+          onTestGenerationInstructionsChange={(instructions) =>
+            updateConfig('testGenerationInstructions', instructions)
+          }
+          onPromptsChange={(prompts) => updateConfig('prompts', prompts)}
         />
       </div>
     </div>

@@ -92,6 +92,7 @@ describe('redteamGenerateOptionsSchema', () => {
         plugins: [{ id: 'harmful:hate', numTests: 5 }],
         provider: 'openai:gpt-4',
         purpose: 'You are an expert content moderator',
+        strict: false,
         write: true,
       },
     });

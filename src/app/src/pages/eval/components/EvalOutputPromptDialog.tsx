@@ -136,6 +136,11 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
+  /**
+   * The actual prompt sent by the provider (if different from the rendered prompt).
+   * Takes priority over metadata.redteamFinalPrompt for display purposes.
+   */
+  providerPrompt?: string;
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
@@ -157,6 +162,7 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  providerPrompt,
   evaluationId,
   testCaseId,
   testIndex,
@@ -472,6 +478,7 @@ export default function EvalOutputPromptDialog({
                 <OutputsPanel
                   output={output}
                   replayOutput={replayOutput}
+                  providerPrompt={providerPrompt}
                   redteamFinalPrompt={metadata?.redteamFinalPrompt}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}

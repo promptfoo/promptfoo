@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
+import { deduplicateTestCases, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
@@ -82,6 +83,14 @@ export async function filterTestsByResults(
     return [];
   }
 
+  // Log unique test cases in filtered results for debugging
+  const uniqueVarsInResults = new Set(
+    filteredResults.map((r) => JSON.stringify(filterRuntimeVars(r.vars))),
+  );
+  logger.debug(
+    `[filterTestsByResults] ${uniqueVarsInResults.size} unique test cases (by vars) in filtered results`,
+  );
+
   // Match tests against filtered results.
   // We try two matching strategies:
   // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
@@ -114,12 +123,74 @@ export async function filterTestsByResults(
     `[filterTestsByResults] Matched ${matchedTests.length} tests out of ${testSuite.tests.length} in test suite`,
   );
 
-  if (matchedTests.length === 0 && filteredResults.length > 0) {
-    logger.warn(
-      `[filterTestsByResults] No tests matched ${filteredResults.length} filtered results. ` +
-        'This may indicate a vars mismatch between stored results and current test suite.',
+  // Extract tests from results that didn't match any config test.
+  // This captures runtime-generated tests (e.g., from remote plugins like cipher-code, wordplay)
+  // that exist in results but not in the config file.
+  const extractedTests: TestCase[] = [];
+  const matchedResultKeys = new Set<string>();
+
+  // Track which results matched config tests
+  for (const result of filteredResults) {
+    for (const test of matchedTests) {
+      const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
+      if (resultIsForTestCase(result, testWithDefaults)) {
+        matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
+        break;
+      }
+    }
+  }
+
+  // Extract tests from unmatched results
+  for (const result of filteredResults) {
+    const resultKey = JSON.stringify(filterRuntimeVars(result.vars));
+
+    // Skip if this result already matched a config test
+    if (matchedResultKeys.has(resultKey)) {
+      continue;
+    }
+
+    // Skip if no testCase data available
+    if (!result.testCase) {
+      logger.debug('[filterTestsByResults] Skipping result without testCase data for extraction');
+      continue;
+    }
+
+    // Skip if we already extracted a test with these vars (dedup within extraction)
+    if (extractedTests.some((t) => JSON.stringify(filterRuntimeVars(t.vars)) === resultKey)) {
+      continue;
+    }
+
+    // Extract test case, filtering runtime vars and omitting provider (security)
+    extractedTests.push({
+      description: result.testCase.description,
+      vars: filterRuntimeVars(result.testCase.vars) || {},
+      assert: result.testCase.assert,
+      metadata: result.testCase.metadata,
+      options: result.testCase.options,
+      // Intentionally omit: provider (security - may contain stale credentials)
+    });
+  }
+
+  if (extractedTests.length > 0) {
+    logger.info(
+      `[filterTestsByResults] Extracted ${extractedTests.length} runtime-generated test(s) from results`,
     );
   }
 
-  return matchedTests;
+  if (matchedTests.length === 0 && extractedTests.length === 0 && filteredResults.length > 0) {
+    logger.warn(
+      `[filterTestsByResults] No tests matched ${filteredResults.length} filtered results. ` +
+        'This may indicate a vars or provider mismatch between stored results and current test suite. ' +
+        'Use LOG_LEVEL=debug for detailed matching info.',
+    );
+  } else if (matchedTests.length + extractedTests.length < uniqueVarsInResults.size) {
+    logger.debug(
+      `[filterTestsByResults] Note: ${uniqueVarsInResults.size - matchedTests.length - extractedTests.length} unique test cases in results ` +
+        'did not match any test in the current test suite and could not be extracted. ' +
+        'This may indicate results without testCase data.',
+    );
+  }
+
+  // Deduplicate and return combined tests
+  return deduplicateTestCases([...matchedTests, ...extractedTests]);
 }

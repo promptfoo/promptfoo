@@ -11,6 +11,7 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -34,6 +35,19 @@ function computeHighlightCount(table: EvaluateTable | null): number {
       count +
       row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
     );
+  }, 0);
+}
+
+/**
+ * Counts the number of outputs that have been manually rated by users.
+ * A result is considered user-rated if it has a componentResult with assertion.type === 'human'.
+ */
+function computeUserRatedCount(table: EvaluateTable | null): number {
+  if (!table) {
+    return 0;
+  }
+  return table.body.reduce((count, row) => {
+    return count + row.outputs.filter(hasHumanRating).length;
   }, 0);
 }
 
@@ -184,11 +198,11 @@ function computeAvailableSeverities(
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
-  filterMode?: EvalResultsFilterMode;
 }
 
 interface ColumnState {
@@ -264,6 +278,7 @@ interface TableState {
   setFilteredResultsCount: (count: number) => void;
 
   highlightedResultsCount: number;
+  userRatedResultsCount: number;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -372,7 +387,9 @@ interface TableState {
   fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
   currentMetadataValuesRequests: Record<string, AbortController | null>;
 
-  reset: () => void;
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -479,7 +496,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 };
 
 export const useTableStore = create<TableState>()(
-  subscribeWithSelector((set, get, store) => ({
+  subscribeWithSelector((set, get) => ({
     evalId: null,
     setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
@@ -499,6 +516,7 @@ export const useTableStore = create<TableState>()(
       set((prevState) => ({
         table,
         highlightedResultsCount: computeHighlightCount(table),
+        userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
       }));
     },
@@ -517,6 +535,7 @@ export const useTableStore = create<TableState>()(
           table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
+          userRatedResultsCount: computeUserRatedCount(table),
           filters: {
             ...prevState.filters,
             options: {
@@ -540,6 +559,7 @@ export const useTableStore = create<TableState>()(
           table: results.table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
+          userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {
             ...prevState.filters,
             options: {
@@ -567,6 +587,7 @@ export const useTableStore = create<TableState>()(
     stats: null,
 
     highlightedResultsCount: 0,
+    userRatedResultsCount: 0,
 
     isFetching: false,
     isStreaming: false,
@@ -578,7 +599,8 @@ export const useTableStore = create<TableState>()(
       const {
         pageIndex = 0,
         pageSize = 50,
-        filterMode = 'all',
+        // Default to current store value to keep initial load consistent with UI state
+        filterMode = get().filterMode,
         searchText = '',
         skipSettingEvalId = false,
         skipLoadingState = false,
@@ -662,6 +684,7 @@ export const useTableStore = create<TableState>()(
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
+            userRatedResultsCount: computeUserRatedCount(data.table),
             config: data.config,
             version: data.version,
             author: data.author,
@@ -1034,11 +1057,9 @@ export const useTableStore = create<TableState>()(
       }
     },
 
-    /**
-     * Resets the store's state to its initial values.
-     */
-    reset: () => {
-      set(store.getInitialState());
-    },
+    filterMode: 'all',
+    setFilterMode: (filterMode: EvalResultsFilterMode) =>
+      set((prevState) => ({ ...prevState, filterMode })),
+    resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
   })),
 );

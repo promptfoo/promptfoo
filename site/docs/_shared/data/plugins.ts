@@ -1485,6 +1485,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-source-attribution/',
+    name: 'RAG Source Attribution',
+    pluginId: 'rag-source-attribution',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
     link: '/docs/red-team/plugins/rbac/',
@@ -1667,6 +1683,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/vlguard/',
     name: 'VLGuard',
     pluginId: 'vlguard',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlsu/',
+    name: 'VLSU',
+    pluginId: 'vlsu',
     applicationTypes: {
       rag: true,
       agent: true,

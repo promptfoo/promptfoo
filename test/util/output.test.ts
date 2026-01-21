@@ -29,14 +29,18 @@ vi.mock('fs', async () => {
   };
 });
 
-vi.mock('fs/promises', async () => {
-  return {
-    readFile: vi.fn(),
-    writeFile: vi.fn(),
-    appendFile: vi.fn(),
-    mkdir: vi.fn(),
-  };
-});
+const mockFileHandle = vi.hoisted(() => ({
+  write: vi.fn().mockResolvedValue(undefined),
+  close: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  appendFile: vi.fn(),
+  mkdir: vi.fn(),
+  open: vi.fn().mockResolvedValue(mockFileHandle),
+}));
 
 vi.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: vi.fn(),
@@ -47,6 +51,12 @@ describe('writeOutput', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Restore mock implementations that vi.resetAllMocks() clears
+    mockFileHandle.write.mockResolvedValue(undefined);
+    mockFileHandle.close.mockResolvedValue(undefined);
+    vi.mocked(fsPromises.open).mockResolvedValue(
+      mockFileHandle as unknown as fsPromises.FileHandle,
+    );
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     // @ts-ignore
     vi.mocked(getDb).mockReturnValue({
@@ -116,8 +126,11 @@ describe('writeOutput', () => {
     const shareableUrl = null;
     await writeOutput(outputPath, eval_, shareableUrl);
 
-    // CSV uses writeFile for header (the batched results use appendFile but eval has no results)
-    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    // CSV uses file handle streaming for memory-efficient export
+    // Headers are always written even when database returns no results
+    expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
+    expect(mockFileHandle.write).toHaveBeenCalled(); // Headers written
+    expect(mockFileHandle.close).toHaveBeenCalled();
   });
 
   it('writeOutput with JSON output', async () => {

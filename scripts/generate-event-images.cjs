@@ -536,4 +536,5 @@ async function main() {
   }
 }
 
+// biome-ignore lint/nursery/noFloatingPromises: should probably migrate this to ESM
 main();

@@ -360,7 +360,7 @@ export class SimulatedUser implements ApiProvider {
     return this.serializeOutput(
       messages,
       tokenUsage,
-      agentResponse as ProviderResponse,
+      agentResponse,
       getSessionId(agentResponse, context),
     );
   }
@@ -372,7 +372,7 @@ export class SimulatedUser implements ApiProvider {
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
-    finalTargetResponse: ProviderResponse,
+    finalTargetResponse: ProviderResponse | undefined,
     sessionId?: string,
   ) {
     return {
@@ -386,7 +386,7 @@ export class SimulatedUser implements ApiProvider {
         messages,
         sessionId,
       },
-      guardrails: finalTargetResponse.guardrails,
+      guardrails: finalTargetResponse?.guardrails,
     };
   }
 }

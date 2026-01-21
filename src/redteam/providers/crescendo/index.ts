@@ -215,10 +215,8 @@ export class CrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
-        });
+        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({});
       }
     }
     return this.scoringProvider;
@@ -327,6 +325,7 @@ export class CrescendoProvider implements ApiProvider {
         )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
+      inputs: this.config.inputs,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -367,6 +366,7 @@ export class CrescendoProvider implements ApiProvider {
             )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
+          inputs: this.config.inputs,
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -629,12 +629,14 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
       ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
@@ -651,7 +653,7 @@ export class CrescendoProvider implements ApiProvider {
             : undefined,
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
     };
   }
 
@@ -739,7 +741,7 @@ export class CrescendoProvider implements ApiProvider {
     const parsedOutput =
       typeof response.output === 'string'
         ? extractFirstJsonObject<{
-            generatedQuestion: string;
+            generatedQuestion: string | Record<string, string>;
             rationaleBehindJailbreak: string;
             lastResponseSummary: string;
           }>(response.output)
@@ -759,10 +761,16 @@ export class CrescendoProvider implements ApiProvider {
       logger.warn(`[Crescendo] Response: ${response.output}`);
     }
 
+    // Handle multi-input mode where generatedQuestion is an object
+    const generatedQuestion =
+      typeof parsedOutput.generatedQuestion === 'object'
+        ? JSON.stringify(parsedOutput.generatedQuestion)
+        : parsedOutput.generatedQuestion;
+
     logger.debug(dedent`
       [Crescendo] Received from red teaming chat:
 
-      generatedQuestion: ${parsedOutput.generatedQuestion}
+      generatedQuestion: ${generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
@@ -779,7 +787,7 @@ export class CrescendoProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      generatedQuestion,
     };
   }
 

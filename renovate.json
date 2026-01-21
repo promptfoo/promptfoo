@@ -2,7 +2,8 @@
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
-  "postUpdateOptions": ["npmDedupe"],
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -17,6 +18,12 @@
     "test/**/go.mod"
   ],
   "packageRules": [
+    {
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
     {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
