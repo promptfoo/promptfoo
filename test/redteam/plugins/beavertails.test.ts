@@ -16,15 +16,29 @@ describe('BeavertailsPlugin', () => {
     expect(BeavertailsPlugin.canGenerateRemote).toBe(false);
   });
 
-<<<<<<< HEAD
+  it('normalizes provided subcategory config values', () => {
+    const plugin = new BeavertailsPlugin({} as any, 'purpose', 'promptVar', {
+      subcategories: ['self-harm' as any, 'privacy_violation'],
+    });
+
+    expect((plugin as any).pluginConfig?.subcategories).toEqual(['self_harm', 'privacy_violation']);
+  });
+
+  it('should have valid subcategories constant', () => {
+    expect(VALID_SUBCATEGORIES).toHaveLength(14);
+    expect(VALID_SUBCATEGORIES).toContain('animal_abuse');
+    expect(VALID_SUBCATEGORIES).toContain('self_harm');
+    expect(VALID_SUBCATEGORIES).toContain('privacy_violation');
+  });
+
   describe('generateTests with includeSafe', () => {
     const mockProvider = {
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       id: () => 'test-provider',
     };
 
     beforeEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should generate tests with correct metadata when includeSafe is true', async () => {
@@ -43,7 +57,7 @@ describe('BeavertailsPlugin', () => {
         },
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
       const plugin = new BeavertailsPlugin(mockProvider as any, 'test', 'query', {
         includeSafe: true,
@@ -100,7 +114,7 @@ describe('BeavertailsPlugin', () => {
         },
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
       const plugin = new BeavertailsPlugin(mockProvider as any, 'test', 'query', {
         includeSafe: true,
@@ -149,7 +163,7 @@ describe('BeavertailsPlugin', () => {
         },
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
       const plugin = new BeavertailsPlugin(mockProvider as any, 'test', 'query', {
         includeSafe: true,
@@ -166,21 +180,6 @@ describe('BeavertailsPlugin', () => {
       expect(unsafeAssertion?.type).toBe('promptfoo:redteam:beavertails');
       expect(unsafeAssertion?.metric).toBe('BeaverTails');
     });
-=======
-  it('normalizes provided subcategory config values', () => {
-    const plugin = new BeavertailsPlugin({} as any, 'purpose', 'promptVar', {
-      subcategories: ['self-harm' as any, 'privacy_violation'],
-    });
-
-    expect((plugin as any).pluginConfig?.subcategories).toEqual(['self_harm', 'privacy_violation']);
-  });
-
-  it('should have valid subcategories constant', () => {
-    expect(VALID_SUBCATEGORIES).toHaveLength(14);
-    expect(VALID_SUBCATEGORIES).toContain('animal_abuse');
-    expect(VALID_SUBCATEGORIES).toContain('self_harm');
-    expect(VALID_SUBCATEGORIES).toContain('privacy_violation');
->>>>>>> origin/main
   });
 });
 
@@ -693,9 +692,9 @@ describe('fetchAllDatasets', () => {
         },
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
-      const result = await fetchAllDatasets(4, true);
+      const result = await fetchAllDatasets(4, { includeSafe: true });
 
       // Should include both safe and unsafe prompts
       expect(result.length).toBe(4);
@@ -721,9 +720,9 @@ describe('fetchAllDatasets', () => {
         })),
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
-      const result = await fetchAllDatasets(10, true);
+      const result = await fetchAllDatasets(10, { includeSafe: true });
 
       const safeCount = result.filter((test) => test.vars.is_safe).length;
       const unsafeCount = result.filter((test) => !test.vars.is_safe).length;
@@ -755,9 +754,9 @@ describe('fetchAllDatasets', () => {
         },
       ];
 
-      jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
-      const result = await fetchAllDatasets(5, false);
+      const result = await fetchAllDatasets(5, { includeSafe: false });
 
       // Should only include unsafe prompts
       expect(result.every((test) => !test.vars.is_safe)).toBe(true);

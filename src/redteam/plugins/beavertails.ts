@@ -23,6 +23,7 @@ const DATASETS = [
 
 const DEFAULT_FETCH_MULTIPLIER = 5;
 const FILTERING_FETCH_MULTIPLIER = 20;
+const INCLUDE_SAFE_FETCH_MULTIPLIER = 50;
 const MAX_FILTER_FETCH_LIMIT = 100_000;
 
 // Valid subcategories in the BeaverTails dataset
@@ -55,49 +56,15 @@ interface BeaverTailsPluginConfig extends PluginConfig {
 
 type BeaverTailsVars = {
   prompt?: string;
-<<<<<<< HEAD
+  category?: string;
   is_safe?: boolean;
   [key: string]: string | boolean | undefined;
-=======
-  category?: string;
-  [key: string]: string | undefined;
->>>>>>> origin/main
 };
 
 interface BeaverTailsTestCase extends Omit<TestCase, 'vars'> {
   vars: BeaverTailsVars;
 }
 
-<<<<<<< HEAD
-export async function fetchAllDatasets(
-  limit: number,
-  includeSafe = false,
-): Promise<BeaverTailsTestCase[]> {
-  try {
-    // When includeSafe is true, fetch more records to ensure good balance of safe/unsafe
-    const fetchLimit = includeSafe ? limit * 50 : limit * 5;
-
-    logger.debug(`[BeaverTails] Fetching ${fetchLimit} records (includeSafe: ${includeSafe})`);
-
-    const allTestCases = await Promise.all(
-      DATASETS.map((dataset) => fetchHuggingFaceDataset(dataset, fetchLimit)),
-    );
-
-    // Flatten array of arrays and filter out empty test cases
-    const validTestCases = allTestCases.flat().filter((test): test is TestCase => {
-      if (!test || typeof test !== 'object' || !('vars' in test)) {
-        return false;
-      }
-
-      // Only filter out safe prompts if we're not including them
-      if (test.vars?.is_safe && !includeSafe) {
-        return false;
-      }
-
-      const vars = test.vars;
-      if (!vars || typeof vars !== 'object') {
-        return false;
-=======
 function normalizeSubcategoryName(name: string): string {
   return name
     .trim()
@@ -179,6 +146,7 @@ export async function fetchAllDatasets(
   config?: BeaverTailsPluginConfig,
 ): Promise<BeaverTailsTestCase[]> {
   try {
+    const includeSafe = config?.includeSafe ?? false;
     const requestedSubcategories =
       config?.subcategories && config.subcategories.length > 0
         ? Array.from(
@@ -200,14 +168,23 @@ export async function fetchAllDatasets(
       logger.debug(`[beavertails] Filtering by subcategories: ${humanReadable.join(', ')}`);
     }
 
+    // When includeSafe is true, fetch more records to ensure good balance of safe/unsafe
     let fetchLimit = Math.max(
       limit,
-      (subcategorySet ? FILTERING_FETCH_MULTIPLIER : DEFAULT_FETCH_MULTIPLIER) * limit,
+      (includeSafe
+        ? INCLUDE_SAFE_FETCH_MULTIPLIER
+        : subcategorySet
+          ? FILTERING_FETCH_MULTIPLIER
+          : DEFAULT_FETCH_MULTIPLIER) * limit,
     );
 
     if (!Number.isFinite(fetchLimit) || fetchLimit <= 0) {
       fetchLimit = limit;
     }
+
+    logger.debug(
+      `[beavertails] Fetching ${fetchLimit} records (includeSafe: ${includeSafe}, subcategories: ${subcategorySet ? 'yes' : 'no'})`,
+    );
 
     let attempts = 0;
     let candidateTestCases: TestCase[] = [];
@@ -224,8 +201,8 @@ export async function fetchAllDatasets(
         if (!test || typeof test !== 'object' || !('vars' in test)) {
           return false;
         }
-        if (test.vars?.is_safe) {
-          // Filter out safe test cases
+        // Only filter out safe prompts if we're not including them
+        if (test.vars?.is_safe && !includeSafe) {
           return false;
         }
         const vars = test.vars;
@@ -261,7 +238,6 @@ export async function fetchAllDatasets(
         );
       } else {
         candidateTestCases = validTestCases;
->>>>>>> origin/main
       }
 
       if (
@@ -272,46 +248,6 @@ export async function fetchAllDatasets(
         break;
       }
 
-<<<<<<< HEAD
-    // Convert TestCase to BeaverTailsTestCase with is_safe preserved
-    const testCases = validTestCases.map(
-      (test): BeaverTailsTestCase => ({
-        ...test,
-        vars: {
-          prompt: test.vars?.prompt as string | undefined,
-          is_safe: test.vars?.is_safe as boolean | undefined,
-        },
-      }),
-    );
-
-    // If including safe prompts, balance the split
-    if (includeSafe) {
-      const safeTests = testCases.filter((t) => t.vars.is_safe);
-      const unsafeTests = testCases.filter((t) => !t.vars.is_safe);
-
-      logger.info(
-        `[BeaverTails] Found ${safeTests.length} safe and ${unsafeTests.length} unsafe prompts from ${testCases.length} total`,
-      );
-
-      const numEach = Math.floor(limit / 2);
-
-      // Check if we have enough of both types
-      if (safeTests.length < numEach || unsafeTests.length < numEach) {
-        logger.warn(
-          `[BeaverTails] Insufficient prompts for 50/50 split. Wanted ${numEach} of each, found ${safeTests.length} safe and ${unsafeTests.length} unsafe`,
-        );
-      }
-
-      const selected = [
-        ...safeTests.sort(() => Math.random() - 0.5).slice(0, numEach),
-        ...unsafeTests.sort(() => Math.random() - 0.5).slice(0, numEach),
-      ];
-
-      return selected.sort(() => Math.random() - 0.5); // Shuffle final order
-    }
-
-    return testCases;
-=======
       const nextFetchLimit = Math.min(fetchLimit * 2, MAX_FILTER_FETCH_LIMIT);
       if (nextFetchLimit === fetchLimit) {
         break;
@@ -329,8 +265,8 @@ export async function fetchAllDatasets(
       );
     }
 
-    // Convert TestCase to BeaverTailsTestCase, preserving category information
-    return candidateTestCases.map((test): BeaverTailsTestCase => {
+    // Convert TestCase to BeaverTailsTestCase, preserving category and is_safe information
+    const testCases = candidateTestCases.map((test): BeaverTailsTestCase => {
       const rawCategory = extractCategory(test.vars);
       const canonicalCategory = toCanonicalSubcategory(rawCategory);
 
@@ -339,10 +275,40 @@ export async function fetchAllDatasets(
         vars: {
           prompt: test.vars?.prompt as string | undefined,
           category: canonicalCategory,
+          is_safe: test.vars?.is_safe as boolean | undefined,
         },
       };
     });
->>>>>>> origin/main
+
+    // If including safe prompts, balance the split 50/50
+    if (includeSafe) {
+      const safeTests = testCases.filter((t) => t.vars.is_safe);
+      const unsafeTests = testCases.filter((t) => !t.vars.is_safe);
+
+      logger.info(
+        `[beavertails] Found ${safeTests.length} safe and ${unsafeTests.length} unsafe prompts from ${testCases.length} total`,
+      );
+
+      const numEach = Math.floor(limit / 2);
+
+      // Check if we have enough of both types
+      if (safeTests.length < numEach || unsafeTests.length < numEach) {
+        logger.warn(
+          `[beavertails] Insufficient prompts for 50/50 split. Wanted ${numEach} of each, found ${safeTests.length} safe and ${unsafeTests.length} unsafe`,
+        );
+      }
+
+      const actualNumEach = Math.min(numEach, safeTests.length, unsafeTests.length);
+
+      const selected = [
+        ...safeTests.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
+        ...unsafeTests.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
+      ];
+
+      return selected.sort(() => Math.random() - 0.5); // Shuffle final order
+    }
+
+    return testCases;
   } catch (error) {
     logger.error(`Error fetching BeaverTails datasets: ${error}`);
     return [];
@@ -412,9 +378,12 @@ export class BeavertailsPlugin extends RedteamPluginBase {
     return this.injectVar;
   }
 
-<<<<<<< HEAD
-  getAssertions(prompt: string, context?: { isSafe?: boolean }): Assertion[] {
+  protected getAssertions(
+    prompt: string,
+    context?: { category?: string; isSafe?: boolean },
+  ): Assertion[] {
     const isSafe = context?.isSafe ?? false;
+    const category = context?.category;
 
     if (isSafe) {
       // Inverted logic for safe prompts: they SHOULD be answered
@@ -443,9 +412,6 @@ Respond with { "pass": true/false, "score": 1/0, "reason": "..." }`,
     }
 
     // Original logic for unsafe prompts: they SHOULD be refused
-=======
-  getAssertions(_prompt: string, category?: string): Assertion[] {
->>>>>>> origin/main
     return [
       {
         type: 'promptfoo:redteam:beavertails',
@@ -456,12 +422,7 @@ Respond with { "pass": true/false, "score": 1/0, "reason": "..." }`,
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-<<<<<<< HEAD
-    const includeSafe = this.config?.includeSafe ?? false;
-    const testCases = await fetchAllDatasets(n, includeSafe);
-=======
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
->>>>>>> origin/main
 
     // Take n random test cases, or all if we have fewer than n
     const selectedTests = testCases
@@ -472,9 +433,10 @@ Respond with { "pass": true/false, "score": 1/0, "reason": "..." }`,
           typeof test.vars.prompt === 'string',
       );
 
-<<<<<<< HEAD
     return selectedTests.map((test) => {
       const isSafe = test.vars.is_safe ?? false;
+      const category = test.vars.category;
+
       return {
         vars: {
           [this.injectVar]: test.vars.prompt,
@@ -482,24 +444,14 @@ Respond with { "pass": true/false, "score": 1/0, "reason": "..." }`,
         metadata: {
           isSafe,
           label: isSafe ? 'safe' : 'unsafe',
+          ...(category && {
+            beavertailsCategory: category,
+            category,
+          }),
         },
-        assert: this.getAssertions(test.vars.prompt, { isSafe }),
+        assert: this.getAssertions(test.vars.prompt, { category, isSafe }),
       };
     });
-=======
-    return selectedTests.map((test) => ({
-      vars: {
-        [this.injectVar]: test.vars.prompt,
-      },
-      assert: this.getAssertions(test.vars.prompt, test.vars.category),
-      metadata: test.vars.category
-        ? {
-            beavertailsCategory: test.vars.category,
-            category: test.vars.category,
-          }
-        : undefined,
-    }));
->>>>>>> origin/main
   }
 }
 

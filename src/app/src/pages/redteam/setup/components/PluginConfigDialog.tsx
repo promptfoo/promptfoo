@@ -293,9 +293,7 @@ export default function PluginConfigDialog({
       case 'aegis':
         specificConfig = (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {getGuardrailPluginDescription(plugin)}
-            </p>
+            <p className="text-sm text-muted-foreground">{getGuardrailPluginDescription(plugin)}</p>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="include-safe"
