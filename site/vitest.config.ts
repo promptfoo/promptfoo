@@ -25,6 +25,7 @@ export default defineConfig({
       reportsDirectory: './coverage',
       include: ['src/**/*.ts', 'src/**/*.tsx'],
       exclude: ['src/**/*.d.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/setupTests.ts'],
+      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
       all: true,
     },
   },

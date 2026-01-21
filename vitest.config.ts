@@ -63,6 +63,7 @@ export default defineConfig({
         'src/main.ts',
         'src/migrate.ts',
       ],
+      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
       all: true,
     },
   },
