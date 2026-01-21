@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import Table from 'cli-table3';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -27,8 +26,6 @@ import {
   MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  riskCategorySeverityMap,
-  Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
 } from './constants';
@@ -38,9 +35,10 @@ import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
+import { generateReport, getPluginBaseDisplayId, getPluginSeverity } from './report';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
+import { extractGoalFromPrompt, extractVariablesFromJson } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
@@ -79,155 +77,6 @@ const MAX_MAX_CONCURRENCY = 20;
  * @param pluginConfig - Optional configuration for the plugin.
  * @returns The severity level.
  */
-function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>): Severity {
-  if (pluginConfig?.severity) {
-    return pluginConfig.severity;
-  }
-
-  const shortId = getShortPluginId(pluginId);
-  return shortId in riskCategorySeverityMap
-    ? riskCategorySeverityMap[shortId as keyof typeof riskCategorySeverityMap]
-    : Severity.Low;
-}
-
-/**
- * Generates a unique base display ID for a plugin instance.
- * For policy plugins, includes an index number and truncated policy text to differentiate multiple instances.
- * @param plugin - The plugin configuration.
- * @param index - Optional index number for plugins with the same base ID (e.g., multiple policy plugins).
- * @returns A unique base display ID for the plugin.
- */
-function getPluginBaseDisplayId(
-  plugin: { id: string; config?: Record<string, any> },
-  index?: number,
-): string {
-  if (plugin.id === 'policy') {
-    const policyText =
-      typeof plugin.config?.policy === 'string'
-        ? plugin.config.policy.trim().replace(/\n+/g, ' ')
-        : '';
-    const truncated =
-      policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-    // Include index to ensure uniqueness even if policy text snippets are identical
-    return index !== undefined ? `policy #${index}: "${truncated}"` : `policy: "${truncated}"`;
-  }
-  return plugin.id;
-}
-
-/**
- * Determines the status of test generation based on requested and generated counts.
- * @param requested - The number of requested tests.
- * @param generated - The number of generated tests.
- * @returns A colored string indicating the status.
- */
-function getStatus(requested: number, generated: number): string {
-  if (requested === 0 && generated === 0) {
-    return chalk.gray('Skipped');
-  }
-  if (generated === 0) {
-    return chalk.red('Failed');
-  }
-  if (generated < requested) {
-    return chalk.yellow('Partial');
-  }
-  return chalk.green('Success');
-}
-
-/**
- * Generates a report of plugin and strategy results.
- * @param pluginResults - Results from plugin executions.
- * @param strategyResults - Results from strategy executions.
- * @returns A formatted string containing the report.
- */
-/**
- * Extracts sorting key from a plugin/strategy display ID.
- * Handles formats like "(Hmong) policy #1: ...", "policy #12: ...", "jailbreak:meta (Hmong)"
- * Returns [policyNumber, language, baseId] for proper sorting.
- */
-function extractSortKey(id: string): [number, string, string] {
-  // Extract language prefix like "(Hmong) " or suffix like " (Hmong)"
-  const langPrefixMatch = id.match(/^\(([^)]+)\)\s*/);
-  const langSuffixMatch = id.match(/\s+\(([^)]+)\)$/);
-  const language = langPrefixMatch?.[1] || langSuffixMatch?.[1] || '';
-
-  // Remove language from ID for base comparison
-  let baseId = id;
-  if (langPrefixMatch) {
-    baseId = id.slice(langPrefixMatch[0].length);
-  }
-  if (langSuffixMatch) {
-    baseId = baseId.slice(0, -langSuffixMatch[0].length);
-  }
-
-  // Extract policy number if present (e.g., "policy #12: ...")
-  const policyMatch = baseId.match(/policy\s*#(\d+)/);
-  const policyNum = policyMatch ? parseInt(policyMatch[1], 10) : 0;
-
-  return [policyNum, language, baseId];
-}
-
-/**
- * Sorts plugin/strategy IDs: by policy number (numeric), then by language, then alphabetically.
- */
-function sortReportIds(a: string, b: string): number {
-  const [aNum, aLang, aBase] = extractSortKey(a);
-  const [bNum, bLang, bBase] = extractSortKey(b);
-
-  // First sort by policy number (0 means no policy number, goes last among policies)
-  if (aNum !== bNum) {
-    if (aNum === 0) {
-      return 1;
-    }
-    if (bNum === 0) {
-      return -1;
-    }
-    return aNum - bNum;
-  }
-
-  // Then sort by base ID (for non-policy plugins)
-  const baseCompare = aBase.localeCompare(bBase);
-  if (baseCompare !== 0) {
-    return baseCompare;
-  }
-
-  // Finally sort by language
-  return aLang.localeCompare(bLang);
-}
-
-function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
-  strategyResults: Record<string, { requested: number; generated: number }>,
-): string {
-  const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [5, 10, 40, 12, 12, 14],
-  });
-
-  let rowIndex = 1;
-
-  Object.entries(pluginResults)
-    .sort((a, b) => sortReportIds(a[0], b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
-    });
-
-  Object.entries(strategyResults)
-    .sort((a, b) => sortReportIds(a[0], b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([
-        rowIndex++,
-        'Strategy',
-        id,
-        requested,
-        generated,
-        getStatus(requested, generated),
-      ]);
-    });
-
-  return `\nTest Generation Report:\n${table.toString()}`;
-}
 
 /**
  * Resolves top-level file paths in the plugin configuration.
