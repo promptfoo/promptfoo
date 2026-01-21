@@ -353,6 +353,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'vlsu',
   'wordplay',
   'xstest',
 ] as const;
@@ -376,6 +377,7 @@ export const DATASET_EXEMPT_PLUGINS = [
   'pliny',
   'unsafebench',
   'vlguard',
+  'vlsu',
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)

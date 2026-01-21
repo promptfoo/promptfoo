@@ -2109,6 +2109,7 @@
                       "unsafebench",
                       "unverifiable-claims",
                       "vlguard",
+                      "vlsu",
                       "wordplay",
                       "xstest"
                     ]
@@ -2349,6 +2350,7 @@
                           "unsafebench",
                           "unverifiable-claims",
                           "vlguard",
+                          "vlsu",
                           "wordplay",
                           "xstest"
                         ]

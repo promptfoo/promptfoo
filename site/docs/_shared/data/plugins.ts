@@ -1706,6 +1706,21 @@ export const PLUGINS = [
     vulnerabilityType: 'harmful',
   },
   {
+    category: 'Dataset',
+    description:
+      'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlsu/',
+    name: 'VLSU',
+    pluginId: 'vlsu',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
     category: 'Trust and Safety',
     description:
       'Tests whether AI systems can be tricked into generating profanity through innocent-seeming wordplay',

@@ -18,7 +18,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
@@ -398,7 +398,7 @@ function ResultsTable({
         modifiedComponentResults = true;
 
         const humanResultIndex = componentResults.findIndex(
-          (result) => result.assertion?.type === 'human',
+          (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
 
         // If isPass is null, remove the human assertion (unset manual grading)
@@ -427,7 +427,7 @@ function ResultsTable({
             score: finalScore,
             reason: 'Manual result (overrides all other grading results)',
             comment,
-            assertion: { type: 'human' as const },
+            assertion: { type: HUMAN_ASSERTION_TYPE },
           };
 
           if (humanResultIndex === -1) {
