@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteErrorResults,
   getErrorResultIds,
+  recalculatePromptMetrics,
   shouldShareResults,
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
@@ -274,6 +275,215 @@ describe('retry command', () => {
         configSharing: undefined,
       });
       expect(typeof result).toBe('boolean');
+    });
+  });
+
+  describe('recalculatePromptMetrics', () => {
+    it('should recalculate metrics after results change', async () => {
+      // Create an eval with prompts
+      const evalRecord = await Eval.create({}, []);
+      const db = getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      // Add a prompt to the eval
+      await evalRecord.addPrompts([mockPrompt]);
+
+      // Insert results with different scores and outcomes
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-metric-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          latencyMs: 100,
+          cost: 0.01,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: { accuracy: 1 },
+        },
+        {
+          id: `${evalRecord.id}-metric-2`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: false,
+          score: 0,
+          latencyMs: 200,
+          cost: 0.02,
+          failureReason: ResultFailureReason.ASSERT,
+          namedScores: { accuracy: 0 },
+        },
+      ]);
+
+      // Recalculate metrics
+      await recalculatePromptMetrics(evalRecord);
+
+      // Verify metrics were recalculated
+      expect(evalRecord.prompts[0].metrics).toBeDefined();
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.testFailCount).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.testErrorCount).toBe(0);
+      expect(evalRecord.prompts[0].metrics?.score).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.totalLatencyMs).toBe(300);
+      expect(evalRecord.prompts[0].metrics?.cost).toBe(0.03);
+    });
+
+    it('should count ERROR results correctly', async () => {
+      const evalRecord = await Eval.create({}, []);
+      const db = getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt]);
+
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-err-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        },
+        {
+          id: `${evalRecord.id}-err-2`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        },
+      ]);
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.testFailCount).toBe(0);
+      expect(evalRecord.prompts[0].metrics?.testErrorCount).toBe(1);
+    });
+
+    it('should handle multiple prompts', async () => {
+      const evalRecord = await Eval.create({}, []);
+      const db = getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt1 = { raw: 'test1', display: 'test1', label: 'test1', provider: 'test-provider' };
+      const mockPrompt2 = { raw: 'test2', display: 'test2', label: 'test2', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt1, mockPrompt2]);
+
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-multi-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: mockPrompt1,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        },
+        {
+          id: `${evalRecord.id}-multi-2`,
+          evalId: evalRecord.id,
+          promptIdx: 1,
+          testIdx: 0,
+          prompt: mockPrompt2,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ASSERT,
+          namedScores: {},
+        },
+      ]);
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.testFailCount).toBe(0);
+      expect(evalRecord.prompts[1].metrics?.testPassCount).toBe(0);
+      expect(evalRecord.prompts[1].metrics?.testFailCount).toBe(1);
+    });
+
+    it('should handle empty results', async () => {
+      const evalRecord = await Eval.create({}, []);
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt]);
+
+      // No results inserted
+      await recalculatePromptMetrics(evalRecord);
+
+      // Should have initialized metrics with zeros
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(0);
+      expect(evalRecord.prompts[0].metrics?.testFailCount).toBe(0);
+      expect(evalRecord.prompts[0].metrics?.testErrorCount).toBe(0);
+      expect(evalRecord.prompts[0].metrics?.score).toBe(0);
+    });
+
+    it('should accumulate named scores correctly', async () => {
+      const evalRecord = await Eval.create({}, []);
+      const db = getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt]);
+
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-named-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: { accuracy: 0.9, relevance: 0.8 },
+        },
+        {
+          id: `${evalRecord.id}-named-2`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: { accuracy: 0.7, relevance: 0.9 },
+        },
+      ]);
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(evalRecord.prompts[0].metrics?.namedScores).toBeDefined();
+      expect(evalRecord.prompts[0].metrics?.namedScores?.accuracy).toBeCloseTo(1.6, 1);
+      expect(evalRecord.prompts[0].metrics?.namedScores?.relevance).toBeCloseTo(1.7, 1);
     });
   });
 });
