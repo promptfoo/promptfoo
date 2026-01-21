@@ -11,7 +11,12 @@ import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '.
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
+import {
+  ComparisonEvalNotFoundError,
+  evalTableToJson,
+  generateEvalCsv,
+  mergeComparisonTables,
+} from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -215,6 +220,29 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Unified CSV export path - handles both simple and comparison exports
+  // This is the same code path used by CLI exports, ensuring consistent output
+  if (format === 'csv') {
+    try {
+      const csvData = await generateEvalCsv(eval_, {
+        filterMode,
+        searchQuery: searchText,
+        filters: filters as string[],
+        comparisonEvalIds: comparisonEvalIds as string[],
+        findEvalById: Eval.findById.bind(Eval),
+      });
+      setDownloadHeaders(res, `${id}.csv`, 'text/csv');
+      res.send(csvData);
+      return;
+    } catch (error) {
+      if (error instanceof ComparisonEvalNotFoundError) {
+        res.status(404).json({ error: 'Comparison eval not found' });
+        return;
+      }
+      throw error;
+    }
+  }
+
   const table = await eval_.getTablePage({
     offset,
     limit,
@@ -228,22 +256,14 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    const comparisonEvals = await Promise.all(
+    // Fetch comparison evals and their tables, keeping track of eval IDs
+    const comparisonData = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
-        return comparisonEval_;
-      }),
-    );
-
-    if (comparisonEvals.some((comparisonEval_) => !comparisonEval_)) {
-      res.status(404).json({ error: 'Comparison eval not found' });
-      return;
-    }
-
-    const comparisonTables = await Promise.all(
-      comparisonEvals.map(async (comparisonEval_) => {
-        invariant(comparisonEval_, 'Comparison eval not found');
-        return comparisonEval_.getTablePage({
+        if (!comparisonEval_) {
+          return null;
+        }
+        const comparisonTable = await comparisonEval_.getTablePage({
           offset: 0,
           limit: indices.length,
           filterMode: 'all',
@@ -251,56 +271,28 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           searchQuery: searchText,
           filters: filters as string[],
         });
+        return { evalId: comparisonEval_.id, table: comparisonTable };
       }),
     );
 
-    returnTable = {
-      head: {
-        prompts: [
-          ...table.head.prompts.map((prompt) => ({
-            ...prompt,
-            label: `[${id}] ${prompt.label || ''}`,
-          })),
-          ...comparisonTables.flatMap((table) =>
-            table.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${table.id}] ${prompt.label || ''}`,
-            })),
-          ),
-        ],
-        vars: table.head.vars, // Assuming vars are the same
-      },
-      body: table.body.map((row) => {
-        // Find matching row in comparison table by test index
-        const testIdx = row.testIdx;
-        const matchingRows = comparisonTables
-          .map((table) => {
-            const compRow = table.body.find((compRow) => {
-              const compTestIdx = compRow.testIdx;
-              return compTestIdx === testIdx;
-            });
-            return compRow;
-          })
-          .filter((r) => r !== undefined);
+    // Check if any comparison evals were not found
+    if (comparisonData.some((data) => data === null)) {
+      res.status(404).json({ error: 'Comparison eval not found' });
+      return;
+    }
 
-        return {
-          ...row,
-          outputs: [...row.outputs, ...(matchingRows.flatMap((r) => r?.outputs) || [])],
-        };
-      }),
-    };
+    // Use shared merge function (fixes bug where table.id was incorrectly referenced)
+    returnTable = mergeComparisonTables(
+      id,
+      table,
+      comparisonData.filter(
+        (data): data is { evalId: string; table: typeof table } => data !== null,
+      ),
+    );
   }
 
-  // Handle export formats
-  if (format === 'csv') {
-    const csvData = evalTableToCsv(returnTable, {
-      isRedteam: Boolean(eval_.config.redteam),
-    });
-
-    setDownloadHeaders(res, `${id}.csv`, 'text/csv');
-    res.send(csvData);
-    return;
-  } else if (format === 'json') {
+  // Handle JSON export format (CSV is handled above via unified generateEvalCsv)
+  if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
     setDownloadHeaders(res, `${id}.json`, 'application/json');
