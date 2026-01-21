@@ -19,13 +19,13 @@ describe('Separator', () => {
   it('applies correct horizontal styles', () => {
     const { container } = render(<Separator orientation="horizontal" />);
     const separator = container.firstChild;
-    expect(separator).toHaveClass('h-[1px]', 'w-full');
+    expect(separator).toHaveClass('h-px', 'w-full');
   });
 
   it('applies correct vertical styles', () => {
     const { container } = render(<Separator orientation="vertical" />);
     const separator = container.firstChild;
-    expect(separator).toHaveClass('h-full', 'w-[1px]');
+    expect(separator).toHaveClass('h-full', 'w-px');
   });
 
   it('is decorative by default', () => {
@@ -44,5 +44,17 @@ describe('Separator', () => {
     const { container } = render(<Separator className="custom-separator" />);
     const separator = container.firstChild;
     expect(separator).toHaveClass('custom-separator');
+  });
+
+  it('applies bg-border class for horizontal orientation', () => {
+    const { container } = render(<Separator orientation="horizontal" />);
+    const separator = container.firstChild;
+    expect(separator).toHaveClass('bg-border');
+  });
+
+  it('applies bg-border class for vertical orientation', () => {
+    const { container } = render(<Separator orientation="vertical" />);
+    const separator = container.firstChild;
+    expect(separator).toHaveClass('bg-border');
   });
 });

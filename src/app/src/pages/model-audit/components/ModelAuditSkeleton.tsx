@@ -102,7 +102,7 @@ export function HistoryTableSkeleton() {
           <Skeleton className="h-4 w-3/10" />
           <Skeleton className="h-6 w-16" />
           <Skeleton className="h-4 w-1/6" />
-          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="size-8 rounded-full" />
         </div>
       ))}
     </div>

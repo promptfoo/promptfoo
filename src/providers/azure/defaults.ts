@@ -1,6 +1,37 @@
-import type { AzureModelCost } from './types';
+import type { AzureModelCost, AzureVideoSize } from './types';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
+
+// =============================================================================
+// Video Generation Constants (Sora)
+// =============================================================================
+
+/**
+ * Default API version for Azure video generation
+ */
+export const DEFAULT_AZURE_VIDEO_API_VERSION = 'preview';
+
+/**
+ * Valid Azure Sora video dimensions (width x height)
+ */
+export const AZURE_VIDEO_DIMENSIONS: Record<AzureVideoSize, { width: number; height: number }> = {
+  '480x480': { width: 480, height: 480 },
+  '854x480': { width: 854, height: 480 },
+  '720x720': { width: 720, height: 720 },
+  '1280x720': { width: 1280, height: 720 },
+  '1080x1080': { width: 1080, height: 1080 },
+  '1920x1080': { width: 1920, height: 1080 },
+};
+
+/**
+ * Valid Azure Sora durations in seconds
+ */
+export const AZURE_VIDEO_DURATIONS = [5, 10, 15, 20] as const;
+
+/**
+ * Azure Sora cost per second (estimate - actual pricing from Azure documentation)
+ */
+export const AZURE_SORA_COST_PER_SECOND = 0.1;
 
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================

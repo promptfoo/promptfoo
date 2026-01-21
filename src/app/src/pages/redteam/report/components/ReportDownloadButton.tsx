@@ -49,7 +49,9 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
         'Plugin ID': pluginId ?? '',
-        Strategy: getStrategyIdFromTest(result.testCase),
+        // TODO: getStrategyIdFromTest expects TestWithMetadata but we're passing testCase directly
+        // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
+        Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
         Prompt:
           result.vars.query?.toString() ||
@@ -163,7 +165,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
               disabled={isDownloading}
               className="mt-1 text-muted-foreground hover:text-foreground"
             >
-              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="h-5 w-5" />}
+              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="size-5" />}
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>

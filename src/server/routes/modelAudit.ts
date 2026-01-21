@@ -482,7 +482,7 @@ modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Prom
 // Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
@@ -499,7 +499,7 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });

@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -35,6 +36,7 @@ import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -45,11 +47,13 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { isApiProvider } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isPromptAllowed } from './util/promptMatching';
+import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -73,7 +77,9 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
+  VarValue,
 } from './types/index';
+import type { CallApiContextParams } from './types/providers';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -234,27 +240,22 @@ function updateAssertionMetrics(
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
- * prompt labels. Providers can be configured with a `prompts` attribute, which
- * corresponds to an array of prompt labels. Labels can either refer to a group
- * (for example from a file) or to individual prompts. If the attribute is
- * present, this function validates that the prompt labels fit the matching
- * criteria of the provider. Examples:
+ * prompt references. Providers and tests can be configured with a `prompts` attribute,
+ * which corresponds to an array of prompt labels or IDs. References can either match
+ * exactly or use wildcard patterns. Examples:
  *
- * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
- * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ * - `prompts: ['examplePrompt']` matches prompt with label OR id 'examplePrompt'
+ * - `prompts: ['exampleGroup:*']` matches any prompt with label/id starting with 'exampleGroup:'
+ * - `prompts: ['exampleGroup']` matches 'exampleGroup' exactly OR any label/id starting with 'exampleGroup:'
  *
  * If no `prompts` attribute is present, all prompts are allowed by default.
  *
  * @param prompt - The prompt object to check.
- * @param allowedPrompts - The list of allowed prompt labels.
+ * @param allowedPrompts - The list of allowed prompt labels or IDs.
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
-  return (
-    !Array.isArray(allowedPrompts) ||
-    allowedPrompts.includes(prompt.label) ||
-    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
-  );
+  return isPromptAllowed(prompt, allowedPrompts);
 }
 
 /**
@@ -290,6 +291,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  evalId,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -300,12 +302,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // Deep clone vars to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
   // Crescendo) may add runtime variables like sessionId to vars during execution.
-  // Without this copy, those mutations would persist to the stored testCase, causing
-  // test matching to fail when using --filter-errors-only or --filter-failing.
-  const vars = { ...(test.vars || {}) };
+  // Without this deep clone, mutations to nested objects would persist to the stored
+  // testCase, causing non-deterministic behavior where test execution order affects results.
+  const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -324,6 +326,11 @@ export async function runEval({
   Object.assign(vars, registers);
 
   // Initialize these outside try block so they're in scope for the catch
+  // Merge test.options into prompt.config (test options override prompt config)
+  const mergedPromptConfig = {
+    ...(prompt.config ?? {}),
+    ...(test.options ?? {}),
+  };
   const setup = {
     provider: {
       id: provider.id(),
@@ -333,7 +340,7 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: prompt.config,
+      config: mergedPromptConfig,
     },
     vars,
   };
@@ -342,7 +349,10 @@ export async function runEval({
 
   try {
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+    // For redteam tests, skip rendering the inject variable to prevent double-rendering of
+    // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
+    const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider, skipRenderVars);
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
@@ -372,12 +382,18 @@ export async function runEval({
         testSuite,
       );
 
-      const callApiContext: any = {
+      // Create a prompt object with merged config for the provider
+      // This allows test.options to override prompt.config for per-test structured output
+      const promptWithMergedConfig = {
+        ...prompt,
+        config: mergedPromptConfig,
+      };
+      const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
+        prompt: promptWithMergedConfig,
         filters,
         originalProvider: provider,
         test,
@@ -446,7 +462,7 @@ export async function runEval({
       failureReason: ResultFailureReason.NONE,
       score: 0,
       namedScores: {},
-      latencyMs,
+      latencyMs: response.latencyMs ?? latencyMs,
       cost: response.cost,
       metadata: {
         ...test.metadata,
@@ -518,6 +534,7 @@ export async function runEval({
 
       // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
       const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        evalId,
         testIdx,
         promptIdx,
       });
@@ -583,10 +600,20 @@ export async function runEval({
 
     return [ret];
   } catch (err) {
+    const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
+      error: err,
+      provider,
+      test,
+      promptIdx,
+      testIdx,
+    });
+
+    logger.error('Provider call failed during eval', logContext);
+
     return [
       {
         ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
+        error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
         score: 0,
@@ -596,9 +623,80 @@ export async function runEval({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
+        metadata,
       },
     ];
   }
+}
+
+function buildProviderErrorContext({
+  error,
+  provider,
+  test,
+  promptIdx,
+  testIdx,
+}: {
+  error: unknown;
+  provider: ApiProvider;
+  test: AtomicTestCase;
+  promptIdx: number;
+  testIdx: number;
+}) {
+  const providerId = provider.id();
+  const providerLabel = provider.label;
+  // Type guard for errors with HTTP response information
+  const errorWithResponse = error as {
+    response?: { status?: number; statusText?: string; data?: unknown };
+  };
+  const status = errorWithResponse?.response?.status;
+  const statusText = errorWithResponse?.response?.statusText;
+  const responseData = errorWithResponse?.response?.data;
+  const responseSnippet = (() => {
+    if (responseData == null) {
+      return undefined;
+    }
+    const asString =
+      typeof responseData === 'string' ? responseData : safeJsonStringify(responseData);
+    if (!asString) {
+      return undefined;
+    }
+    return asString.length > 500 ? `${asString.slice(0, 500)}...` : asString;
+  })();
+  const errorMessage = String(error);
+  const stack = (error as Error)?.stack;
+  // Stack traces typically start with the error message, so check if stack already contains
+  // the message to avoid duplication like "Error: msg\n\nError: msg\n    at ..."
+  const errorWithStack = stack
+    ? stack.startsWith(errorMessage)
+      ? stack // Stack already contains the message
+      : `${errorMessage}\n\n${stack}`
+    : errorMessage;
+
+  return {
+    errorWithStack,
+    metadata: {
+      ...(test.metadata || {}),
+      errorContext: {
+        providerId,
+        providerLabel,
+        status,
+        statusText,
+        responseSnippet,
+      },
+    },
+    logContext: {
+      providerId,
+      providerLabel,
+      status,
+      statusText,
+      responseSnippet,
+      promptIdx,
+      testIdx,
+      pluginId: test.metadata?.pluginId,
+      strategyId: test.metadata?.strategyId,
+      error,
+    },
+  };
 }
 
 /**
@@ -610,7 +708,7 @@ export async function runEval({
  * @returns Formatted variables string or fallback message
  */
 export function formatVarsForDisplay(
-  vars: Record<string, any> | undefined,
+  vars: Record<string, unknown> | undefined,
   maxLength: number,
 ): string {
   if (!vars || Object.keys(vars).length === 0) {
@@ -637,13 +735,13 @@ export function formatVarsForDisplay(
 }
 
 export function generateVarCombinations(
-  vars: Record<string, string | string[] | any>,
-): Record<string, string | any[]>[] {
+  vars: Record<string, string | string[] | unknown>,
+): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | any[]>[] = [{}];
+  const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = [];
+    let values: Array<string | object> = [];
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
@@ -671,7 +769,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, any>[] = [];
+    const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -893,7 +991,7 @@ class Evaluator {
       }
     }
 
-    this.evalRecord.addPrompts(prompts);
+    await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1043,6 +1141,10 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
+      // If the test case doesn't have prompts filter, use the one from defaultTest
+      testCase.prompts =
+        testCase.prompts ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.prompts : undefined);
       // If the test case doesn't have a provider, use the one from defaultTest
       // Note: defaultTest.provider may be a raw config object that needs to be loaded
       if (
@@ -1071,6 +1173,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1102,9 +1208,18 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
+              // Provider-level prompt filtering
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+                continue;
+              }
+              // Test-level prompt filtering
+              if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
               runEvalOptions.push({
@@ -1154,6 +1269,7 @@ class Evaluator {
                 isRedteam: testSuite.redteam != null,
                 concurrency,
                 abortSignal: options.abortSignal,
+                evalId: this.evalRecord.id,
               });
               promptIdx++;
             }
@@ -1296,9 +1412,12 @@ class Evaluator {
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
 
           // Count assertions contributing to this named score
+          // Note: We need to render template variables in assertion metrics before comparing
+          const testVars = row.testCase?.vars || {};
           let contributingAssertions = 0;
           row.gradingResult?.componentResults?.forEach((result) => {
-            if (result.assertion?.metric === key) {
+            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
+            if (renderedMetric === key) {
               contributingAssertions++;
             }
           });
@@ -1309,17 +1428,34 @@ class Evaluator {
 
         if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
+          // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
+          // This is the number of test evaluations for THIS prompt, not global progress
+          const promptEvalCount =
+            metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+          // Warn if user has a metric named __count (it will be overridden)
+          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+            logger.warn(
+              "Metric name '__count' is reserved for derived metrics and will be overridden.",
+            );
+          }
+          // Create evaluation context with named scores and __count for average calculations
+          const evalContext: Record<string, number> = {
+            ...metrics.namedScores,
+            __count: promptEvalCount,
+          };
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
             try {
               if (typeof metric.value === 'function') {
-                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+                metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
               } else {
-                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                const evaluatedValue = math.evaluate(metric.value, evalContext);
                 metrics.namedScores[metric.name] = evaluatedValue;
               }
+              // Update context with the new derived metric value for subsequent metrics
+              evalContext[metric.name] = metrics.namedScores[metric.name];
             } catch (error) {
               logger.debug(
                 `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
@@ -1372,19 +1508,25 @@ class Evaluator {
 
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
-      const { signal } = abortController;
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
+        : abortController.signal;
 
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
+
+      let timeoutId: NodeJS.Timeout | undefined;
+      let didTimeout = false;
 
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
+              didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
 
@@ -1398,13 +1540,13 @@ class Evaluator {
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-
-              // Clear the timeout to prevent memory leaks
-              clearTimeout(timeoutId);
             }, timeoutMs);
           }),
         ]);
       } catch (error) {
+        if (!didTimeout) {
+          throw error;
+        }
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1443,6 +1585,8 @@ class Evaluator {
           metrics.totalLatencyMs += timeoutMs;
         }
 
+        numComplete++;
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1470,6 +1614,10 @@ class Evaluator {
               cost: 0,
             },
           );
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
       }
     };
@@ -1571,12 +1719,29 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // User interruption or max duration timeout
-        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        // Distinguish between max-duration timeout and user SIGINT
         if (evalTimedOut) {
+          // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
+          // User SIGINT: early exit, skip comparisons/afterAll/telemetry
+          // Results already persisted by addResult() calls during evaluation
+          // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          if (progressBarManager) {
+            progressBarManager.stop();
+          }
+          if (ciProgressReporter) {
+            ciProgressReporter.finish();
+          }
+          // Persist vars and prompts so UI/export shows correct headers
+          this.evalRecord.setVars(Array.from(vars));
+          await this.evalRecord.addPrompts(prompts);
+          updateSignalFile(this.evalRecord.id);
+          return this.evalRecord;
         }
       } else {
         if (ciProgressReporter) {
@@ -1889,11 +2054,25 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
-      suite: testSuite,
-    });
+    // Only load results from database if there are extensions to run
+    if (testSuite.extensions?.length) {
+      // Load results from database for extensions (results may not be in memory for persisted evals)
+      const allResults = await this.evalRecord.getResults();
+
+      // Convert EvalResult model instances to plain EvaluateResult objects for extensions
+      const resultsForExtension: EvaluateResult[] = allResults.map(
+        (result): EvaluateResult =>
+          'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+      );
+
+      await runExtensionHook(testSuite.extensions, 'afterAll', {
+        prompts: this.evalRecord.prompts,
+        results: resultsForExtension,
+        suite: testSuite,
+        evalId: this.evalRecord.id,
+        config: this.evalRecord.config,
+      });
+    }
 
     // Calculate additional metrics for telemetry
     const endTime = Date.now();
@@ -2059,6 +2238,9 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Reset cliState.maxConcurrency to prevent stale state between evaluations
+      cliState.maxConcurrency = undefined;
     }
   }
 }

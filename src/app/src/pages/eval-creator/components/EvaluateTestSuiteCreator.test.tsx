@@ -1,8 +1,5 @@
-import React from 'react';
-
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -78,11 +75,6 @@ vi.mock('@app/utils/api', () => ({
   ),
 }));
 
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
-
 describe('EvaluateTestSuiteCreator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -91,7 +83,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
@@ -99,7 +91,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
@@ -115,7 +107,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog after the Reset button in the dialog is clicked', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -137,7 +129,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const initialPrompts = ['Test Prompt {{var}}'];
     useStore.getState().updateConfig({ prompts: initialPrompts });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Navigate to step 3 (Test Cases) to see the TestCasesSection
     const step3Button = screen.getByRole('button', { name: /add test cases/i });
@@ -176,7 +168,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -209,7 +201,7 @@ describe('EvaluateTestSuiteCreator', () => {
     };
     useStore.getState().updateConfig(nonEmptyState);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
@@ -226,8 +218,84 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(currentConfig).toEqual(DEFAULT_CONFIG);
   });
 
+  it('should render the Upload YAML button in the header', () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    const uploadButton = screen.getByRole('button', { name: /Upload YAML/i });
+    expect(uploadButton).toBeInTheDocument();
+  });
+
+  it('should successfully upload and parse a valid YAML file', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
+    const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    expect(useStore.getState().config.description).toBe('Test Config');
+  });
+
+  it('should handle invalid YAML with error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockInvalidYaml = 'invalid: yaml: content: [unclosed';
+    const mockFile = new File([mockInvalidYaml], 'invalid.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse YAML'),
+        'error',
+      );
+    });
+  });
+
+  it('should handle non-object YAML with error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    // YAML that parses to a string instead of an object
+    const mockScalarYaml = 'just a plain string';
+    const mockFile = new File([mockScalarYaml], 'scalar.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Invalid YAML configuration', 'error');
+    });
+  });
+
+  it('should reset file input after upload to allow re-uploading same file', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = 'description: Test';
+    const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    // File input should be reset to allow re-uploading
+    expect(fileInput.value).toBe('');
+  });
+
   it('should update state when interacting with components', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Step 1 (Choose Providers) should be active by default, so provider selector should be visible
     // Find the provider selector
@@ -267,7 +335,7 @@ describe('EvaluateTestSuiteCreator', () => {
       ],
     });
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     // Navigate to step 3 (Test Cases) to see the TestCasesSection
     const step3Button = screen.getByRole('button', { name: /add test cases/i });
@@ -283,7 +351,7 @@ describe('EvaluateTestSuiteCreator', () => {
       json: async () => ({}),
     } as Response);
 
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith('/providers/config-status');
@@ -296,7 +364,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should show the ConfigureEnvButton when the server responds with { hasCustomConfig: false }', async () => {
-    renderWithTheme(<EvaluateTestSuiteCreator />);
+    render(<EvaluateTestSuiteCreator />);
 
     const configureEnvButton = await screen.findByTestId('mock-configure-env-button');
 

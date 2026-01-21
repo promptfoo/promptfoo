@@ -207,8 +207,23 @@ export class HttpAdversarialProvider implements AdversarialAudioProvider {
       `HTTP adversarial provider: calling ${this.endpoint} with attack type: ${attackType}`,
     );
 
+    interface AdversarialAudioResponse {
+      error?: string;
+      audio?: Partial<AudioOutput>;
+      data?: string;
+      format?: string;
+      sampleRate?: number;
+      channels?: number;
+      transcript?: string;
+      transformationMetadata?: {
+        attackType: string;
+        parameters?: Record<string, unknown>;
+        description?: string;
+      };
+    }
+
     try {
-      const response = await fetchWithCache(
+      const response = await fetchWithCache<AdversarialAudioResponse>(
         this.endpoint,
         {
           method: 'POST',
@@ -230,6 +245,10 @@ export class HttpAdversarialProvider implements AdversarialAudioProvider {
       }
 
       const audioOutput = response.data.audio || response.data;
+
+      if (!audioOutput.data) {
+        throw new Error('Adversarial API response missing required audio data');
+      }
 
       return {
         data: audioOutput.data,

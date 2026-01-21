@@ -24,11 +24,16 @@ try {
  * 2. PROMPTFOO_API_KEY environment variable
  * 3. API key from promptfoo auth (cloudConfig)
  * 4. GitHub OIDC token (environment variable)
+ * 5. Fork PR context (for fork PRs where OIDC is unavailable)
  *
  * @param apiKey Optional API key from CLI arg or config file
+ * @param forkPR Optional fork PR context for authentication
  * @returns Resolved auth credentials
  */
-export function resolveAuthCredentials(apiKey?: string): SocketAuthCredentials {
+export function resolveAuthCredentials(
+  apiKey?: string,
+  forkPR?: { owner: string; repo: string; number: number },
+): SocketAuthCredentials {
   // 1. API key from argument (CLI --api-key or config file)
   if (apiKey) {
     logger.debug('Using API key from CLI/config');
@@ -62,6 +67,12 @@ export function resolveAuthCredentials(apiKey?: string): SocketAuthCredentials {
     return {
       oidcToken,
     };
+  }
+
+  // 5. Fork PR context (for fork PRs where OIDC is unavailable)
+  if (forkPR) {
+    logger.debug('Using fork PR context for authentication');
+    return { forkPR };
   }
 
   // No auth found

@@ -1,5 +1,9 @@
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
+// Inject variable name used in multi-input mode to prevent namespace collisions
+// with user-defined input variable names
+export const MULTI_INPUT_VAR = '__prompt';
+
 // Redteam configuration defaults
 export const REDTEAM_DEFAULTS = {
   MAX_CONCURRENCY: 4,
@@ -334,6 +338,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -372,6 +377,10 @@ export const DATASET_EXEMPT_PLUGINS = [
   'vlsu',
 ] as const;
 
+// Plugins excluded from multi-input mode (in addition to dataset plugins)
+export const MULTI_INPUT_EXCLUDED_PLUGINS = ['ascii-smuggling'] as const;
+export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
+
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
@@ -396,6 +405,19 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
     ...PII_PLUGINS,
     ...BIAS_PLUGINS,
   ].sort(),
+] as const satisfies readonly Plugin[]);
+
+export const MINIMAL_TEST_PLUGINS: ReadonlySet<Plugin> = new Set([
+  'harmful:hate',
+  'harmful:self-harm',
+] as const satisfies readonly Plugin[]);
+
+export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...DEFAULT_PLUGINS,
+  'bola',
+  'bfla',
+  'rbac',
+  'rag-source-attribution',
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
@@ -438,6 +460,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'reasoning-dos',
   'religion',
   'special-token-injection',

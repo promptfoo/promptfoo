@@ -20,7 +20,12 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  isBasicRefusal,
+} from '../../util';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
@@ -42,6 +47,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 
@@ -93,6 +99,11 @@ interface HydraConfig {
    * Set by the layer strategy when used as: layer: { steps: [hydra, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -154,6 +165,8 @@ export class HydraProvider implements ApiProvider {
       task: 'hydra-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
+      inputs: this.config.inputs as Record<string, string> | undefined,
     });
 
     logger.debug('[Hydra] Provider initialized', {
@@ -206,7 +219,7 @@ export class HydraProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     goal: string;
     targetProvider: ApiProvider;
     context?: CallApiContextParams;
@@ -268,6 +281,7 @@ export class HydraProvider implements ApiProvider {
       graderPassed: boolean | undefined;
       trace?: Record<string, unknown>;
       traceSummary?: string;
+      inputVars?: Record<string, string>;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
@@ -305,6 +319,7 @@ export class HydraProvider implements ApiProvider {
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,
+        ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
@@ -366,10 +381,21 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
-      // Add message to conversation history
+      // Extract JSON from <Prompt> tags if present (multi-input mode)
+      // Do this BEFORE adding to conversation history so we don't store the tags
+      let processedMessage = nextMessage;
+      const extractedPrompt = extractPromptFromTags(nextMessage);
+      if (extractedPrompt) {
+        processedMessage = extractedPrompt;
+      }
+
+      // Extract input vars from the processed message for multi-input mode
+      const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
+      // Add message to conversation history (without <Prompt> tags)
       this.conversationHistory.push({
         role: 'user',
-        content: nextMessage,
+        content: processedMessage,
       });
 
       // Send to target (different based on stateful/stateless)
@@ -377,19 +403,24 @@ export class HydraProvider implements ApiProvider {
 
       if (this.stateful) {
         // Stateful: send only the new message with sessionId
-        const escapedMessage = nextMessage
+        const escapedMessage = processedMessage
           .replace(/\{\{/g, '{ {')
           .replace(/\}\}/g, '} }')
           .replace(/\{%/g, '{ %')
           .replace(/%\}/g, '% }');
 
+        // Build updated vars - handle multi-input mode
+        const updatedVars: Record<string, VarValue> = {
+          ...vars,
+          [this.injectVar]: escapedMessage,
+          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          // Add extracted input vars if available
+          ...(currentInputVars || {}),
+        };
+
         targetPrompt = await renderPrompt(
           prompt,
-          {
-            ...vars,
-            [this.injectVar]: escapedMessage,
-            ...(this.sessionId ? { sessionId: this.sessionId } : {}),
-          },
+          updatedVars,
           filters,
           targetProvider,
           [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -712,6 +743,8 @@ export class HydraProvider implements ApiProvider {
         graderPassed: graderResult?.pass,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
+        // Include input vars for multi-input mode (extracted from current prompt)
+        inputVars: currentInputVars,
       });
 
       // Check if vulnerability was achieved

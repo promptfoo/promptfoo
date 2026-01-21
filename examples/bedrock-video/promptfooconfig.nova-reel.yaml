@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Amazon Nova Reel Video Generation
+
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      region: us-east-1
+      # Required: S3 bucket for video output
+      # Update this to your own S3 bucket
+      s3OutputUri: s3://your-bucket/nova-reel-outputs
+      durationSeconds: 6
+      # Optional: Set seed for reproducible results
+      # seed: 12345
+
+prompts:
+  # Promptfoo red panda mascot themed prompts
+  - 'A cute red panda sitting at a desk reviewing documents, wearing small round glasses, soft warm lighting, camera slowly zooms in on the focused expression'
+  - 'An adorable red panda mascot walking through a futuristic data center with glowing servers, purple and teal ambient lighting, camera follows alongside'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'Video:' # Output format is [Video: prompt](url)
+      - type: not-contains
+        value: 'error' # No errors in output

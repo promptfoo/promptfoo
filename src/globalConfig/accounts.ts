@@ -213,22 +213,23 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
     });
-    const emailSchema = z.string().email('Please enter a valid email address');
+    const emailSchema = z.email();
     try {
       email = await input({
         message: 'Redteam evals require email verification. Please enter your work email:',
         validate: (input: string) => {
           const result = emailSchema.safeParse(input);
-          return result.success || result.error.errors[0].message;
+          return result.success || result.error.issues[0].message;
         },
       });
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
         // exit cleanly on interrupt
         process.exit(1);
       }
       // Unknown error: rethrow
-      logger.error('failed to prompt for email:', err);
+      logger.error(`failed to prompt for email: ${err}`);
       throw err;
     }
     setUserEmail(email);
