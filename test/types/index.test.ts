@@ -398,18 +398,21 @@ describe('TestCaseSchema options (merged schema properties)', () => {
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
   });
 
-  it('should strip unknown properties in options (Zod default behavior)', () => {
+  it('should allow provider-specific properties in options via catchall', () => {
     const testCase = {
       vars: { input: 'test' },
       options: {
         provider: 'openai:gpt-4o-mini',
-        unknownProperty: 'should be stripped',
+        // Provider-specific options like response_format, temperature, etc. should pass through
+        response_format: { type: 'json_object' },
+        custom_option: 'custom_value',
       },
     };
     const result = TestCaseSchema.parse(testCase);
-    // Zod strips unknown properties by default (additionalProperties:false in JSON schema is for IDE validation)
-    expect(result.options).not.toHaveProperty('unknownProperty');
+    // catchall(z.any()) allows provider-specific options to pass through for per-test structured output
     expect(result.options).toHaveProperty('provider', 'openai:gpt-4o-mini');
+    expect(result.options).toHaveProperty('response_format', { type: 'json_object' });
+    expect(result.options).toHaveProperty('custom_option', 'custom_value');
   });
 });
 
