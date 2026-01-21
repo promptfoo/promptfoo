@@ -1165,7 +1165,10 @@ export async function synthesize({
       const currentIndex = (pluginIndexMap.get(plugin.id) || 0) + 1;
       pluginIndexMap.set(plugin.id, currentIndex);
       // Only pass index for plugins that can have duplicates (like policy)
-      const baseId = getPluginBaseDisplayId(plugin, plugin.id === 'policy' ? currentIndex : undefined);
+      const baseId = getPluginBaseDisplayId(
+        plugin,
+        plugin.id === 'policy' ? currentIndex : undefined,
+      );
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
