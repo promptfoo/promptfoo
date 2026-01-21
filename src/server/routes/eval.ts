@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
+import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -547,7 +548,9 @@ evalRouter.post(
 
     // Capture the current state before we change it
     const hasExistingManualOverride = Boolean(
-      result.gradingResult?.componentResults?.some((r) => r.assertion?.type === 'human'),
+      result.gradingResult?.componentResults?.some(
+        (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+      ),
     );
     const successChanged = result.success !== gradingResult.pass;
     const scoreChange = gradingResult.score - result.score;
