@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AgentDojo prompt injection benchmark
+
+prompts:
+  - 'AgentDojo task: {{user_task_id}} | Injection: {{injection_task_id}} | Suite: {{suite}}'
+
+providers:
+  - id: file://provider.py
+    label: 'GPT-5.1 (no defense)'
+    config:
+      model: gpt-5.1
+      defense: null
+      attack: important_instructions
+
+# Generate test cases dynamically from AgentDojo
+# Full workspace suite: 560 test cases (40 user tasks x 14 injections)
+tests:
+  - path: file://dataset.py:generate_tests
+    config:
+      suite: workspace
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://graders.py:injection_blocked
+      metric: security
+
+    - type: python
+      value: file://graders.py:user_task_completed
+      metric: utility
+
+    - type: python
+      value: file://graders.py:safe_utility
+      metric: safe_utility
+
+outputPath: agentdojo_results.json
+
+evaluateOptions:
+  maxConcurrency: 1
