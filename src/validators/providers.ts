@@ -44,6 +44,34 @@ export const ApiProviderSchema = z.object({
   inputs: InputsSchema.optional(),
 });
 
+/**
+ * Schema for reasoning content from various providers.
+ * Discriminated union matching the ReasoningContent type.
+ */
+export const ReasoningContentSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('thinking'),
+    thinking: z.string(),
+    signature: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('redacted_thinking'),
+    data: z.string(),
+  }),
+  z.object({
+    type: z.literal('reasoning'),
+    content: z.string(),
+  }),
+  z.object({
+    type: z.literal('thought'),
+    thought: z.string(),
+  }),
+  z.object({
+    type: z.literal('think'),
+    content: z.string(),
+  }),
+]);
+
 export const ProviderResponseSchema = z.object({
   cached: z.boolean().optional(),
   cost: z.number().optional(),
@@ -56,6 +84,7 @@ export const ProviderResponseSchema = z.object({
     .catchall(z.any())
     .optional(),
   output: z.union([z.string(), z.any()]).optional(),
+  reasoning: z.array(ReasoningContentSchema).optional(),
   tokenUsage: BaseTokenUsageSchema.optional(),
 });
 

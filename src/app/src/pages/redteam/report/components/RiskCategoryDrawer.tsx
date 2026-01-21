@@ -135,14 +135,13 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
-  // Validate category BEFORE any hooks to comply with Rules of Hooks
+  // Validate category before hooks - early return must happen before any hook calls
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
     return null;
   }
 
-  // All hooks must be called unconditionally after early returns
   const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(

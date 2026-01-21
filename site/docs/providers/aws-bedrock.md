@@ -169,7 +169,7 @@ providers:
       thinking:
         type: enabled
         budget_tokens: 16000
-      showThinking: true # Include thinking content in output
+      showThinking: true # Include thinking content in response
 ```
 
 The `thinking` configuration controls Claude's reasoning behavior:
@@ -177,7 +177,7 @@ The `thinking` configuration controls Claude's reasoning behavior:
 - `type: enabled` - Activates extended thinking
 - `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
 
-Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+Use `showThinking: true` to include the model's reasoning in the response's `reasoning` field (displayed in the UI's Reasoning panel), or `false` to exclude it.
 
 :::warning
 Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
@@ -193,7 +193,7 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 | `stopSequences`       | Array of stop sequences                         |
 | `thinking`            | Extended thinking configuration (Claude models) |
 | `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: false)     |
+| `showThinking`        | Include thinking in response (default: true)    |
 | `performanceConfig`   | Performance settings (`latency: optimized`)     |
 | `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
 | `guardrailIdentifier` | Guardrail ID for content filtering              |
@@ -766,7 +766,7 @@ config:
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
   thinking: { ... } # Optional: Enable Claude's extended thinking capability
-  showThinking: true # Optional: Control whether thinking content is included in output
+  showThinking: true # Optional: Control whether thinking content is included in response
 ```
 
 When using Claude's extended thinking capability, you can configure it like this:
@@ -777,15 +777,15 @@ config:
   thinking:
     type: 'enabled'
     budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-  showThinking: true # Whether to include thinking content in the output (default: true)
+  showThinking: true # Whether to include thinking content in the response (default: true)
 ```
 
 :::tip
 
-The `showThinking` parameter controls whether thinking content is included in the response output:
+The `showThinking` parameter controls whether thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
@@ -906,7 +906,7 @@ config:
   top_p: 0.9
 
   # Promptfoo control params
-  showThinking: true # Optional: Control whether thinking content is included in output
+  showThinking: true # Optional: Control whether thinking content is included in response
 ```
 
 DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:

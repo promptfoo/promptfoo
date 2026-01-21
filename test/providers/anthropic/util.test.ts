@@ -335,7 +335,7 @@ describe('Anthropic utilities', () => {
       expect(result).toBe('The sky is blue');
     });
 
-    it('should include thinking blocks when showThinking is true', () => {
+    it('should exclude thinking blocks from output (reasoning goes to separate field)', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
@@ -363,10 +363,9 @@ describe('Anthropic utilities', () => {
         },
       };
 
+      // Thinking blocks are NEVER included in output - they go to the reasoning field only
       const result = outputFromMessage(message, true);
-      expect(result).toBe(
-        'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
-      );
+      expect(result).toBe('Hello\n\nWorld');
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
@@ -401,7 +400,7 @@ describe('Anthropic utilities', () => {
       expect(result).toBe('Hello\n\nWorld');
     });
 
-    it('should include redacted_thinking blocks when showThinking is true', () => {
+    it('should exclude redacted_thinking blocks from output (reasoning goes to separate field)', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
@@ -428,8 +427,9 @@ describe('Anthropic utilities', () => {
         },
       };
 
+      // Redacted thinking blocks are NEVER included in output - they go to the reasoning field only
       const result = outputFromMessage(message, true);
-      expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
+      expect(result).toBe('Hello\n\nWorld');
     });
 
     it('should exclude redacted_thinking blocks when showThinking is false', () => {

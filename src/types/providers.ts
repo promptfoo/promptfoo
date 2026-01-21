@@ -142,6 +142,51 @@ export interface GuardrailResponse {
   reason?: string;
 }
 
+/**
+ * Native reasoning/thinking content from LLM providers.
+ * Uses a discriminated union to preserve provider-specific structure.
+ *
+ * Provider mapping:
+ * - 'thinking': Anthropic Claude extended thinking
+ * - 'redacted_thinking': Anthropic Claude redacted thinking blocks
+ * - 'reasoning': OpenAI o-series, DeepSeek R1, xAI Grok
+ * - 'thought': Google Gemini thinking mode
+ * - 'think': Meta Llama-Nemotron (extracted from <think> tags)
+ */
+export type ReasoningContent =
+  | {
+      /** Anthropic Claude extended thinking */
+      type: 'thinking';
+      /** The thinking content */
+      thinking: string;
+      /** Cryptographic signature for verification */
+      signature?: string;
+    }
+  | {
+      /** Anthropic Claude redacted thinking (safety) */
+      type: 'redacted_thinking';
+      /** Redacted content identifier */
+      data: string;
+    }
+  | {
+      /** OpenAI o-series, DeepSeek R1, xAI Grok reasoning */
+      type: 'reasoning';
+      /** The reasoning content */
+      content: string;
+    }
+  | {
+      /** Google Gemini thinking mode */
+      type: 'thought';
+      /** The thought content */
+      thought: string;
+    }
+  | {
+      /** Meta Llama-Nemotron (extracted from <think> tags) */
+      type: 'think';
+      /** The thinking content */
+      content: string;
+    };
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -184,6 +229,12 @@ export interface ProviderResponse {
    * it operates on provider-normalized output, independent of test transforms.
    */
   providerTransformedOutput?: string | any;
+  /**
+   * Reasoning/thinking content from models that support extended reasoning.
+   * Stored separately from output - view layer handles combined display.
+   * Array to support interleaved thinking (e.g., Claude 4 with tool use).
+   */
+  reasoning?: ReasoningContent[];
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;

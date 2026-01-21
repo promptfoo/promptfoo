@@ -16,6 +16,7 @@ import type {
   CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  ReasoningContent,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 
@@ -589,6 +590,16 @@ export interface LumaRayInvocationResponse {
   };
 }
 
+/**
+ * Return type for model output handlers that support reasoning content.
+ * Models can return either a simple output value or an object with separate
+ * output and reasoning fields (for models with extended thinking/reasoning).
+ */
+export interface BedrockModelOutputResult {
+  output: any;
+  reasoning?: ReasoningContent[];
+}
+
 export interface IBedrockModel {
   params: (
     config: BedrockOptions,
@@ -597,7 +608,12 @@ export interface IBedrockModel {
     modelName?: string,
     vars?: Record<string, VarValue>,
   ) => Promise<any>;
-  output: (config: BedrockOptions, responseJson: any) => any;
+  /**
+   * Extract output from model response.
+   * Can return either a simple value (backwards compatible) or an object
+   * with { output, reasoning } for models that support extended thinking.
+   */
+  output: (config: BedrockOptions, responseJson: any) => any | BedrockModelOutputResult;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
 
@@ -609,6 +625,27 @@ export function parseValue(value: string | number, defaultValue: any) {
     return value;
   }
   return value;
+}
+
+/**
+ * Parse <think>...</think> blocks from model output.
+ * Used by DeepSeek and Qwen models that wrap reasoning in think tags.
+ * Returns output with think blocks removed and reasoning content separately.
+ */
+function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelOutputResult {
+  const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+  if (thinkMatch) {
+    const thinkingContent = thinkMatch[1].trim();
+    const output = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    return {
+      output,
+      reasoning:
+        showThinking && thinkingContent
+          ? [{ type: 'think' as const, content: thinkingContent }]
+          : undefined,
+    };
+  }
+  return { output: content };
 }
 
 export function addConfigParam(
@@ -1295,11 +1332,16 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (config: BedrockAmazonNova2GenerationOptions, responseJson: any) => {
+    output: (
+      config: BedrockAmazonNova2GenerationOptions,
+      responseJson: any,
+    ): BedrockModelOutputResult | string | undefined => {
       // Handle reasoningContent blocks in Nova 2 responses
       const content = responseJson.output?.message?.content;
       if (!content || !Array.isArray(content)) {
-        return novaOutputFromMessage(responseJson);
+        // novaOutputFromMessage can return undefined, wrap it for consistency
+        const output = novaOutputFromMessage(responseJson);
+        return output !== undefined ? { output } : undefined;
       }
 
       const hasToolUse = content.some((block: any) => block.toolUse?.toolUseId);
@@ -1315,23 +1357,32 @@ export const BEDROCK_MODEL = {
           .join('\n\n');
       }
 
-      // Process content blocks, handling both text and reasoningContent
-      const parts: string[] = [];
+      // Process content blocks, separating text from reasoningContent
+      // Reasoning goes ONLY in reasoning field - no double-write to output
+      const textParts: string[] = [];
+      const reasoningBlocks: ReasoningContent[] = [];
       const showThinking = config.showThinking !== false;
 
       for (const block of content) {
-        if (block.reasoningContent && showThinking) {
-          // Handle reasoning content from Nova 2 extended thinking
+        if (block.reasoningContent) {
+          // Extract reasoning content from Nova 2 extended thinking
           const reasoningText = block.reasoningContent?.reasoningText?.text;
-          if (reasoningText) {
-            parts.push(`<thinking>\n${reasoningText}\n</thinking>`);
+          if (reasoningText && showThinking) {
+            reasoningBlocks.push({
+              type: 'thinking' as const,
+              thinking: reasoningText,
+            });
           }
         } else if (block.text) {
-          parts.push(block.text);
+          textParts.push(block.text);
         }
       }
 
-      return parts.join('\n\n');
+      const output = textParts.join('\n\n');
+      return {
+        output,
+        reasoning: reasoningBlocks.length > 0 ? reasoningBlocks : undefined,
+      };
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       const usage = responseJson?.usage;
@@ -1758,23 +1809,15 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any): BedrockModelOutputResult | undefined => {
       if (responseJson.error) {
         throw new Error(`DeepSeek API error: ${responseJson.error}`);
       }
 
       if (responseJson.choices && Array.isArray(responseJson.choices)) {
         const choice = responseJson.choices[0];
-        if (choice && choice.text) {
-          const fullResponse = choice.text;
-          const [thinking, finalResponse] = fullResponse.split('</think>');
-          if (!thinking || !finalResponse) {
-            return fullResponse;
-          }
-          if (config.showThinking !== false) {
-            return fullResponse;
-          }
-          return finalResponse.trim();
+        if (choice?.text) {
+          return parseThinkBlocks(choice.text, config.showThinking !== false);
         }
       }
 
@@ -2093,14 +2136,14 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any): BedrockModelOutputResult | string => {
       if (responseJson.error) {
         throw new Error(`Qwen API error: ${responseJson.error}`);
       }
 
-      // Handle thinking mode output similar to DeepSeek
       if (responseJson.choices && Array.isArray(responseJson.choices)) {
         const choice = responseJson.choices[0];
+        const showThinking = config.showThinking !== false;
 
         // Handle tool calls
         if (choice?.message?.tool_calls && Array.isArray(choice.message.tool_calls)) {
@@ -2118,22 +2161,11 @@ ${prompt}
         }
 
         if (choice?.message?.content) {
-          const content = choice.message.content;
-
-          // Check if response contains thinking content
-          if (content.includes('<think>') && content.includes('</think>')) {
-            if (config.showThinking === false) {
-              // Extract only the final response after thinking
-              const parts = content.split('</think>');
-              return parts.length > 1 ? parts[1].trim() : content;
-            }
-          }
-
-          return content;
+          return parseThinkBlocks(choice.message.content, showThinking);
         }
       }
 
-      return responseJson.choices?.[0]?.message?.content;
+      return responseJson.choices?.[0]?.message?.content || '';
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
@@ -2438,11 +2470,22 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
-          tokenUsage: createEmptyTokenUsage(),
-          cached: true,
-        };
+        const modelOutput = model.output(this.config, JSON.parse(cachedResponse as string));
+        // Handle both simple output and BedrockModelOutputResult
+        const result: ProviderResponse =
+          modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput
+            ? {
+                output: modelOutput.output,
+                reasoning: modelOutput.reasoning,
+                tokenUsage: createEmptyTokenUsage(),
+                cached: true,
+              }
+            : {
+                output: modelOutput,
+                tokenUsage: createEmptyTokenUsage(),
+                cached: true,
+              };
+        return result;
       }
     }
 
@@ -2548,16 +2591,29 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      const modelOutput = model.output(this.config, output);
+      const guardrailsInfo = output['amazon-bedrock-guardrailAction']
+        ? {
+            guardrails: {
+              flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+            },
+          }
+        : {};
+
+      // Handle both simple output and BedrockModelOutputResult
+      if (modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput) {
+        return {
+          output: modelOutput.output,
+          reasoning: modelOutput.reasoning,
+          tokenUsage,
+          ...guardrailsInfo,
+        };
+      }
+
       return {
-        output: model.output(this.config, output),
+        output: modelOutput,
         tokenUsage,
-        ...(output['amazon-bedrock-guardrailAction']
-          ? {
-              guardrails: {
-                flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-              },
-            }
-          : {}),
+        ...guardrailsInfo,
       };
     } catch (err) {
       logger.error('Bedrock API response error', { error: String(err), response });

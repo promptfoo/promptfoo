@@ -458,9 +458,15 @@ describe('AnthropicMessagesProvider', () => {
         },
         {},
       );
-      expect(result.output).toBe(
-        'Thinking: Let me analyze this step by step...\nSignature: test-signature\n\nFinal answer',
-      );
+      // Thinking content goes to reasoning field, not output
+      expect(result.output).toBe('Final answer');
+      expect(result.reasoning).toEqual([
+        {
+          type: 'thinking',
+          thinking: 'Let me analyze this step by step...',
+          signature: 'test-signature',
+        },
+      ]);
     });
 
     it('should handle redacted thinking blocks', async () => {
@@ -479,7 +485,14 @@ describe('AnthropicMessagesProvider', () => {
       } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is 2+2?');
-      expect(result.output).toBe('Redacted Thinking: encrypted-data\n\nFinal answer');
+      // Redacted thinking content goes to reasoning field, not output
+      expect(result.output).toBe('Final answer');
+      expect(result.reasoning).toEqual([
+        {
+          type: 'redacted_thinking',
+          data: 'encrypted-data',
+        },
+      ]);
     });
 
     it('should handle API errors for thinking configuration', async () => {

@@ -30,6 +30,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  ReasoningContent,
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -531,11 +532,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      let reasoning = '';
-      let output: any = '';
+      // Collect reasoning content into separate field (not prepended to output)
+      const reasoningBlocks: ReasoningContent[] = [];
+      let output: string | object = '';
+
       if (message.reasoning) {
-        reasoning = message.reasoning;
-        output = message.content;
+        reasoningBlocks.push({ type: 'reasoning', content: message.reasoning });
+        output = message.content || '';
       } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
@@ -547,10 +550,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         message.content === undefined ||
         (message.content === '' && message.tool_calls)
       ) {
-        output = message.function_call || message.tool_calls;
+        output = message.function_call || message.tool_calls || '';
       } else {
         output = message.content;
       }
+
+      // Handle DeepSeek reasoning model's reasoning_content
+      if (message.reasoning_content && typeof message.reasoning_content === 'string') {
+        reasoningBlocks.push({ type: 'reasoning', content: message.reasoning_content });
+      }
+
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
@@ -563,10 +572,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
-      // Handle reasoning as thinking content if present and showThinking is enabled
-      if (reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${reasoning}\n\n${output}`;
-      }
+
+      // Build reasoning field (only if we have reasoning content and showThinking is not false)
+      const reasoning =
+        reasoningBlocks.length > 0 && config.showThinking !== false ? reasoningBlocks : undefined;
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
@@ -661,6 +670,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         if (hasSuccessfulCallback && results.length > 0) {
           return {
             output: results.join('\n'),
+            reasoning,
             tokenUsage: getTokenUsage(data, cached),
             cached,
             latencyMs,
@@ -679,18 +689,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
-      if (
-        message.reasoning_content &&
-        typeof message.reasoning_content === 'string' &&
-        typeof output === 'string' &&
-        (this.config.showThinking ?? true)
-      ) {
-        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
-      }
       if (message.audio) {
         return {
           output: message.audio.transcript || '',
+          reasoning,
           audio: {
             id: message.audio.id,
             expiresAt: message.audio.expires_at,
@@ -717,6 +719,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       return {
         output,
+        reasoning,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,

@@ -411,8 +411,16 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const expectedOutput = `Thinking: First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.\n\nThe answer is 9.11 is greater than 9.8.`;
-      expect(result.output).toBe(expectedOutput);
+      // Output should NOT include the reasoning content
+      expect(result.output).toBe('The answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
+        },
+      ]);
       expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13, numRequests: 1 });
     });
 
@@ -444,6 +452,8 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 42.');
+      // With showThinking: false, reasoning should not be captured
+      expect(result.reasoning).toBeUndefined();
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
@@ -473,10 +483,16 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const expectedOutput = `Thinking: Let me compare 9.11 and 9.8:
-9.11 > 9.8 because 11 > 8 in the decimal places.
-Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
-      expect(result.output).toBe(expectedOutput);
+      // Output should NOT include the reasoning content
+      expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+        },
+      ]);
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
@@ -509,6 +525,8 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // With showThinking: false, reasoning should not be captured
+      expect(result.reasoning).toBeUndefined();
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
@@ -560,10 +578,16 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
         JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
       );
 
-      const expectedOutput1 = `Thinking: Let me compare 9.11 and 9.8:
-9.11 > 9.8 because 11 > 8 in the decimal places.
-Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
-      expect(result1.output).toBe(expectedOutput1);
+      // Output should NOT include the reasoning content
+      expect(result1.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result1.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+        },
+      ]);
 
       // Second round (with conversation history excluding reasoning_content)
       const result2 = await provider.callApi(
@@ -574,11 +598,16 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
         ]),
       );
 
-      const expectedOutput2 = `Thinking: Let me count the occurrences of the letter "r" in "strawberry":
-The word is spelled s-t-r-a-w-b-e-r-r-y.
-I can see that the letter "r" appears twice: once in "str" and once in "rry".
-Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere are 2 "r"s in the word "strawberry".`;
-      expect(result2.output).toBe(expectedOutput2);
+      // Output should NOT include the reasoning content
+      expect(result2.output).toBe('There are 2 "r"s in the word "strawberry".');
+      // Reasoning should be stored separately
+      expect(result2.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
+        },
+      ]);
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 

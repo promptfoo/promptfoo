@@ -94,6 +94,13 @@ export interface AzureCompletionOptions {
   verbosity?: 'low' | 'medium' | 'high';
 
   /**
+   * Whether to include thinking/reasoning content in the response.
+   * When true (default), reasoning is captured in the dedicated reasoning field.
+   * When false, reasoning is omitted from the response.
+   */
+  showThinking?: boolean;
+
+  /**
    * If set, automatically call these functions when the model calls them.
    * Keys are function names, values are either functions or strings (JavaScript code).
    */

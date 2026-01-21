@@ -11,6 +11,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { reasoningToString } from '@app/utils/reasoning';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -863,6 +864,7 @@ function EvalOutputCell({
               provider={output.provider}
               gradingResults={output.gradingResult?.componentResults}
               output={text}
+              reasoning={reasoningToString(output.response?.reasoning)}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}

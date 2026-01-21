@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { formatOpenAiError } from '../openai/util';
 
-import type { ProviderResponse, TokenUsage } from '../../types/index';
+import type { ProviderResponse, ReasoningContent, TokenUsage } from '../../types/index';
 import type {
   ProcessedOutput,
   ProcessorConfig,
@@ -129,6 +129,9 @@ export class ResponsesProcessor {
         }
       }
 
+      // Only include reasoning if showThinking is not explicitly false (per-call config takes priority)
+      const showThinking = requestConfig.showThinking !== false;
+
       const result: ProviderResponse = {
         output: finalOutput,
         tokenUsage: getTokenUsage(data, cached),
@@ -136,6 +139,9 @@ export class ResponsesProcessor {
         cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
+        ...(processedOutput.reasoning?.length && showThinking
+          ? { reasoning: processedOutput.reasoning }
+          : {}),
       };
 
       // Add annotations if present (for deep research citations)
@@ -166,6 +172,7 @@ export class ResponsesProcessor {
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
+    const reasoningBlocks: ReasoningContent[] = [];
 
     // Process all output items
     for (const item of output) {
@@ -191,6 +198,11 @@ export class ResponsesProcessor {
       if (processed.annotations) {
         annotations.push(...processed.annotations);
       }
+
+      // Collect reasoning blocks
+      if (processed.reasoning) {
+        reasoningBlocks.push(...processed.reasoning);
+      }
     }
 
     return {
@@ -198,6 +210,7 @@ export class ResponsesProcessor {
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      reasoning: reasoningBlocks.length > 0 ? reasoningBlocks : undefined,
     };
   }
 
@@ -208,6 +221,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    reasoning?: ReasoningContent[];
   }> {
     switch (item.type) {
       case 'function_call':
@@ -333,13 +347,16 @@ export class ResponsesProcessor {
     });
   }
 
-  private processReasoning(item: any): Promise<{ content?: string }> {
+  private processReasoning(item: any): Promise<{ reasoning?: ReasoningContent[] }> {
     if (!item.summary || !item.summary.length) {
       return Promise.resolve({});
     }
 
-    const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
-    return Promise.resolve({ content: reasoningText });
+    // Extract reasoning text and store in dedicated reasoning field
+    const reasoningText = item.summary.map((s: { text: string }) => s.text).join('\n');
+    return Promise.resolve({
+      reasoning: [{ type: 'reasoning', content: reasoningText }],
+    });
   }
 
   private processWebSearch(item: any): Promise<{ content?: string }> {

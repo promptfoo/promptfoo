@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { reasoningToString } from '@app/utils/reasoning';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -115,6 +116,7 @@ export interface ReplayEvaluationParams {
  */
 export interface ReplayEvaluationResult {
   output?: string;
+  reasoning?: any;
   error?: string;
 }
 
@@ -134,6 +136,7 @@ interface EvalOutputPromptDialogProps {
   prompt: string;
   provider?: string;
   output?: string;
+  reasoning?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
   /**
@@ -160,6 +163,7 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  reasoning,
   gradingResults,
   metadata,
   providerPrompt,
@@ -184,6 +188,7 @@ export default function EvalOutputPromptDialog({
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
+  const [replayReasoning, setReplayReasoning] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
 
@@ -193,6 +198,7 @@ export default function EvalOutputPromptDialog({
     setEditMode(false);
     setEditedPrompt(prompt);
     setReplayOutput(null);
+    setReplayReasoning(null);
     setReplayError(null);
     setActiveTab('prompt-output'); // Reset to first tab when dialog opens
   }, [prompt]);
@@ -256,6 +262,7 @@ export default function EvalOutputPromptDialog({
     setReplayLoading(true);
     setReplayError(null);
     setReplayOutput(null);
+    setReplayReasoning(null);
 
     try {
       const result = await onReplay({
@@ -269,6 +276,9 @@ export default function EvalOutputPromptDialog({
         setReplayError(result.error);
       } else if (result.output) {
         setReplayOutput(result.output);
+        if (result.reasoning) {
+          setReplayReasoning(reasoningToString(result.reasoning));
+        }
       } else {
         setReplayOutput('(No output returned)');
       }
@@ -322,7 +332,7 @@ export default function EvalOutputPromptDialog({
   const citationsData = metadata?.citations;
 
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || reasoning,
   );
 
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
@@ -480,6 +490,7 @@ export default function EvalOutputPromptDialog({
                   replayOutput={replayOutput}
                   providerPrompt={providerPrompt}
                   redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  reasoning={replayReasoning || reasoning}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}

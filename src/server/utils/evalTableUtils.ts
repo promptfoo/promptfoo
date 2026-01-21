@@ -1,5 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
+import { reasoningToString } from '../../util/reasoning';
 
 import type Eval from '../../models/eval';
 import type {
@@ -7,6 +8,7 @@ import type {
   EvalResultsFilterMode,
   EvaluateTableRow,
   Prompt,
+  ReasoningContent,
 } from '../../types/index';
 
 /**
@@ -122,7 +124,7 @@ export function buildCsvHeaders(
     ...prompts.flatMap((prompt) => {
       const provider = (prompt as CompletedPrompt).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
+      return [label, 'Reasoning', 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
     }),
   ];
 
@@ -149,15 +151,17 @@ export function tableRowToCsvValues(
     ...row.vars,
     ...row.outputs.flatMap((output) => {
       if (!output) {
-        return ['', '', '', '', '', ''];
+        return ['', '', '', '', '', '', ''];
       }
 
       const status = getOutputStatus(output);
       const score = output.score?.toFixed(2) ?? '';
       const namedScores = formatNamedScores(output.namedScores);
+      const reasoning = reasoningToString(output.response?.reasoning) || '';
 
       return [
         output.text || '',
+        reasoning,
         status,
         score,
         namedScores,
@@ -407,6 +411,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       failureReason?: ResultFailureReason;
       gradingResult?: { reason?: string; comment?: string } | null;
       metadata?: Record<string, unknown>;
+      response?: { reasoning?: ReasoningContent[] };
     }>;
     test: { description?: string };
   }> | null = null;
@@ -426,6 +431,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
           failureReason?: ResultFailureReason;
           gradingResult?: { reason?: string; comment?: string } | null;
           metadata?: Record<string, unknown>;
+          response?: { reasoning?: ReasoningContent[] };
         }>;
         test: { description?: string };
       }
@@ -455,6 +461,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
         failureReason: result.failureReason,
         gradingResult: result.gradingResult,
         metadata: result.metadata,
+        response: result.response?.reasoning ? { reasoning: result.response.reasoning } : undefined,
       };
     }
 
