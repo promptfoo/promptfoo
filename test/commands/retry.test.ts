@@ -384,8 +384,18 @@ describe('retry command', () => {
       const evalRecord = await Eval.create({}, []);
       const db = getDb();
       const mockProvider = { id: 'test-provider' };
-      const mockPrompt1 = { raw: 'test1', display: 'test1', label: 'test1', provider: 'test-provider' };
-      const mockPrompt2 = { raw: 'test2', display: 'test2', label: 'test2', provider: 'test-provider' };
+      const mockPrompt1 = {
+        raw: 'test1',
+        display: 'test1',
+        label: 'test1',
+        provider: 'test-provider',
+      };
+      const mockPrompt2 = {
+        raw: 'test2',
+        display: 'test2',
+        label: 'test2',
+        provider: 'test-provider',
+      };
 
       await evalRecord.addPrompts([mockPrompt1, mockPrompt2]);
 

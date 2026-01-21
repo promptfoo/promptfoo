@@ -330,12 +330,12 @@ Deletes a specific resource.
 
 Retry all ERROR results from a specific evaluation. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures) and re-runs only those test cases. The results are updated in place in the original evaluation.
 
-| Option                       | Description                                                                       |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided)  |
-| `-v, --verbose`              | Verbose output                                                                    |
-| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                          |
-| `--delay <number>`           | Delay between evaluations in milliseconds                                         |
+| Option                       | Description                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided)       |
+| `-v, --verbose`              | Verbose output                                                                         |
+| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                               |
+| `--delay <number>`           | Delay between evaluations in milliseconds                                              |
 | `--share/--no-share`         | Share results to cloud (auto-shares when cloud is configured, disable with --no-share) |
 
 Examples:
