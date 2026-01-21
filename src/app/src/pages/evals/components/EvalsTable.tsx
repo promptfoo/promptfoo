@@ -71,6 +71,7 @@ export default function EvalsTable({
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchEvals(abortController.signal);
@@ -255,6 +256,7 @@ export default function EvalsTable({
             </Tooltip>
           );
         },
+        size: 250,
       },
       {
         accessorKey: 'passRate',

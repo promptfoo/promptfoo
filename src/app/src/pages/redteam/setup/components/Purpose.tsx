@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Code } from '@app/components/ui/code';
 import {
@@ -62,7 +62,7 @@ function DiscoveryResult({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary/80">
             Auto-Discovery Result
           </p>
-          <p className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-foreground">
+          <p className="whitespace-pre-wrap wrap-break-word font-mono text-[13px] leading-relaxed text-foreground">
             {text}
           </p>
         </div>
@@ -79,7 +79,7 @@ function DiscoveryResult({
  * "Usage Details" step of the red teaming config setup wizard.
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
-  const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
+  const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -90,6 +90,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
   }, []);
@@ -156,6 +157,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
   const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
@@ -299,7 +301,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
               {!discoveryResult && (
-                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
                   {/* Subtle decorative element */}
                   <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
 
@@ -337,7 +339,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         isDiscovering
                       }
                       onClick={handleTargetPurposeDiscovery}
-                      className="w-[150px]"
+                      className="w-37.5"
                     >
                       {isDiscovering ? 'Discovering...' : 'Discover'}
                     </Button>
@@ -345,34 +347,42 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     {isDiscovering && showSlowDiscoveryMessage && (
                       <Alert variant="info">
                         <Info className="size-4" />
-                        <AlertDescription>
-                          Discovery is taking a little while. This is normal for complex
-                          applications.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            Discovery is taking a little while. This is normal for complex
+                            applications.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {!hasTargetConfigured && (
                       <Alert variant="warning">
                         <AlertTriangle className="size-4" />
-                        <AlertDescription>
-                          You must configure a target to run auto-discovery.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            You must configure a target to run auto-discovery.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                       <Alert variant="destructive">
                         <AlertTriangle className="size-4" />
-                        <AlertDescription>
-                          Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                          connection.
-                        </AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>
+                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                            connection.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {discoveryError && (
                       <>
                         <Alert variant="destructive">
                           <AlertTriangle className="size-4" />
-                          <AlertDescription>{discoveryError}</AlertDescription>
+                          <AlertContent>
+                            <AlertDescription>{discoveryError}</AlertDescription>
+                          </AlertContent>
                         </Alert>
                         <div className="rounded-lg border border-border bg-background/80 p-4">
                           <p className="mb-3 text-[13px] text-muted-foreground">
@@ -428,7 +438,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
                     placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
                     rows={3}
-                    className="min-h-[72px] resize-y"
+                    className="min-h-18 resize-y"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground/80">
@@ -841,39 +851,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   />
                 </div>
               </div>
-
-              {/* Test Generation Instructions - Standalone Section */}
-              <div className="mt-8 space-y-4">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Test Generation Instructions
-                </h2>
-                <div>
-                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
-                    Additional instructions for test generation
-                    <span className="text-xs font-normal text-muted-foreground/70">optional</span>
-                  </label>
-                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
-                    Guidance on how red team attacks should be generated. Useful for domain-specific
-                    applications.
-                  </p>
-                  <Textarea
-                    value={config.testGenerationInstructions ?? ''}
-                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
-                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology..."
-                    rows={3}
-                    className="min-h-[72px] resize-y"
-                  />
-                </div>
-              </div>
             </div>
           ) : (
             <div>
               <Alert variant="info">
                 <Info className="size-4" />
-                <AlertDescription>
-                  When testing a model directly, you don't need to provide application details. You
-                  can proceed to configure the model and test scenarios in the next steps.
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription>
+                    When testing a model directly, you don't need to provide application details.
+                    You can proceed to configure the model and test scenarios in the next steps.
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </div>
           )}

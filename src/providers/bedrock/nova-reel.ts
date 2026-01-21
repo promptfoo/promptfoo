@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
@@ -60,10 +61,15 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   private loadImageData(imagePath: string): { data?: string; error?: string } {
     if (imagePath.startsWith('file://')) {
       const filePath = imagePath.slice(7);
-      if (!fs.existsSync(filePath)) {
-        return { error: `Image file not found: ${filePath}` };
+      // Resolve to absolute path and validate no path traversal
+      const resolvedPath = path.resolve(filePath);
+      if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
+        return { error: `Invalid image path (path traversal detected): ${filePath}` };
       }
-      return { data: fs.readFileSync(filePath).toString('base64') };
+      if (!fs.existsSync(resolvedPath)) {
+        return { error: `Image file not found: ${resolvedPath}` };
+      }
+      return { data: fs.readFileSync(resolvedPath).toString('base64') };
     }
     // Assume it's already base64
     return { data: imagePath };

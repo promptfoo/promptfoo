@@ -639,12 +639,16 @@ Note: Nova Sonic has advanced multimodal capabilities including audio input/outp
 Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
 
 :::note Prerequisites
+
 Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
 
 - `bedrock:InvokeModel` and `bedrock:StartAsyncInvoke` permissions
 - `s3:PutObject` permission on the output bucket
 - `s3:GetObject` permission for downloading generated videos
-  :::
+
+:::
+
+Nova Reel is available in **us-east-1** region.
 
 #### Basic Configuration
 

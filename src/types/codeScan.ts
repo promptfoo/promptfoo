@@ -299,6 +299,12 @@ export interface JsonRpcMessage {
 export interface SocketAuthCredentials {
   apiKey?: string;
   oidcToken?: string;
+  // Fork PR authentication (when OIDC unavailable due to GitHub blocking OIDC for forks)
+  forkPR?: {
+    owner: string;
+    repo: string;
+    number: number;
+  };
 }
 
 // GitHub types

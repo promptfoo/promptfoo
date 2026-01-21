@@ -45,6 +45,7 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {

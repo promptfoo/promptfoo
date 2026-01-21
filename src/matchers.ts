@@ -56,6 +56,7 @@ import type {
   ProviderTypeMap,
   TestCase,
   TokenUsage,
+  VarValue,
 } from './types/index';
 
 class LlmRubricProviderError extends Error {
@@ -107,7 +108,7 @@ export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
-  vars: Record<string, string | object>,
+  vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
   return provider.callApi(prompt, {
@@ -552,9 +553,9 @@ function splitIntoSentences(text: string) {
 }
 
 function processContextForTemplating(
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
   enableObjectAccess: boolean,
-): Record<string, string | object> {
+): Record<string, VarValue> {
   if (enableObjectAccess) {
     return context;
   }
@@ -577,7 +578,7 @@ function processContextForTemplating(
 
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
@@ -602,7 +603,7 @@ export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
@@ -776,7 +777,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -942,7 +943,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -1246,7 +1247,7 @@ export async function matchesContextRecall(
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1445,7 +1446,7 @@ export async function matchesContextFaithfulness(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1563,7 +1564,7 @@ export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
@@ -1758,7 +1759,7 @@ export async function matchesSearchRubric(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   _provider?: ApiProvider,
   providerCallContext?: CallApiContextParams,

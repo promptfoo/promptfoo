@@ -75,6 +75,7 @@ export function LogViewer({ logs }: LogViewerProps) {
   );
 
   // Auto-scroll effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {

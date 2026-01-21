@@ -50,6 +50,7 @@ export default function ModelAuditHistory() {
   const [scanToDelete, setScanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchHistoricalScans(abortController.signal);
@@ -84,6 +85,7 @@ export default function ModelAuditHistory() {
     }
   }, [scanToDelete, deleteHistoricalScan]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns = useMemo<ColumnDef<HistoricalScan>[]>(
     () => [
       {

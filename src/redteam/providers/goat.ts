@@ -23,13 +23,19 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
+import type {
+  Assertion,
+  AssertionSet,
+  AtomicTestCase,
+  GradingResult,
+  VarValue,
+} from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -82,6 +88,11 @@ interface GoatConfig {
    * Set by the layer strategy when used as: layer: { steps: [goat, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -114,6 +125,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
+      inputs?: Record<string, string>;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -129,6 +141,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess: options.continueAfterSuccess ?? false,
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
+      inputs: options.inputs,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -138,6 +151,7 @@ export default class GoatProvider implements ApiProvider {
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      inputs: options.inputs,
     });
   }
 
@@ -177,6 +191,7 @@ export default class GoatProvider implements ApiProvider {
       output: string;
       outputAudio?: MediaData;
       outputImage?: MediaData;
+      inputVars?: Record<string, string>;
     }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
@@ -326,6 +341,8 @@ export default class GoatProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           modifiers: context?.test?.metadata?.modifiers,
           traceSummary: previousTraceSummary,
+          // Pass inputs schema for multi-input mode
+          inputs: this.config.inputs,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
@@ -349,9 +366,34 @@ export default class GoatProvider implements ApiProvider {
 
         previousAttackerMessage = attackerMessage?.content;
 
-        const targetVars = {
+        // Extract JSON from <Prompt> tags if present (multi-input mode)
+        let processedMessage = attackerMessage.content;
+        const extractedPrompt = extractPromptFromTags(attackerMessage.content);
+        if (extractedPrompt) {
+          processedMessage = extractedPrompt;
+        }
+
+        // Extract input vars from the attack message for multi-input mode
+        const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
+        // For multi-input mode, extract the 'prompt' field from JSON for the inject var
+        // Cloud returns JSON like: {"prompt": "attack text", "message": "val1", "email": "val2"}
+        if (currentInputVars && this.config.inputs) {
+          try {
+            const parsed = JSON.parse(processedMessage);
+            if (typeof parsed.prompt === 'string') {
+              processedMessage = parsed.prompt;
+            }
+          } catch {
+            // Not valid JSON, use as-is
+          }
+        }
+
+        // Build target vars - handle multi-input mode
+        const targetVars: Record<string, VarValue> = {
           ...context.vars,
-          [this.config.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: processedMessage,
+          ...(currentInputVars || {}),
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -532,6 +574,8 @@ export default class GoatProvider implements ApiProvider {
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
+          // Include input vars for multi-input mode (extracted from current prompt)
+          inputVars: currentInputVars,
         });
 
         // Store the attack response for potential unblocking in next turn
@@ -606,10 +650,12 @@ export default class GoatProvider implements ApiProvider {
       }
     }
 
+    const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         stopReason:
           this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess

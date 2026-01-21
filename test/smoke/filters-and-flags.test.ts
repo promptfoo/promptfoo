@@ -174,8 +174,8 @@ describe('Pattern Filter Tests', () => {
     expect(exitCode).toBe(0);
 
     // Verify 0 successes/failures/errors in output
-    expect(stdout).toContain('Successes: 0');
-    expect(stdout).toContain('Failures: 0');
+    expect(stdout).toContain('0 passed');
+    expect(stdout).toContain('0 failed');
 
     // Verify output file has 0 results
     const content = fs.readFileSync(outputPath, 'utf-8');

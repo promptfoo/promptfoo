@@ -59,7 +59,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
-      this.preloadFunctionCallbacks();
+      void this.preloadFunctionCallbacks();
     }
   }
 

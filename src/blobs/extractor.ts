@@ -2,7 +2,6 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
-import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -44,6 +43,53 @@ function getKindFromMimeType(mimeType: string): BlobKind {
   return mimeType.startsWith('audio/') ? 'audio' : 'image';
 }
 
+/**
+ * Normalize audio format to proper MIME type.
+ * Some providers return just 'wav' instead of 'audio/wav'.
+ * @internal Exported for testing
+ */
+export function normalizeAudioMimeType(format: string | undefined): string {
+  if (!format) {
+    return 'audio/wav';
+  }
+
+  const trimmedFormat = format.trim();
+
+  // Already a proper audio MIME type - validate strictly to prevent MIME injection
+  // Only allow: audio/subtype where subtype is alphanumeric with optional dash/underscore/plus
+  // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
+  if (/^audio\/[a-z0-9_+-]+$/i.test(trimmedFormat)) {
+    return trimmedFormat;
+  }
+
+  // Normalize common formats (e.g., "wav", "mp3")
+  const formatLower = trimmedFormat.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    aac: 'audio/aac',
+    m4a: 'audio/mp4',
+    webm: 'audio/webm',
+  };
+
+  // Check if format is in the known map
+  if (mimeMap[formatLower]) {
+    return mimeMap[formatLower];
+  }
+
+  // Validate format contains only alphanumeric, dash, or underscore
+  // Periods are NOT allowed to prevent MIME injection attacks (e.g., "wav.html" -> "audio/wav.html")
+  // which browsers could interpret as HTML and execute embedded scripts
+  if (!/^[a-z0-9_-]+$/i.test(formatLower)) {
+    logger.warn('[BlobExtractor] Invalid audio format, using default', { format });
+    return 'audio/wav';
+  }
+
+  return `audio/${formatLower}`;
+}
+
 function parseBinary(
   base64OrDataUrl: string,
   defaultMimeType: string,
@@ -76,26 +122,11 @@ async function maybeStore(
     return null;
   }
 
-  // Try uploading to the cloud server when logged into Promptfoo Cloud
-  if (shouldAttemptRemoteBlobUpload()) {
-    const remote = await uploadBlobRemote(
-      parsed.buffer,
-      parsed.mimeType || 'application/octet-stream',
-      {
-        ...context,
-        location,
-        kind,
-      },
-    );
-    if (remote?.ref) {
-      return remote.ref;
-    }
-  }
-
   if (!isBlobStorageEnabled()) {
     return null;
   }
 
+  // Store blobs locally (like videos). Media files are not uploaded to cloud.
   const { ref } = await storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
     ...context,
     location,
@@ -188,7 +219,7 @@ export async function extractAndStoreBinaryData(
   if (response.audio?.data && typeof response.audio.data === 'string') {
     const stored = await maybeStore(
       response.audio.data,
-      response.audio.format || 'audio/wav',
+      normalizeAudioMimeType(response.audio.format),
       blobContext,
       'response.audio.data',
       'audio',
@@ -205,14 +236,16 @@ export async function extractAndStoreBinaryData(
   }
 
   // Turns audio (multi-turn)
-  const turns = (response as any).turns as any[] | undefined;
+
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
+  const turns = (response as any).turns;
   if (Array.isArray(turns)) {
     const updatedTurns = await Promise.all(
-      turns.map(async (turn: any, idx: number) => {
+      turns.map(async (turn, idx) => {
         if (turn?.audio?.data && typeof turn.audio.data === 'string') {
           const stored = await maybeStore(
             turn.audio.data,
-            turn.audio.format || 'audio/wav',
+            normalizeAudioMimeType(turn.audio.format),
             blobContext,
             `response.turns[${idx}].audio.data`,
             'audio',
@@ -232,6 +265,8 @@ export async function extractAndStoreBinaryData(
         return turn;
       }),
     );
+
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
     (next as any).turns = updatedTurns;
   }
 
@@ -264,7 +299,7 @@ export async function extractAndStoreBinaryData(
       response.output.includes('b64_json'))
   ) {
     try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, any>> };
+      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
       if (Array.isArray(parsed.data)) {
         let jsonMutated = false;
         const storedUris: string[] = [];

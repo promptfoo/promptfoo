@@ -5,14 +5,14 @@ import { Spinner } from '@app/components/ui/spinner';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { email, isLoading, fetchEmail } = useUserStore();
-  const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({
     title: 'Red Team Vulnerability Reports',
