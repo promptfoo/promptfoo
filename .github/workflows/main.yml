@@ -106,7 +106,17 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard && ' -- --coverage' || '' }}
+
+      - name: Upload Backend Coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/coverage-final.json
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   build:
     name: Build on Node ${{ matrix.node }}
@@ -158,75 +168,6 @@ jobs:
             fi
             echo "PostHog key replacement verified successfully"
           fi
-
-  coverage:
-    name: Test Coverage
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-
-      - name: Use Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Use Python 3.14
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.14.2
-
-      - name: Use Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 4.0.1
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Backend Tests with Coverage
-        run: npm run test -- --coverage
-
-      - name: Run Frontend Tests with Coverage
-        run: npm run test:coverage --prefix src/app
-
-      - name: Run Site Tests with Coverage
-        run: npm run test:coverage --prefix site
-
-      - name: Upload Backend Coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          # Token not needed - using OIDC authentication via id-token: write permission
-          files: ./coverage/coverage-final.json
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: true
-          use_oidc: true
-
-      - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          # Token not needed - using OIDC authentication via id-token: write permission
-          files: ./src/app/coverage/coverage-final.json
-          flags: frontend
-          name: frontend-coverage
-          fail_ci_if_error: true
-          use_oidc: true
-
-      - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          # Token not needed - using OIDC authentication via id-token: write permission
-          files: ./site/coverage/coverage-final.json
-          flags: site
-          name: site-coverage
-          fail_ci_if_error: true
-          use_oidc: true
 
   style-check:
     name: Style Check
@@ -403,9 +344,18 @@ jobs:
         working-directory: site
         run: npm install
 
-      - name: Run Site Tests
+      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   webui:
     name: webui tests
@@ -428,8 +378,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run App Tests
-        run: npm run test:app
+      - name: Run App Tests with Coverage
+        run: npm run test:coverage --prefix src/app
+
+      - name: Upload Frontend Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./src/app/coverage/coverage-final.json
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   integration-tests:
     name: Run Integration Tests
