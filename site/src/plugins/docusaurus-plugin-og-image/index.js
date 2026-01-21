@@ -1077,6 +1077,270 @@ async function generatePressTemplate() {
   };
 }
 
+// Generate Satori JSX template for Store page OG image
+async function generateStoreTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        fontFamily: 'Inter',
+      },
+      children: [
+        // Top accent bar with gradient
+        {
+          type: 'div',
+          props: {
+            style: {
+              width: '100%',
+              height: 4,
+              background: 'linear-gradient(90deg, #e53a3a 0%, #ff6b6b 50%, #e53a3a 100%)',
+            },
+          },
+        },
+        // Main content
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              flex: 1,
+              padding: 60,
+            },
+            children: [
+              // Left side - text content
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1,
+                  },
+                  children: [
+                    // Header (logo + brand)
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginBottom: 40,
+                        },
+                        children: [
+                          logoBase64
+                            ? {
+                                type: 'img',
+                                props: {
+                                  src: logoBase64,
+                                  width: 56,
+                                  height: 56,
+                                  style: { marginRight: 16 },
+                                },
+                              }
+                            : null,
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 28,
+                                fontWeight: 600,
+                                color: '#ff7a7a',
+                              },
+                              children: 'promptfoo',
+                            },
+                          },
+                        ].filter(Boolean),
+                      },
+                    },
+                    // Main headline
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 64,
+                          fontWeight: 600,
+                          color: 'white',
+                          lineHeight: 1.1,
+                          marginBottom: 16,
+                        },
+                        children: 'The Prompt',
+                      },
+                    },
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 64,
+                          fontWeight: 600,
+                          color: '#ff7a7a',
+                          lineHeight: 1.1,
+                          marginBottom: 30,
+                        },
+                        children: 'Shop',
+                      },
+                    },
+                    // Subtitle
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 24,
+                          color: 'rgba(255, 255, 255, 0.7)',
+                          marginBottom: 40,
+                        },
+                        children: 'Official Promptfoo Merchandise',
+                      },
+                    },
+                    // Tags row
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          gap: 12,
+                          marginTop: 'auto',
+                        },
+                        children: [
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                padding: '10px 20px',
+                                borderRadius: 20,
+                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                                border: '1px solid rgba(255, 122, 122, 0.3)',
+                                fontSize: 16,
+                                fontWeight: 600,
+                                color: '#ff7a7a',
+                              },
+                              children: 'Apparel',
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                padding: '10px 20px',
+                                borderRadius: 20,
+                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                                border: '1px solid rgba(255, 122, 122, 0.3)',
+                                fontSize: 16,
+                                fontWeight: 600,
+                                color: '#ff7a7a',
+                              },
+                              children: 'Accessories',
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                padding: '10px 20px',
+                                borderRadius: 20,
+                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                                border: '1px solid rgba(255, 122, 122, 0.3)',
+                                fontSize: 16,
+                                fontWeight: 600,
+                                color: '#ff7a7a',
+                              },
+                              children: 'Swag',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+              // Right side - shopping bag icon
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 300,
+                  },
+                  children: [
+                    // Large shopping bag SVG as inline element
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          width: 200,
+                          height: 200,
+                          backgroundColor: 'rgba(255, 122, 122, 0.1)',
+                          borderRadius: 24,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '2px solid rgba(255, 122, 122, 0.2)',
+                        },
+                        children: [
+                          {
+                            type: 'svg',
+                            props: {
+                              width: 120,
+                              height: 120,
+                              viewBox: '0 0 24 24',
+                              fill: 'none',
+                              children: [
+                                {
+                                  type: 'path',
+                                  props: {
+                                    d: 'M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z',
+                                    stroke: '#ff7a7a',
+                                    strokeWidth: 1.5,
+                                    strokeLinecap: 'round',
+                                    strokeLinejoin: 'round',
+                                    fill: 'rgba(255, 122, 122, 0.1)',
+                                  },
+                                },
+                                {
+                                  type: 'path',
+                                  props: {
+                                    d: 'M3 6h18',
+                                    stroke: '#ff7a7a',
+                                    strokeWidth: 1.5,
+                                    strokeLinecap: 'round',
+                                    strokeLinejoin: 'round',
+                                  },
+                                },
+                                {
+                                  type: 'path',
+                                  props: {
+                                    d: 'M16 10a4 4 0 01-8 0',
+                                    stroke: '#ff7a7a',
+                                    strokeWidth: 1.5,
+                                    strokeLinecap: 'round',
+                                    strokeLinejoin: 'round',
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -1482,6 +1746,38 @@ async function generatePressOgImage(outputPath) {
     return true;
   } catch (error) {
     console.error('❌ Failed to generate Press OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Store OG image using custom template
+async function generateStoreOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateStoreTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Store OG image:', error.message);
     return false;
   }
 }
@@ -1934,6 +2230,18 @@ module.exports = function (context, options) {
         generatedImages.set('/press/', '/img/og/press-og.png');
         successCount++;
         console.log('  ✅ Press OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Generate store page OG image
+      console.log('🎨 Generating Store page OG image...');
+      const storeImagePath = path.join(outDir, 'img', 'og', 'store-og.png');
+      const storeSuccess = await generateStoreOgImage(storeImagePath);
+      if (storeSuccess) {
+        generatedImages.set('/store/', '/img/og/store-og.png');
+        successCount++;
+        console.log('  ✅ Store OG image generated');
       } else {
         failureCount++;
       }
