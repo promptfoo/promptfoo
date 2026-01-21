@@ -92,15 +92,24 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 
 /**
  * Generates a unique base display ID for a plugin instance.
- * For policy plugins, includes truncated policy text to differentiate multiple instances.
+ * For policy plugins, includes an index number and truncated policy text to differentiate multiple instances.
  * @param plugin - The plugin configuration.
+ * @param index - Optional index number for plugins with the same base ID (e.g., multiple policy plugins).
  * @returns A unique base display ID for the plugin.
  */
-function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
-  if (plugin.id === 'policy' && typeof plugin.config?.policy === 'string') {
-    const policyText = plugin.config.policy.trim().replace(/\n+/g, ' ');
-    const truncated = policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText;
-    return `policy: "${truncated}"`;
+function getPluginBaseDisplayId(
+  plugin: { id: string; config?: Record<string, any> },
+  index?: number,
+): string {
+  if (plugin.id === 'policy') {
+    const policyText =
+      typeof plugin.config?.policy === 'string'
+        ? plugin.config.policy.trim().replace(/\n+/g, ' ')
+        : '';
+    const truncated =
+      policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
+    // Include index to ensure uniqueness even if policy text snippets are identical
+    return index !== undefined ? `policy #${index}: "${truncated}"` : `policy: "${truncated}"`;
   }
   return plugin.id;
 }
@@ -989,19 +998,20 @@ export async function synthesize({
       },
       cliProgress.Presets.shades_classic,
     );
-    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
+    // Use totalTests to include both plugin and strategy tests in progress tracking
+    progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
 
   // Replace progress bar updates with logger calls when in web UI
   if (showProgressBar) {
-    progressBar?.increment(1, { task: 'Extracting system purpose' });
+    progressBar?.update({ task: 'Extracting system purpose' });
   } else {
     logger.info('Extracting system purpose...');
   }
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
 
   if (showProgressBar) {
-    progressBar?.increment(1, { task: 'Extracting entities' });
+    progressBar?.update({ task: 'Extracting entities' });
   } else {
     logger.info('Extracting entities...');
   }
@@ -1013,6 +1023,8 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
+  // Track index per plugin id to ensure unique display IDs (e.g., multiple policy plugins)
+  const pluginIndexMap = new Map<string, number>();
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
@@ -1146,14 +1158,20 @@ export async function synthesize({
 
       // If multiple defined languages were used, create separate report entries for each language
       // Otherwise, use the aggregated result for the plugin
-      // NOTE: Aggregate counts for plugins with same ID (e.g., multiple policy plugins)
+      // NOTE: Use index to ensure unique display IDs (e.g., multiple policy plugins)
       const definedLanguages = languages.filter((lang) => lang !== undefined);
+
+      // Get or increment index for this plugin to ensure unique display IDs
+      const currentIndex = (pluginIndexMap.get(plugin.id) || 0) + 1;
+      pluginIndexMap.set(plugin.id, currentIndex);
+      // Only pass index for plugins that can have duplicates (like policy)
+      const baseId = getPluginBaseDisplayId(plugin, plugin.id === 'policy' ? currentIndex : undefined);
+
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Put language prefix at the beginning so it's visible even with truncation
-        const baseId = getPluginBaseDisplayId(plugin);
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "(Hmong) policy: ..." so language is visible in truncated table
+          // Use format like "(Hmong) policy #1: ..." so language is visible in truncated table
           const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
@@ -1161,7 +1179,6 @@ export async function synthesize({
         }
       } else {
         // Single language or no language - use aggregated result
-        const baseId = getPluginBaseDisplayId(plugin);
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
@@ -1235,6 +1252,9 @@ export async function synthesize({
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
+    if (showProgressBar) {
+      progressBar?.update({ task: 'Applying retry strategy' });
+    }
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
       targetIds,
@@ -1247,19 +1267,31 @@ export async function synthesize({
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
+    // Update progress bar with retry strategy tests generated
+    if (showProgressBar) {
+      progressBar?.increment(retryTestCases.length);
+    }
   }
 
   // Check for abort signal or apply non-basic strategies
   checkAbort();
+  const nonBasicStrategies = strategies.filter((s) => !['basic', 'retry'].includes(s.id));
+  if (showProgressBar && nonBasicStrategies.length > 0) {
+    progressBar?.update({ task: 'Applying strategies' });
+  }
   const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
     await applyStrategies(
       pluginTestCases,
-      strategies.filter((s) => !['basic', 'retry'].includes(s.id)),
+      nonBasicStrategies,
       injectVar,
       excludeTargetOutputFromAgenticAttackGeneration,
     );
 
   Object.assign(strategyResults, otherStrategyResults);
+  // Update progress bar with strategy tests generated
+  if (showProgressBar && strategyTestCases.length > 0) {
+    progressBar?.increment(strategyTestCases.length);
+  }
 
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
