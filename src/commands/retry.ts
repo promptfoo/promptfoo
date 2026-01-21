@@ -385,7 +385,7 @@ export function setupRetryCommand(program: Command) {
     .option('-v, --verbose', 'Verbose output')
     .option('--max-concurrency <number>', 'Maximum number of concurrent evaluations', parseInt)
     .option('--delay <number>', 'Delay between evaluations in milliseconds', parseInt)
-    .option('--share/--no-share', 'Share results to cloud (auto-shares when cloud is configured)')
+    .option('--share', 'Share results to cloud (auto-shares when cloud is configured)')
     .action(async (evalId: string, cmdObj: RetryCommandOptions) => {
       try {
         await retryCommand(evalId, cmdObj);
