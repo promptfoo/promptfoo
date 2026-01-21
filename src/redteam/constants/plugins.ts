@@ -372,6 +372,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 export const DATASET_EXEMPT_PLUGINS = [
   'beavertails',
   'cyberseceval',
+  'openai-guardrails',
   'pliny',
   'unsafebench',
   'vlguard',
