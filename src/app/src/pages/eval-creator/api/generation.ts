@@ -421,9 +421,25 @@ export async function getJobStatus(
 // Synchronous analysis endpoints (for quick insights)
 
 export interface ConceptAnalysis {
-  topics: string[];
-  entities: string[];
-  constraints: string[];
+  topics: Array<{
+    name: string;
+    description?: string;
+    relevance?: number;
+  }>;
+  entities: Array<{
+    name: string;
+    type?: string;
+    occurrences?: number;
+  }>;
+  constraints: Array<{
+    description: string;
+    type?: 'format' | 'content' | 'behavior' | 'length' | 'style';
+    source?: 'explicit' | 'implied';
+  }>;
+  variableRelationships?: Array<{
+    variables: string[];
+    relationship: string;
+  }>;
 }
 
 export interface DiversityMetrics {
