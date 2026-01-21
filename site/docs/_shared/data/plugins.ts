@@ -1327,6 +1327,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Dataset',
+    description:
+      "Tests jailbreak resistance using OpenAI's evaluation dataset of role-playing attacks and system manipulation",
+    label: 'technical',
+    link: '/docs/red-team/plugins/openai-guardrails/',
+    name: 'OpenAI Guardrails',
+    pluginId: 'openai-guardrails',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Brand',
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     label: 'technical',

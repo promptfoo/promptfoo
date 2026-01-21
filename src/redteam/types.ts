@@ -90,6 +90,8 @@ export const PluginConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
+  // Include safe prompts for testing over-blocking (openai-guardrails plugin)
+  includeSafe: z.boolean().optional(),
 
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain

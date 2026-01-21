@@ -90,6 +90,7 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'hijacking',
   'system-prompt-override',
   'beavertails',
+  'openai-guardrails',
   'harmbench',
   'pliny',
   'donotanswer',
@@ -330,6 +331,7 @@ export const ADDITIONAL_PLUGINS = [
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
   'off-topic',
+  'openai-guardrails',
   'overreliance',
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
@@ -371,6 +373,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 export const DATASET_EXEMPT_PLUGINS = [
   'beavertails',
   'cyberseceval',
+  'openai-guardrails',
   'pliny',
   'unsafebench',
   'vlguard',

@@ -261,4 +261,111 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
   });
+
+  describe("when plugin is 'openai-guardrails'", () => {
+    it("should display the 'includeSafe' checkbox and update its state on toggle", () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkboxLabel = 'Include safe prompts to test for over-blocking';
+      const checkbox = screen.getByLabelText(checkboxLabel);
+      expect(checkbox).toBeInTheDocument();
+
+      fireEvent.click(checkbox);
+
+      // After clicking, checkbox should change state
+      expect(checkbox).toHaveAttribute('data-state', 'checked');
+
+      fireEvent.click(checkbox);
+
+      expect(checkbox).toHaveAttribute('data-state', 'unchecked');
+    });
+
+    it("should call onSave with the correct plugin and localConfig (including the 'includeSafe' value) when the Save button is clicked", () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkboxLabel = 'Include safe prompts to test for over-blocking';
+      const checkbox = screen.getByLabelText(checkboxLabel);
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+
+      fireEvent.click(checkbox);
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', { includeSafe: true });
+    });
+
+    it('should not call onSave if no changes were made to the config', () => {
+      const initialConfig = { includeSafe: true };
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={initialConfig}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it('should discard changes when the dialog is closed without saving', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkboxLabel = 'Include safe prompts to test for over-blocking';
+      const checkbox = screen.getByLabelText(checkboxLabel);
+      fireEvent.click(checkbox);
+
+      fireEvent.click(screen.getByText('Cancel'));
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it('shows gradingGuidance alongside openai-guardrails config', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      // Should show openai-guardrails-specific field
+      expect(screen.getByText(/jailbreak attempts from OpenAI/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Include safe prompts to test for over-blocking'),
+      ).toBeInTheDocument();
+
+      // Should ALSO show gradingGuidance field
+      expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+  });
 });
