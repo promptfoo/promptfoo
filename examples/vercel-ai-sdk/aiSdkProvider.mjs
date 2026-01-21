@@ -162,7 +162,7 @@ export default class AiSdkProvider {
         model: openai(this.modelId),
         messages,
         temperature: this.temperature,
-        maxTokens: this.config.maxTokens,
+        maxOutputTokens: this.config.maxOutputTokens,
       });
 
       return {
@@ -176,8 +176,8 @@ export default class AiSdkProvider {
         prompt: messages,
 
         tokenUsage: {
-          prompt: result.usage?.promptTokens,
-          completion: result.usage?.completionTokens,
+          prompt: result.usage?.inputTokens,
+          completion: result.usage?.outputTokens,
           total: result.usage?.totalTokens,
         },
       };
