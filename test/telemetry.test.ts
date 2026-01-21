@@ -272,12 +272,8 @@ describe('Telemetry', () => {
 
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
-    // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
-    // but NOT with the user's event ('eval_ran')
-    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', {
-      feature: 'telemetry disabled',
-    });
-    expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    // When telemetry is disabled, sendEvent should not be called at all
+    expect(localSendEventSpy).not.toHaveBeenCalled();
     localSendEventSpy.mockRestore();
   });
 
@@ -578,13 +574,12 @@ describe('Telemetry', () => {
   });
 
   describe('telemetry disabled recording', () => {
-    it('should record telemetry disabled event only once', () => {
+    it('should not call sendEvent when telemetry is disabled', () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
       const _telemetry = new Telemetry();
 
       _telemetry.record('eval_ran', { foo: 'bar' });
-      expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
-      expect(sendEventSpy).toHaveBeenCalledTimes(1);
+      expect(sendEventSpy).not.toHaveBeenCalled();
 
       sendEventSpy.mockClear();
       _telemetry.record('command_used', { name: 'test' });
