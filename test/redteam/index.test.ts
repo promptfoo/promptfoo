@@ -1001,6 +1001,247 @@ describe('synthesize', () => {
     });
   });
 
+  describe('Progress bar', () => {
+    it('should initialize progress bar with totalTests including strategies', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      // Mock plugin to return test cases
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      // 2 plugins × 1 test = 2 plugin tests
+      // 2 strategies × 2 tests = 4 strategy tests (jailbreak strategies add 1:1)
+      // Total = 6 tests
+      await synthesize({
+        numTests: 1,
+        plugins: [
+          { id: 'test-plugin', numTests: 1 },
+          { id: 'test-plugin', numTests: 1 },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:tree' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Progress bar should be started with totalTests (not just plugin tests)
+      expect(mockStart).toHaveBeenCalled();
+      const startCall = mockStart.mock.calls[0];
+      // totalTests should be greater than just plugin tests (2)
+      expect(startCall[0]).toBeGreaterThan(2);
+    });
+
+    it('should increment progress bar for strategy tests', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Should have increment calls for both plugin tests and strategy tests
+      expect(mockIncrement).toHaveBeenCalled();
+      // At least one increment call should be for strategy tests (with a number argument)
+      const incrementCalls = mockIncrement.mock.calls;
+      const hasStrategyIncrement = incrementCalls.some(
+        (call) => typeof call[0] === 'number' && call[0] > 0,
+      );
+      expect(hasStrategyIncrement).toBe(true);
+    });
+
+    it('should include strategy tests in progress bar for multilingual configs', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // 2 plugins × 1 test × 2 languages = 4 plugin tests
+      // 1 strategy × 4 plugin tests = 4 strategy tests
+      // Total = 8 tests
+      await synthesize({
+        numTests: 1,
+        language: ['Hmong', 'Zulu'],
+        plugins: [
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 2' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Progress bar should be started with totalTests including strategies
+      expect(mockStart).toHaveBeenCalled();
+      const startCall = mockStart.mock.calls[0];
+      // Should be 8 (4 plugin + 4 strategy), not 4 (just plugins)
+      expect(startCall[0]).toBeGreaterThanOrEqual(8);
+    });
+  });
+
+  describe('Report status for policy plugins', () => {
+    it('should show Failed status when plugin generates 0 test cases', async () => {
+      // Mock plugin to return empty array (failed generation)
+      const mockPluginAction = vi.fn().mockResolvedValue([]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 0 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('0');
+      expect(cleanReport).toContain('Failed');
+    });
+
+    it('should show Partial status when plugin generates fewer tests than requested', async () => {
+      // Mock plugin to return only 1 test case when 2 are requested
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test1' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 1 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('1');
+      expect(cleanReport).toContain('Partial');
+    });
+
+    it('should show individual status for each policy when one fails and others succeed', async () => {
+      // First policy returns 0, second policy returns 2
+      let callCount = 0;
+      const mockPluginAction = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve([]); // First policy fails
+        }
+        return Promise.resolve([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
+      });
+
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          { id: 'policy', numTests: 2, config: { policy: 'Failing policy' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Succeeding policy' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should have both policies with unique IDs
+      expect(cleanReport).toContain('policy #1');
+      expect(cleanReport).toContain('policy #2');
+      // Should show both Failed and Success statuses
+      expect(cleanReport).toContain('Failed');
+      expect(cleanReport).toContain('Success');
+    });
+  });
+
   describe('API Health Check', () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -2776,10 +3017,10 @@ describe('Language configuration', () => {
       // Strip ANSI codes for easier assertion
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy plugin should have its own row with unique display ID
-      expect(cleanReport).toContain('policy: "Policy 1"');
-      expect(cleanReport).toContain('policy: "Policy 2"');
-      expect(cleanReport).toContain('policy: "Policy 3"');
+      // Each policy plugin should have its own row with unique display ID including index
+      expect(cleanReport).toContain('policy #1: "Policy 1"');
+      expect(cleanReport).toContain('policy #2: "Policy 2"');
+      expect(cleanReport).toContain('policy #3: "Policy 3"');
       // Each should show 2 requested, 2 generated
       const twoMatches = cleanReport.match(/\b2\b/g);
       expect(twoMatches?.length).toBeGreaterThanOrEqual(6); // At least 6 occurrences of "2"
@@ -2814,11 +3055,11 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy should have separate rows for each language (language prefix first)
-      expect(cleanReport).toContain('(Hmong) policy: "Policy 1"');
-      expect(cleanReport).toContain('(Zulu) policy: "Policy 1"');
-      expect(cleanReport).toContain('(Hmong) policy: "Policy 2"');
-      expect(cleanReport).toContain('(Zulu) policy: "Policy 2"');
+      // Each policy should have separate rows for each language (language prefix first for visibility)
+      expect(cleanReport).toContain('(Hmong) policy #1: "Policy 1"');
+      expect(cleanReport).toContain('(Zulu) policy #1: "Policy 1"');
+      expect(cleanReport).toContain('(Hmong) policy #2: "Policy 2"');
+      expect(cleanReport).toContain('(Zulu) policy #2: "Policy 2"');
       // Each should show 1 requested, 1 generated
       const oneMatches = cleanReport.match(/\b1\b/g);
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
