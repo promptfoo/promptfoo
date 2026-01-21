@@ -185,6 +185,7 @@ async function fetchImageAsBase64(
 class UnsafeBenchDatasetManager {
   private static instance: UnsafeBenchDatasetManager | null = null;
   private datasetCache: UnsafeBenchInput[] | null = null;
+  private cacheIncludeSafe: boolean | null = null; // Track cache mode
 
   private constructor() {}
 
@@ -290,14 +291,24 @@ class UnsafeBenchDatasetManager {
    * Ensure the dataset is loaded into cache
    */
   private async ensureDatasetLoaded(config?: UnsafeBenchPluginConfig): Promise<void> {
-    if (this.datasetCache !== null) {
+    const includeSafe = config?.includeSafe ?? false;
+
+    // Check if cache exists and was loaded with the same includeSafe mode
+    if (this.datasetCache !== null && this.cacheIncludeSafe === includeSafe) {
       logger.debug(`[unsafebench] Using cached dataset with ${this.datasetCache.length} records`);
       return;
     }
 
+    // Cache mode changed - need to reload
+    if (this.datasetCache !== null && this.cacheIncludeSafe !== includeSafe) {
+      logger.debug(
+        `[unsafebench] Cache mode changed from includeSafe=${this.cacheIncludeSafe} to ${includeSafe}, reloading`,
+      );
+      this.datasetCache = null;
+    }
+
     // Fetch a large dataset - aim to get the entire dataset if reasonable
     // When includeSafe is true, we need to fetch more to ensure good balance
-    const includeSafe = config?.includeSafe ?? false;
     const fetchLimit = includeSafe ? 2000 : 1000;
     logger.debug(
       `[unsafebench] Fetching ${fetchLimit} records from UnsafeBench dataset${includeSafe ? ' (includeSafe mode)' : ''}`,
@@ -315,7 +326,6 @@ class UnsafeBenchDatasetManager {
       logger.debug(`[unsafebench] Fetched ${records.length} total records`);
 
       // Filter for unsafe images (or both if includeSafe is true)
-      const includeSafe = config?.includeSafe ?? false;
       const filteredRecords = records
         .filter((record) => {
           const safetyLabel = record.vars?.safety_label;
@@ -441,8 +451,9 @@ class UnsafeBenchDatasetManager {
         );
       }
 
-      // Store in cache
+      // Store in cache with mode tracking
       this.datasetCache = finalRecords;
+      this.cacheIncludeSafe = includeSafe;
       logger.debug(
         `[unsafebench] Cached ${finalRecords.length} processed records${includeSafe ? ' (balanced safe/unsafe)' : ' (unsafe only)'}`,
       );
