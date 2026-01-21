@@ -426,6 +426,23 @@ describe('json utilities', () => {
           expect(convertSlashCommentsToHash(input)).toBe(expected[i]);
         });
       });
+
+      it('should not treat URL schemes as comments', () => {
+        const inputs = [
+          'url: http://example.com/path',
+          'url: https://example.com/path',
+          'url: http://example.com//double-slash',
+        ];
+        inputs.forEach((input) => {
+          expect(convertSlashCommentsToHash(input)).toBe(input);
+        });
+      });
+
+      it('should still convert comments after URLs', () => {
+        const input = 'url: http://example.com/path // trailing comment';
+        const expected = 'url: http://example.com/path # trailing comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
     });
 
     it('should skip non-object YAML values', () => {

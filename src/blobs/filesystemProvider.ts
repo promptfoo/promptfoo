@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 
 import logger from '../logger';
@@ -64,18 +65,20 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     return targetPath;
   }
 
-  private hashToPath(hash: string, options?: { ensureDir?: boolean }): string {
+  private hashToPath(hash: string): string {
+    this.assertValidHash(hash);
+
+    const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
+    const fileRelative = path.join(dirRelative, hash);
+    return this.resolvePathInBase(fileRelative);
+  }
+
+  private async ensureHashDir(hash: string): Promise<void> {
     this.assertValidHash(hash);
 
     const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
     const dirPath = this.resolvePathInBase(dirRelative);
-
-    if (options?.ensureDir && !fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-
-    const fileRelative = path.join(dirRelative, hash);
-    return this.resolvePathInBase(fileRelative);
+    await fsPromises.mkdir(dirPath, { recursive: true });
   }
 
   private metadataPath(filePath: string): string {
@@ -84,10 +87,13 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
     const hash = computeHash(data);
-    const filePath = this.hashToPath(hash, { ensureDir: true });
+    await this.ensureHashDir(hash);
+    const filePath = this.hashToPath(hash);
 
-    if (fs.existsSync(filePath)) {
-      const meta = this.readMetadata(filePath);
+    // Check if file already exists (deduplication)
+    try {
+      await fsPromises.access(filePath);
+      const meta = await this.readMetadata(filePath);
       const ref = this.buildRef(
         hash,
         meta?.mimeType ?? mimeType,
@@ -95,9 +101,11 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
         meta?.provider ?? this.providerId,
       );
       return { ref, deduplicated: true };
+    } catch {
+      // File doesn't exist, proceed with storing
     }
 
-    fs.writeFileSync(filePath, data);
+    await fsPromises.writeFile(filePath, data);
 
     const metadata: BlobMetadata = {
       mimeType,
@@ -106,7 +114,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       provider: this.providerId,
       key: filePath,
     };
-    fs.writeFileSync(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
+    await fsPromises.writeFile(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
 
     return {
       ref: this.buildRef(hash, mimeType, data.length, this.providerId),
@@ -116,12 +124,19 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
   async getByHash(hash: string): Promise<StoredBlob> {
     const filePath = this.hashToPath(hash);
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Blob not found: ${hash}`);
+
+    let data: Buffer;
+    try {
+      data = await fsPromises.readFile(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`Blob not found: ${hash}`);
+      }
+      throw error;
     }
-    const data = fs.readFileSync(filePath);
+
     const metadata =
-      this.readMetadata(filePath) ||
+      (await this.readMetadata(filePath)) ||
       ({
         mimeType: 'application/octet-stream',
         sizeBytes: data.length,
@@ -135,7 +150,8 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   async exists(hash: string): Promise<boolean> {
     try {
       const filePath = this.hashToPath(hash);
-      return fs.existsSync(filePath);
+      await fsPromises.access(filePath);
+      return true;
     } catch {
       return false;
     }
@@ -145,11 +161,21 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     try {
       const filePath = this.hashToPath(hash);
       const metaPath = this.metadataPath(filePath);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+
+      // Delete files (ignore ENOENT errors)
+      try {
+        await fsPromises.unlink(filePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
       }
-      if (fs.existsSync(metaPath)) {
-        fs.unlinkSync(metaPath);
+      try {
+        await fsPromises.unlink(metaPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
       }
     } catch {
       // Ignore invalid hashes/path traversal attempts
@@ -171,16 +197,16 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     };
   }
 
-  private readMetadata(filePath: string): BlobMetadata | null {
+  private async readMetadata(filePath: string): Promise<BlobMetadata | null> {
     const safeFilePath = this.resolvePathInBase(filePath);
     const metaPath = this.metadataPath(safeFilePath);
-    if (!fs.existsSync(metaPath)) {
-      return null;
-    }
     try {
-      const raw = fs.readFileSync(metaPath, 'utf8');
+      const raw = await fsPromises.readFile(metaPath, 'utf8');
       return JSON.parse(raw) as BlobMetadata;
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
       logger.warn('[BlobFS] Failed to read metadata', { error });
       return null;
     }

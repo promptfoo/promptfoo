@@ -10,7 +10,7 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -165,7 +165,7 @@ export function createApp() {
   );
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const file = await readResult(id);
     if (!file) {
       res.status(404).send('Result not found');
@@ -196,7 +196,7 @@ export function createApp() {
   });
 
   app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
-    const sha256hash = req.params.sha256hash;
+    const sha256hash = req.params.sha256hash as string;
     const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
@@ -278,7 +278,7 @@ export function createApp() {
       if (!result.success) {
         res
           .status(400)
-          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
+          .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
         return;
       }
       const { event, properties } = result.data;
@@ -322,20 +322,23 @@ export async function startServer(
 
   await runDbMigrations();
 
-  const watcher = setupSignalWatcher(async () => {
-    // Try to get the specific eval that was updated from the signal file
-    const signalEvalId = readSignalEvalId();
-    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+  const watcher = setupSignalWatcher(() => {
+    const handleSignalUpdate = async () => {
+      // Try to get the specific eval that was updated from the signal file
+      const signalEvalId = readSignalEvalId();
+      const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+      const results = await updatedEval?.getResultsCount();
 
-    const results = await updatedEval?.getResultsCount();
+      if (results && results > 0) {
+        logger.debug(
+          `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
+        );
+        io.emit('update', updatedEval);
+        allPrompts = null;
+      }
+    };
 
-    if (results && results > 0) {
-      logger.debug(
-        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
-      );
-      io.emit('update', updatedEval);
-      allPrompts = null;
-    }
+    void handleSignalUpdate();
   });
 
   io.on('connection', async (socket) => {

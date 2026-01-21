@@ -203,7 +203,7 @@ const CSVExporter = ({
 
   return (
     <Button onClick={exportToCSV} className="print-hide">
-      <DownloadIcon className="mr-2 h-4 w-4" />
+      <DownloadIcon className="mr-2 size-4" />
       Export framework results to CSV
     </Button>
   );

@@ -6,13 +6,15 @@ import logger from '../../logger';
 
 function errorFileHasContents(filePath: string): boolean {
   try {
-    return (
-      fs.existsSync(filePath) && fs.statSync(filePath).isFile() && fs.statSync(filePath).size > 0
-    );
+    const stats = fs.statSync(filePath);
+    return stats.isFile() && stats.size > 0;
   } catch (error) {
-    logger.debug(`[errorFileHasContents] Error checking if file has contents: ${filePath}`, {
-      error,
-    });
+    // ENOENT means file doesn't exist, which is expected in many cases
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.debug(`[errorFileHasContents] Error checking if file has contents: ${filePath}`, {
+        error,
+      });
+    }
     return false;
   }
 }

@@ -6,7 +6,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
@@ -45,10 +44,12 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
+  FailedPluginInfo,
   PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -56,6 +57,47 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+
+/**
+ * Handles failed plugins based on strict mode.
+ * In strict mode, throws PartialGenerationError.
+ * In non-strict mode (default), logs a warning and returns false to continue.
+ * @returns true if we should stop (error thrown), false to continue
+ */
+function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean): void {
+  if (failedPlugins.length === 0) {
+    return;
+  }
+
+  const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+  const warningMessage = dedent`
+    ${chalk.yellow('⚠️  Warning:')} Test case generation failed for ${failedPlugins.length} plugin(s):
+    ${pluginList.join('\n')}
+
+    ${chalk.dim('Possible causes:')}
+      - API rate limiting or connectivity issues
+      - Invalid plugin configuration
+      - Provider errors during generation
+
+    ${chalk.dim('To troubleshoot:')}
+      - Run with --verbose flag to see detailed error messages
+      - Check API keys and provider configuration
+      - Retry the scan after resolving any reported errors
+  `;
+
+  if (strict) {
+    // In strict mode, throw to stop the scan
+    throw new PartialGenerationError(failedPlugins);
+  }
+
+  // In non-strict mode (default), log warning and continue
+  logger.warn(warningMessage);
+  logger.warn(
+    chalk.yellow(
+      `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
+    ),
+  );
+}
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -115,7 +157,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
@@ -171,7 +212,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    resolvedConfigMetadata = resolved.config.metadata;
     commandLineOptions = resolved.commandLineOptions;
     resolvedConfig = resolved.config;
 
@@ -328,11 +368,13 @@ export async function doGenerateRedteam(
     (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
   );
   if (policyPluginsWithRefs.length > 0) {
-    // Load the calling user's team id; all policies must belong to the same team.
-    const teamId =
-      resolvedConfigMetadata?.teamId ??
-      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
-      (await resolveTeamId()).id;
+    // Always use the calling user's team id for fetching policies.
+    // The server will return:
+    // 1. Policies owned by the user's team
+    // 2. Org-scoped policies (accessible to all teams in the org)
+    // This allows users to run scans with org-scoped templates that reference
+    // org-scoped policies, even if those policies are owned by a different team.
+    const teamId = (await resolveTeamId()).id;
 
     const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 
@@ -373,8 +415,13 @@ export async function doGenerateRedteam(
     logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
+  // Read inputs from the first target/provider
+  const targetInputs = testSuite.providers[0]?.inputs;
+
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
+    // Multi-variable inputs for test case generation (read from target)
+    inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency:
       options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
@@ -394,7 +441,7 @@ export async function doGenerateRedteam(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    const errorMessage = fromError(parsedConfig.error).toString();
+    const errorMessage = z.prettifyError(parsedConfig.error);
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
@@ -447,6 +494,9 @@ export async function doGenerateRedteam(
     // Multi-context mode: generate tests for each context
     logger.info(`Generating tests for ${contexts.length} contexts...`);
 
+    // Collect failed plugins across all contexts
+    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+
     for (const context of contexts) {
       logger.info(`  Generating tests for context: ${context.id}`);
 
@@ -454,6 +504,7 @@ export async function doGenerateRedteam(
 
       const contextResult = await synthesize({
         ...parsedConfig.data,
+        inputs: targetInputs,
         purpose: contextPurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -464,6 +515,11 @@ export async function doGenerateRedteam(
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: augmentedTestGenerationInstructions,
       } as SynthesizeOptions);
+
+      // Collect failed plugins from this context
+      if (contextResult.failedPlugins.length > 0) {
+        allFailedPlugins.push(...contextResult.failedPlugins);
+      }
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
@@ -492,6 +548,9 @@ export async function doGenerateRedteam(
       }
     }
 
+    // Check for failed plugins across all contexts
+    handleFailedPlugins(allFailedPlugins, options.strict ?? false);
+
     // Use first context's purpose for backward compatibility in output
     purpose = contexts[0].purpose;
     logger.info(
@@ -501,6 +560,7 @@ export async function doGenerateRedteam(
     // Single purpose mode (existing behavior)
     const result = await synthesize({
       ...parsedConfig.data,
+      inputs: targetInputs,
       purpose: enhancedPurpose,
       numTests: config.numTests,
       prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -511,6 +571,9 @@ export async function doGenerateRedteam(
       showProgressBar: options.progressBar !== false,
       testGenerationInstructions: augmentedTestGenerationInstructions,
     } as SynthesizeOptions);
+
+    // Check for failed plugins - warn by default, throw with --strict
+    handleFailedPlugins(result.failedPlugins, options.strict ?? false);
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -559,6 +622,7 @@ export async function doGenerateRedteam(
       typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
+      ...(options.description ? { description: options.description } : {}),
       defaultTest: {
         ...existingDefaultTest,
         metadata: {
@@ -643,6 +707,9 @@ export async function doGenerateRedteam(
         entities,
       },
     };
+    if (options.description) {
+      existingConfig.description = options.description;
+    }
     existingConfig.tests = [...testsArray, ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     // Add the config hash to metadata
@@ -686,7 +753,14 @@ export async function doGenerateRedteam(
       strategies: strategyObjs,
     });
 
-    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml', headerComments);
+    ret = writePromptfooConfig(
+      {
+        ...(options.description ? { description: options.description } : {}),
+        tests: redteamTests,
+      },
+      'redteam.yaml',
+      headerComments,
+    );
   }
 
   telemetry.record('command_used', {
@@ -729,6 +803,7 @@ export function redteamGenerateCommand(
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file', false)
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option('-d, --description <text>', 'Custom description/name for the generated tests')
     .option(
       '--purpose <purpose>',
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
@@ -786,6 +861,11 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
+    .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
       // Handle cloud config with target
       if (opts.config && isUuid(opts.config)) {
@@ -817,6 +897,9 @@ export function redteamGenerateCommand(
       if (opts.remote) {
         cliState.remote = true;
       }
+      if (opts.maxConcurrency !== undefined) {
+        cliState.maxConcurrency = opts.maxConcurrency;
+      }
       if (shouldGenerateRemote()) {
         logger.debug('Remote generation enabled');
       } else {
@@ -833,10 +916,11 @@ export function redteamGenerateCommand(
           });
           if (!parsed.success) {
             logger.error('Invalid options:');
-            parsed.error.errors.forEach((err: z.ZodIssue) => {
+            parsed.error.issues.forEach((err: z.ZodIssue) => {
               logger.error(`  ${err.path.join('.')}: ${err.message}`);
             });
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
           overrides = parsed.data;
         }
@@ -854,7 +938,7 @@ export function redteamGenerateCommand(
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
+          error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
@@ -865,7 +949,11 @@ export function redteamGenerateCommand(
               : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-        process.exit(1);
+        process.exitCode = 1;
+        return;
+      } finally {
+        // Reset cliState.maxConcurrency to prevent stale state
+        cliState.maxConcurrency = undefined;
       }
     });
 }

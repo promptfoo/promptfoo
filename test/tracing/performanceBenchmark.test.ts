@@ -1,8 +1,9 @@
 /**
- * Phase 5: Performance benchmark tests for OTEL instrumentation.
+ * Smoke tests for OTEL instrumentation.
  *
- * These tests measure the overhead of OTEL tracing to ensure
- * it doesn't significantly impact evaluation performance.
+ * These tests verify that tracing works correctly under various conditions
+ * (concurrency, errors, many attributes, etc.) without asserting on timing.
+ * Performance benchmarking should be done with dedicated tooling, not in CI.
  */
 
 import {
@@ -26,13 +27,12 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-describe('OTEL Tracing Performance Benchmarks', () => {
+describe('OTEL Tracing Smoke Tests', () => {
   let tracerProvider: NodeTracerProvider;
   let memoryExporter: InMemorySpanExporter;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    // Use SimpleSpanProcessor for consistent test behavior
     tracerProvider = new NodeTracerProvider({
       spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
     });
@@ -66,128 +66,57 @@ describe('OTEL Tracing Performance Benchmarks', () => {
     finishReasons: ['stop'],
   });
 
-  describe('Span Creation Overhead', () => {
-    it('should add minimal overhead to a no-op function', async () => {
-      const iterations = 1000;
+  describe('Basic Span Creation', () => {
+    it('should create spans for traced operations', async () => {
+      const iterations = 10;
 
-      // Baseline: direct function call
-      const baselineStart = performance.now();
-      for (let i = 0; i < iterations; i++) {
-        await (async () => ({ output: 'test' }))();
-      }
-      const baselineTime = performance.now() - baselineStart;
-
-      // With tracing
-      const tracedStart = performance.now();
       for (let i = 0; i < iterations; i++) {
         await withGenAISpan(baseContext, async () => ({ output: 'test' }));
       }
-      const tracedTime = performance.now() - tracedStart;
 
-      const overhead = tracedTime - baselineTime;
-      const overheadPerCall = overhead / iterations;
-
-      // Expect less than 1ms overhead per call
-      expect(overheadPerCall).toBeLessThan(1);
-
-      // Log results for visibility
-      console.log(`Baseline: ${baselineTime.toFixed(2)}ms for ${iterations} calls`);
-      console.log(`Traced: ${tracedTime.toFixed(2)}ms for ${iterations} calls`);
-      console.log(`Overhead per call: ${overheadPerCall.toFixed(4)}ms`);
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(iterations);
     });
 
-    it('should add minimal overhead with full result extraction', async () => {
-      const iterations = 1000;
+    it('should create spans with result extraction', async () => {
+      const iterations = 10;
 
-      // With full result extraction
-      const tracedStart = performance.now();
       for (let i = 0; i < iterations; i++) {
         await withGenAISpan(baseContext, async () => ({ output: 'test' }), resultExtractor);
       }
-      const tracedTime = performance.now() - tracedStart;
 
-      const timePerCall = tracedTime / iterations;
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(iterations);
 
-      // Expect less than 2ms per call with full extraction
-      expect(timePerCall).toBeLessThan(2);
-
-      console.log(`With result extraction: ${tracedTime.toFixed(2)}ms for ${iterations} calls`);
-      console.log(`Time per call: ${timePerCall.toFixed(4)}ms`);
+      // Verify token usage attributes are set
+      const span = spans[0];
+      expect(span.attributes['gen_ai.usage.input_tokens']).toBe(100);
+      expect(span.attributes['gen_ai.usage.output_tokens']).toBe(50);
     });
 
-    it('should handle high concurrency efficiently', async () => {
+    it('should handle high concurrency without errors', async () => {
       const concurrency = 100;
-      const iterations = 10;
+      const batches = 3;
 
-      const start = performance.now();
-
-      for (let batch = 0; batch < iterations; batch++) {
+      for (let batch = 0; batch < batches; batch++) {
         await Promise.all(
           Array.from({ length: concurrency }, (_, i) =>
             withGenAISpan(
               { ...baseContext, testIndex: batch * concurrency + i },
-              async () => {
-                // Simulate minimal work
-                return { output: `Response ${i}` };
-              },
+              async () => ({ output: `Response ${i}` }),
               resultExtractor,
             ),
           ),
         );
       }
 
-      const totalTime = performance.now() - start;
-      const totalCalls = concurrency * iterations;
-      const timePerCall = totalTime / totalCalls;
-
-      // Expect reasonable performance under concurrency
-      expect(timePerCall).toBeLessThan(5);
-
-      console.log(`Concurrent: ${totalTime.toFixed(2)}ms for ${totalCalls} calls`);
-      console.log(`Time per call: ${timePerCall.toFixed(4)}ms`);
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(concurrency * batches);
     });
   });
 
-  describe('Memory Usage', () => {
-    it('should not leak memory over many iterations', async () => {
-      const iterations = 5000;
-
-      // Force GC if available
-      if (global.gc) {
-        global.gc();
-      }
-
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      for (let i = 0; i < iterations; i++) {
-        await withGenAISpan(baseContext, async () => ({ output: `test-${i}` }), resultExtractor);
-      }
-
-      // Clear exported spans to simulate normal operation
-      memoryExporter.reset();
-
-      // Force GC if available
-      if (global.gc) {
-        global.gc();
-      }
-
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024; // MB
-
-      // Memory increase should be reasonable (less than 50MB for 5000 calls)
-      // Note: This test is indicative; actual behavior depends on GC timing
-      console.log(`Memory increase: ${memoryIncrease.toFixed(2)}MB for ${iterations} calls`);
-
-      // We don't strictly assert here as GC timing varies
-      // But we log for manual review
-    });
-  });
-
-  describe('Attribute Setting Performance', () => {
-    it('should efficiently set many attributes', async () => {
-      const iterations = 1000;
-
-      // Context with all optional attributes
+  describe('Attribute Handling', () => {
+    it('should handle contexts with all optional attributes', async () => {
       const fullContext: GenAISpanContext = {
         system: 'openai',
         operationName: 'chat',
@@ -205,7 +134,6 @@ describe('OTEL Tracing Performance Benchmarks', () => {
         promptLabel: 'benchmark-prompt-label',
       };
 
-      // Full result extractor
       const fullResultExtractor = (): GenAISpanResult => ({
         tokenUsage: {
           prompt: 1000,
@@ -223,47 +151,43 @@ describe('OTEL Tracing Performance Benchmarks', () => {
         finishReasons: ['stop'],
       });
 
-      const start = performance.now();
+      const iterations = 10;
 
       for (let i = 0; i < iterations; i++) {
         await withGenAISpan(fullContext, async () => ({ output: 'test' }), fullResultExtractor);
       }
 
-      const totalTime = performance.now() - start;
-      const timePerCall = totalTime / iterations;
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(iterations);
 
-      // Even with all attributes, should be fast
-      expect(timePerCall).toBeLessThan(3);
-
-      console.log(`Full attributes: ${totalTime.toFixed(2)}ms for ${iterations} calls`);
-      console.log(`Time per call: ${timePerCall.toFixed(4)}ms`);
+      // Verify key attributes are set
+      const span = spans[0];
+      expect(span.attributes['gen_ai.request.model']).toBe('gpt-4-turbo-preview');
+      expect(span.attributes['gen_ai.request.max_tokens']).toBe(4096);
+      expect(span.attributes['gen_ai.usage.input_tokens']).toBe(1000);
     });
   });
 
-  describe('Error Path Performance', () => {
-    it('should handle errors efficiently', async () => {
-      const iterations = 500;
-
-      const start = performance.now();
+  describe('Error Handling', () => {
+    it('should properly record errors in spans', async () => {
+      const iterations = 10;
 
       for (let i = 0; i < iterations; i++) {
         try {
           await withGenAISpan(baseContext, async () => {
-            throw new Error(`Error ${i}`);
+            throw new Error(`Test error ${i}`);
           });
         } catch {
           // Expected
         }
       }
 
-      const totalTime = performance.now() - start;
-      const timePerCall = totalTime / iterations;
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(iterations);
 
-      // Error path should still be reasonably fast
-      expect(timePerCall).toBeLessThan(5);
-
-      console.log(`Error path: ${totalTime.toFixed(2)}ms for ${iterations} calls`);
-      console.log(`Time per call: ${timePerCall.toFixed(4)}ms`);
+      // Verify error is recorded
+      const span = spans[0];
+      expect(span.status.code).toBe(2); // SpanStatusCode.ERROR
     });
   });
 

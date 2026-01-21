@@ -83,6 +83,7 @@ describe('Plugin Documentation', () => {
     'base.ts',
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
+    'multiInputFormat.ts',
   ]);
   const docFiles = getFiles(DOCS_DIR, '.md', ['_category_.json']);
 

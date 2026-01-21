@@ -132,7 +132,7 @@ function SelectFilterInput({
                     onClick={() => handleMultiSelectToggle(option.value)}
                   >
                     <div
-                      className={`h-4 w-4 border rounded flex items-center justify-center ${
+                      className={`size-4 border rounded flex items-center justify-center ${
                         isSelected
                           ? 'bg-primary border-primary text-primary-foreground'
                           : 'border-input'
@@ -342,10 +342,10 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="relative">
-          <Filter className="mr-2 h-4 w-4" />
+          <Filter className="mr-2 size-4" />
           Filters
           {activeFilterCount > 0 && (
-            <span className="ml-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+            <span className="ml-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
               {activeFilterCount}
             </span>
           )}
@@ -446,9 +446,9 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                       variant="ghost"
                       size="sm"
                       onClick={() => removeFilter(filter.id)}
-                      className="h-8 w-8 p-0 shrink-0"
+                      className="size-8 p-0 shrink-0"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="size-4" />
                     </Button>
                   </div>
                 );
@@ -463,7 +463,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
             className="w-full"
             disabled={filterableColumns.length === 0}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 size-4" />
             Add filter
           </Button>
         </div>

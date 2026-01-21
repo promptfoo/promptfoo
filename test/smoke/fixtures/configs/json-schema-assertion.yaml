@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing contains-json with JSON Schema validation
+description: 'Smoke test - JSON schema validation via contains-json'
+
+providers:
+  - echo
+
+prompts:
+  - '{"name": "John", "age": 30}'
+
+tests:
+  - assert:
+      - type: is-json
+      # contains-json with a value validates against JSON Schema
+      - type: contains-json
+        value:
+          type: object
+          required:
+            - name
+            - age
+          properties:
+            name:
+              type: string
+            age:
+              type: number

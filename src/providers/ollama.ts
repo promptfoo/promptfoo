@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
@@ -219,9 +219,10 @@ export class OllamaCompletionProvider implements ApiProvider {
     }
 
     logger.debug('Calling Ollama API', { params });
-    let response;
+
+    let response: FetchWithCacheResult<string> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<string>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
@@ -243,9 +244,9 @@ export class OllamaCompletionProvider implements ApiProvider {
       };
     }
     logger.debug(`\tOllama generate API response: ${response.data}`);
-    if (response.data.error) {
+    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
       return {
-        error: `Ollama error: ${response.data.error}`,
+        error: `Ollama error: ${(response.data as { error: string }).error}`,
       };
     }
 
@@ -378,9 +379,10 @@ export class OllamaChatProvider implements ApiProvider {
     }
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
-    let response;
+
+    let response: FetchWithCacheResult<string> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<string>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
@@ -405,9 +407,10 @@ export class OllamaChatProvider implements ApiProvider {
       status: response.status,
       dataLength: response.data?.length,
     });
-    if (response.data.error) {
+
+    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
       return {
-        error: `Ollama error: ${response.data.error}`,
+        error: `Ollama error: ${(response.data as { error: string }).error}`,
       };
     }
 
@@ -508,9 +511,14 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     };
 
     logger.debug('Calling Ollama API', { params });
-    let response;
+
+    interface OllamaEmbeddingResponse {
+      embedding: number[];
+    }
+
+    let response: FetchWithCacheResult<OllamaEmbeddingResponse>;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<OllamaEmbeddingResponse>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',

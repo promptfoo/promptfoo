@@ -1,4 +1,11 @@
-import type { EvaluateSummaryV2, EvaluateSummaryV3 } from '../../../types/index';
+import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+
+import type {
+  EvaluateResult,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  ResultFailureReason,
+} from '../../../types/index';
 
 /**
  * Union type for evaluation summaries
@@ -87,10 +94,25 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 /**
+ * Convert numeric ResultFailureReason to string representation
+ * Returns undefined for NONE (test passed) or string for ASSERT/ERROR
+ */
+function formatFailureReason(reason: ResultFailureReason): string | undefined {
+  if (reason === ResultFailureReasonEnum.ASSERT) {
+    return 'assertion_failed';
+  }
+  if (reason === ResultFailureReasonEnum.ERROR) {
+    return 'error';
+  }
+  // NONE or unknown - return undefined
+  return undefined;
+}
+
+/**
  * Format a single evaluation result for MCP response
  */
 function formatSingleResult(
-  result: any,
+  result: EvaluateResult,
   index: number,
   options: ResultFormattingOptions,
 ): FormattedEvalResult {
@@ -115,9 +137,9 @@ function formatSingleResult(
     const componentResults = result.gradingResult.componentResults || [];
     assertions = {
       totalAssertions: result.testCase.assert?.length || 0,
-      passedAssertions: componentResults.filter((r: any) => r.pass).length,
-      failedAssertions: componentResults.filter((r: any) => !r.pass).length,
-      componentResults: componentResults.slice(0, assertionLimit).map((cr: any, idx: number) => ({
+      passedAssertions: componentResults.filter((r) => r.pass).length,
+      failedAssertions: componentResults.filter((r) => !r.pass).length,
+      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
         index: idx,
         type: result.testCase.assert?.[idx]?.type || 'unknown',
         pass: cr.pass,
@@ -152,8 +174,8 @@ function formatSingleResult(
       success: result.success,
       score: result.score,
       namedScores: result.namedScores,
-      error: result.error,
-      failureReason: result.failureReason,
+      error: result.error ?? undefined,
+      failureReason: formatFailureReason(result.failureReason),
     },
     assertions,
   };
@@ -201,7 +223,7 @@ export function formatPromptsSummary(summary: EvaluateSummary): Array<{
   metrics?: unknown;
 }> {
   if (summary.version === 3 && 'prompts' in summary) {
-    return (summary as any).prompts.map((prompt: any) => ({
+    return summary.prompts.map((prompt) => ({
       label: prompt.label,
       provider: prompt.provider,
       metrics: prompt.metrics,

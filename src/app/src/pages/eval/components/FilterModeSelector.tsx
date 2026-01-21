@@ -1,23 +1,26 @@
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import type { SelectChangeEvent } from '@mui/material/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import type { EvalResultsFilterMode } from '@promptfoo/types';
 
 interface FilterModeSelectorProps {
   filterMode: EvalResultsFilterMode;
-  onChange: (event: SelectChangeEvent) => void;
+  onChange: (value: EvalResultsFilterMode) => void;
   showDifferentOption?: boolean;
 }
 
 const BASE_OPTIONS: { value: EvalResultsFilterMode; label: string }[] = [
-  { value: 'all', label: 'Show all results' },
-  { value: 'failures', label: 'Show failures only' },
-  { value: 'passes', label: 'Show passes only' },
-  { value: 'errors', label: 'Show errors only' },
-  { value: 'different', label: 'Show different outputs' },
-  { value: 'highlights', label: 'Show highlights only' },
+  { value: 'all', label: 'All results' },
+  { value: 'failures', label: 'Failures only' },
+  { value: 'passes', label: 'Passes only' },
+  { value: 'errors', label: 'Errors only' },
+  { value: 'different', label: 'Different outputs' },
+  { value: 'highlights', label: 'Highlights only' },
+  { value: 'user-rated', label: 'User-rated only' },
 ];
 
 export const FilterModeSelector = ({
@@ -30,21 +33,17 @@ export const FilterModeSelector = ({
     : BASE_OPTIONS.filter((o) => o.value !== 'different');
 
   return (
-    <FormControl sx={{ minWidth: 180 }} size="small">
-      <InputLabel id="filter-mode-label">Display</InputLabel>
-      <Select
-        labelId="filter-mode-label"
-        id="filter-mode"
-        value={filterMode}
-        onChange={onChange}
-        label="Filter"
-      >
+    <Select value={filterMode} onValueChange={onChange}>
+      <SelectTrigger className="w-[140px] h-8 text-xs">
+        <SelectValue placeholder="All results" />
+      </SelectTrigger>
+      <SelectContent>
         {options.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
+          <SelectItem key={option.value} value={option.value}>
             {option.label}
-          </MenuItem>
+          </SelectItem>
         ))}
-      </Select>
-    </FormControl>
+      </SelectContent>
+    </Select>
   );
 };

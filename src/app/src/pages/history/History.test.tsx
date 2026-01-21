@@ -110,7 +110,7 @@ describe('History', () => {
     // Pass count is rendered as a Badge, not gridcell
     expect(row2Cells.getByText('7')).toBeInTheDocument();
     expect(row2Cells.getByText('2')).toBeInTheDocument();
-    expect(row2Cells.getByText('1 errors')).toBeInTheDocument();
+    expect(row2Cells.getByText('1 err')).toBeInTheDocument();
     expect(row2Cells.getByText('0.75')).toBeInTheDocument();
   });
 

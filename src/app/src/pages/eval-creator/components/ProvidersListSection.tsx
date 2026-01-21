@@ -119,17 +119,17 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditingIndex(index)}
-                    className="h-8 w-8 p-0"
+                    className="size-8 p-0"
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleRemoveProvider(index)}
-                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="size-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               </Card>
@@ -147,7 +147,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
 
       {/* Add provider button */}
       <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="size-4 mr-2" />
         Add Provider
       </Button>
 

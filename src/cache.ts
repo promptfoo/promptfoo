@@ -125,7 +125,7 @@ export type FetchWithCacheResult<T> = {
   deleteFromCache?: () => Promise<void>;
 };
 
-export async function fetchWithCache<T = any>(
+export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number = REQUEST_TIMEOUT_MS,
