@@ -10,6 +10,7 @@ permissions:
   contents: read
   pull-requests: read
   checks: write
+  id-token: write # Required for OIDC authentication with Codecov
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -200,29 +201,32 @@ jobs:
       - name: Upload Backend Coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          # Token not needed - using OIDC authentication via id-token: write permission
           files: ./coverage/coverage-final.json
           flags: backend
           name: backend-coverage
           fail_ci_if_error: true
+          use_oidc: true
 
       - name: Upload Frontend Coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          # Token not needed - using OIDC authentication via id-token: write permission
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
           name: frontend-coverage
           fail_ci_if_error: true
+          use_oidc: true
 
       - name: Upload Site Coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          # Token not needed - using OIDC authentication via id-token: write permission
           files: ./site/coverage/coverage-final.json
           flags: site
           name: site-coverage
           fail_ci_if_error: true
+          use_oidc: true
 
   style-check:
     name: Style Check
