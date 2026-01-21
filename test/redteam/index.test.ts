@@ -3064,5 +3064,46 @@ describe('Language configuration', () => {
       const oneMatches = cleanReport.match(/\b1\b/g);
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
     });
+
+    it('should sort report rows numerically by policy number, not alphabetically', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Create 12 policy plugins to test numeric sorting (1, 2, 3... vs 1, 10, 11, 12, 2...)
+      const plugins = Array.from({ length: 12 }, (_, i) => ({
+        id: 'policy',
+        numTests: 1,
+        config: { policy: `Policy ${i + 1}` },
+      }));
+
+      await synthesize({
+        numTests: 1,
+        plugins,
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Extract the order of policy numbers from the report
+      const policyMatches = cleanReport.match(/policy #(\d+)/g) || [];
+      const policyNumbers = policyMatches.map((m) => parseInt(m.replace('policy #', ''), 10));
+
+      // Should be sorted numerically: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+      // NOT alphabetically: 1, 10, 11, 12, 2, 3, 4, 5, 6, 7, 8, 9
+      expect(policyNumbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    });
   });
 });

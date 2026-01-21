@@ -139,6 +139,61 @@ function getStatus(requested: number, generated: number): string {
  * @param strategyResults - Results from strategy executions.
  * @returns A formatted string containing the report.
  */
+/**
+ * Extracts sorting key from a plugin/strategy display ID.
+ * Handles formats like "(Hmong) policy #1: ...", "policy #12: ...", "jailbreak:meta (Hmong)"
+ * Returns [policyNumber, language, baseId] for proper sorting.
+ */
+function extractSortKey(id: string): [number, string, string] {
+  // Extract language prefix like "(Hmong) " or suffix like " (Hmong)"
+  const langPrefixMatch = id.match(/^\(([^)]+)\)\s*/);
+  const langSuffixMatch = id.match(/\s+\(([^)]+)\)$/);
+  const language = langPrefixMatch?.[1] || langSuffixMatch?.[1] || '';
+
+  // Remove language from ID for base comparison
+  let baseId = id;
+  if (langPrefixMatch) {
+    baseId = id.slice(langPrefixMatch[0].length);
+  }
+  if (langSuffixMatch) {
+    baseId = baseId.slice(0, -langSuffixMatch[0].length);
+  }
+
+  // Extract policy number if present (e.g., "policy #12: ...")
+  const policyMatch = baseId.match(/policy\s*#(\d+)/);
+  const policyNum = policyMatch ? parseInt(policyMatch[1], 10) : 0;
+
+  return [policyNum, language, baseId];
+}
+
+/**
+ * Sorts plugin/strategy IDs: by policy number (numeric), then by language, then alphabetically.
+ */
+function sortReportIds(a: string, b: string): number {
+  const [aNum, aLang, aBase] = extractSortKey(a);
+  const [bNum, bLang, bBase] = extractSortKey(b);
+
+  // First sort by policy number (0 means no policy number, goes last among policies)
+  if (aNum !== bNum) {
+    if (aNum === 0) {
+      return 1;
+    }
+    if (bNum === 0) {
+      return -1;
+    }
+    return aNum - bNum;
+  }
+
+  // Then sort by base ID (for non-policy plugins)
+  const baseCompare = aBase.localeCompare(bBase);
+  if (baseCompare !== 0) {
+    return baseCompare;
+  }
+
+  // Finally sort by language
+  return aLang.localeCompare(bLang);
+}
+
 function generateReport(
   pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
@@ -153,13 +208,13 @@ function generateReport(
   let rowIndex = 1;
 
   Object.entries(pluginResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .sort((a, b) => sortReportIds(a[0], b[0]))
     .forEach(([id, { requested, generated }]) => {
       table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
     });
 
   Object.entries(strategyResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .sort((a, b) => sortReportIds(a[0], b[0]))
     .forEach(([id, { requested, generated }]) => {
       table.push([
         rowIndex++,
