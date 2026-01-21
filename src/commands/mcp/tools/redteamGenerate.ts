@@ -1,21 +1,21 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doGenerateRedteam } from '../../../redteam/commands/generate';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
 } from '../../../redteam/constants';
-import type { RedteamCliGenerateOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import { createToolResponse } from '../utils';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { RedteamCliGenerateOptions } from '../../../redteam/types';
 
 /**
  * Generate adversarial test cases for redteam security testing
@@ -111,7 +111,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         .min(1)
         .max(10)
         .optional()
-        .default(DEFAULT_MAX_CONCURRENCY)
+        .prefault(DEFAULT_MAX_CONCURRENCY)
         .describe('Maximum number of concurrent API calls (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
       language: z
@@ -136,22 +136,22 @@ export function registerRedteamGenerateTool(server: McpServer) {
       force: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force generation even if no changes are detected'),
       write: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Write results to the promptfoo configuration file instead of separate output'),
       remote: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force remote inference wherever possible'),
       progressBar: z
         .boolean()
         .optional()
-        .default(true)
+        .prefault(true)
         .describe('Show progress bar during generation'),
     },
     async (args) => {
@@ -217,7 +217,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             'redteam_generate',
             false,
             undefined,
-            `Options validation error: ${fromError(optionsParse.error).message}`,
+            `Options validation error: ${z.prettifyError(optionsParse.error)}`,
           );
         }
 
@@ -225,9 +225,13 @@ export function registerRedteamGenerateTool(server: McpServer) {
           `Generating redteam tests with config: ${configPath || 'promptfooconfig.yaml'}`,
         );
 
-        // Generate test cases
+        // Generate test cases with timeout protection
         const startTime = Date.now();
-        const result = await doGenerateRedteam(optionsParse.data);
+        const result = await withTimeout(
+          doGenerateRedteam(optionsParse.data),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Redteam test generation timed out. This may indicate provider connectivity issues, missing API credentials, or too many tests requested.',
+        );
         const endTime = Date.now();
 
         if (!result) {
@@ -322,6 +326,20 @@ export function registerRedteamGenerateTool(server: McpServer) {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Redteam generation failed: ${errorMessage}`);
+
+        // Handle timeout specifically
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'redteam_generate',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'The generation took too long. Try reducing numTests, checking API credentials, or using fewer plugins.',
+            },
+            'Redteam test generation timed out',
+          );
+        }
 
         const errorData = {
           configuration: {

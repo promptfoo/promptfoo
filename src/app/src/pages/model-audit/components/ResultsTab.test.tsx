@@ -1,51 +1,23 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-import ResultsTab from './ResultsTab';
-import ScanStatistics from './ScanStatistics';
-import SecurityFindings from './SecurityFindings';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ChecksSection from './ChecksSection';
+import ResultsTab from './ResultsTab';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
-
-vi.mock('./ScanStatistics', () => ({
-  default: vi.fn(({ onSeverityClick }) => (
-    <div data-testid="scan-statistics">
-      <button data-testid="severity-button" onClick={() => onSeverityClick('error')}>
-        Error
-      </button>
-    </div>
-  )),
-}));
-
-vi.mock('./SecurityFindings', () => ({
-  default: vi.fn(({ onToggleRawOutput }) => (
-    <div data-testid="security-findings">
-      <button data-testid="toggle-raw-output" onClick={onToggleRawOutput}>
-        Toggle Raw Output
-      </button>
-    </div>
-  )),
-}));
+import type { ScanResult } from '../ModelAudit.types';
 
 vi.mock('./ChecksSection', () => ({
   default: vi.fn(() => <div data-testid="checks-section"></div>),
 }));
 
-const MockedScanStatistics = vi.mocked(ScanStatistics);
-const MockedSecurityFindings = vi.mocked(SecurityFindings);
 const MockedChecksSection = vi.mocked(ChecksSection);
-
-const theme = createTheme();
 
 describe('ResultsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should render ScanStatistics and SecurityFindings with the correct props when provided with valid scanResults and onShowFilesDialog callback', () => {
+  it('should render findings with severity filter and action buttons', () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',
       success: true,
@@ -58,88 +30,70 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
-    expect(MockedScanStatistics).toHaveBeenCalledTimes(1);
-    expect(MockedScanStatistics.mock.calls[0][0]).toMatchObject({
-      scanResults: mockScanResults,
-      selectedSeverity: null,
-      onSeverityClick: expect.any(Function),
-      onFilesClick: mockOnShowFilesDialog,
-    });
+    // Check heading with count
+    expect(screen.getByText(/Findings/i)).toBeInTheDocument();
+    expect(screen.getByText('(2)')).toBeInTheDocument();
 
-    expect(MockedSecurityFindings).toHaveBeenCalledTimes(1);
-    expect(MockedSecurityFindings.mock.calls[0][0]).toMatchObject({
-      scanResults: mockScanResults,
-      selectedSeverity: null,
-      onSeverityChange: expect.any(Function),
-      showRawOutput: false,
-      onToggleRawOutput: expect.any(Function),
-    });
+    // Check severity filter is rendered
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+
+    // Check action buttons are rendered
+    expect(screen.getByRole('button', { name: /CSV/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Raw/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Files/i })).toBeInTheDocument();
+
+    // Check issues are displayed
+    expect(screen.getByText('Critical issue')).toBeInTheDocument();
+    expect(screen.getByText('Warning issue')).toBeInTheDocument();
   });
 
-  it('should update selectedSeverity and pass it to SecurityFindings when a severity is clicked in ScanStatistics', async () => {
+  it('should render issues grouped by severity', () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',
       success: true,
-      issues: [{ severity: 'error', message: 'Critical issue' }],
+      issues: [
+        { severity: 'error', message: 'Critical issue' },
+        { severity: 'warning', message: 'Warning issue' },
+        { severity: 'info', message: 'Info issue' },
+      ],
       scannedFiles: 15,
       rawOutput: 'raw output',
     };
     const mockOnShowFilesDialog = vi.fn();
-    const user = userEvent.setup();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
-    const severityButton = screen.getByTestId('severity-button');
-    await user.click(severityButton);
+    // All issues should be visible
+    expect(screen.getByText('Critical issue')).toBeInTheDocument();
+    expect(screen.getByText('Warning issue')).toBeInTheDocument();
+    expect(screen.getByText('Info issue')).toBeInTheDocument();
 
-    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
-    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
-      scanResults: mockScanResults,
-      selectedSeverity: 'error',
-      onSeverityChange: expect.any(Function),
-      showRawOutput: false,
-      onToggleRawOutput: expect.any(Function),
-    });
+    // Check that severity badges are rendered
+    expect(screen.getByText('Critical Issues')).toBeInTheDocument();
+    expect(screen.getByText('Warnings')).toBeInTheDocument();
+    expect(screen.getByText('Informational')).toBeInTheDocument();
   });
 
-  it('should toggle showRawOutput and pass the updated value to SecurityFindings when the raw output toggle is triggered', async () => {
+  it('should show raw output dialog when Raw button is clicked', async () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',
       success: true,
       issues: [],
       scannedFiles: 0,
-      rawOutput: 'raw output',
+      rawOutput: 'raw output content',
     };
     const mockOnShowFilesDialog = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
-    const toggleButton = screen.getByTestId('toggle-raw-output');
-    await user.click(toggleButton);
+    const rawButton = screen.getByRole('button', { name: /Raw/i });
+    await user.click(rawButton);
 
-    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
-    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
-      scanResults: mockScanResults,
-      selectedSeverity: null,
-      onSeverityChange: expect.any(Function),
-      showRawOutput: true,
-      onToggleRawOutput: expect.any(Function),
-    });
+    // Dialog should appear with raw output (portaled to document)
+    expect(document.querySelector('[role="dialog"]')).toBeInTheDocument();
   });
 
   it('should render ChecksSection with the correct props when scanResults contains security check data', () => {
@@ -158,11 +112,7 @@ describe('ResultsTab', () => {
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
     expect(MockedChecksSection).toHaveBeenCalledTimes(1);
     expect(MockedChecksSection.mock.calls[0][0]).toMatchObject({
@@ -175,37 +125,23 @@ describe('ResultsTab', () => {
     });
   });
 
-  it('should render the scanned files section and display file names and issue counts when scanResults.scannedFilesList is present and non-empty', () => {
+  it('should call onShowFilesDialog when Files button is clicked', async () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',
       success: true,
-      issues: [
-        { severity: 'error', message: 'Critical issue', location: 'file1.txt' },
-        { severity: 'warning', message: 'Warning issue', location: 'file1.txt' },
-        { severity: 'info', message: 'Info issue', location: 'file1.txt' },
-        { severity: 'error', message: 'Critical issue', location: 'file2.txt' },
-        { severity: 'warning', message: 'Warning issue', location: 'file2.txt' },
-        { severity: 'info', message: 'Info issue', location: 'file2.txt' },
-      ] as ScanIssue[],
+      issues: [],
       scannedFiles: 2,
       rawOutput: 'raw output',
-      scannedFilesList: ['file1.txt', 'file2.txt'],
     };
     const mockOnShowFilesDialog = vi.fn();
+    const user = userEvent.setup();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
-    expect(screen.getByText('Scanned Files (2)')).toBeInTheDocument();
-    expect(screen.getAllByText('file1.txt')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('file2.txt')[0]).toBeInTheDocument();
+    const filesButton = screen.getByRole('button', { name: /Files/i });
+    await user.click(filesButton);
 
-    expect(screen.getAllByText('1 critical').length).toBe(2);
-    expect(screen.getAllByText('1 warning').length).toBe(2);
-    expect(screen.getAllByText('1 info').length).toBe(2);
+    expect(mockOnShowFilesDialog).toHaveBeenCalledTimes(1);
   });
 
   it('should handle malformed scanResults gracefully when scanResults.issues is undefined', () => {
@@ -219,9 +155,7 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
@@ -238,60 +172,36 @@ describe('ResultsTab', () => {
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
+      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
     );
 
     expect(container.firstChild).toBeInTheDocument();
   });
 
-  it('should toggle selectedSeverity to null when clicking on an already selected severity', async () => {
-    const originalMock = vi.mocked(ScanStatistics);
-    let currentSeverity: string | null = null;
-
-    originalMock.mockImplementation(({ selectedSeverity, onSeverityClick }) => {
-      currentSeverity = selectedSeverity;
-
-      return (
-        <div data-testid="scan-statistics">
-          <button
-            data-testid="severity-button"
-            onClick={() => onSeverityClick(currentSeverity === 'error' ? null : 'error')}
-          >
-            Click Severity
-          </button>
-        </div>
-      );
-    });
-
+  it('should hide debug issues by default but show other severities', () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',
       success: true,
-      issues: [{ severity: 'error', message: 'Critical issue' }],
+      issues: [
+        { severity: 'error', message: 'Critical issue' },
+        { severity: 'warning', message: 'Warning issue' },
+        { severity: 'debug', message: 'Debug issue' },
+      ],
       scannedFiles: 15,
       rawOutput: 'raw output',
     };
     const mockOnShowFilesDialog = vi.fn();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />
-      </ThemeProvider>,
-    );
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />);
 
-    const severityButton = screen.getByTestId('severity-button');
-    await userEvent.click(severityButton);
+    // Critical and warning should be visible
+    expect(screen.getByText('Critical issue')).toBeInTheDocument();
+    expect(screen.getByText('Warning issue')).toBeInTheDocument();
 
-    await userEvent.click(severityButton);
+    // Debug should be hidden by default
+    expect(screen.queryByText('Debug issue')).not.toBeInTheDocument();
 
-    expect(MockedScanStatistics.mock.lastCall?.[0]).toMatchObject({
-      scanResults: mockScanResults,
-      selectedSeverity: null,
-      onSeverityClick: expect.any(Function),
-      onFilesClick: mockOnShowFilesDialog,
-    });
-
-    originalMock.mockReset();
+    // Count should show 2, not 3
+    expect(screen.getByText('(2)')).toBeInTheDocument();
   });
 });

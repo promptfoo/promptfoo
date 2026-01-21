@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { vi } from 'vitest';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -62,6 +62,7 @@ vi.mock('../src/globalConfig/cloud', () => {
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
     getCurrentTeamId: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
     getAppUrl: vi.fn(),
   };
 
@@ -224,7 +225,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe('https://promptfoo.app');
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use PROMPTFOO_REMOTE_APP_BASE_URL when specified', () => {
@@ -245,7 +245,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(customDomain);
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use config sharing.appBaseUrl when provided', () => {
@@ -264,7 +263,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 
   it('should prioritize config sharing.appBaseUrl over environment variables', () => {
@@ -291,7 +289,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 });
 
@@ -653,6 +650,12 @@ describe('hasEvalBeenShared', () => {
     mockFetch.mockReset();
   });
 
+  beforeEach(() => {
+    // Setup cloudConfig mocks for team-scoped checking
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+  });
+
   it('returns true if the server does not return 404', async () => {
     const mockEval: Partial<Eval> = {
       config: {},
@@ -663,6 +666,8 @@ describe('hasEvalBeenShared', () => {
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
+    // Verify teamId is passed in the request URL
+    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
   });
 
   it('returns false if the server returns 404', async () => {
@@ -675,5 +680,21 @@ describe('hasEvalBeenShared', () => {
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
+  });
+
+  it('makes request without teamId when no current team is set', async () => {
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+      id: randomUUID(),
+    };
+
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+    expect(result).toBe(true);
+    // Verify request is made without teamId
+    expect(makeRequest).toHaveBeenCalledWith(expect.not.stringContaining('teamId='), 'GET');
   });
 });

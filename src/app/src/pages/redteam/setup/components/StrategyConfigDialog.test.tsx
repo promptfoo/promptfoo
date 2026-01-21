@@ -1,6 +1,15 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
+
+const AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
+);
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(ui, { wrapper: AllProviders });
+};
 
 describe('StrategyConfigDialog', () => {
   const mockOnSave = vi.fn();
@@ -11,7 +20,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -26,20 +35,21 @@ describe('StrategyConfigDialog', () => {
     const specificPluginsButton = screen.getByText('Specific plugins only');
     fireEvent.click(specificPluginsButton);
 
-    const addStepInput = screen.getByLabelText('Add Strategy Step');
-    fireEvent.change(addStepInput, { target: { value: 'base64' } });
-    fireEvent.keyDown(addStepInput, { key: 'Enter' });
+    // Use the custom file:// input field to add a step
+    const customStepInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    fireEvent.change(customStepInput, { target: { value: 'file://base64.js' } });
+    fireEvent.keyDown(customStepInput, { key: 'Enter' });
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['file://base64.js'] });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it('should compute availableStrategies correctly with stable empty array for allStrategies', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -51,12 +61,15 @@ describe('StrategyConfigDialog', () => {
       />,
     );
 
-    const autocomplete = screen.getByLabelText('Add Strategy Step');
-    expect(autocomplete).toBeInTheDocument();
+    // Check that the strategy selector and custom input field are present
+    const strategySelector = screen.getByRole('combobox');
+    expect(strategySelector).toBeInTheDocument();
+    const customInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    expect(customInput).toBeInTheDocument();
   });
 
   it('should use stable empty arrays when selectedPlugins and allStrategies are not provided', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -88,13 +101,13 @@ describe('StrategyConfigDialog', () => {
       );
     };
 
-    render(<TestComponent />);
+    renderWithProviders(<TestComponent />);
 
     expect(renderCount).toBeLessThan(5);
   });
 
   it('should not mutate the default empty arrays, which could affect other component instances', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -105,14 +118,15 @@ describe('StrategyConfigDialog', () => {
       />,
     );
 
-    const addStrategyStepInput = screen.getByLabelText('Add Strategy Step');
-    fireEvent.change(addStrategyStepInput, { target: { value: 'base64' } });
-    fireEvent.keyDown(addStrategyStepInput, { key: 'Enter' });
+    // Use the custom file:// input field to add a step
+    const customStepInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    fireEvent.change(customStepInput, { target: { value: 'file://base64.js' } });
+    fireEvent.keyDown(customStepInput, { key: 'Enter' });
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveButton);
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -124,11 +138,11 @@ describe('StrategyConfigDialog', () => {
     );
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['file://base64.js'] });
   });
 
   it('should handle null or undefined values for selectedPlugins and allStrategies without crashing', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -146,7 +160,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the correct title and switch when open is true and strategy is 'basic'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -169,7 +183,7 @@ describe('StrategyConfigDialog', () => {
   it('should save basic strategy configuration correctly', () => {
     const initialConfig = { enabled: false };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -200,7 +214,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = {};
     const strategyText = 'This is a valid custom strategy.';
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -227,7 +241,7 @@ describe('StrategyConfigDialog', () => {
   it('should return early from handleSave when custom strategy is invalid', () => {
     const initialConfig = {};
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -247,7 +261,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the number input for maximum tests and update the value when changed for the 'retry' strategy", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="retry"
@@ -274,7 +288,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it('should not call onSave and disable the Save button when a non-numeric value is entered for numTests in the retry strategy', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="retry"
@@ -299,7 +313,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = { numIterations: 10 };
     const newNumIterations = 20;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak"
@@ -329,7 +343,7 @@ describe('StrategyConfigDialog', () => {
       useBooks: true,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="citation"
@@ -370,7 +384,7 @@ describe('StrategyConfigDialog', () => {
       maxCandidatesPerStep: 5,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="best-of-n"
@@ -405,7 +419,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = { n: 5 };
     const newN = 10;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="gcg"
@@ -437,7 +451,7 @@ describe('StrategyConfigDialog', () => {
       maxNoImprovement: 25,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:tree"
@@ -483,7 +497,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it('should reset local state when switching between strategies', () => {
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -521,7 +535,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render Hydra configuration fields when strategy is 'jailbreak:hydra'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:hydra"
@@ -547,7 +561,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:hydra"
@@ -581,7 +595,7 @@ describe('StrategyConfigDialog', () => {
   it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', () => {
     const initialConfig = { numIterations: 10 };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -607,7 +621,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the 'jailbreak:meta' strategy config without falling through to multi-turn or default", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -646,7 +660,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = { numIterations: 25 };
     const newConfig = { numIterations: 35 };
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -709,7 +723,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = {};
     const numIterations = 25;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -738,7 +752,7 @@ describe('StrategyConfigDialog', () => {
   it("should save 'jailbreak:meta' strategy with default numIterations when input is empty", () => {
     const initialConfig = {};
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -765,7 +779,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it('should reset localConfig when the jailbreak:meta strategy dialog is opened multiple times with different config values', () => {
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -810,7 +824,7 @@ describe('StrategyConfigDialog', () => {
     };
     const newNumIterations = 20;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -844,7 +858,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = { numIterations: 10 };
     const newNumIterations = 20;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -871,7 +885,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the number of iterations input and relevant instructions when open is true and strategy is 'jailbreak:meta'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -893,7 +907,7 @@ describe('StrategyConfigDialog', () => {
 
   describe('layer strategy', () => {
     it('should render layer strategy configuration correctly', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -906,11 +920,13 @@ describe('StrategyConfigDialog', () => {
 
       expect(screen.getByText('Target Plugins')).toBeInTheDocument();
       expect(screen.getByText('Steps (in order)')).toBeInTheDocument();
-      expect(screen.getByLabelText('Add Strategy Step')).toBeInTheDocument();
+      // Check that the strategy selector and custom input field are present
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeInTheDocument();
     });
 
     it('should save layer strategy with all plugins by default', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -928,7 +944,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should save layer strategy with specific plugins when selected', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -950,7 +966,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should disable save button when no steps are configured', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -970,7 +986,7 @@ describe('StrategyConfigDialog', () => {
         steps: [{ id: 'base64', config: { plugins: ['harmful'] } }, 'rot13'],
       };
 
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -989,7 +1005,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Configure Layer Strategy" description when no steps are added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1007,7 +1023,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Transform Chain" mode when only transform steps are added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1025,7 +1041,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Turn + Multi-Modal Attack" mode when agentic and multi-modal steps are combined', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1045,7 +1061,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Turn Agentic Attack" mode when only agentic step is added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1063,7 +1079,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Modal Transform" mode when only multi-modal step is added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1081,7 +1097,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "agentic" chip for agentic strategies', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1096,7 +1112,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "multi-modal" chip for multi-modal strategies', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1111,7 +1127,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "configured" chip when step has config', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1126,7 +1142,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show warning when agentic strategy is not first step', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1143,7 +1159,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show warning when transforms are between agentic and multi-modal steps', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1158,7 +1174,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should disable step movement when multi-modal is at the end', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1175,7 +1191,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show validation message when last step is multi-modal', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"

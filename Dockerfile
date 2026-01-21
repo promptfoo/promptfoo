@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM --platform=${BUILDPLATFORM} node:24.7.0-alpine
+FROM node:24.13.0-alpine AS base
 
-FROM node:24.7.0-alpine AS base
+# Update Alpine packages to get latest security patches
+RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 # Make Python version configurable with a default of 3.12

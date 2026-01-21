@@ -8,7 +8,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
-  'owasp:agentic': 'OWASP Agentic v1.0',
+  'owasp:agentic': 'OWASP Top 10 for Agentic Applications',
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
   gdpr: 'GDPR',
@@ -40,15 +40,24 @@ export const OWASP_API_TOP_10_NAMES = [
   'Unsafe Consumption of APIs',
 ];
 
+/**
+ * OWASP Top 10 for Agentic Applications (December 2025)
+ * The official OWASP Top 10 list for AI agent security risks.
+ * Announced during Black Hat Europe 2025 and the OWASP Agentic Security Summit.
+ *
+ * @see https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications/
+ */
 export const OWASP_AGENTIC_NAMES = [
-  'T1: Memory Poisoning',
-  'T2: Tool Misuse',
-  'T3: Privilege Compromise',
-  'T4: Cascading Hallucination Attacks',
-  'T5: Intent Breaking & Goal Manipulation',
-  'T6: Misaligned & Deceptive Behaviors',
-  'T8: Identity Spoofing & Impersonation',
-  'T10: Unexpected Remote Code Execution & Code Attacks',
+  'ASI01: Agent Goal Hijack',
+  'ASI02: Tool Misuse and Exploitation',
+  'ASI03: Identity and Privilege Abuse',
+  'ASI04: Agentic Supply Chain Vulnerabilities',
+  'ASI05: Unexpected Code Execution',
+  'ASI06: Memory and Context Poisoning',
+  'ASI07: Insecure Inter-Agent Communication',
+  'ASI08: Cascading Failures',
+  'ASI09: Human Agent Trust Exploitation',
+  'ASI10: Rogue Agents',
 ];
 
 export const GDPR_ARTICLE_NAMES = [
@@ -209,51 +218,75 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 };
 
 /**
- * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
+ * OWASP Top 10 for Agentic Applications (December 2025)
+ * The official OWASP Top 10 list for AI agent security risks.
+ * Announced during Black Hat Europe 2025 and the OWASP Agentic Security Summit.
+ *
+ * @see https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications/
  */
-export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
+export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
   string,
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
-  'owasp:agentic:t01': {
-    // T1: Memory Poisoning
-    plugins: ['agentic:memory-poisoning'],
-    strategies: [],
+  'owasp:agentic:asi01': {
+    // ASI01: Agent Goal Hijack
+    // Occurs when an attacker alters an agent's objectives or decision path through malicious content
+    plugins: ['hijacking', 'system-prompt-override', 'indirect-prompt-injection', 'intent'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
-  'owasp:agentic:t02': {
-    // T2: Tool Misuse
+  'owasp:agentic:asi02': {
+    // ASI02: Tool Misuse and Exploitation
+    // Occurs when an agent uses legitimate tools in unsafe ways
     plugins: ['excessive-agency', 'mcp', 'tool-discovery'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
-  'owasp:agentic:t03': {
-    // T3: Privilege Compromise
-    plugins: ['rbac', 'bfla', 'bola'],
-    strategies: [],
-  },
-  'owasp:agentic:t04': {
-    // T4: Cascading Hallucination Attacks
-    plugins: ['hallucination', 'harmful:misinformation-disinformation'],
+  'owasp:agentic:asi03': {
+    // ASI03: Identity and Privilege Abuse
+    // Agents inherit user/system identities with high-privilege credentials
+    plugins: ['rbac', 'bfla', 'bola', 'imitation'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
-  'owasp:agentic:t05': {
-    // T5: Intent Breaking & Goal Manipulation
-    plugins: ['hijacking', 'system-prompt-override'],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  'owasp:agentic:asi04': {
+    // ASI04: Agentic Supply Chain Vulnerabilities
+    // Compromised tools, plugins, prompt templates, and external servers
+    plugins: ['indirect-prompt-injection', 'mcp'],
+    strategies: ['prompt-injection'],
   },
-  'owasp:agentic:t06': {
-    // T6: Misaligned & Deceptive Behaviors
-    plugins: ['contracts', 'goal-misalignment', 'excessive-agency'],
-    strategies: ['jailbreak', 'crescendo'],
-  },
-  'owasp:agentic:t08': {
-    // T8: Identity Spoofing & Impersonation
-    plugins: ['imitation', 'cross-session-leak', 'pii:session'],
-    strategies: [],
-  },
-  'owasp:agentic:t10': {
-    // T10: Unexpected Remote Code Execution & Code Attacks
+  'owasp:agentic:asi05': {
+    // ASI05: Unexpected Code Execution
+    // Agents generate or run code/commands unsafely
     plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
     strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:asi06': {
+    // ASI06: Memory and Context Poisoning
+    // Attackers poison agent memory systems, embeddings, and RAG databases
+    plugins: ['agentic:memory-poisoning', 'cross-session-leak', 'indirect-prompt-injection'],
+    strategies: ['jailbreak', 'crescendo'],
+  },
+  'owasp:agentic:asi07': {
+    // ASI07: Insecure Inter-Agent Communication
+    // Multi-agent systems face spoofed identities, replayed messages, tampering
+    plugins: ['indirect-prompt-injection', 'hijacking', 'imitation'],
+    strategies: ['prompt-injection'],
+  },
+  'owasp:agentic:asi08': {
+    // ASI08: Cascading Failures
+    // Small errors in one agent propagate across planning, execution, memory
+    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'divergent-repetition'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:asi09': {
+    // ASI09: Human Agent Trust Exploitation
+    // Users over-trust agent recommendations or explanations
+    plugins: ['overreliance', 'imitation', 'harmful:misinformation-disinformation'],
+    strategies: ['crescendo'],
+  },
+  'owasp:agentic:asi10': {
+    // ASI10: Rogue Agents
+    // Compromised or misaligned agents act harmfully while appearing legitimate
+    plugins: ['excessive-agency', 'hijacking', 'rbac', 'goal-misalignment'],
+    strategies: ['jailbreak', 'crescendo'],
   },
 };
 
@@ -706,7 +739,7 @@ export const ALIASED_PLUGINS = [
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
   'owasp:llm:redteam:runtime',
-  'owasp:agentic:redteam',
+  'owasp:agentic',
   'toxicity',
   'bias',
   'misinformation',
@@ -720,7 +753,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
-  ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
+  ...Object.keys(OWASP_AGENTIC_TOP_10_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
   ...Object.keys(ISO_42001_MAPPING),
   ...Object.keys(GDPR_MAPPING),
@@ -735,7 +768,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
-  'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
+  'owasp:agentic': OWASP_AGENTIC_TOP_10_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
   'iso:42001': ISO_42001_MAPPING,
   gdpr: GDPR_MAPPING,

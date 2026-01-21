@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
-import { runAssertions } from '../../src/assertions/index';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderMetricName, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -539,5 +539,318 @@ describe('runAssertions', () => {
         strategyId: 'crescendo',
       }),
     );
+  });
+
+  it('should render metric field with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricName: 'CustomMetric',
+        category: 'accuracy',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{metricName}}',
+        },
+        {
+          type: 'contains',
+          value: 'output',
+          metric: '{{category}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      CustomMetric: 1,
+      accuracy: 1,
+    });
+  });
+
+  it('should render metric field in assert-set with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricGroup: 'ValidationGroup',
+      },
+      assert: [
+        {
+          type: 'assert-set',
+          metric: '{{metricGroup}}',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Expected output',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      ValidationGroup: 1,
+    });
+  });
+
+  it('should render undefined metric variables as empty string and not track them', async () => {
+    const test: AtomicTestCase = {
+      vars: {},
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{undefinedVar}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Undefined variables render as empty string, which is falsy,
+    // so the metric is not tracked in namedScores
+    expect(result.namedScores).toEqual({});
+  });
+
+  it('should preserve static metric names without template syntax', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricName: 'ShouldNotBeUsed',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: 'StaticMetricName',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      StaticMetricName: 1,
+    });
+  });
+
+  it('should render complex metric templates with multiple variables', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        category: 'accuracy',
+        version: 'v2',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{category}}_{{version}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      accuracy_v2: 1,
+    });
+  });
+
+  it('should render metrics for inner assertions within assert-set', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        outerMetric: 'GroupMetric',
+        innerMetric1: 'EqualityCheck',
+        innerMetric2: 'ContainsCheck',
+      },
+      assert: [
+        {
+          type: 'assert-set',
+          metric: '{{outerMetric}}',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Expected output',
+              metric: '{{innerMetric1}}',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+              metric: '{{innerMetric2}}',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Both outer and inner metrics should be rendered
+    expect(result.namedScores).toEqual({
+      GroupMetric: 1,
+      EqualityCheck: 1,
+      ContainsCheck: 1,
+    });
+  });
+
+  it('should handle metric variable with same name as the field (issue #4986)', async () => {
+    // This test matches the exact use case from the original issue:
+    // metric: '{{metric}}' with vars: { metric: 'metric1' }
+    const test: AtomicTestCase = {
+      vars: {
+        metric: 'metric1',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{metric}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      metric1: 1,
+    });
+  });
+
+  it('should gracefully handle invalid metric template syntax', async () => {
+    // Invalid template syntax should not crash, should fall back to original metric
+    const test: AtomicTestCase = {
+      vars: {
+        someVar: 'value',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{invalid syntax',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Should fall back to the original (invalid) metric string
+    expect(result.namedScores).toEqual({
+      '{{invalid syntax': 1,
+    });
+  });
+
+  it('should handle test with no vars defined', async () => {
+    // When test.vars is undefined, should still work (empty vars object)
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: 'StaticMetric',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      StaticMetric: 1,
+    });
+  });
+});
+
+describe('renderMetricName', () => {
+  it('should be exported and callable', () => {
+    expect(renderMetricName).toBeDefined();
+    expect(typeof renderMetricName).toBe('function');
+  });
+
+  it('should render template variables', () => {
+    expect(renderMetricName('{{foo}}', { foo: 'bar' })).toBe('bar');
+  });
+
+  it('should render multiple template variables', () => {
+    expect(
+      renderMetricName('{{category}}_{{version}}', { category: 'accuracy', version: 'v2' }),
+    ).toBe('accuracy_v2');
+  });
+
+  it('should return undefined for undefined input', () => {
+    expect(renderMetricName(undefined, {})).toBeUndefined();
+  });
+
+  it('should return original on render error', () => {
+    expect(renderMetricName('{{invalid syntax', {})).toBe('{{invalid syntax');
+  });
+
+  it('should handle empty string metric', () => {
+    expect(renderMetricName('', {})).toBe('');
+  });
+
+  it('should handle metric without template syntax', () => {
+    expect(renderMetricName('StaticMetric', { foo: 'bar' })).toBe('StaticMetric');
+  });
+
+  it('should handle undefined variable by rendering to empty string', () => {
+    expect(renderMetricName('{{undefinedVar}}', {})).toBe('');
   });
 });

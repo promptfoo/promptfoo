@@ -1,9 +1,11 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { createRequire } from 'node:module';
 
+import { resolveModulePath } from 'exsolve';
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
@@ -75,6 +77,66 @@ export function clearWrapperDirCache(): void {
   for (const key of Object.keys(wrapperDirCache) as WrapperType[]) {
     delete wrapperDirCache[key];
   }
+}
+
+/**
+ * Resolves the entry point path for an npm package, handling ESM-only packages
+ * with restrictive `exports` fields.
+ *
+ * ## Why this function exists
+ *
+ * Some ESM-only packages (like `@openai/codex-sdk`) have restrictive `exports` fields:
+ *
+ * ```json
+ * {
+ *   "type": "module",
+ *   "exports": {
+ *     ".": { "import": "./dist/index.js" }
+ *   }
+ * }
+ * ```
+ *
+ * This causes problems with Node.js's `require.resolve()`:
+ * - `require.resolve('@openai/codex-sdk')` fails with "No exports main defined"
+ *   because there's no `"require"` or `"default"` condition.
+ *
+ * ## Solution
+ *
+ * This function uses `exsolve` which implements Node's ESM resolution algorithm,
+ * correctly handling all `exports` field variations:
+ * - Direct string exports: `"exports": "./index.js"`
+ * - Shorthand object: `"exports": { ".": "./index.js" }`
+ * - Conditional exports: `"exports": { ".": { "import": "./index.js" } }`
+ * - Nested conditionals, array fallbacks, pattern exports, etc.
+ *
+ * @param packageName - The npm package name (e.g., '@openai/codex-sdk')
+ * @param baseDir - The directory to resolve from (should contain node_modules)
+ * @returns The absolute path to the package entry point, or null if not found
+ *
+ * @example
+ * ```typescript
+ * // Resolve from current directory
+ * const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', process.cwd());
+ * if (codexPath) {
+ *   const module = await importModule(codexPath);
+ * }
+ * ```
+ */
+export function resolvePackageEntryPoint(packageName: string, baseDir: string): string | null {
+  // Use exsolve which implements Node's ESM resolution algorithm
+  // The `from` URL tells exsolve where to start looking for node_modules
+  const from = pathToFileURL(path.join(baseDir, 'package.json')).href;
+
+  const resolved = resolveModulePath(packageName, {
+    from,
+    // Conditions in priority order: Node.js-specific, ESM, CommonJS, default fallback
+    conditions: ['node', 'import', 'require', 'default'],
+    // Return undefined instead of throwing when package not found
+    try: true,
+  });
+
+  // Normalize the path to use platform-specific separators (forward slashes on Unix, backslashes on Windows)
+  return resolved ? path.normalize(resolved) : null;
 }
 
 // Global variable defined by tsup at build time
@@ -202,16 +264,42 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
         );
+
+        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
         (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
-    } else {
-      logger.error(`ESM import failed: ${err}`);
     }
 
     // Log stack trace for debugging
-    if ((err as any).stack) {
-      logger.debug((err as any).stack);
+    const e = err as Error;
+    if (e.stack) {
+      logger.debug(e.stack);
+    }
+
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
+    // (vs a dependency inside the file being missing).
+    // This provides clearer error messages for users when their files don't exist.
+    const nodeError = err as NodeJS.ErrnoException;
+    if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
+      const resolvedModulePath = safeResolve(modulePath);
+      try {
+        await fsPromises.access(resolvedModulePath);
+        // File exists - the error is about a missing dependency, log and preserve original error
+        logger.error(`ESM import failed: ${err}`);
+      } catch {
+        // File doesn't exist - normalize to ENOENT for clearer error message
+        // Don't log as error - this is expected during config file discovery
+        const enoentError = new Error(
+          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+        ) as NodeJS.ErrnoException;
+        enoentError.code = 'ENOENT';
+        enoentError.path = resolvedModulePath;
+        throw enoentError;
+      }
+    } else {
+      // For all other errors (not file-not-found), log as error
+      logger.error(`ESM import failed: ${err}`);
     }
 
     throw err;
@@ -243,6 +331,8 @@ export function isCjsInEsmError(message: string): boolean {
  * This is intentional - it's designed for loading trusted user configuration files
  * (custom providers, assertions, hooks) that need full Node.js capabilities.
  */
+
+// biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
 function loadCjsModule(modulePath: string): any {
   const code = fs.readFileSync(modulePath, 'utf-8');
   const dirname = path.dirname(modulePath);
@@ -252,6 +342,7 @@ function loadCjsModule(modulePath: string): any {
   const moduleRequire = createRequire(pathToFileURL(modulePath).href);
 
   // Create module and exports objects
+  // biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
   const moduleObj: { exports: any } = { exports: {} };
 
   // Create a context with CJS globals

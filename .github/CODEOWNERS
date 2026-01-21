@@ -30,6 +30,7 @@
 # ============================================================================
 
 /src/codeScan/   @danenania                          # 2.5k lines - Dane (91%)
+/code-scan-action/  @danenania                          # GitHub Action for code scan
 /src/validators/ @faizanminhas @mldangelo                # 1.5k lines - Faizan (55%)
 
 # ============================================================================
@@ -46,6 +47,7 @@
 # ============================================================================
 
 /test/codeScans/   @danenania
+/test/code-scan-action/  @danenania                      # Tests for GitHub Action
 /test/redteam/     @mldangelo @MrFlounder @will-holley
 /test/validators/  @faizanminhas @mldangelo
 /test/providers/   @MrFlounder @mldangelo                # Provider tests
@@ -54,7 +56,7 @@
 # DOCUMENTATION
 # ============================================================================
 
-/site/                      @typpo @mldangelo            # Documentation site
+/site/                      @typpo @mldangelo @swarnap   # Documentation site
 /CONTRIBUTING.md            @mldangelo                   # Contributing guide
 /site/docs/contributing.md  @mldangelo                   # Contributing docs
 

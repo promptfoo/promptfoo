@@ -1,67 +1,19 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import '@testing-library/jest-dom';
-
-import StrategyStats from './StrategyStats';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import type { RedteamPluginObject, PolicyObject } from '@promptfoo/redteam/types';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import StrategyStats from './StrategyStats';
+import type { PolicyObject, RedteamPluginObject } from '@promptfoo/redteam/types';
+import type { EvaluateResult } from '@promptfoo/types';
 
-vi.mock('@mui/material/styles', async () => {
-  const actual = await vi.importActual('@mui/material/styles');
-  return {
-    ...actual,
-    useTheme: () => ({
-      palette: {
-        mode: 'light',
-        error: {
-          main: '#f44336',
-          light: '#e57373',
-          dark: '#d32f2f',
-        },
-        action: {
-          hover: 'rgba(0, 0, 0, 0.04)',
-        },
-        background: {
-          paper: '#ffffff',
-        },
-        text: {
-          primary: '#000000',
-          secondary: 'rgba(0, 0, 0, 0.54)',
-        },
-        divider: 'rgba(0, 0, 0, 0.12)',
-        grey: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-        },
-        common: {
-          black: '#000000',
-        },
-      },
-      shape: {
-        borderRadius: 4,
-      },
-      shadows: Array(25).fill('none'),
-      spacing: (factor: number) => `${factor * 8}px`,
-    }),
-  };
-});
+import type { TestWithMetadata } from './shared';
+
+// No MUI theme mock needed - component uses Tailwind CSS
 
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
   useCustomPoliciesMap: vi.fn(),
 }));
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
 
 describe('StrategyStats', () => {
   let strategyStats: Record<string, { pass: number; total: number; failCount: number }>;
@@ -154,7 +106,13 @@ describe('StrategyStats', () => {
   const openStrategyDrawer = async (strategyId: string) => {
     const button = screen.getByLabelText(`View details for ${strategyId} attack method`);
     fireEvent.click(button);
-    return await screen.findByLabelText('Strategy details');
+    // Wait for the sheet/dialog to appear by looking for key content elements
+    // The drawer shows strategy stats and a title
+    await waitFor(() => {
+      expect(screen.getByText('Total Attempts')).toBeInTheDocument();
+    });
+    // Return the dialog element
+    return screen.getByRole('dialog');
   };
 
   describe('Happy Path', () => {
@@ -289,13 +247,18 @@ describe('StrategyStats', () => {
       );
       promptInjectionButton.focus();
 
-      fireEvent.keyPress(promptInjectionButton, { key: 'Enter', code: 'Enter', charCode: 13 });
+      fireEvent.keyDown(promptInjectionButton, { key: 'Enter', code: 'Enter' });
 
-      const drawer = await screen.findByLabelText('Strategy details');
+      // Wait for the sheet/dialog to appear
+      await waitFor(() => {
+        expect(screen.getByText('Total Attempts')).toBeInTheDocument();
+      });
+      const drawer = screen.getByRole('dialog');
       expect(drawer).toBeInTheDocument();
     });
 
     it('should render the Successful Attacks tab content when tabValue is 1', async () => {
+      const user = userEvent.setup();
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -308,11 +271,13 @@ describe('StrategyStats', () => {
       const drawer = await openStrategyDrawer('prompt-injection');
       expect(drawer).toBeInTheDocument();
 
-      const successfulAttacksTab = await screen.findByText(/Successful Attacks/);
-      fireEvent.click(successfulAttacksTab);
+      const successfulAttacksTab = await screen.findByRole('tab', { name: /Successful Attacks/ });
+      await user.click(successfulAttacksTab);
 
-      const failPrompts = await screen.findAllByText('fail prompt 1');
-      expect(failPrompts.length).toBeGreaterThan(0);
+      await waitFor(() => {
+        const failPrompts = screen.getAllByText('fail prompt 1');
+        expect(failPrompts.length).toBeGreaterThan(0);
+      });
     });
 
     it('should display the custom policy name in the plugin performance table', async () => {
@@ -409,6 +374,7 @@ describe('StrategyStats', () => {
   });
 
   it('should display raw JSON when prompt is valid JSON but does not match expected structure', async () => {
+    const user = userEvent.setup();
     const unexpectedJsonPrompt = '{"key": "value"}';
     const failuresByPluginWithUnexpectedJson: Record<string, TestWithMetadata[]> = {
       'plugin-C': [
@@ -434,8 +400,8 @@ describe('StrategyStats', () => {
     expect(drawer).toBeInTheDocument();
 
     // Click on Successful Attacks tab to see the content
-    const successfulAttacksTab = await screen.findByText(/Successful Attacks/);
-    fireEvent.click(successfulAttacksTab);
+    const successfulAttacksTab = await screen.findByRole('tab', { name: /Successful Attacks/ });
+    await user.click(successfulAttacksTab);
 
     // The prompt should be displayed as is since it doesn't match the expected array structure
     await waitFor(() => {
@@ -449,6 +415,7 @@ describe('StrategyStats', () => {
     });
   });
   it('should handle output that is an array of non-function items', async () => {
+    const user = userEvent.setup();
     const arrayOutput = ['item1', 'item2', 'item3'];
     const failuresByPluginWithArrayOutput: Record<string, TestWithMetadata[]> = {
       'plugin-C': [
@@ -470,17 +437,12 @@ describe('StrategyStats', () => {
       />,
     );
 
-    const promptInjectionButton = screen.getByLabelText(
-      'View details for prompt-injection attack method',
-    );
-    fireEvent.click(promptInjectionButton);
-
-    const drawer = await screen.findByLabelText('Strategy details');
+    const drawer = await openStrategyDrawer('prompt-injection');
     expect(drawer).toBeInTheDocument();
 
     // Click on Successful Attacks tab to see the content
-    const successfulAttacksTab = await screen.findByText(/Successful Attacks/);
-    fireEvent.click(successfulAttacksTab);
+    const successfulAttacksTab = await screen.findByRole('tab', { name: /Successful Attacks/ });
+    await user.click(successfulAttacksTab);
 
     // The output should be displayed somewhere in the drawer content
     await waitFor(() => {
@@ -526,7 +488,11 @@ describe('StrategyStats', () => {
     const noExamplesButton = screen.getByLabelText('View details for no-examples attack method');
     fireEvent.click(noExamplesButton);
 
-    const drawer = await screen.findByLabelText('Strategy details');
+    // Wait for the sheet/dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Total Attempts')).toBeInTheDocument();
+    });
+    const drawer = screen.getByRole('dialog');
     expect(drawer).toBeInTheDocument();
 
     expect(await screen.findByRole('heading', { name: 'no-examples' })).toBeInTheDocument();
@@ -605,6 +571,7 @@ describe('StrategyStats', () => {
   });
 
   it('should handle null selectedStrategy in DrawerContent', async () => {
+    const user = userEvent.setup();
     render(
       <StrategyStats
         strategyStats={strategyStats}
@@ -614,24 +581,23 @@ describe('StrategyStats', () => {
       />,
     );
 
-    const promptInjectionButton = screen.getByLabelText(
-      'View details for prompt-injection attack method',
-    );
-    fireEvent.click(promptInjectionButton);
-
-    const drawer = await screen.findByLabelText('Strategy details');
+    const drawer = await openStrategyDrawer('prompt-injection');
     expect(drawer).toBeInTheDocument();
 
-    const backdrop = document.querySelector('.MuiBackdrop-root');
-    if (backdrop) {
-      fireEvent.click(backdrop);
-    }
+    // Close the sheet using the Close button
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
 
     expect(screen.queryByRole('heading', { name: 'Direct Prompt Injection' })).toBeNull();
   });
 
   describe('getPromptDisplayString', () => {
     it('should correctly parse and display JSON array prompts with lastPrompt.content', async () => {
+      const user = userEvent.setup();
       const testPrompt = JSON.stringify([
         { role: 'user', content: 'initial prompt' },
         { role: 'assistant', content: 'some response' },
@@ -663,8 +629,8 @@ describe('StrategyStats', () => {
       expect(drawer).toBeInTheDocument();
 
       // Click on Successful Attacks tab to see the content
-      const successfulAttacksTab = await screen.findByText(/Successful Attacks/);
-      fireEvent.click(successfulAttacksTab);
+      const successfulAttacksTab = await screen.findByRole('tab', { name: /Successful Attacks/ });
+      await user.click(successfulAttacksTab);
 
       // The last prompt's content should be extracted and displayed
       await waitFor(() => {

@@ -1,6 +1,6 @@
-import { vi } from 'vitest';
 import fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
@@ -193,7 +193,7 @@ describe('Google assertions', () => {
         validateFunctionCall(functionOutput, fileProvider.config.tools, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.json');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.json',
         'utf8',

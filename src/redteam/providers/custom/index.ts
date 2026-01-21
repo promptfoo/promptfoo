@@ -1,21 +1,7 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -30,18 +16,34 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
-import type { Message } from '../shared';
 import {
+  buildGraderResultAssertion,
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+  VarValue,
+} from '../../../types/index';
+import type { BaseRedteamMetadata } from '../../types';
+import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -151,7 +153,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -187,8 +189,8 @@ export class CustomProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -283,7 +285,7 @@ export class CustomProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -515,7 +517,7 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
@@ -524,7 +526,10 @@ export class CustomProvider implements ApiProvider {
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            };
           }
         }
 
@@ -613,10 +618,12 @@ export class CustomProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
         customBacktrackCount: backtrackCount,
@@ -630,7 +637,7 @@ export class CustomProvider implements ApiProvider {
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
       ...(lastTargetError ? { error: lastTargetError } : {}),
     };
   }
@@ -755,7 +762,7 @@ export class CustomProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     _roundNum: number,
@@ -870,7 +877,12 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(

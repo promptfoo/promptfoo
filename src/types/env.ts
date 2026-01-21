@@ -27,6 +27,8 @@ export const ProviderEnvOverridesSchema = z.object({
   CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_GATEWAY_ID: z.string().optional(),
+  CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
@@ -34,6 +36,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_API_KEY: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
@@ -79,12 +82,15 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_ALIAS: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
+  QUIVERAI_API_KEY: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
   SHAREPOINT_BASE_URL: z.string().optional(),
   SHAREPOINT_CERT_PATH: z.string().optional(),
   SHAREPOINT_CLIENT_ID: z.string().optional(),
   SHAREPOINT_TENANT_ID: z.string().optional(),
+  VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
+  VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),
   VERTEX_API_KEY: z.string().optional(),
   VERTEX_API_VERSION: z.string().optional(),
@@ -97,6 +103,8 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_AUTH_TYPE: z.string().optional(),
   WATSONX_AI_BEARER_TOKEN: z.string().optional(),
   WATSONX_AI_PROJECT_ID: z.string().optional(),
+  XAI_API_BASE_URL: z.string().optional(),
+  XAI_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
@@ -109,4 +117,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
+// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
+// while maintaining type safety for known env vars
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

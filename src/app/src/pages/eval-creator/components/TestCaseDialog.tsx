@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import AssertsForm from './AssertsForm';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
@@ -55,19 +59,22 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   };
 
   return (
-    <Dialog open={open} onClose={onCancel} fullWidth maxWidth="md">
-      <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
-      <DialogContent>
-        <Box>
-          {/*
-          <TextField
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            fullWidth
-            margin="normal"
-          />
-          */}
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="test-case-description">Description</Label>
+            <Input
+              id="test-case-description"
+              placeholder="Enter a description for this test case"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
           <VarsForm
             onAdd={(vars) => setVars(vars)}
             varsList={varsList}
@@ -82,21 +89,22 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
               ) as Assertion[]) || []
             }
           />
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleAdd.bind(this, true)} color="primary" variant="contained">
-          {initialValues ? 'Update Test Case' : 'Add Test Case'}
-        </Button>
-        {!initialValues && (
-          <Button onClick={handleAdd.bind(this, false)} color="primary" variant="contained">
-            Add Another
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
           </Button>
-        )}
-        <Button onClick={onCancel} color="secondary">
-          Cancel
-        </Button>
-      </DialogActions>
+          {!initialValues && (
+            <Button variant="secondary" onClick={() => handleAdd(false)}>
+              Add Another
+            </Button>
+          )}
+          <Button onClick={() => handleAdd(true)}>
+            {initialValues ? 'Update Test Case' : 'Add Test Case'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 };

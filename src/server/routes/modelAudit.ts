@@ -420,15 +420,39 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get all model scans
+// Valid sort fields and order values for the /scans endpoint
+const VALID_SORT_FIELDS = ['createdAt', 'name', 'modelPath'] as const;
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+type SortField = (typeof VALID_SORT_FIELDS)[number];
+type SortOrder = (typeof VALID_SORT_ORDERS)[number];
+
+// Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const audits = await ModelAudit.getMany(limit);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const sortParam = (req.query.sort as string) || 'createdAt';
+    const orderParam = (req.query.order as string) || 'desc';
+    const search = req.query.search as string | undefined;
+
+    // Validate sort field against allowlist
+    const sort: SortField = VALID_SORT_FIELDS.includes(sortParam as SortField)
+      ? (sortParam as SortField)
+      : 'createdAt';
+
+    // Validate order against allowlist
+    const order: SortOrder = VALID_SORT_ORDERS.includes(orderParam as SortOrder)
+      ? (orderParam as SortOrder)
+      : 'desc';
+
+    const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
+    const total = await ModelAudit.count(search);
 
     res.json({
       scans: audits.map((audit) => audit.toJSON()),
-      total: audits.length,
+      total,
+      limit,
+      offset,
     });
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
@@ -436,10 +460,29 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get specific model scan by ID
+// IMPORTANT: /scans/latest must be defined BEFORE /scans/:id to prevent
+// "latest" from being matched as an :id parameter
+// Get the latest/most recent model scan
+modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const audits = await ModelAudit.getMany(1, 0, 'createdAt', 'desc');
+
+    if (audits.length === 0) {
+      res.status(404).json({ error: 'No scans found' });
+      return;
+    }
+
+    res.json(audits[0].toJSON());
+  } catch (error) {
+    logger.error(`Error fetching latest model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
@@ -456,7 +499,7 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });

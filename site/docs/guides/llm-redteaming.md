@@ -54,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node 20 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node.js 20+](https://nodejs.org/en/download/package-manager/).
 
 Then create a new project for your red teaming needs:
 
@@ -93,7 +93,7 @@ In this example, let's pretend we're building a trip planner app. I’ll set a p
 
 ```yaml
 prompts:
-  - 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise. User query: {{query}}'
+  - 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise. User query: {{query}}'
 ```
 
 ### What if you don't have a prompt?
@@ -108,7 +108,7 @@ In most cases your prompt will be more complex, in which case you could create a
 [
   {
     'role': 'system',
-    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise.',
+    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise.',
   },
   { 'role': 'user', 'content': '{{query}}' },
 ]
@@ -130,7 +130,7 @@ def get_prompt(context):
   if context['vars']['destination'] === 'Australia':
     return f"Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip.  Be friendly and concise. User query: {{query}}"
+  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 

@@ -1,6 +1,5 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
@@ -41,7 +40,7 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
     const { name, type, config } = req.body;
-    const id = uuidv4();
+    const id = crypto.randomUUID();
 
     const [result] = await db
       .insert(configsTable)
@@ -67,6 +66,7 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
+  const type = req.params.type as string;
   try {
     const configs = await db
       .select({
@@ -76,10 +76,10 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
         updatedAt: configsTable.updatedAt,
       })
       .from(configsTable)
-      .where(eq(configsTable.type, req.params.type))
+      .where(eq(configsTable.type, type))
       .orderBy(configsTable.updatedAt);
 
-    logger.info(`Loaded ${configs.length} configs of type ${req.params.type}`);
+    logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
     res.json({ configs });
   } catch (error) {
@@ -90,14 +90,16 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
+  const type = req.params.type as string;
+  const id = req.params.id as string;
   try {
     const config = await db
       .select()
       .from(configsTable)
-      .where(and(eq(configsTable.type, req.params.type), eq(configsTable.id, req.params.id)))
+      .where(and(eq(configsTable.type, type), eq(configsTable.id, id)))
       .limit(1);
 
-    logger.info(`Loaded config ${req.params.id} of type ${req.params.type}`);
+    logger.info(`Loaded config ${id} of type ${type}`);
 
     if (!config.length) {
       res.status(404).json({ error: 'Config not found' });

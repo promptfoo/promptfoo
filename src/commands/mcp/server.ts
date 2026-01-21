@@ -10,6 +10,7 @@ import { registerGenerateDatasetTool } from './tools/generateDataset';
 import { registerGenerateTestCasesTool } from './tools/generateTestCases';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
+import { registerLogTools } from './tools/logs';
 import { registerRedteamGenerateTool } from './tools/redteamGenerate';
 import { registerRedteamRunTool } from './tools/redteamRun';
 import { registerRunAssertionTool } from './tools/runAssertion';
@@ -25,6 +26,8 @@ export async function createMcpServer() {
   const server = new McpServer({
     name: 'Promptfoo MCP',
     version: '1.0.0',
+    description:
+      'MCP server for LLM evaluation, red teaming, and security testing with promptfoo. Provides tools for running evaluations, testing providers, generating datasets, and performing security assessments.',
   });
 
   // Track MCP server creation
@@ -54,6 +57,9 @@ export async function createMcpServer() {
   registerRedteamRunTool(server);
   registerRedteamGenerateTool(server);
 
+  // Register debugging tools
+  registerLogTools(server);
+
   // Register resources
   registerResources(server);
 
@@ -62,6 +68,7 @@ export async function createMcpServer() {
 
 /**
  * Starts an MCP server with HTTP transport
+ * Returns a Promise that only resolves when the server shuts down
  */
 export async function startHttpMcpServer(port: number): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -74,14 +81,14 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   const app = express();
   app.use(express.json());
 
-  const server = await createMcpServer();
+  const mcpServer = await createMcpServer();
 
   // Set up HTTP transport for MCP
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
   });
 
-  await server.connect(transport);
+  await mcpServer.connect(transport);
 
   // Handle MCP requests
   app.post('/mcp', async (req, res) => {
@@ -98,18 +105,59 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     res.status(200).json({ status: 'OK', message: 'Promptfoo MCP server is running' });
   });
 
-  // Start the server
-  app.listen(port, () => {
-    logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
-    logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-    logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+  // Return a Promise that only resolves when the server shuts down
+  // This keeps long-running commands running until SIGINT/SIGTERM
+  return new Promise<void>((resolve) => {
+    const httpServer = app.listen(port, () => {
+      logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
+      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
+      logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
 
-    // Track server start
-    telemetry.record('feature_used', {
-      feature: 'mcp_server_started',
-      transport: 'http',
-      port,
+      // Track server start
+      telemetry.record('feature_used', {
+        feature: 'mcp_server_started',
+        transport: 'http',
+        port,
+      });
+      // Don't resolve - server runs until shutdown signal
     });
+
+    let isShuttingDown = false;
+
+    // Register shutdown handlers
+    const shutdown = () => {
+      if (isShuttingDown) {
+        return;
+      }
+      isShuttingDown = true;
+
+      logger.info('Shutting down MCP server...');
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn('MCP server close timeout - forcing shutdown');
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Clean up the MCP server first, then close the HTTP server
+      mcpServer
+        .close()
+        .catch((err) => {
+          logger.warn(`Error closing MCP server: ${err instanceof Error ? err.message : err}`);
+        })
+        .finally(() => {
+          httpServer.close((err) => {
+            clearTimeout(forceCloseTimeout);
+            if (err) {
+              logger.warn(`Error closing HTTP server: ${err.message}`);
+            }
+            logger.info('MCP server closed');
+            resolve();
+          });
+        });
+    };
+
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
   });
 }
 
@@ -142,6 +190,40 @@ export async function startStdioMcpServer(): Promise<void> {
     transport: 'stdio',
   });
 
-  // Don't log to stdout in stdio mode as it pollutes the JSON-RPC protocol
-  // logger.info('Promptfoo MCP stdio server started');
+  // Return a Promise that only resolves when the server shuts down
+  // This matches the pattern used in startHttpMcpServer
+  return new Promise<void>((resolve) => {
+    let isShuttingDown = false;
+
+    const shutdown = () => {
+      if (isShuttingDown) {
+        return;
+      }
+      isShuttingDown = true;
+
+      // Add timeout to prevent indefinite hangs, matching HTTP server pattern
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Clean up the server and transport properly
+      server
+        .close()
+        .catch(() => {
+          // Ignore close errors during shutdown
+        })
+        .finally(() => {
+          clearTimeout(forceCloseTimeout);
+          resolve();
+        });
+    };
+
+    // Register shutdown handlers for signals
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+
+    // Handle client disconnect (stdin close)
+    process.stdin.once('end', shutdown);
+  });
 }

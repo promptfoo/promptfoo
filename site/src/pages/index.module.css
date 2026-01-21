@@ -94,59 +94,6 @@ html {
   }
 }
 
-/* Floating animation for continuous subtle motion */
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes floatSlow {
-  0%,
-  100% {
-    transform: translateY(0px) rotate(0deg);
-  }
-  50% {
-    transform: translateY(-15px) rotate(1deg);
-  }
-}
-
-/* Breathing animation for cards */
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
-}
-
-/* Shimmer effect */
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
-
-/* Glow pulse */
-@keyframes glowPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(229, 58, 58, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(229, 58, 58, 0.6);
-  }
-}
-
 /* Page-level gradient - main background for entire page */
 :global(.homepage-wrapper) {
   background:
@@ -202,31 +149,6 @@ html {
   animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) backwards;
 }
 
-.heroBanner::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent,
-    rgba(229, 58, 58, 0.03),
-    transparent,
-    rgba(179, 46, 46, 0.03),
-    transparent
-  );
-  animation: rotate 30s linear infinite;
-  z-index: -1;
-}
-
-@keyframes rotate {
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
 .heroBanner h1 {
   font-size: 4rem;
   margin-bottom: 2rem;
@@ -262,16 +184,6 @@ html {
   display: inline-block;
   font-weight: 900;
   letter-spacing: -0.03em;
-  animation: textGlow 3s ease-in-out infinite alternate;
-}
-
-@keyframes textGlow {
-  from {
-    filter: brightness(1) contrast(1);
-  }
-  to {
-    filter: brightness(1.1) contrast(1.05);
-  }
 }
 
 .heroHighlight {
@@ -351,41 +263,10 @@ html {
   cursor: pointer;
 }
 
-.buttons .button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transition: left 0.5s ease;
-}
-
-.buttons .button:hover::before {
-  left: 100%;
-}
-
-/* Add shimmer effect on hover */
-.buttons .button::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-}
-
-.buttons .button:hover::after {
-  transform: translateX(100%);
-}
-
 .buttons .button--primary {
   background: linear-gradient(135deg, var(--pf-red-dark) 0%, var(--pf-red-base) 100%);
   border: none;
   color: white;
-  /* Add subtle glow animation */
-  animation: glowPulse 3s ease-in-out infinite;
 }
 
 .buttons .button--primary:hover {
@@ -394,7 +275,6 @@ html {
   box-shadow:
     0 12px 28px rgba(229, 58, 58, 0.4),
     0 4px 12px rgba(229, 58, 58, 0.3);
-  animation: none; /* Disable glow on hover */
 }
 
 .buttons .button--primary:active {
@@ -684,7 +564,7 @@ html {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.95rem;
   font-weight: 600;
-  overflow-x: auto;
+  overflow: hidden;
   white-space: pre-wrap;
   word-wrap: break-word;
   position: relative;
@@ -704,20 +584,6 @@ html {
   opacity: 0;
   z-index: -1;
   transition: opacity 0.3s ease;
-  background-size: 200% 200%;
-  animation: gradientShift 3s ease infinite;
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 .codeBox:hover::before {
@@ -930,20 +796,6 @@ html {
   background-image:
     radial-gradient(circle at 25% 25%, rgba(229, 58, 58, 0.05) 0%, transparent 30%),
     radial-gradient(circle at 75% 75%, rgba(179, 46, 46, 0.05) 0%, transparent 30%);
-  animation: floatingBg 20s ease-in-out infinite;
-}
-
-@keyframes floatingBg {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  33% {
-    transform: translate(30px, -30px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.95);
-  }
 }
 
 .logoSection h2 {
@@ -1001,17 +853,6 @@ html {
   right: 0;
   height: 3px;
   background: linear-gradient(90deg, var(--pf-red-base), var(--pf-red-light), var(--pf-red-base));
-  background-size: 200% 100%;
-  animation: gradientFlow 3s ease infinite;
-}
-
-@keyframes gradientFlow {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
 }
 
 [data-theme='dark'] .ctaSection {
@@ -1128,7 +969,6 @@ html {
 
 .asSeenOnCard:hover::after {
   opacity: 0.6;
-  animation: gradientShift 3s ease infinite;
 }
 
 [data-theme='dark'] .asSeenOnCard {
@@ -1401,18 +1241,6 @@ html {
 }
   */
 
-@keyframes underlinePulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scaleX(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scaleX(1);
-  }
-}
-
 [data-theme='dark'] .securityHighlight {
   color: var(--pf-red-lighter);
   background: linear-gradient(
@@ -1463,19 +1291,6 @@ html {
   height: 40px;
   background: linear-gradient(180deg, var(--pf-red-base), transparent);
   position: relative;
-  animation: flowLineGrow 1.5s ease-in-out infinite;
-}
-
-@keyframes flowLineGrow {
-  0%,
-  100% {
-    height: 40px;
-    opacity: 0.6;
-  }
-  50% {
-    height: 50px;
-    opacity: 1;
-  }
 }
 
 .flowDot {
@@ -1486,19 +1301,6 @@ html {
   box-shadow: 0 0 20px rgba(229, 58, 58, 0.6);
   position: absolute;
   bottom: 0;
-  animation: flowDotPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes flowDotPulse {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 20px rgba(229, 58, 58, 0.6);
-  }
-  50% {
-    transform: scale(1.3);
-    box-shadow: 0 0 30px rgba(229, 58, 58, 0.8);
-  }
 }
 
 [data-theme='dark'] .flowLine {
@@ -1847,7 +1649,7 @@ html {
   width: 100%;
 }
 
-/* Add subtle pulse to eyebrow */
+/* Subtle underline for eyebrow */
 .sectionEyebrow::after {
   content: '';
   position: absolute;
@@ -1857,19 +1659,7 @@ html {
   height: 2px;
   background: var(--pf-red-base);
   transform: translateX(-50%);
-  animation: expandLine 2s ease-in-out infinite;
-}
-
-@keyframes expandLine {
-  0%,
-  100% {
-    width: 40px;
-    opacity: 0.6;
-  }
-  50% {
-    width: 60px;
-    opacity: 1;
-  }
+  opacity: 0.6;
 }
 
 [data-theme='dark'] .sectionEyebrow {
@@ -1888,42 +1678,8 @@ html {
   line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--ifm-font-color-base);
-  /* Add entrance animation */
-  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
   /* Add subtle text shadow for depth */
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  position: relative;
-}
-
-/* Add gradient shine effect on section titles */
-.sectionTitle::before {
-  content: attr(data-text);
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(229, 58, 58, 0.3), transparent);
-  -webkit-background-clip: text;
-  background-clip: text;
-  opacity: 0;
-  animation: textShine 3s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes textShine {
-  0%,
-  90% {
-    opacity: 0;
-    transform: translateX(-100%);
-  }
-  95% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(100%);
-  }
 }
 
 .sectionSubtitle {
@@ -2197,9 +1953,6 @@ html {
   font-weight: 900;
   color: white;
   box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
-  /* Add subtle floating animation */
-  animation: float 3s ease-in-out infinite;
-  transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
 }
 
 /* Hover animation removed for consistency */
@@ -2615,14 +2368,11 @@ html {
   box-shadow:
     0 12px 32px rgba(229, 58, 58, 0.4),
     0 4px 12px rgba(0, 0, 0, 0.2);
-  /* Add subtle glow animation */
-  animation: glowPulse 3s ease-in-out infinite;
 }
 
 .personaTabActive:hover {
   background: linear-gradient(135deg, var(--pf-red-darker), var(--pf-red-dark));
   transform: translateY(-5px) scale(1.02);
-  animation: none; /* Disable glow on hover */
 }
 
 .personaTabTitle {

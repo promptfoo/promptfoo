@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUD_PROVIDER_PREFIX,
   DEFAULT_API_BASE_URL,
@@ -46,26 +46,9 @@ describe('constants', () => {
       expect(getShareApiBaseUrl()).toBe(DEFAULT_API_BASE_URL);
     });
 
-    it('should return NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL if set', () => {
-      process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL = 'https://custom.api.com';
-      expect(getShareApiBaseUrl()).toBe('https://custom.api.com');
-    });
-
-    it('should return NEXT_PUBLIC_PROMPTFOO_BASE_URL if set', () => {
-      process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL = 'https://custom.base.com';
-      expect(getShareApiBaseUrl()).toBe('https://custom.base.com');
-    });
-
     it('should return PROMPTFOO_REMOTE_API_BASE_URL if set', () => {
       process.env.PROMPTFOO_REMOTE_API_BASE_URL = 'https://remote.api.com';
       expect(getShareApiBaseUrl()).toBe('https://remote.api.com');
-    });
-
-    it('should prioritize NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL over others', () => {
-      process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL = 'https://custom.api.com';
-      process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL = 'https://custom.base.com';
-      process.env.PROMPTFOO_REMOTE_API_BASE_URL = 'https://remote.api.com';
-      expect(getShareApiBaseUrl()).toBe('https://custom.api.com');
     });
   });
 
@@ -85,20 +68,9 @@ describe('constants', () => {
       expect(getShareViewBaseUrl()).toBe('https://promptfoo.app');
     });
 
-    it('should return NEXT_PUBLIC_PROMPTFOO_BASE_URL if set', () => {
-      process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL = 'https://custom.base.com';
-      expect(getShareViewBaseUrl()).toBe('https://custom.base.com');
-    });
-
     it('should return PROMPTFOO_REMOTE_APP_BASE_URL if set', () => {
       process.env.PROMPTFOO_REMOTE_APP_BASE_URL = 'https://remote.app.com';
       expect(getShareViewBaseUrl()).toBe('https://remote.app.com');
-    });
-
-    it('should prioritize NEXT_PUBLIC_PROMPTFOO_BASE_URL over others', () => {
-      process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL = 'https://custom.base.com';
-      process.env.PROMPTFOO_REMOTE_APP_BASE_URL = 'https://remote.app.com';
-      expect(getShareViewBaseUrl()).toBe('https://custom.base.com');
     });
   });
 

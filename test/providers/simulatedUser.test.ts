@@ -88,9 +88,53 @@ describe('SimulatedUser', () => {
       expect(result.output).toBeDefined();
       expect(result.output).toContain('User:');
       expect(result.output).toContain('Assistant:');
-      expect(result.tokenUsage?.numRequests).toBe(2);
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
       expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should accumulate token usage from both agent and user providers', async () => {
+      // Set up user provider to return token usage
+      mockUserProviderCallApi
+        .mockResolvedValueOnce({
+          output: 'user response 1',
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'user response 2',
+          tokenUsage: { prompt: 12, completion: 6, total: 18, numRequests: 1 },
+        });
+
+      // Agent provider returns token usage
+      const agentWithTokenUsage = {
+        id: () => 'test-agent',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'agent response 1',
+            tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'agent response 2',
+            tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 },
+          }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: agentWithTokenUsage,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toBeDefined();
+      // Total should include both agent (2 calls) and user (2 calls) token usage
+      // Agent: 30 + 40 = 70 total, 2 numRequests
+      // User: 15 + 18 = 33 total, 2 numRequests
+      expect(result.tokenUsage?.numRequests).toBe(4);
+      expect(result.tokenUsage?.prompt).toBe(67); // 10+12+20+25
+      expect(result.tokenUsage?.completion).toBe(36); // 5+6+10+15
+      expect(result.tokenUsage?.total).toBe(103); // 15+18+30+40
     });
 
     it('should respect maxTurns configuration', async () => {
@@ -139,6 +183,26 @@ describe('SimulatedUser', () => {
       // The original provider should be called once for the first exchange
       expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should handle ###STOP### on first turn without crashing (agentResponse undefined)', async () => {
+      // This tests the edge case from GitHub issue #7101
+      // When the simulated user returns ###STOP### on the very first turn,
+      // agentResponse is never set and would be undefined
+      mockUserProviderCallApi.mockResolvedValueOnce({ output: '###STOP###' });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should complete without crashing
+      expect(result.output).toBeDefined();
+      // The target provider should never have been called
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(0);
+      // guardrails should be undefined but not crash
+      expect(result.guardrails).toBeUndefined();
     });
 
     it('should throw error if originalProvider is not provided', async () => {
@@ -452,7 +516,8 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.output).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBe(2);
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
     });
 
     it('should pass initial messages to user provider in flipped format', async () => {
@@ -546,7 +611,8 @@ describe('SimulatedUser', () => {
 
       // Should proceed without initial messages
       expect(result.output).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns without initial messages
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
     });
 
     it('should return empty array for non-array JSON', async () => {
@@ -563,7 +629,8 @@ describe('SimulatedUser', () => {
 
       // Should proceed without initial messages
       expect(result.output).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBe(2);
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
     });
 
     it('should handle empty string initialMessages', async () => {
@@ -578,7 +645,8 @@ describe('SimulatedUser', () => {
 
       // Empty string should be treated as no initial messages
       expect(result.output).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBe(2);
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
     });
 
     it('should validate message content is a string', async () => {
@@ -688,7 +756,8 @@ describe('SimulatedUser', () => {
 
       // Should proceed without initial messages when file fails to load
       expect(result.output).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns
+      // 2 agent calls + 2 user provider calls = 4 total requests tracked
+      expect(result.tokenUsage?.numRequests).toBe(4);
     });
   });
 

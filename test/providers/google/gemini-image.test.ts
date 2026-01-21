@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';
@@ -15,6 +15,7 @@ vi.mock('../../../src/providers/google/util', () => ({
     contents: [{ parts: [{ text: prompt }], role: 'user' }],
     systemInstruction: undefined,
   })),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 describe('GeminiImageProvider', () => {
@@ -30,7 +31,12 @@ describe('GeminiImageProvider', () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
 
-    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockLoadCredentials.mockImplementation((creds) => {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
@@ -78,6 +84,7 @@ describe('GeminiImageProvider', () => {
         },
       },
       cached: false,
+      statusText: 'OK',
     });
 
     const result = await provider.callApi('Generate a picture of a cat');
@@ -158,7 +165,7 @@ describe('GeminiImageProvider', () => {
       };
 
       mockGetGoogleClient.mockResolvedValue({
-        client: mockClient,
+        client: mockClient as any,
         projectId: 'test-project',
       });
 
@@ -228,6 +235,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
@@ -243,7 +251,7 @@ describe('GeminiImageProvider', () => {
       );
 
       const callArgs = mockFetchWithCache.mock.calls[0];
-      const body = JSON.parse(callArgs[1].body);
+      const body = JSON.parse(callArgs[1]!.body as string);
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '16:9',
         imageSize: '2K',
@@ -278,12 +286,13 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
 
       const callArgs = mockFetchWithCache.mock.calls[0];
-      const body = JSON.parse(callArgs[1].body);
+      const body = JSON.parse(callArgs[1]!.body as string);
       // Should only have aspectRatio, not imageSize
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '16:9',
@@ -307,6 +316,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -326,6 +336,7 @@ describe('GeminiImageProvider', () => {
           },
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -338,6 +349,8 @@ describe('GeminiImageProvider', () => {
 
       mockFetchWithCache.mockResolvedValueOnce({
         status: 400,
+        statusText: 'Bad Request',
+        cached: false,
         data: {
           error: {
             message: 'Invalid request',
@@ -378,6 +391,7 @@ describe('GeminiImageProvider', () => {
           },
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -415,6 +429,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -445,6 +460,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -480,13 +496,18 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=gemini-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'gemini-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
@@ -523,13 +544,18 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=config-api-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'config-api-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
@@ -554,6 +580,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
@@ -583,6 +610,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');

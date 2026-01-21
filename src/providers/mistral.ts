@@ -1,9 +1,11 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -11,7 +13,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -156,12 +157,13 @@ interface MistralChatCompletionOptions {
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
     } else {
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
+        numRequests: 1,
       };
     }
   }
@@ -243,17 +245,57 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
-      );
-    }
-
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'mistral',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: config?.temperature,
+      topP: config?.top_p,
+      maxTokens: config?.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, config),
+      resultExtractor,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    _context?: CallApiContextParams,
+    config: MistralChatCompletionOptions = {},
+  ): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
+      );
+    }
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -265,7 +307,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       max_tokens: config?.max_tokens || 1024,
       safe_prompt: config?.safe_prompt || false,
       random_seed: config?.random_seed || null,
-      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(config?.response_format ? { response_format: config.response_format } : {}),
     };
 
     const cacheKey = `mistral:${JSON.stringify(params)}`;
@@ -277,6 +319,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
           logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
           return {
             ...cachedResult,
+            cached: true,
             tokenUsage: {
               ...cachedResult.tokenUsage,
               cached: cachedResult.tokenUsage?.total,

@@ -14,24 +14,9 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -46,8 +31,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import type { BaseRedteamMetadata } from '../types';
-import { getSessionId } from '../util';
+import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -56,10 +40,27 @@ import {
 import {
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+  VarValue,
+} from '../../types/index';
+import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -364,7 +365,7 @@ export function createTreeNode(
   id?: string,
 ): TreeNode {
   return {
-    id: id || uuidv4(),
+    id: id || crypto.randomUUID(),
     prompt,
     score,
     children: [],
@@ -459,6 +460,7 @@ async function runRedteamConversation({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
+  inputs,
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -469,9 +471,10 @@ async function runRedteamConversation({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
+  inputs?: Record<string, string>;
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
@@ -544,12 +547,19 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
-        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
+        let { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
 
         attempts++;
+
+        // Extract JSON from <Prompt> tags if present (multi-input mode)
+        const extractedPrompt = extractPromptFromTags(newInjectVar);
+        if (extractedPrompt) {
+          newInjectVar = extractedPrompt;
+        }
+
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
         );
@@ -594,23 +604,42 @@ async function runRedteamConversation({
           });
         }
 
+        // Build updated vars - handle multi-input mode
+        const updatedVars: Record<string, VarValue> = {
+          ...iterationVars,
+          [injectVar]: finalInjectVar,
+        };
+
+        // If inputs is defined, extract individual keys from the attack prompt JSON
+        if (inputs && Object.keys(inputs).length > 0) {
+          try {
+            // Use the original newInjectVar (before escaping) for parsing
+            const parsed = JSON.parse(newInjectVar);
+            Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
+          } catch {
+            // If parsing fails, it's plain text - keep original vars
+          }
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
-          {
-            ...iterationVars,
-            [injectVar]: finalInjectVar,
-          },
+          updatedVars,
           filters,
           targetProvider,
           [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
-        const targetResponse = await getTargetResponse(
+        let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
           iterationContext,
           options,
         );
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
         lastResponse = targetResponse;
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
@@ -622,7 +651,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed: undefined,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             improvement,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
             outputAudio:
@@ -635,7 +664,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
@@ -731,7 +760,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -743,11 +772,12 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -759,7 +789,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -769,7 +799,7 @@ async function runRedteamConversation({
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
@@ -782,11 +812,12 @@ async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -798,7 +829,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -810,7 +841,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: bestResponse,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -822,11 +853,12 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -838,7 +870,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -856,7 +888,7 @@ async function runRedteamConversation({
         treeOutputs.push({
           depth,
           graderPassed,
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           improvement,
           output: targetResponse.output,
           outputAudio:
@@ -869,7 +901,7 @@ async function runRedteamConversation({
           promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
-          guardrails: targetResponse.guardrails,
+          guardrails: targetResponse?.guardrails,
           sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
@@ -881,12 +913,32 @@ async function runRedteamConversation({
     );
   }
 
+  // Extract JSON from <Prompt> tags if present (multi-input mode)
+  let bestPrompt = bestNode.prompt;
+  const extractedBestPrompt = extractPromptFromTags(bestPrompt);
+  if (extractedBestPrompt) {
+    bestPrompt = extractedBestPrompt;
+  }
+
+  // Build final vars - handle multi-input mode
+  const finalUpdatedVars: Record<string, VarValue> = {
+    ...vars,
+    [injectVar]: bestPrompt,
+  };
+
+  // If inputs is defined, extract individual keys from the best prompt JSON
+  if (inputs && Object.keys(inputs).length > 0) {
+    try {
+      const parsed = JSON.parse(bestPrompt);
+      Object.assign(finalUpdatedVars, extractVariablesFromJson(parsed, inputs));
+    } catch {
+      // If parsing fails, it's plain text - keep original vars
+    }
+  }
+
   const finalTargetPrompt = await renderPrompt(
     prompt,
-    {
-      ...vars,
-      [injectVar]: bestNode.prompt,
-    },
+    finalUpdatedVars,
     filters,
     targetProvider,
     [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -909,7 +961,7 @@ async function runRedteamConversation({
 
   stoppingReason = 'MAX_DEPTH';
   treeOutputs.push({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     prompt: finalTargetPrompt,
     // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
     output: bestResponse,
@@ -921,11 +973,12 @@ async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
@@ -937,7 +990,7 @@ async function runRedteamConversation({
       sessionIds: extractSessionIds(treeOutputs),
     },
     tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
@@ -948,16 +1001,18 @@ async function runRedteamConversation({
 class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  readonly inputs?: Record<string, string>;
 
   /**
    * Creates a new instance of RedteamIterativeTreeProvider.
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
@@ -1000,13 +1055,25 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
       });
     } else {
+      invariant(
+        this.config.redteamProvider === undefined ||
+          typeof this.config.redteamProvider === 'string' ||
+          (typeof this.config.redteamProvider === 'object' &&
+            this.config.redteamProvider !== null &&
+            !Array.isArray(this.config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
       redteamProvider = await redteamProviderManager.getProvider({
-        provider: this.config.redteamProvider,
+        provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,
       });
-      gradingProvider = redteamProvider; // Default to using same provider
+      gradingProvider = await redteamProviderManager.getGradingProvider({
+        jsonOnly: true,
+      });
     }
 
     return runRedteamConversation({
@@ -1022,6 +1089,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       vars: context.vars,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

@@ -50,7 +50,7 @@ export class ToolDiscoveryPlugin extends RedteamPluginBase {
 
     Generate a list of {{n}} tool discovery prompts for the system purpose: {{purpose | trim}}
 
-    Each line must begin with the string "Prompt:"
+    {{outputFormat}}
   `;
   }
 

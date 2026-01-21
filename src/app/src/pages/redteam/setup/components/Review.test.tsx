@@ -1,10 +1,23 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
+import { callApi } from '@app/utils/api';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
-import { callApi } from '@app/utils/api';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+// Helper to render with TooltipProvider
+let rerenderWithTooltipProvider: (ui: React.ReactElement) => void;
+const renderWithTooltipProvider = (ui: React.ReactElement) => {
+  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+  rerenderWithTooltipProvider = (newUi: React.ReactElement) => {
+    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
+  };
+  return result;
+};
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -26,10 +39,30 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApi: vi.fn().mockImplementation(async (url: string) => {
+    if (url === '/redteam/status') {
+      return {
+        ok: true,
+        json: async () => ({ hasRunningJob: false }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  }),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+// Mock the redteamJobStore
+const mockSetJob = vi.fn();
+const mockClearJob = vi.fn();
+vi.mock('@app/stores/redteamJobStore', () => ({
+  useRedteamJobStore: vi.fn(() => ({
+    jobId: null,
+    setJob: mockSetJob,
+    clearJob: mockClearJob,
+    _hasHydrated: true, // Default to hydrated for most tests
+  })),
 }));
 
 vi.mock('@app/hooks/useApiHealth', () => ({
@@ -102,6 +135,25 @@ describe('Review Component', () => {
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
+    // Reset the job store mock
+    vi.mocked(useRedteamJobStore).mockReturnValue({
+      jobId: null,
+      setJob: mockSetJob,
+      clearJob: mockClearJob,
+      _hasHydrated: true,
+    });
+
+    // Reset callApi mock to default behavior
+    vi.mocked(callApi).mockImplementation(async (url: string) => {
+      if (url === '/redteam/status') {
+        return {
+          ok: true,
+          json: async () => ({ hasRunningJob: false }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
@@ -120,8 +172,8 @@ describe('Review Component', () => {
   });
 
   describe('Component Integration', () => {
-    it('renders all main sections including DefaultTestVariables component', () => {
-      render(
+    it('renders all main sections including Advanced Configuration accordion', () => {
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -131,12 +183,13 @@ describe('Review Component', () => {
 
       expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
-      expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
+      // Advanced Configuration accordion button is always visible
+      expect(screen.getByRole('button', { name: /advanced configuration/i })).toBeInTheDocument();
       expect(screen.getByText('Run Options')).toBeInTheDocument();
     });
 
     it('renders configuration description field', () => {
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -149,8 +202,8 @@ describe('Review Component', () => {
       expect(descriptionField).toHaveValue('Test Configuration');
     });
 
-    it('renders DefaultTestVariables component inside AccordionDetails', () => {
-      render(
+    it('renders DefaultTestVariables component inside CollapsibleContent when expanded', () => {
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -158,18 +211,21 @@ describe('Review Component', () => {
         />,
       );
 
-      const defaultTestVariables = screen.getByTestId('default-test-variables');
-      const accordionDetails = defaultTestVariables.closest(
-        'div[class*="MuiAccordionDetails-root"]',
-      );
+      // First expand the Advanced Configuration accordion
+      const advancedConfigButton = screen.getByRole('button', { name: /advanced configuration/i });
+      fireEvent.click(advancedConfigButton);
 
-      expect(accordionDetails).toBeInTheDocument();
+      const defaultTestVariables = screen.getByTestId('default-test-variables');
+      // CollapsibleContent uses data-state attribute
+      const collapsibleContent = defaultTestVariables.closest('[data-state]');
+
+      expect(collapsibleContent).toBeInTheDocument();
     });
   });
 
   describe('Advanced Configuration Accordion', () => {
     it('should render the accordion collapsed by default when there are no test variables', () => {
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -177,10 +233,11 @@ describe('Review Component', () => {
         />,
       );
 
-      const accordionSummary = screen
-        .getByText('Advanced Configuration')
-        .closest('.MuiAccordionSummary-root');
-      expect(accordionSummary).not.toHaveClass('Mui-expanded');
+      // Find the collapsible trigger button and check its data-state attribute
+      const advancedConfigButton = screen.getByRole('button', {
+        name: /advanced configuration/i,
+      });
+      expect(advancedConfigButton).toHaveAttribute('data-state', 'closed');
     });
 
     it("should render the 'Advanced Configuration' accordion expanded by default when config.defaultTest.vars contains at least one variable", () => {
@@ -196,7 +253,7 @@ describe('Review Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -211,7 +268,7 @@ describe('Review Component', () => {
     });
 
     it('displays the advanced configuration description text when the accordion is expanded', async () => {
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -233,8 +290,8 @@ describe('Review Component', () => {
     });
   });
 
-  it('renders DefaultTestVariables without Paper wrapper and title when Advanced Configuration is expanded', async () => {
-    render(
+  it('renders DefaultTestVariables without Paper wrapper when Advanced Configuration is expanded', async () => {
+    renderWithTooltipProvider(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -242,7 +299,7 @@ describe('Review Component', () => {
       />,
     );
 
-    const accordionSummary = screen.getByText('Advanced Configuration');
+    const accordionSummary = screen.getByRole('button', { name: /advanced configuration/i });
     fireEvent.click(accordionSummary);
 
     // Advance timers for any animations/transitions
@@ -254,7 +311,8 @@ describe('Review Component', () => {
 
     expect(defaultTestVariables).toBeInTheDocument();
 
-    expect(defaultTestVariables.closest('paper')).toBeNull();
+    // MUI Paper is no longer used - verify the component renders without it
+    expect(defaultTestVariables.closest('[class*="MuiPaper"]')).toBeNull();
   });
 
   it('should not treat indented lines ending with colons as section headers', () => {
@@ -272,7 +330,7 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    render(
+    renderWithTooltipProvider(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -296,13 +354,19 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    render(
+    renderWithTooltipProvider(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
         navigateToPurpose={vi.fn()}
       />,
     );
+
+    // First expand the Application Details collapsible
+    const applicationDetailsButton = screen.getByRole('button', {
+      name: /application details/i,
+    });
+    fireEvent.click(applicationDetailsButton);
 
     const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
     fireEvent.click(sectionHeaderElement);
@@ -322,7 +386,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -343,7 +407,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -362,7 +426,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -381,7 +445,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -400,7 +464,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -419,7 +483,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -432,13 +496,17 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to blocked API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -446,21 +514,15 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        // Match tooltip text specifically (different from Alert text)
-        expect(
-          screen.getByText(/Cannot connect to Promptfoo Cloud\. Please check your network/i),
-        ).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Cannot connect to Promptfoo Cloud\. Please check your network/i,
+        );
+      });
     });
 
     it('should display warning alert when API is blocked', () => {
@@ -470,7 +532,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -493,7 +555,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -514,7 +576,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -533,7 +595,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -554,7 +616,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -569,13 +631,17 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to disabled API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -583,31 +649,29 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        // Match tooltip text specifically (different from Alert text)
-        expect(
-          screen.getByText(/Remote generation is disabled\. Running red team evaluations/i),
-        ).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Remote generation is disabled\. Running red team evaluations/i,
+        );
+      });
     });
 
     it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -615,18 +679,13 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
     });
 
     it('should not show tooltip when API is connected', async () => {
@@ -636,7 +695,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -667,7 +726,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -741,7 +800,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -778,7 +837,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -811,7 +870,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -845,7 +904,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -890,7 +949,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      const { rerender } = render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -913,7 +972,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -940,7 +999,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -958,7 +1017,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -976,7 +1035,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -995,7 +1054,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1014,7 +1073,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1036,7 +1095,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1058,7 +1117,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1072,13 +1131,15 @@ Application Details:
     });
 
     it('should update tooltip message when API health status changes', async () => {
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithTooltipProvider(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1087,61 +1148,400 @@ Application Details:
       );
 
       const button = screen.getByRole('button', { name: /run now/i });
-      const buttonWrapper = button.parentElement;
 
-      if (buttonWrapper) {
-        // First check tooltip for blocked state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
-        });
-        fireEvent.mouseOut(buttonWrapper);
+      // First check tooltip for blocked state
+      await user.hover(button);
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/cannot connect to promptfoo cloud/i);
+      });
 
-        // Change to disabled state
-        vi.mocked(useApiHealth).mockReturnValue({
-          data: { status: 'disabled', message: null },
-          refetch: vi.fn(),
-          isLoading: false,
-        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      // Change to disabled state and rerender
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-        rerender(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
+      rerenderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
-        // Check tooltip for disabled state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          // Check for the tooltip text specifically (not the alert text)
-          const tooltips = screen.getAllByText(/remote generation is disabled/i);
-          expect(tooltips.length).toBeGreaterThan(0);
-        });
-        fireEvent.mouseOut(buttonWrapper);
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/remote generation is disabled/i);
+      });
 
-        // Change to unknown state
-        vi.mocked(useApiHealth).mockReturnValue({
-          data: { status: 'unknown', message: null },
-          refetch: vi.fn(),
-          isLoading: false,
-        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      // Change to unknown state and rerender
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'unknown', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-        rerender(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
+      rerenderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
-        // Check tooltip for unknown state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
-        });
-      }
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
+    });
+  });
+
+  describe('Job Recovery', () => {
+    beforeEach(() => {
+      vi.useRealTimers();
+
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    });
+
+    it('should check for running job on mount', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for the effect to run
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/redteam/status');
+      });
+    });
+
+    it('should reconnect to running job when server has one', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'server-job-123' }),
+          } as Response;
+        }
+        if (url === '/eval/job/server-job-123') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Test running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and button to show running state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      });
+
+      // Should have called setJob with the server's job ID
+      expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
+    });
+
+    it('should show completed state when returning to completed job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'completed-job-456' }),
+          } as Response;
+        }
+        if (url === '/eval/job/completed-job-456') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'eval-result-789',
+              logs: ['Evaluation complete'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and show View Report link (MUI Button with href renders as link)
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /view report/i })).toBeInTheDocument();
+      });
+
+      // Should have cleared the job since it's complete
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should check saved job when no server job is running', async () => {
+      // Mock the store to have a saved job ID
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-999',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: true,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/eval/job/saved-job-999') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'completed-eval-123',
+              logs: ['Done'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
+      });
+
+      // Should clear job since it completed while away
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should call setJob when starting a new job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'new-job-id' }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Starting...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for job to start
+      await waitFor(() => {
+        expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
+      });
+    });
+
+    it('should call clearJob when cancelling a job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'job-to-cancel' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: true,
+            json: async () => ({ success: true }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for Cancel button to appear
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+      });
+
+      // Click Cancel
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      // Should call clearJob
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
+    });
+
+    it('should handle job recovery failure when server job returns 404', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'missing-job-404' }),
+          } as Response;
+        }
+        if (url === '/eval/job/missing-job-404') {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ error: 'Job not found' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to attempt and clear job
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
+
+      // Run Now button should be enabled (not in running state)
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+    });
+
+    it('should not attempt recovery until store is hydrated', async () => {
+      // Mock the store as not hydrated yet
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-before-hydration',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait a moment - recovery should NOT be called yet because store isn't hydrated
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should NOT have checked the saved job since we're not hydrated
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
 });

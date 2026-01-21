@@ -1,10 +1,6 @@
-import { createRequire } from 'node:module';
 import path from 'path';
 
-import chalk from 'chalk';
-import dedent from 'dedent';
-import { importModule } from '../esm';
-import logger from '../logger';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 
@@ -27,31 +23,31 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     );
   }
 
-  // First, try to resolve the package path
-  let filePath: string;
-  try {
-    const require = createRequire(path.resolve(basePath));
-    filePath = require.resolve(packageName);
-  } catch {
+  // Resolve the package path using exsolve-based resolver
+  // This handles ESM-only packages with restrictive exports fields
+  const filePath = resolvePackageEntryPoint(packageName, path.resolve(basePath));
+  if (!filePath) {
     throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
   }
 
   // Then, try to import the module
+  let module;
   try {
-    const module = await importModule(filePath);
-    const entity = getValue(module, entityName ?? 'default');
-
-    if (!entity) {
-      logger.error(dedent`
-        Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
-      `);
-      process.exit(1);
-    }
-
-    return entity;
+    module = await importModule(filePath);
   } catch (error) {
     throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
+
+  const entity = getValue(module, entityName ?? 'default');
+
+  if (!entity) {
+    throw new Error(
+      `Could not find entity: ${entityName} in module: ${filePath}. ` +
+        `Make sure the entity is exported from the package.`,
+    );
+  }
+
+  return entity;
 }
 
 export async function parsePackageProvider(

@@ -1,4 +1,5 @@
 import path from 'path';
+
 import chalk from 'chalk';
 import {
   afterEach,
@@ -6,9 +7,9 @@ import {
   describe,
   expect,
   it,
-  vi,
   type Mock,
   type MockInstance,
+  vi,
 } from 'vitest';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
@@ -33,6 +34,8 @@ const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mo
       info: Mock;
       debug: Mock;
       on: Mock;
+      once: Mock;
+      end: Mock;
       add: Mock;
       remove: Mock;
       transports: Array<Partial<Transport>>;
@@ -56,6 +59,14 @@ const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mo
         return mockLoggerInstance;
       }),
       on: vi.fn(),
+      once: vi.fn((event: string, callback: () => void) => {
+        // Simulate the 'finish' event being emitted after end() is called
+        if (event === 'finish') {
+          setImmediate(callback);
+        }
+        return mockLoggerInstance;
+      }),
+      end: vi.fn(),
       add: vi.fn(),
       remove: vi.fn(),
       transports: [{ level: 'info' }],
@@ -189,7 +200,7 @@ describe('logger', () => {
     });
 
     it('should handle missing stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: undefined });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -218,7 +229,7 @@ describe('logger', () => {
     });
 
     it('should handle empty stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: '' });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -228,10 +239,10 @@ describe('logger', () => {
 
     it('should handle errors in stack trace parsing', () => {
       // Force an error in the try block by making stack.split throw
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', {
         get: () => {
-          throw new Error('Forced error');
+          throw new Error('Forced stack access error');
         },
       });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
@@ -752,17 +763,26 @@ describe('logger', () => {
     });
 
     it('should set shutdown flag when closing', async () => {
-      // Create mock file transports
-      const mockFileTransport1 = {
-        filename: '/mock/path/debug.log',
-      };
-      const mockFileTransport2 = {
-        filename: '/mock/path/error.log',
+      // Create mock file transports with once/end methods for proper flush handling
+      const createMockFileTransport = (filename: string) => {
+        const transport = {
+          filename,
+          once: vi.fn((event: string, callback: () => void) => {
+            // Immediately call the callback to simulate finish event
+            if (event === 'finish') {
+              setImmediate(callback);
+            }
+          }),
+          on: vi.fn(),
+          off: vi.fn(),
+          end: vi.fn(),
+        };
+        Object.setPrototypeOf(transport, winstonMock.transports.File.prototype);
+        return transport;
       };
 
-      // Make transports appear as File instances
-      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
-      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+      const mockFileTransport1 = createMockFileTransport('/mock/path/debug.log');
+      const mockFileTransport2 = createMockFileTransport('/mock/path/error.log');
 
       // Set up transports array with file transports
       mockLogger.transports.length = 0;
@@ -776,6 +796,11 @@ describe('logger', () => {
       // Shutdown flag should be set (critical for preventing writes during shutdown)
       expect(logger.getLoggerShuttingDown()).toBe(true);
 
+      // Verify winstonLogger.end() was called to properly drain the stream pipeline
+      // Winston's _final() internally calls transport.end() on each transport
+      expect(mockLogger.end).toHaveBeenCalled();
+      expect(mockLogger.once).toHaveBeenCalledWith('finish', expect.any(Function));
+
       // Reset for other tests
       logger.setLoggerShuttingDown(false);
     });
@@ -783,6 +808,14 @@ describe('logger', () => {
     it('should handle file transports gracefully', async () => {
       const mockTransport = {
         filename: '/mock/path/test.log',
+        once: vi.fn((event: string, callback: () => void) => {
+          if (event === 'finish') {
+            setImmediate(callback);
+          }
+        }),
+        on: vi.fn(),
+        off: vi.fn(),
+        end: vi.fn(),
       };
 
       Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
@@ -795,6 +828,11 @@ describe('logger', () => {
 
       // Shutdown flag should be set
       expect(logger.getLoggerShuttingDown()).toBe(true);
+      // Verify winstonLogger.end() was called for proper stream draining
+      expect(mockLogger.end).toHaveBeenCalled();
+      // Verify error handler was attached for "write after end" protection
+      expect(mockTransport.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(mockTransport.off).toHaveBeenCalledWith('error', expect.any(Function));
       logger.setLoggerShuttingDown(false);
     });
 
@@ -815,6 +853,14 @@ describe('logger', () => {
     it('should handle errors gracefully', async () => {
       const mockTransport = {
         filename: '/mock/path/test.log',
+        once: vi.fn((event: string, callback: () => void) => {
+          if (event === 'finish') {
+            setImmediate(callback);
+          }
+        }),
+        on: vi.fn(),
+        off: vi.fn(),
+        end: vi.fn(),
       };
 
       Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
@@ -825,6 +871,47 @@ describe('logger', () => {
       // Should not throw
       await expect(logger.closeLogger()).resolves.not.toThrow();
 
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should catch write after end errors during shutdown', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let errorHandler: ((err: Error) => void) | undefined;
+
+      const mockTransport = {
+        filename: '/mock/path/test.log',
+        once: vi.fn((event: string, callback: () => void) => {
+          if (event === 'finish') {
+            setImmediate(callback);
+          }
+        }),
+        on: vi.fn((event: string, handler: (err: Error) => void) => {
+          if (event === 'error') {
+            errorHandler = handler;
+          }
+        }),
+        off: vi.fn(),
+        end: vi.fn(),
+      };
+
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransport as any);
+
+      const closePromise = logger.closeLogger();
+
+      // Simulate "write after end" error during shutdown
+      if (errorHandler) {
+        errorHandler(new Error('write after end'));
+      }
+
+      await closePromise;
+
+      // The error should be silently handled, not logged to console
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
       logger.setLoggerShuttingDown(false);
     });
 
@@ -1240,6 +1327,270 @@ describe('logger', () => {
       expect(loggedMessage).toContain('"requestBody":');
       expect(loggedMessage).toContain('"status":');
       expect(loggedMessage).toContain('"response":');
+    });
+  });
+
+  describe('setStructuredLogging with custom logger', () => {
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      // Set custom logger to bypass default createLogMethod wrappers
+      logger.setLogger(customLogger);
+    });
+
+    afterEach(() => {
+      // Reset to default state after each test
+      logger.setStructuredLogging(false);
+    });
+
+    it('should pass structured object when enabled', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('test message', { userId: '123', action: 'test' });
+
+      // When structured logging is enabled, custom logger receives object
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'test message',
+          userId: '123',
+          action: 'test',
+        }),
+      );
+    });
+
+    it('should pass string with appended JSON when disabled', () => {
+      logger.setStructuredLogging(false);
+
+      logger.default.info('test message', { userId: '123' });
+
+      // When structured logging is disabled, context is appended as JSON string
+      const call = customLogger.info.mock.calls[0][0];
+      expect(typeof call).toBe('string');
+      expect(call).toContain('test message');
+      expect(call).toContain('"userId"');
+      expect(call).toContain('123');
+    });
+
+    it('should include all context fields in structured output', () => {
+      logger.setStructuredLogging(true);
+
+      const context = {
+        userId: 'user-123',
+        requestId: 'req-456',
+        duration: 100,
+      };
+
+      logger.default.info('operation completed', context);
+
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'operation completed',
+          userId: 'user-123',
+          requestId: 'req-456',
+          duration: 100,
+        }),
+      );
+    });
+
+    it('should pass plain string when no context provided', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('simple message');
+
+      // Without context, just pass the string regardless of structured logging setting
+      expect(customLogger.info).toHaveBeenCalledWith('simple message');
+    });
+  });
+
+  describe('setLogger', () => {
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+    });
+
+    afterEach(() => {
+      // Reset structured logging
+      logger.setStructuredLogging(false);
+    });
+
+    it('should route logs through custom logger', () => {
+      logger.setLogger(customLogger);
+
+      logger.default.info('test message');
+
+      expect(customLogger.info).toHaveBeenCalledWith('test message');
+    });
+
+    it('should pass structured objects to custom logger when structured logging enabled', () => {
+      logger.setLogger(customLogger);
+      logger.setStructuredLogging(true);
+
+      logger.default.info('test message', { requestId: 'req-123' });
+
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'test message',
+          requestId: 'req-123',
+        }),
+      );
+    });
+
+    it('should validate custom logger has required methods', () => {
+      expect(() => logger.setLogger(null as any)).toThrow(
+        'Custom logger must be a valid object with required logging methods',
+      );
+
+      expect(() => logger.setLogger({} as any)).toThrow(
+        'Custom logger is missing required methods',
+      );
+
+      expect(() => logger.setLogger({ info: vi.fn() } as any)).toThrow(
+        'Custom logger is missing required methods: debug, warn, error',
+      );
+    });
+
+    it('should work with winston-style loggers that accept objects', () => {
+      // Simulate a winston-style logger that handles object arguments
+      const winstonStyleLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      logger.setLogger(winstonStyleLogger);
+      logger.setStructuredLogging(true);
+
+      logger.default.info('structured log', { key: 'value' });
+
+      expect(winstonStyleLogger.info).toHaveBeenCalledWith({
+        message: 'structured log',
+        key: 'value',
+      });
+    });
+  });
+
+  describe('logRequestResponse with structured logging', () => {
+    let mockResponse: Partial<Response>;
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        clone: vi.fn().mockReturnValue({
+          text: vi.fn().mockResolvedValue('{"success": true}'),
+        }),
+      };
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      // Set custom logger to test structured logging behavior
+      logger.setLogger(customLogger);
+    });
+
+    afterEach(() => {
+      logger.setStructuredLogging(false);
+    });
+
+    it('should pass structured object with all request details', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(customLogger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'API request',
+          url: 'https://api.example.com/test',
+          method: 'POST',
+          status: 200,
+          statusText: 'OK',
+        }),
+      );
+    });
+
+    it('should include response text in structured output', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const callArg = customLogger.debug.mock.calls[0][0];
+      // Response text comes from the mock - exact format depends on mock implementation
+      expect(callArg).toHaveProperty('response');
+      expect(callArg.response).toContain('success');
+    });
+
+    it('should use error level when error flag is set', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+        error: true,
+      });
+
+      expect(customLogger.error).toHaveBeenCalled();
+      expect(customLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize sensitive data in structured output', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test?api_key=secret123',
+        requestBody: { password: 'secret', data: 'safe' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const callArg = customLogger.debug.mock.calls[0][0];
+      // URL should have sensitive params redacted (may be URL-encoded as %5BREDACTED%5D)
+      expect(callArg.url).toMatch(/(\[REDACTED\]|%5BREDACTED%5D)/);
+      // Request body should have sensitive fields redacted
+      expect(JSON.stringify(callArg.requestBody)).toContain('[REDACTED]');
     });
   });
 });

@@ -1,15 +1,19 @@
+import * as fs from 'fs';
 import path from 'path';
 
+import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -19,19 +23,18 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts/index';
-import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
-import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -49,7 +52,9 @@ import type {
   ProviderResponse,
   ProviderType,
   ProviderTypeMap,
+  TestCase,
   TokenUsage,
+  VarValue,
 } from './types/index';
 
 class LlmRubricProviderError extends Error {
@@ -97,11 +102,11 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
  */
-function callProviderWithContext(
+export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
-  vars: Record<string, any>,
+  vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
   return provider.callApi(prompt, {
@@ -169,11 +174,12 @@ export async function getGradingProvider(
     }
   } else {
     // No provider specified - check defaultTest.options.provider as fallback
-    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const defaultTest = cliState.config?.defaultTest;
+    const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const cfg =
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      defaultTestObj?.provider ||
+      defaultTestObj?.options?.provider?.text ||
+      defaultTestObj?.options?.provider ||
       undefined;
 
     if (cfg) {
@@ -486,7 +492,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -497,19 +503,31 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (
-    typeof rubricPrompt === 'string' &&
-    rubricPrompt.startsWith('file://') &&
-    isJavascriptFile(rubricPrompt)
-  ) {
+  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
-    let filePath = rubricPrompt.slice('file://'.length);
 
-    const [pathPart, functionName] = filePath.split(':');
-    filePath = path.resolve(basePath, pathPart);
-    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    // Render Nunjucks templates in the file path (e.g., file://{{ env.RUBRIC_PATH }}/rubric.json)
+    const renderedFilePath = getNunjucksEngineForFilePath().renderString(rubricPrompt, {});
+
+    // Parse the file URL to extract file path and function name
+    // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
+    const { filePath, functionName } = parseFileUrl(renderedFilePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+
+    if (isJavascriptFile(filePath)) {
+      rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);
+    } else {
+      // For non-JS files (including .json, .yaml, .txt), load as raw text
+      // to allow Nunjucks templating before JSON/YAML parsing.
+      // This fixes the issue where .json files with Nunjucks templates
+      // would fail to parse before rendering.
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File does not exist: ${resolvedPath}`);
+      }
+      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
+    }
   } else {
-    // Load from external file if needed
+    // Load from external file if needed (for non file:// references)
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
@@ -533,9 +551,9 @@ function splitIntoSentences(text: string) {
 }
 
 function processContextForTemplating(
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
   enableObjectAccess: boolean,
-): Record<string, string | object> {
+): Record<string, VarValue> {
   if (enableObjectAccess) {
     return context;
   }
@@ -558,7 +576,7 @@ function processContextForTemplating(
 
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
-  context: Record<string, string | object>,
+  context: Record<string, VarValue>,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
@@ -583,7 +601,7 @@ export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
@@ -648,7 +666,7 @@ export async function matchesLlmRubric(
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  let jsonObjects: any[] = [];
+  let jsonObjects: object[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
@@ -723,6 +741,9 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+    metadata: {
+      renderedGradingPrompt: prompt,
+    },
   };
 }
 
@@ -754,7 +775,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -920,7 +941,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
@@ -1224,7 +1245,7 @@ export async function matchesContextRecall(
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1260,12 +1281,23 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
 
   for (const sentence of sentences) {
-    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
@@ -1412,7 +1444,7 @@ export async function matchesContextFaithfulness(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1438,14 +1470,17 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt: string =
-    (typeof grading?.rubricPrompt?.[0] === 'string'
+  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+  const rawLongformPrompt =
+    typeof grading?.rubricPrompt?.[0] === 'string'
       ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt: string =
-    (typeof grading?.rubricPrompt?.[1] === 'string'
+      : grading?.rubricPrompt?.[0]?.content;
+  const rawNliPrompt =
+    typeof grading?.rubricPrompt?.[1] === 'string'
       ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+      : grading?.rubricPrompt?.[1]?.content;
+  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
@@ -1527,7 +1562,7 @@ export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
@@ -1722,9 +1757,10 @@ export async function matchesSearchRubric(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   assertion?: Assertion,
   _provider?: ApiProvider,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -1769,7 +1805,13 @@ export async function matchesSearchRubric(
   });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    searchProvider,
+    prompt,
+    'search-rubric',
+    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    providerCallContext,
+  );
 
   if (resp.error || !resp.output) {
     return {
@@ -1787,7 +1829,7 @@ export async function matchesSearchRubric(
       pass?: boolean;
       score?: number;
       reason?: string;
-      searchResults?: any;
+      searchResults?: unknown;
     };
 
     // Apply threshold if specified

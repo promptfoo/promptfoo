@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -9,18 +8,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -35,21 +22,37 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+  VarValue,
+} from '../../types/index';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -90,6 +93,7 @@ interface IterativeMetadata {
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[]; // All session IDs from iterations
   traceSnapshots?: Record<string, unknown>[];
@@ -109,6 +113,7 @@ export async function runRedteamConversation({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -120,11 +125,13 @@ export async function runRedteamConversation({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
+  inputs?: Record<string, string>;
 }): Promise<{
   output: string;
+  prompt?: string;
   metadata: IterativeMetadata;
   tokenUsage: TokenUsage;
   error?: string;
@@ -152,11 +159,13 @@ export async function runRedteamConversation({
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
+        inputs,
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
+        inputs,
       });
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
@@ -196,6 +205,7 @@ export async function runRedteamConversation({
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
     metadata?: Record<string, any>;
   }[] = [];
 
@@ -254,15 +264,17 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let improvement, newInjectVar;
+    let improvement, newInjectVar: string;
     if (typeof redteamResp.output === 'string') {
       try {
         const parsed = extractFirstJsonObject<{
           improvement: string;
-          prompt: string;
+          prompt: string | Record<string, string>;
         }>(redteamResp.output);
         improvement = parsed.improvement;
-        newInjectVar = parsed.prompt;
+        // Handle multi-input mode where prompt is an object
+        newInjectVar =
+          typeof parsed.prompt === 'object' ? JSON.stringify(parsed.prompt) : parsed.prompt;
       } catch (err) {
         // Re-throw abort errors to properly cancel the operation
         if (err instanceof Error && err.name === 'AbortError') {
@@ -276,7 +288,9 @@ export async function runRedteamConversation({
       }
     } else {
       improvement = redteamResp.output?.improvement;
-      newInjectVar = redteamResp.output?.prompt;
+      // Handle multi-input mode where prompt is an object
+      const promptValue = redteamResp.output?.prompt;
+      newInjectVar = typeof promptValue === 'object' ? JSON.stringify(promptValue) : promptValue;
     }
 
     if (improvement === undefined || newInjectVar === undefined) {
@@ -284,6 +298,12 @@ export async function runRedteamConversation({
         response: redteamResp,
       });
       continue;
+    }
+
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const extractedPrompt = extractPromptFromTags(newInjectVar);
+    if (extractedPrompt) {
+      newInjectVar = extractedPrompt;
     }
 
     // Update the application prompt with the new injection.
@@ -327,24 +347,37 @@ export async function runRedteamConversation({
       });
     }
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, VarValue> = {
+      ...iterationVars,
+      [injectVar]: finalInjectVar,
+      ...(currentInputVars || {}),
+    };
+
     targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: finalInjectVar,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    // Externalize blobs before they hit history/prompts
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
@@ -434,7 +467,7 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -449,7 +482,10 @@ export async function runRedteamConversation({
               }
             : undefined,
         );
-        storedGraderResult = grade;
+        storedGraderResult = {
+          ...grade,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+        };
       }
     }
     // Calculate the score
@@ -617,9 +653,11 @@ export async function runRedteamConversation({
           : undefined,
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
-      guardrails: targetResponse.guardrails,
+      guardrails: targetResponse?.guardrails,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
       metadata: {
         sessionId,
       },
@@ -634,6 +672,7 @@ export async function runRedteamConversation({
   return {
     output: bestResponse || lastResponse?.output || '',
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    prompt: bestInjectVar,
     metadata: {
       finalIteration,
       highestScore,
@@ -658,11 +697,13 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  readonly inputs?: Record<string, string>;
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
@@ -683,9 +724,19 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
       });
     } else {
-      this.redteamProvider = config.redteamProvider;
+      invariant(
+        config.redteamProvider === undefined ||
+          typeof config.redteamProvider === 'string' ||
+          (typeof config.redteamProvider === 'object' &&
+            config.redteamProvider !== null &&
+            !Array.isArray(config.redteamProvider)),
+        'Expected redteamProvider to be a provider id string or provider config object',
+      );
+      this.redteamProvider = config.redteamProvider as RedteamFileConfig['provider'];
     }
   }
 
@@ -714,7 +765,7 @@ class RedteamIterativeProvider implements ApiProvider {
         provider: this.redteamProvider,
         jsonOnly: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,
         jsonOnly: true,
       }),
@@ -727,6 +778,7 @@ class RedteamIterativeProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

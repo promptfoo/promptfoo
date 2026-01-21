@@ -159,6 +159,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
+  'rag-source-attribution': 'Tests for fabricated document citations in RAG systems',
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
@@ -167,7 +168,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
-  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   'special-token-injection':
     'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
@@ -327,6 +327,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
+  'rag-source-attribution': 'RAG Source Attribution',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
   'mischievous-user': 'Mischievous User',
@@ -334,7 +335,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
-  simba: 'Simba Red Team Agent',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
@@ -484,6 +484,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'prompt-extraction': Severity.Medium,
   'rag-document-exfiltration': Severity.Medium,
   'rag-poisoning': Severity.Medium,
+  'rag-source-attribution': Severity.High,
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
@@ -532,6 +533,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'prompt-extraction',
     'rag-document-exfiltration',
     'rag-poisoning',
+    'rag-source-attribution',
 
     'agentic:memory-poisoning',
   ],
@@ -765,6 +767,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'prompt-extraction': 'PromptExtraction',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
+  'rag-source-attribution': 'RAGSourceAttribution',
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
@@ -935,6 +938,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
+  'rag-source-attribution':
+    "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
@@ -997,7 +1002,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
@@ -1035,7 +1039,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
-  simba: 'Simba Red Team Agent',
   video: 'Video',
 };
 
@@ -1050,7 +1053,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
+  'OWASP Top 10 for Agentic Applications': 'OWASP Top 10 for Agentic Applications (ASI01-ASI10)',
   'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',

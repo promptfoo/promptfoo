@@ -1,3 +1,7 @@
+import path from 'path';
+
+import protobuf from 'protobufjs';
+import request from 'supertest';
 import {
   afterEach,
   beforeAll,
@@ -5,13 +9,39 @@ import {
   describe,
   expect,
   it,
-  vi,
   type MockedFunction,
+  vi,
 } from 'vitest';
-import request from 'supertest';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';
+
+// Helper to create protobuf-encoded OTLP data for tests
+let protoRoot: protobuf.Root | null = null;
+
+async function getProtoRoot(): Promise<protobuf.Root> {
+  if (protoRoot) {
+    return protoRoot;
+  }
+  const protoDir = path.join(__dirname, '../../src/tracing/proto');
+  const root = new protobuf.Root();
+  root.resolvePath = (_origin: string, target: string) => {
+    return path.join(protoDir, target);
+  };
+  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
+  protoRoot = root;
+  return protoRoot;
+}
+
+async function encodeOTLPRequest(data: any): Promise<Buffer> {
+  const root = await getProtoRoot();
+  const ExportTraceServiceRequest = root.lookupType(
+    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
+  );
+  const message = ExportTraceServiceRequest.create(data);
+  const encoded = ExportTraceServiceRequest.encode(message).finish();
+  return Buffer.from(encoded);
+}
 
 // Mock the database
 vi.mock('../../src/database', () => ({
@@ -78,6 +108,7 @@ describe('OTLPReceiver', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -96,7 +127,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json'],
+        supported_formats: ['json', 'protobuf'],
       });
     });
   });
@@ -304,14 +335,93 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ error: 'Unsupported content type' });
     });
 
-    it('should handle protobuf format with appropriate message', async () => {
+    it('should reject invalid protobuf data', async () => {
       const response = await request(receiver.getApp())
         .post('/v1/traces')
         .set('Content-Type', 'application/x-protobuf')
         .send(Buffer.from('dummy protobuf data'))
-        .expect(415);
+        .expect(400);
 
-      expect(response.body).toEqual({ error: 'Protobuf format not yet supported' });
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+    });
+
+    it('should accept valid OTLP protobuf traces', async () => {
+      // Manually override the traceStore property for this test too
+      (receiver as any).traceStore = mockTraceStore;
+
+      const traceIdBytes = new Uint8Array([
+        0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe,
+        0xef,
+      ]);
+      const spanIdBytes = new Uint8Array([0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]);
+
+      const protobufRequest = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'test-python-service' } }],
+            },
+            scopeSpans: [
+              {
+                scope: {
+                  name: 'opentelemetry.instrumentation.test',
+                  version: '1.0.0',
+                },
+                spans: [
+                  {
+                    traceId: traceIdBytes,
+                    spanId: spanIdBytes,
+                    name: 'protobuf-test-span',
+                    kind: 2, // SPAN_KIND_SERVER
+                    startTimeUnixNano: 1700000000000000000n,
+                    endTimeUnixNano: 1700000001000000000n,
+                    attributes: [
+                      { key: 'http.method', value: { stringValue: 'POST' } },
+                      { key: 'http.status_code', value: { intValue: 200 } },
+                    ],
+                    status: {
+                      code: 1, // STATUS_CODE_OK
+                      message: 'Success',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPRequest(protobufRequest);
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(200);
+
+      expect(response.body).toEqual({ partialSuccess: {} });
+
+      // Verify spans were stored with correct trace ID
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'deadbeefdeadbeefdeadbeefdeadbeef',
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1234567890abcdef',
+            name: 'protobuf-test-span',
+            attributes: expect.objectContaining({
+              'service.name': 'test-python-service',
+              'http.method': 'POST',
+              'http.status_code': 200,
+              'otel.scope.name': 'opentelemetry.instrumentation.test',
+              'otel.scope.version': '1.0.0',
+            }),
+            statusCode: 1,
+            statusMessage: 'Success',
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
     });
 
     it('should handle malformed JSON gracefully', async () => {

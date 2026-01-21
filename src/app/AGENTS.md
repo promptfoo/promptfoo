@@ -1,227 +1,120 @@
 # Frontend Application
 
-**What this is:** React-based web UI (Vite + TypeScript + MUI). Separate workspace from main codebase.
+React-based web UI using Vite + TypeScript. Separate workspace from main codebase.
 
-## CRITICAL: API Calls
+## CRITICAL: Use callApi()
 
 **NEVER use `fetch()` directly. ALWAYS use `callApi()`:**
 
 ```typescript
 import { callApi } from '@app/utils/api';
-
-// Correct - Handles dev/prod API URLs
 const data = await callApi('/traces/evaluation/123');
-
-// Wrong - Will fail in development
-const data = await fetch('/api/traces/evaluation/123');
 ```
 
-**Why:** `callApi` handles API base URL differences between dev (proxy to localhost:3000) and production.
+This handles API base URL differences between dev and production.
 
 ## Tech Stack
 
-- **React 18** + **TypeScript** + **Vite** (not Next.js, not CRA)
-- **Vitest** for testing (same as main codebase)
-- **MUI (Material-UI)** - Component library
-- **Zustand** - State management (not Redux)
-- **React Router v7** - Routing
-- **Socket.io Client** - Real-time updates
+**Target Stack:**
 
-## Design Principles
+- React 19 + TypeScript + Vite
+- Promptfoo's Design system + Radix UI primitives
+- Tailwind CSS for styling
+- Lucide React for icons
+- **Vitest** for testing
+- Zustand for state management
+- React Router v7
 
-- Focus on atomic design, building components with reusability and composability
-- Keep components small when possible
-- Break out repeated patterns into reusable components
-- **Reusability**: Design small, composable parts with clear boundaries and APIs
-- **Consistency**: Use design tokens (color, spacing, type) and shared patterns
-- **Single responsibility**: Each component does one thing well
-- **Composition over inheritance**: Build complex UIs by assembling simpler pieces
-- Use icons from @mui/icons-material
+## Modern React 19 Patterns
+
+Use modern React 19 patterns throughout:
+
+- **`use()` hook** for reading promises and context
+- **Actions** with `useActionState` and `useFormStatus` for form handling
+- **`useOptimistic`** for optimistic UI updates
+- **Refs as props** - no need for `forwardRef` in most cases
+- **Async transitions** with `useTransition` for non-blocking updates
+
+Avoid legacy patterns like class components, legacy context, or string refs.
+
+## Component Guidelines
+
+### Use Radix
+
+```typescript
+// New components - use Promptfoo's Design system from components/ui/
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader } from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+
+// Icons - use Lucide
+import { Check, X, ChevronDown } from 'lucide-react';
+
+// Styling - use Tailwind + cn()
+import { cn } from '@app/lib/utils';
+<Button className={cn('w-full', isActive && 'bg-primary')}>Click</Button>
+```
 
 ## Directory Structure
 
-```
+```plaintext
 src/app/src/
-├── components/    # Reusable UI components
-├── pages/        # Route pages
-├── hooks/        # Custom React hooks
-├── store/        # Zustand state stores
-├── contexts/     # React contexts
-└── utils/        # Including the critical api.ts
+├── components/
+│   ├── ui/
+│   │   ├── button.tsx
+│   │   ├── dialog.tsx
+│   │   ├── input.tsx
+│   │   └── ...
+│   └── ...            # Feature components
+├── pages/             # Route pages
+├── hooks/             # Custom React hooks
+├── store/             # Zustand stores
+├── lib/               # Utilities (cn, etc.)
+├── styles/            # Global styles, tokens
+└── utils/             # Including api.ts
 ```
 
 ## Development
 
 ```bash
-npm run dev:app    # From root
-npm run dev        # From src/app/
+npm run dev:app    # From root, runs on localhost:5173
 ```
 
-Runs on `http://localhost:5173` (Vite default).
-
-## Testing
-
-### Running Tests
+## Testing with Vitest
 
 ```bash
-# From src/app/
-npm run test       # Run all tests
-
-# From project root
-npm run test:app
-
-# Run specific test file
-npm run test -- src/components/JsonTextField.test.tsx
-
-# Run with coverage
-npm run test -- --coverage
+npm run test       # From src/app/
+npm run test:app   # From project root
 ```
 
-**Note:** Both frontend and backend tests use **Vitest**.
+See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
 
-### Vitest Imports
+## Key Patterns
 
-**Import from vitest when you need mocking utilities:**
+- **Zustand stores**: See `src/app/src/store/` for implementation patterns; see `test/AGENTS.md` "Zustand Store Testing" section for testing patterns
+- **Custom hooks**: See `src/app/src/hooks/` for patterns
+- **New components**: Use `components/ui/` primitives, compose with Tailwind
+- **Icons**: Use Lucide React
+- **Route constants**: Use `EVAL_ROUTES`, `REDTEAM_ROUTES`, `ROUTES` from `@app/constants/routes`
 
-```typescript
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+```tsx
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+
+// Navigation
+<Link to={EVAL_ROUTES.DETAIL(evalId)}>View Eval</Link>
+<Link to={ROUTES.PROMPT_DETAIL(promptId)}>View Prompt</Link>
 ```
 
-**Note:** With `globals: true` in vitest config, `describe`, `it`, `expect`, etc. are available without imports. Only `vi` needs to be imported for mocking.
+## UI Guidelines
 
-### Writing Vitest Tests
+See `UI_GUIDELINES.md` for the 9 rules on writing React components:
 
-**Basic component test:**
-
-```typescript
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import MyComponent from './MyComponent';
-
-describe('MyComponent', () => {
-  it('should render correctly', () => {
-    render(<MyComponent title="Test" />);
-    expect(screen.getByText('Test')).toBeInTheDocument();
-  });
-
-  it('should handle user interaction', async () => {
-    const onAction = vi.fn();
-    render(<MyComponent onAction={onAction} />);
-
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    expect(onAction).toHaveBeenCalledTimes(1);
-  });
-});
-```
-
-**Mocking functions:**
-
-```typescript
-import { vi } from 'vitest';
-
-// Mock a function
-const mockFn = vi.fn();
-
-// Mock a module
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn().mockResolvedValue({ data: 'test' }),
-}));
-```
-
-## Common Patterns
-
-### Zustand State Management
-
-```typescript
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-interface MyState {
-  value: string | null;
-  setValue: (value: string) => void;
-}
-
-export const useMyStore = create<MyState>()(
-  persist(
-    (set, get) => ({
-      value: null,
-      setValue: (value) => set({ value }),
-    }),
-    { name: 'my-store', skipHydration: true },
-  ),
-);
-
-// Access state outside components
-const currentValue = useMyStore.getState().value;
-```
-
-### Custom Hooks Pattern
-
-```typescript
-export const useMyHook = () => {
-  const context = useContext(MyContext);
-  if (context === undefined) {
-    throw new Error('useMyHook must be used within a MyProvider');
-  }
-  return context;
-};
-```
-
-### MUI Styled Components
-
-```typescript
-import { styled } from '@mui/material/styles';
-import Box from '@mui/material/Box';
-
-const StyledBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
-  backgroundColor: theme.palette.background.paper,
-}));
-```
-
-## Anti-Patterns to Avoid
-
-### Using fetch() instead of callApi()
-
-```typescript
-// NEVER DO THIS
-const response = await fetch('/api/endpoint');
-
-// ALWAYS DO THIS
-const response = await callApi('/endpoint');
-```
-
-### Using @jest/globals (removed)
-
-```typescript
-// WRONG - Jest has been removed from this project
-import { describe, it, expect } from '@jest/globals';
-
-// CORRECT - Use vitest (or globals are available without import)
-import { vi } from 'vitest'; // Only needed for mocking
-```
-
-### Over-optimization
-
-```typescript
-// Unnecessary memoization
-const value = useMemo(() => prop1 + prop2, [prop1, prop2]);
-
-// Just calculate directly
-const value = prop1 + prop2;
-```
-
-## DRY Principles
-
-Check existing patterns before creating new ones:
-
-1. **Components** - `src/app/src/components/`
-2. **Hooks** - `src/app/src/hooks/`
-3. **Utils** - `src/app/src/utils/`
-4. **Stores** - `src/app/src/stores/`
-
-## Path Alias
-
-`@app/*` maps to `src/*` (configured in `vite.config.ts`).
+1. Typography with semantic HTML
+2. Small, composable components
+3. Purposeful iconography
+4. Data fetching separation
+5. React 19 patterns (`use`, `useActionState`, `useOptimistic`, `useTransition`)
+6. Subtle borders
+7. Dark mode opacity
+8. Semantic severity colors
+9. Consistent page layouts

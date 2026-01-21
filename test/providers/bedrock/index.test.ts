@@ -1,22 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
   addConfigParam,
   BEDROCK_MODEL,
   coerceStrToNum,
+  extractTextAndImages,
+  extractTextContent,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
   formatPromptLlama4,
+  formatPromptLlama32Vision,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
-import { getCache, isCacheEnabled } from '../../../src/cache';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -373,6 +376,17 @@ describe('AwsBedrockGenericProvider', () => {
 
       expect(provider.modelName).toBe(arnModelName);
       expect((provider.config as any).inferenceModelType).toBe('nova');
+    });
+
+    it('should handle inference profile ARN with nova2 model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/nova2-inference';
+      const config: any = { inferenceModelType: 'nova2' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('nova2');
     });
 
     it('should handle inference profile ARN with llama model type', async () => {
@@ -1320,6 +1334,320 @@ You are a helpful assistant.<|eot|><|header_start|>user<|header_end|>
 
 Hello<|eot|><|header_start|>assistant<|header_end|>`;
       expect(formatPromptLlama4(messages)).toBe(expected);
+    });
+  });
+
+  describe('extractTextContent', () => {
+    it('should return trimmed string when content is a string', () => {
+      expect(extractTextContent('  Hello world  ')).toBe('Hello world');
+    });
+
+    it('should extract text from array with text type blocks', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'world' },
+      ];
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should extract text from array without type field', () => {
+      const content = [{ text: 'Hello' }, { text: 'world' }];
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should handle string items in array', () => {
+      const content = ['Hello', 'world'] as any;
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should throw error when content contains images', () => {
+      const content = [
+        { type: 'text', text: 'Describe this image' },
+        { type: 'image', image: { format: 'jpeg', source: { bytes: 'base64data' } } },
+      ];
+      expect(() => extractTextContent(content, 'meta.llama3-2-11b')).toThrow(
+        /Multimodal content \(images\) detected/,
+      );
+      expect(() => extractTextContent(content, 'meta.llama3-2-11b')).toThrow(
+        /bedrock:converse:meta\.llama3-2-11b/,
+      );
+    });
+
+    it('should throw error when content contains image_url', () => {
+      const content = [
+        { type: 'text', text: 'Describe this' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,abc' } },
+      ];
+      expect(() => extractTextContent(content)).toThrow(/Multimodal content \(images\) detected/);
+    });
+
+    it('should throw error when content has image property without type', () => {
+      const content = [{ text: 'Hello' }, { image: { format: 'png', source: { data: 'base64' } } }];
+      expect(() => extractTextContent(content)).toThrow(/Multimodal content \(images\) detected/);
+    });
+
+    it('should include model name in error message when provided', () => {
+      const content = [{ type: 'image', image: {} }];
+      expect(() => extractTextContent(content, 'us.meta.llama3-2-90b-instruct-v1:0')).toThrow(
+        /us\.meta\.llama3-2-90b-instruct-v1:0/,
+      );
+    });
+  });
+
+  describe('extractTextAndImages', () => {
+    it('should return text and empty images array for string content', () => {
+      const result = extractTextAndImages('Hello world');
+      expect(result).toEqual({ text: 'Hello world', images: [] });
+    });
+
+    it('should extract text from array with text blocks', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: ' world' },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result).toEqual({ text: 'Hello world', images: [] });
+    });
+
+    it('should extract image data and insert <|image|> token from source.bytes format', () => {
+      const content = [
+        { type: 'text', text: 'Describe this: ' },
+        { type: 'image', source: { bytes: 'base64ImageData' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Describe this: <|image|>');
+      expect(result.images).toEqual(['base64ImageData']);
+    });
+
+    it('should extract image data from source.data (Anthropic format)', () => {
+      const content = [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'base64Data' } },
+        { type: 'text', text: ' What is this?' },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|> What is this?');
+      expect(result.images).toEqual(['base64Data']);
+    });
+
+    it('should extract image data from image_url format (OpenAI compatible)', () => {
+      const content = [
+        { type: 'text', text: 'Look at this: ' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,pngBase64Data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Look at this: <|image|>');
+      expect(result.images).toEqual(['pngBase64Data']);
+    });
+
+    it('should extract image from data URL in source.bytes', () => {
+      const content = [{ type: 'image', source: { bytes: 'data:image/jpeg;base64,jpegDataHere' } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['jpegDataHere']);
+    });
+
+    it('should handle multiple images in correct order', () => {
+      const content = [
+        { type: 'text', text: 'Image 1: ' },
+        { type: 'image', source: { bytes: 'image1data' } },
+        { type: 'text', text: ' Image 2: ' },
+        { type: 'image', source: { bytes: 'image2data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Image 1: <|image|> Image 2: <|image|>');
+      expect(result.images).toEqual(['image1data', 'image2data']);
+    });
+
+    it('should handle block.image with source.data', () => {
+      const content = [{ type: 'image', image: { source: { data: 'nestedImageData' } } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['nestedImageData']);
+    });
+
+    it('should handle Buffer source.bytes', () => {
+      const content = [{ type: 'image', source: { bytes: Buffer.from('hello') } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual([Buffer.from('hello').toString('base64')]);
+    });
+
+    it('should extract base64 from data URL in source.data', () => {
+      const content = [
+        { type: 'image', source: { data: 'data:image/jpeg;base64,actualBase64Data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['actualBase64Data']);
+    });
+  });
+
+  describe('formatPromptLlama32Vision', () => {
+    it('should format text-only message correctly', () => {
+      const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello' }];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.prompt).toContain('<|begin_of_text|>');
+      expect(result.prompt).toContain('Hello');
+      expect(result.prompt).toContain('<|start_header_id|>assistant<|end_header_id|>');
+      expect(result.images).toEqual([]);
+    });
+
+    it('should format message with image and return images array', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'imageBase64' } },
+            { type: 'text', text: 'What is this?' },
+          ],
+        },
+      ];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.prompt).toContain('<|image|>');
+      expect(result.prompt).toContain('What is this?');
+      expect(result.images).toEqual(['imageBase64']);
+    });
+
+    it('should collect images from multiple messages', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { data: 'img1' } },
+            { type: 'text', text: 'First image' },
+          ],
+        },
+        { role: 'assistant', content: 'I see a cat' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'And this: ' },
+            { type: 'image', source: { data: 'img2' } },
+          ],
+        },
+      ];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.images).toEqual(['img1', 'img2']);
+      expect(result.prompt).toContain('First image');
+      expect(result.prompt).toContain('I see a cat');
+      expect(result.prompt).toContain('And this:');
+    });
+  });
+
+  describe('getLlamaModelHandler LLAMA3_2 with images', () => {
+    it('should include images array in params when multimodal content provided (11B)', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'testImageData' } },
+            { type: 'text', text: 'What is in this image?' },
+          ],
+        },
+      ]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
+      expect(params.images).toEqual(['testImageData']);
+      expect(params.prompt).toContain('<|image|>');
+      expect(params.prompt).toContain('What is in this image?');
+    });
+
+    it('should not include images array when no images in content', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
+      expect(params.images).toBeUndefined();
+      expect(params.prompt).toContain('Just text');
+    });
+
+    it('should handle image_url format in LLAMA3_2 (90B)', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe: ' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,pngData' } },
+          ],
+        },
+      ]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-90b-instruct-v1:0',
+      );
+      expect(params.images).toEqual(['pngData']);
+      expect(params.prompt).toContain('<|image|>');
+    });
+
+    it('should use text-only formatting for 1B and 3B models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-3b-instruct-v1:0',
+      );
+      expect(params.images).toBeUndefined();
+      expect(params.prompt).toContain('Just text');
+      // Should use Llama 3 formatting, not vision formatting
+      expect(params.prompt).not.toContain('<|image|>');
+    });
+
+    it('should throw error when images are provided to 1B/3B text-only models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'testImageData' } },
+            { type: 'text', text: 'What is in this image?' },
+          ],
+        },
+      ]);
+      await expect(
+        handler.params({}, prompt, undefined, 'us.meta.llama3-2-3b-instruct-v1:0'),
+      ).rejects.toThrow(/Multimodal content \(images\) detected/);
+    });
+  });
+
+  describe('formatPromptLlama3Instruct with multimodal content', () => {
+    it('should throw helpful error when message contains images', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', image: { format: 'jpeg', source: { bytes: 'data' } } },
+            { type: 'text', text: 'Describe this image' },
+          ],
+        },
+      ];
+      expect(() => formatPromptLlama3Instruct(messages, 'meta.llama3-2-11b')).toThrow(
+        /Multimodal content \(images\) detected/,
+      );
+    });
+
+    it('should work with text-only array content', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello world' }],
+        },
+      ];
+      const result = formatPromptLlama3Instruct(messages);
+      expect(result).toContain('Hello world');
     });
   });
 });
@@ -2543,12 +2871,28 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
   });
+
+  it('should map Nova 2 models correctly', async () => {
+    // Base model ID
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Regional model IDs
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Global cross-region inference
+    expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
+    // so it's handled separately via NovaSonicProvider in registry.ts
+  });
 });
 
 describe('AwsBedrockCompletionProvider', () => {
   const mockInvokeModel = vi.fn();
   let originalModelHandler: IBedrockModel;
-  let mockCache;
+  let mockCache: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -2620,6 +2964,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      undefined, // vars not provided when context is undefined
     );
   });
 
@@ -2660,6 +3005,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 
@@ -2703,7 +3049,35 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
+  });
+
+  it('should set cached flag when returning cached response', async () => {
+    const mockCachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('processed output');
+    expect(mockCache.get).toHaveBeenCalled();
+    // Verify invokeModel was not called because cache was used
+    expect(mockInvokeModel).not.toHaveBeenCalled();
   });
 });
 

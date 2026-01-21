@@ -1,41 +1,44 @@
 import async from 'async';
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderOptions,
-  ProviderResponse,
-} from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getSessionId } from '../util';
 
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
+
 interface BestOfNResponse {
   modifiedPrompts: string[];
   task: 'jailbreak:best-of-n';
 }
 
+interface BestOfNConfig {
+  injectVar: string;
+  maxConcurrency: number;
+  nSteps?: number;
+  maxCandidatesPerStep?: number;
+}
+
 export default class BestOfNProvider implements ApiProvider {
-  private readonly injectVar: string;
-  private readonly maxConcurrency: number;
-  private readonly nSteps?: number;
-  private readonly maxCandidatesPerStep?: number;
+  readonly config: BestOfNConfig;
 
   id() {
     return 'promptfoo:redteam:best-of-n';
   }
 
   constructor(
-    options: ProviderOptions & {
+    options: {
       injectVar?: string;
       maxConcurrency?: number;
       nSteps?: number;
@@ -47,10 +50,12 @@ export default class BestOfNProvider implements ApiProvider {
     }
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    this.injectVar = options.injectVar;
-    this.maxConcurrency = options.maxConcurrency || 3;
-    this.nSteps = options.nSteps;
-    this.maxCandidatesPerStep = options.maxCandidatesPerStep;
+    this.config = {
+      injectVar: options.injectVar,
+      maxConcurrency: options.maxConcurrency || 3,
+      nSteps: options.nSteps,
+      maxCandidatesPerStep: options.maxCandidatesPerStep,
+    };
   }
 
   async callApi(
@@ -76,9 +81,9 @@ export default class BestOfNProvider implements ApiProvider {
           },
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
-            prompt: context.vars[this.injectVar],
-            nSteps: this.nSteps,
-            maxCandidatesPerStep: this.maxCandidatesPerStep,
+            prompt: context.vars[this.config.injectVar],
+            nSteps: this.config.nSteps,
+            maxCandidatesPerStep: this.config.maxCandidatesPerStep,
             version: VERSION,
             email: getUserEmail(),
           }),
@@ -101,47 +106,52 @@ export default class BestOfNProvider implements ApiProvider {
       let lastResponse: ProviderResponse | null = null;
       let currentStep = 0;
 
-      await async.eachLimit(data.modifiedPrompts, this.maxConcurrency, async (candidatePrompt) => {
-        if (successfulResponse) {
-          return;
-        }
-
-        const targetVars = {
-          ...context.vars,
-          [this.injectVar]: candidatePrompt,
-        };
-
-        const renderedPrompt = await renderPrompt(
-          context.prompt,
-          targetVars,
-          context.filters,
-          targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
-
-        try {
-          const response = await targetProvider.callApi(renderedPrompt, context, options);
-          const sessionId = getSessionId(response, context);
-          if (sessionId) {
-            sessionIds.push(sessionId);
+      await async.eachLimit(
+        data.modifiedPrompts,
+        this.config.maxConcurrency,
+        async (candidatePrompt) => {
+          if (successfulResponse) {
+            return;
           }
-          lastResponse = response;
-          accumulateResponseTokenUsage(targetTokenUsage, response);
-          currentStep++;
-          if (!response.error) {
-            successfulResponse = response;
-            successfulResponse.metadata = {
-              ...successfulResponse.metadata,
-              redteamFinalPrompt: candidatePrompt,
-              step: currentStep,
-            };
-            return false; // Stop processing more candidates
+
+          const targetVars = {
+            ...context.vars,
+            [this.config.injectVar]: candidatePrompt,
+          };
+
+          const renderedPrompt = await renderPrompt(
+            context.prompt,
+            targetVars,
+            context.filters,
+            targetProvider,
+            [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          );
+
+          try {
+            const response = await targetProvider.callApi(renderedPrompt, context, options);
+            const sessionId = getSessionId(response, context);
+            if (sessionId) {
+              sessionIds.push(sessionId);
+            }
+            lastResponse = response;
+            accumulateResponseTokenUsage(targetTokenUsage, response);
+            currentStep++;
+            if (!response.error) {
+              successfulResponse = response;
+              successfulResponse.prompt = candidatePrompt;
+              successfulResponse.metadata = {
+                ...successfulResponse.metadata,
+                redteamFinalPrompt: candidatePrompt,
+                step: currentStep,
+              };
+              return false; // Stop processing more candidates
+            }
+          } catch (err) {
+            logger.debug(`[Best-of-N] Candidate failed: ${err}`);
+            currentStep++;
           }
-        } catch (err) {
-          logger.debug(`[Best-of-N] Candidate failed: ${err}`);
-          currentStep++;
-        }
-      });
+        },
+      );
 
       if (successfulResponse) {
         (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;

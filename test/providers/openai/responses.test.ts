@@ -1,9 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mock } from 'vitest';
-
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import type { Mock } from 'vitest';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {

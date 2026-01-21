@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudSwag Store</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        background: #f5f5f5;
+        min-height: 100vh;
+      }
+
+      /* Login page special background */
+      body.login-page {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      }
+
+      /* Navigation */
+      .navbar {
+        background: #1a1a2e;
+        color: white;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .navbar-brand {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #4fc3f7;
+      }
+
+      .navbar-nav {
+        display: flex;
+        gap: 1rem;
+      }
+
+      .nav-link {
+        color: #ccc;
+        text-decoration: none;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        transition: all 0.2s;
+        cursor: pointer;
+      }
+
+      .nav-link:hover,
+      .nav-link.active {
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .navbar-user {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .user-points {
+        background: #4fc3f7;
+        color: #1a1a2e;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9rem;
+      }
+
+      .btn-logout {
+        background: transparent;
+        border: 1px solid #ff6b6b;
+        color: #ff6b6b;
+        padding: 0.4rem 1rem;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-logout:hover {
+        background: #ff6b6b;
+        color: white;
+      }
+
+      /* Page Container */
+      .page {
+        display: none;
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .page.active {
+        display: block;
+      }
+
+      /* Login Page */
+      .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .login-card {
+        background: white;
+        padding: 3rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 420px;
+      }
+
+      .login-card h1 {
+        color: #1a1a2e;
+        margin-bottom: 0.5rem;
+        text-align: center;
+        font-size: 2rem;
+      }
+
+      .login-card h1::before {
+        content: '☁️';
+        display: block;
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .login-card p {
+        color: #666;
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #333;
+        font-weight: 500;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 0.8rem 1rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: #4fc3f7;
+      }
+
+      .btn-login {
+        width: 100%;
+        padding: 1rem;
+        background: #4fc3f7;
+        color: #1a1a2e;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .btn-login:hover {
+        background: #29b6f6;
+      }
+
+      .btn-login:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .login-error {
+        background: #ffebee;
+        color: #c62828;
+        padding: 0.8rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        display: none;
+      }
+
+      .demo-hint {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background: #e3f2fd;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: #1565c0;
+      }
+
+      /* Products Page */
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+
+      .page-header h1 {
+        color: #1a1a2e;
+      }
+
+      .filter-bar {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+      }
+
+      .filter-btn {
+        padding: 0.5rem 1.2rem;
+        border: 2px solid #e0e0e0;
+        background: white;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+      }
+
+      .filter-btn:hover,
+      .filter-btn.active {
+        border-color: #4fc3f7;
+        background: #e3f2fd;
+        color: #0277bd;
+      }
+
+      .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.5rem;
+      }
+
+      .product-card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .product-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+      }
+
+      .product-image {
+        height: 180px;
+        background: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 3rem;
+        overflow: hidden;
+      }
+
+      .product-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .product-image.no-image {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+
+      .product-image.apparel.no-image {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+      .product-image.accessories.no-image {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      }
+      .product-image.drinkware.no-image {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      }
+      .product-image.stickers.no-image {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+      }
+
+      .product-info {
+        padding: 1.2rem;
+      }
+
+      .product-name {
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 0.3rem;
+      }
+
+      .product-meta {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 0.8rem;
+      }
+
+      .product-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .product-price {
+        font-weight: bold;
+        color: #4fc3f7;
+        font-size: 1.1rem;
+      }
+
+      .stock-badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 10px;
+      }
+
+      .stock-badge.in-stock {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      .stock-badge.out-of-stock {
+        background: #ffebee;
+        color: #c62828;
+      }
+
+      /* Orders Page */
+      .orders-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .order-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #eee;
+      }
+
+      .order-id {
+        font-weight: bold;
+        color: #1a1a2e;
+        font-size: 1.1rem;
+      }
+
+      .order-date {
+        color: #666;
+        font-size: 0.85rem;
+      }
+
+      .order-status {
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .order-status.pending {
+        background: #fff3e0;
+        color: #e65100;
+      }
+      .order-status.confirmed {
+        background: #e3f2fd;
+        color: #1565c0;
+      }
+      .order-status.shipped {
+        background: #f3e5f5;
+        color: #7b1fa2;
+      }
+      .order-status.delivered {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      .order-items {
+        margin-bottom: 1rem;
+      }
+
+      .order-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f5f5f5;
+      }
+
+      .order-item:last-child {
+        border-bottom: none;
+      }
+
+      .order-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 1rem;
+        border-top: 1px solid #eee;
+      }
+
+      .order-total {
+        font-weight: bold;
+        font-size: 1.1rem;
+        color: #1a1a2e;
+      }
+
+      .order-tracking {
+        font-size: 0.85rem;
+        color: #666;
+      }
+
+      .order-tracking a {
+        color: #4fc3f7;
+      }
+
+      /* Chat Page */
+      .chat-container {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 140px);
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+      }
+
+      .chat-header {
+        padding: 1rem 1.5rem;
+        background: #1a1a2e;
+        color: white;
+      }
+
+      .chat-header h2 {
+        font-size: 1.1rem;
+      }
+
+      .chat-header p {
+        font-size: 0.85rem;
+        color: #aaa;
+      }
+
+      .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .message {
+        max-width: 80%;
+        padding: 1rem;
+        border-radius: 12px;
+        line-height: 1.5;
+      }
+
+      .message.user {
+        background: #4fc3f7;
+        color: #1a1a2e;
+        align-self: flex-end;
+        border-bottom-right-radius: 4px;
+      }
+
+      .message.bot {
+        background: #f5f5f5;
+        color: #333;
+        align-self: flex-start;
+        border-bottom-left-radius: 4px;
+      }
+
+      .message.bot pre {
+        background: #e0e0e0;
+        padding: 0.5rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        font-size: 0.85rem;
+        margin: 0.5rem 0;
+      }
+
+      .chat-input-area {
+        padding: 1rem;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .chat-input {
+        flex: 1;
+        padding: 0.8rem 1rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 25px;
+        font-size: 1rem;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      .chat-input:focus {
+        border-color: #4fc3f7;
+      }
+
+      .chat-send {
+        padding: 0.8rem 1.5rem;
+        background: #4fc3f7;
+        color: #1a1a2e;
+        border: none;
+        border-radius: 25px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .chat-send:hover {
+        background: #29b6f6;
+      }
+
+      .chat-send:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .typing-indicator {
+        display: none;
+        align-self: flex-start;
+        padding: 1rem;
+        background: #f5f5f5;
+        border-radius: 12px;
+        color: #666;
+        font-style: italic;
+      }
+
+      .typing-indicator.active {
+        display: block;
+      }
+
+      /* Quick Actions */
+      .quick-actions {
+        padding: 0.5rem 1rem;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .quick-action {
+        padding: 0.4rem 0.8rem;
+        background: #e3f2fd;
+        color: #1565c0;
+        border: none;
+        border-radius: 15px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .quick-action:hover {
+        background: #bbdefb;
+      }
+
+      /* Empty States */
+      .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #666;
+      }
+
+      .empty-state h3 {
+        margin-bottom: 0.5rem;
+        color: #333;
+      }
+
+      /* Loading */
+      .loading {
+        text-align: center;
+        padding: 2rem;
+        color: #666;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e0e0e0;
+        border-top-color: #4fc3f7;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Hidden navbar for login */
+      body.login-page .navbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="login-page">
+    <!-- Navigation -->
+    <nav class="navbar">
+      <div class="navbar-brand">CloudSwag</div>
+      <div class="navbar-nav">
+        <a class="nav-link" data-page="store">Store</a>
+        <a class="nav-link" data-page="orders">My Orders</a>
+        <a class="nav-link" data-page="chat">Support Chat</a>
+      </div>
+      <div class="navbar-user">
+        <span class="user-name"></span>
+        <span class="user-points"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- Login Page -->
+    <div id="login-page" class="page active">
+      <div class="login-container">
+        <div class="login-card">
+          <h1>Welcome to CloudSwag</h1>
+          <p>Sign in to browse products and manage orders</p>
+
+          <div class="login-error" id="login-error"></div>
+
+          <form id="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+              <label for="username">Username</label>
+              <input type="text" id="username" name="username" required autocomplete="username" />
+            </div>
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                required
+                autocomplete="current-password"
+              />
+            </div>
+            <button type="submit" class="btn-login" id="login-btn">Sign In</button>
+          </form>
+
+          <div class="demo-hint">
+            <strong>Demo Credentials:</strong><br />
+            Username: alice, bob, charlie, diana, or eve<br />
+            Password: password123
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Store Page -->
+    <div id="store-page" class="page">
+      <div class="page-header">
+        <h1>Swag Store</h1>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-btn active" data-category="all">All Products</button>
+        <button class="filter-btn" data-category="apparel">Apparel</button>
+        <button class="filter-btn" data-category="accessories">Accessories</button>
+        <button class="filter-btn" data-category="drinkware">Drinkware</button>
+        <button class="filter-btn" data-category="stickers">Stickers</button>
+      </div>
+
+      <div class="products-grid" id="products-grid">
+        <div class="loading">
+          <div class="spinner"></div>
+          Loading products...
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Page -->
+    <div id="orders-page" class="page">
+      <div class="page-header">
+        <h1>My Orders</h1>
+      </div>
+
+      <div class="orders-list" id="orders-list">
+        <div class="loading">
+          <div class="spinner"></div>
+          Loading orders...
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Page -->
+    <div id="chat-page" class="page">
+      <div class="chat-container">
+        <div class="chat-header">
+          <h2>CloudSwag Support</h2>
+          <p>Ask me about products, orders, shipping, or policies!</p>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+          <div class="message bot">
+            Hello! I'm the CloudSwag assistant. I can help you with:
+            <ul style="margin-top: 0.5rem; padding-left: 1.5rem">
+              <li>Checking your order status</li>
+              <li>Tracking shipments</li>
+              <li>Product recommendations</li>
+              <li>Return and shipping policies</li>
+            </ul>
+            How can I help you today?
+          </div>
+        </div>
+
+        <div class="typing-indicator" id="typing-indicator">CloudSwag Bot is typing...</div>
+
+        <div class="quick-actions">
+          <button class="quick-action" onclick="sendQuickMessage('What are my orders?')">
+            My Orders
+          </button>
+          <button class="quick-action" onclick="sendQuickMessage('Track my shipped order')">
+            Track Shipment
+          </button>
+          <button class="quick-action" onclick="sendQuickMessage('What is the return policy?')">
+            Return Policy
+          </button>
+          <button class="quick-action" onclick="sendQuickMessage('Show me hoodies')">
+            Browse Hoodies
+          </button>
+          <button class="quick-action" onclick="sendQuickMessage('How many points do I have?')">
+            My Points
+          </button>
+        </div>
+
+        <div class="chat-input-area">
+          <input
+            type="text"
+            class="chat-input"
+            id="chat-input"
+            placeholder="Type your message..."
+            onkeypress="if (event.key === 'Enter') sendMessage();"
+          />
+          <button class="chat-send" id="chat-send" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Handle image load errors gracefully
+      function handleImageError(img) {
+        const parent = img.parentElement;
+        parent.classList.add('no-image');
+        const icon = parent.getAttribute('data-icon') || '📦';
+        img.remove();
+        parent.innerHTML = icon;
+      }
+
+      // State
+      let currentUser = null;
+      let authToken = null;
+      let sessionId = null;
+      let currentPage = 'login';
+
+      // Check for existing session on load
+      document.addEventListener('DOMContentLoaded', () => {
+        const savedToken = localStorage.getItem('authToken');
+        const savedUser = localStorage.getItem('currentUser');
+
+        if (savedToken && savedUser) {
+          authToken = savedToken;
+          currentUser = JSON.parse(savedUser);
+          showApp();
+        }
+
+        // Set up navigation
+        document.querySelectorAll('.nav-link').forEach((link) => {
+          link.addEventListener('click', () => {
+            navigateTo(link.dataset.page);
+          });
+        });
+
+        // Set up filter buttons
+        document.querySelectorAll('.filter-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadProducts(btn.dataset.category);
+          });
+        });
+      });
+
+      // Login
+      async function handleLogin(event) {
+        event.preventDefault();
+
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const loginBtn = document.getElementById('login-btn');
+        const errorDiv = document.getElementById('login-error');
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Signing in...';
+        errorDiv.style.display = 'none';
+
+        try {
+          const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Login failed');
+          }
+
+          const data = await response.json();
+
+          authToken = data.token;
+          currentUser = {
+            user_id: data.user_id,
+            name: data.name,
+            email: data.email,
+            department: data.department,
+            office_location: data.office_location,
+            swag_points: data.swag_points,
+          };
+          sessionId = `${data.user_id}_default`;
+
+          // Save to localStorage
+          localStorage.setItem('authToken', authToken);
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+          showApp();
+        } catch (error) {
+          errorDiv.textContent = error.message;
+          errorDiv.style.display = 'block';
+        } finally {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Sign In';
+        }
+      }
+
+      // Show main app
+      function showApp() {
+        document.body.classList.remove('login-page');
+        document.querySelector('.user-name').textContent = currentUser.name;
+        document.querySelector('.user-points').textContent = `${currentUser.swag_points} pts`;
+        navigateTo('store');
+      }
+
+      // Logout
+      function logout() {
+        authToken = null;
+        currentUser = null;
+        sessionId = null;
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+
+        document.body.classList.add('login-page');
+        document.getElementById('login-form').reset();
+        navigateTo('login');
+
+        // Clear chat
+        document.getElementById('chat-messages').innerHTML = `
+                <div class="message bot">
+                    Hello! I'm the CloudSwag assistant. How can I help you today?
+                </div>
+            `;
+      }
+
+      // Navigation
+      function navigateTo(page) {
+        currentPage = page;
+
+        // Update nav links
+        document.querySelectorAll('.nav-link').forEach((link) => {
+          link.classList.toggle('active', link.dataset.page === page);
+        });
+
+        // Show/hide pages
+        document.querySelectorAll('.page').forEach((p) => {
+          p.classList.remove('active');
+        });
+        document.getElementById(`${page}-page`).classList.add('active');
+
+        // Load data for page
+        if (page === 'store') loadProducts('all');
+        if (page === 'orders') loadOrders();
+      }
+
+      // Load Products
+      async function loadProducts(category = 'all') {
+        const grid = document.getElementById('products-grid');
+        grid.innerHTML =
+          '<div class="loading"><div class="spinner"></div>Loading products...</div>';
+
+        try {
+          let url = '/api/products';
+          if (category !== 'all') {
+            url += `?category=${category}`;
+          }
+
+          const response = await fetch(url);
+          const data = await response.json();
+
+          if (data.products.length === 0) {
+            grid.innerHTML =
+              '<div class="empty-state"><h3>No products found</h3><p>Try a different category</p></div>';
+            return;
+          }
+
+          grid.innerHTML = data.products
+            .map((product) => {
+              const imageUrl = getProductImage(product);
+              const icon = getCategoryIcon(product.category);
+              return `
+                    <div class="product-card">
+                        <div class="product-image ${product.category} ${!imageUrl ? 'no-image' : ''}" data-icon="${icon}">
+                            ${
+                              imageUrl
+                                ? `<img src="${imageUrl}" alt="${product.name}" loading="lazy" onerror="handleImageError(this)">`
+                                : icon
+                            }
+                        </div>
+                        <div class="product-info">
+                            <div class="product-name">${product.name}</div>
+                            <div class="product-meta">
+                                ${product.size ? `Size: ${product.size}` : ''}
+                                ${product.size && product.color ? ' | ' : ''}
+                                ${product.color ? `Color: ${product.color}` : ''}
+                                ${!product.size && !product.color ? product.category : ''}
+                            </div>
+                            <div class="product-footer">
+                                <span class="product-price">${product.price_points} pts</span>
+                                <span class="stock-badge ${product.in_stock ? 'in-stock' : 'out-of-stock'}">
+                                    ${product.in_stock ? `${product.stock_quantity} in stock` : 'Out of stock'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            })
+            .join('');
+        } catch (error) {
+          grid.innerHTML = `<div class="empty-state"><h3>Error loading products</h3><p>${error.message}</p></div>`;
+        }
+      }
+
+      function getCategoryIcon(category) {
+        const icons = {
+          apparel: '👕',
+          accessories: '🎒',
+          drinkware: '☕',
+          stickers: '✨',
+        };
+        return icons[category] || '📦';
+      }
+
+      // Product images from Unsplash (free, reliable)
+      function getProductImage(product) {
+        const images = {
+          // T-Shirts - Unsplash
+          'TSHIRT-BLU':
+            'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=400&h=400&fit=crop',
+          'TSHIRT-BLK':
+            'https://images.unsplash.com/photo-1618453292459-53424b66bb6a?w=400&h=400&fit=crop',
+          'TSHIRT-WHT':
+            'https://images.unsplash.com/photo-1622445275463-afa2ab738c34?w=400&h=400&fit=crop',
+          // Hoodies - Unsplash
+          'HOODIE-GRY':
+            'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=400&fit=crop',
+          'HOODIE-NVY':
+            'https://images.unsplash.com/photo-1624548140129-74786c5f1279?w=400&h=400&fit=crop',
+          // Hats - Unsplash
+          'HAT-SNAP':
+            'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&h=400&fit=crop',
+          'HAT-BEANIE':
+            'https://images.unsplash.com/photo-1576871337622-98d48d1cf531?w=400&h=400&fit=crop',
+          // Bottles & Mugs - Unsplash
+          BOTTLE:
+            'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&h=400&fit=crop',
+          'MUG-WHT':
+            'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=400&h=400&fit=crop',
+          'MUG-BLK':
+            'https://images.unsplash.com/photo-1572119865084-43c285814d63?w=400&h=400&fit=crop',
+          TUMBLER:
+            'https://images.unsplash.com/photo-1570968915860-54d5c301fa9f?w=400&h=400&fit=crop',
+          // Stickers - Unsplash
+          STICKER: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=400&fit=crop',
+          // Accessories - Unsplash
+          BACKPACK:
+            'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop',
+          LANYARD:
+            'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop',
+          MOUSEPAD:
+            'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=400&fit=crop',
+          SOCKS:
+            'https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?w=400&h=400&fit=crop',
+        };
+
+        // Match product_id prefix to image
+        const productId = product.product_id;
+        for (const [prefix, url] of Object.entries(images)) {
+          if (productId.startsWith(prefix)) {
+            return url;
+          }
+        }
+        return null;
+      }
+
+      // Load Orders
+      async function loadOrders() {
+        const list = document.getElementById('orders-list');
+        list.innerHTML = '<div class="loading"><div class="spinner"></div>Loading orders...</div>';
+
+        try {
+          const response = await fetch('/api/orders', {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to load orders');
+          }
+
+          const data = await response.json();
+
+          if (data.orders.length === 0) {
+            list.innerHTML =
+              '<div class="empty-state"><h3>No orders yet</h3><p>Browse the store to place your first order!</p></div>';
+            return;
+          }
+
+          list.innerHTML = data.orders
+            .map(
+              (order) => `
+                    <div class="order-card">
+                        <div class="order-header">
+                            <div>
+                                <div class="order-id">${order.order_id}</div>
+                                <div class="order-date">${formatDate(order.created_at)}</div>
+                            </div>
+                            <span class="order-status ${order.status}">${order.status}</span>
+                        </div>
+                        <div class="order-items">
+                            ${order.items
+                              .map(
+                                (item) => `
+                                <div class="order-item">
+                                    <span>${item.name} x${item.quantity}</span>
+                                    <span>${item.total_points} pts</span>
+                                </div>
+                            `,
+                              )
+                              .join('')}
+                        </div>
+                        <div class="order-footer">
+                            <span class="order-total">Total: ${order.total_points} points</span>
+                            ${
+                              order.tracking_number
+                                ? `
+                                <span class="order-tracking">
+                                    Tracking: ${order.carrier?.toUpperCase()} ${order.tracking_number}
+                                </span>
+                            `
+                                : ''
+                            }
+                        </div>
+                    </div>
+                `,
+            )
+            .join('');
+        } catch (error) {
+          list.innerHTML = `<div class="empty-state"><h3>Error loading orders</h3><p>${error.message}</p></div>`;
+        }
+      }
+
+      function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+      }
+
+      // Chat Functions
+      async function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+
+        if (!message) return;
+
+        input.value = '';
+        addMessage(message, 'user');
+
+        const sendBtn = document.getElementById('chat-send');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        sendBtn.disabled = true;
+        typingIndicator.classList.add('active');
+
+        try {
+          const response = await fetch('/chat/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              token: authToken,
+              session_id: sessionId,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Chat request failed');
+          }
+
+          const data = await response.json();
+          sessionId = data.session_id;
+          addMessage(data.response, 'bot');
+        } catch (error) {
+          addMessage(`Sorry, I encountered an error: ${error.message}`, 'bot');
+        } finally {
+          sendBtn.disabled = false;
+          typingIndicator.classList.remove('active');
+        }
+      }
+
+      function sendQuickMessage(message) {
+        document.getElementById('chat-input').value = message;
+        sendMessage();
+      }
+
+      function addMessage(text, type) {
+        const messages = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+
+        // Simple markdown-like formatting for bot messages
+        if (type === 'bot') {
+          text = text
+            .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+        }
+
+        messageDiv.innerHTML = text;
+        messages.appendChild(messageDiv);
+        messages.scrollTop = messages.scrollHeight;
+      }
+    </script>
+  </body>
+</html>

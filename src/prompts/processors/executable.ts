@@ -1,13 +1,13 @@
 import { execFile } from 'child_process';
-import { readFile, stat as fsStat } from 'fs/promises';
+import { stat as fsStat, readFile } from 'fs/promises';
 
-import logger from '../../logger';
-import { parseScriptParts, getFileHashes } from '../../providers/scriptCompletion';
 import { getCache, isCacheEnabled } from '../../cache';
+import logger from '../../logger';
+import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
+import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -25,9 +25,12 @@ function stripText(text: string) {
 export const executablePromptFunction = async (
   scriptPath: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: {
+      basePath?: string;
+      timeout?: number;
+    };
   },
 ): Promise<string> => {
   invariant(context.provider?.id, 'provider.id is required');

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, like, or } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
@@ -25,6 +25,7 @@ export interface ModelAuditRecord {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -50,6 +51,7 @@ export default class ModelAudit {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -109,6 +111,7 @@ export default class ModelAudit {
     modelPath: string;
     modelType?: string;
     results: ModelAuditScanResults;
+    // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any>;
     // Revision tracking fields
     modelId?: string;
@@ -252,16 +255,76 @@ export default class ModelAudit {
     return new ModelAudit({ ...result, persisted: true });
   }
 
-  static async getMany(limit: number = 100): Promise<ModelAudit[]> {
+  /**
+   * Get multiple model audits with pagination, sorting, and optional search.
+   *
+   * Note: The search parameter is safely handled by Drizzle ORM's `like()` function,
+   * which uses parameterized queries under the hood. The search string is passed as
+   * a bound parameter, not interpolated into the SQL string, preventing SQL injection.
+   */
+  static async getMany(
+    limit: number = 100,
+    offset: number = 0,
+    sortField: 'createdAt' | 'name' | 'modelPath' = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
+    search?: string,
+  ): Promise<ModelAudit[]> {
     const db = getDb();
-    const results = await db
-      .select()
-      .from(modelAuditsTable)
-      .orderBy(desc(modelAuditsTable.createdAt))
-      .limit(limit)
-      .all();
+
+    // Build the base query
+    let query = db.select().from(modelAuditsTable);
+
+    // Apply search filter if provided
+    // Note: Drizzle ORM's like() uses parameterized queries, making this safe from SQL injection
+    if (search) {
+      query = query.where(
+        or(
+          like(modelAuditsTable.name, `%${search}%`),
+          like(modelAuditsTable.modelPath, `%${search}%`),
+          like(modelAuditsTable.id, `%${search}%`),
+        ),
+      ) as typeof query;
+    }
+
+    // Determine the sort column using explicit allowlist mapping
+    const sortColumn =
+      sortField === 'name'
+        ? modelAuditsTable.name
+        : sortField === 'modelPath'
+          ? modelAuditsTable.modelPath
+          : modelAuditsTable.createdAt;
+
+    // Apply ordering
+    if (sortOrder === 'asc') {
+      query = query.orderBy(asc(sortColumn)) as typeof query;
+    } else {
+      query = query.orderBy(desc(sortColumn)) as typeof query;
+    }
+
+    // Apply pagination
+    const results = await query.limit(limit).offset(offset).all();
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
+  }
+
+  static async count(search?: string): Promise<number> {
+    const db = getDb();
+
+    let query = db.select({ value: count() }).from(modelAuditsTable);
+
+    // Apply search filter if provided
+    if (search) {
+      query = query.where(
+        or(
+          like(modelAuditsTable.name, `%${search}%`),
+          like(modelAuditsTable.modelPath, `%${search}%`),
+          like(modelAuditsTable.id, `%${search}%`),
+        ),
+      ) as typeof query;
+    }
+
+    const result = await query.get();
+    return result?.value || 0;
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {
@@ -364,9 +427,12 @@ export default class ModelAudit {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       name: this.name,
+      author: this.author,
       modelPath: this.modelPath,
       modelType: this.modelType,
       results: this.results,
+      checks: this.checks,
+      issues: this.issues,
       hasErrors: this.hasErrors,
       totalChecks: this.totalChecks,
       passedChecks: this.passedChecks,

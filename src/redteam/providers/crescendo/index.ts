@@ -1,6 +1,4 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -9,18 +7,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -35,11 +21,15 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import type { BaseRedteamMetadata } from '../../types';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
-import type { Message } from '../shared';
 import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  isBasicRefusal,
+} from '../../util';
+import { getGoalRubric } from '../prompts';
+import {
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
@@ -54,6 +44,22 @@ import {
   resolveTracingOptions,
 } from '../tracingOptions';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+  VarValue,
+} from '../../../types/index';
+import type { BaseRedteamMetadata } from '../../types';
+import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -102,6 +108,11 @@ interface CrescendoConfig {
    * Set by the layer strategy when used as: layer: { steps: [crescendo, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -121,7 +132,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -156,8 +167,8 @@ export class CrescendoProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -181,6 +192,8 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          // Pass inputs schema for multi-input mode
+          inputs: this.config.inputs,
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -202,10 +215,8 @@ export class CrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
-        });
+        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({});
       }
     }
     return this.scoringProvider;
@@ -252,7 +263,7 @@ export class CrescendoProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -288,6 +299,7 @@ export class CrescendoProvider implements ApiProvider {
       output: string;
       outputAudio?: MediaData;
       outputImage?: MediaData;
+      inputVars?: Record<string, string>;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
@@ -306,9 +318,14 @@ export class CrescendoProvider implements ApiProvider {
       successFlag: this.successfulAttacks.length,
       purpose: context?.test?.metadata?.purpose,
       modifierSection:
-        Object.entries(context?.test?.metadata?.modifiers || {})
+        Object.entries(
+          context?.test?.metadata?.modifiers ||
+            context?.test?.metadata?.pluginConfig?.modifiers ||
+            {},
+        )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
+      inputs: this.config.inputs,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -342,9 +359,14 @@ export class CrescendoProvider implements ApiProvider {
           successFlag: this.successfulAttacks.length,
           purpose: context?.test?.metadata?.purpose,
           modifierSection:
-            Object.entries(context?.test?.metadata?.modifiers || {})
+            Object.entries(
+              context?.test?.metadata?.modifiers ||
+                context?.test?.metadata?.pluginConfig?.modifiers ||
+                {},
+            )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
+          inputs: this.config.inputs,
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -371,7 +393,11 @@ export class CrescendoProvider implements ApiProvider {
 
         logger.debug(`[Crescendo] Generated attack prompt: ${attackPrompt}`);
 
-        const { response, transformResult } = await this.sendPrompt(
+        const {
+          response,
+          transformResult,
+          inputVars: currentInputVars,
+        } = await this.sendPrompt(
           attackPrompt,
           prompt,
           vars,
@@ -386,6 +412,8 @@ export class CrescendoProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+        // Track current input vars for history entry
+        const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
 
         if (lastResponse.sessionId && this.stateful) {
@@ -532,6 +560,8 @@ export class CrescendoProvider implements ApiProvider {
             lastResponse.image?.data && lastResponse.image?.format
               ? { data: lastResponse.image.data, format: lastResponse.image.format }
               : undefined,
+          // Include input vars for multi-input mode (extracted from current prompt)
+          inputVars: lastInputVars,
         });
 
         if (graderPassed === false) {
@@ -599,12 +629,14 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
       ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
@@ -621,7 +653,7 @@ export class CrescendoProvider implements ApiProvider {
             : undefined,
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
     };
   }
 
@@ -709,7 +741,7 @@ export class CrescendoProvider implements ApiProvider {
     const parsedOutput =
       typeof response.output === 'string'
         ? extractFirstJsonObject<{
-            generatedQuestion: string;
+            generatedQuestion: string | Record<string, string>;
             rationaleBehindJailbreak: string;
             lastResponseSummary: string;
           }>(response.output)
@@ -729,10 +761,16 @@ export class CrescendoProvider implements ApiProvider {
       logger.warn(`[Crescendo] Response: ${response.output}`);
     }
 
+    // Handle multi-input mode where generatedQuestion is an object
+    const generatedQuestion =
+      typeof parsedOutput.generatedQuestion === 'object'
+        ? JSON.stringify(parsedOutput.generatedQuestion)
+        : parsedOutput.generatedQuestion;
+
     logger.debug(dedent`
       [Crescendo] Received from red teaming chat:
 
-      generatedQuestion: ${parsedOutput.generatedQuestion}
+      generatedQuestion: ${generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
@@ -749,14 +787,14 @@ export class CrescendoProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      generatedQuestion,
     };
   }
 
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     _roundNum: number,
@@ -765,10 +803,31 @@ export class CrescendoProvider implements ApiProvider {
     tracingOptions?: RedteamTracingOptions,
     shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
-  ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+  ): Promise<{
+    response: TargetResponse;
+    transformResult?: TransformResult;
+    inputVars?: Record<string, string>;
+  }> {
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    let processedPrompt = attackPrompt;
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      processedPrompt = extractedPrompt;
+    }
+
+    // Extract input vars from the processed prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, VarValue> = {
+      ...vars,
+      [this.config.injectVar]: processedPrompt,
+      ...(currentInputVars || {}),
+    };
+
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      updatedVars,
       filters,
       provider,
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -856,6 +915,7 @@ export class CrescendoProvider implements ApiProvider {
             tokenUsage: { numRequests: 0 },
           },
           transformResult: lastTransformResult,
+          inputVars: currentInputVars,
         };
       }
 
@@ -900,7 +960,12 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(
@@ -944,7 +1009,11 @@ export class CrescendoProvider implements ApiProvider {
       }
     }
 
-    return { response: targetResponse, transformResult: lastTransformResult };
+    return {
+      response: targetResponse,
+      transformResult: lastTransformResult,
+      inputVars: currentInputVars,
+    };
   }
 
   private async getRefusalScore(
@@ -988,6 +1057,7 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
+    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);

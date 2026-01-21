@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mock } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
+import type { Mock } from 'vitest';
 
 describe('PromptfooModelProvider', () => {
   let mockFetch: Mock;
@@ -55,6 +55,7 @@ describe('PromptfooModelProvider', () => {
         total: 10,
         prompt: 5,
         completion: 5,
+        numRequests: 1,
       },
     });
   });

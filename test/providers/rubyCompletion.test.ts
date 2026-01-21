@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
@@ -320,6 +320,7 @@ describe('RubyProvider', () => {
         tokenUsage: {
           cached: 25,
           total: 25,
+          numRequests: 1,
         },
       });
     });
@@ -398,6 +399,7 @@ describe('RubyProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 0,
         total: 0,
+        numRequests: 1,
       });
       expect(result.cached).toBe(true);
     });

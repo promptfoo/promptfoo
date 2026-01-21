@@ -1,100 +1,26 @@
 import { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Card } from '@app/components/ui/card';
+import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
-import LanguageIcon from '@mui/icons-material/Language';
-import TerminalIcon from '@mui/icons-material/Terminal';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import Collapse from '@mui/material/Collapse';
-import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import { createTheme, styled, ThemeProvider } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
+import { CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
-
-const createAppTheme = (darkMode: boolean) =>
-  createTheme({
-    typography: {
-      fontFamily: 'inherit',
-    },
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-      background: {
-        default: darkMode ? '#1a1a1a' : '#ffffff',
-      },
-    },
-    components: {
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            backgroundColor: darkMode ? '#121212' : '#fff',
-            boxShadow: darkMode ? 'none' : '0 2px 3px rgba(0, 0, 0, 0.1)',
-            borderRadius: '12px',
-          },
-        },
-      },
-    },
-  });
-
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(3),
-  borderRadius: (theme.shape.borderRadius as number) * 2,
-  border: `1px solid ${theme.palette.divider}`,
-  backgroundColor: 'transparent',
-}));
-
-const StyledHeading = styled(Typography)(({ theme }) => ({
-  fontWeight: 300,
-  color: theme.palette.text.primary,
-  fontSize: '1.25rem',
-}));
-
-const StyledText = styled(Typography)(({ theme }) => ({
-  color: theme.palette.text.secondary,
-  fontSize: '1rem',
-  lineHeight: 1.5,
-}));
-
-const CodeBlock = styled(Box)(({ theme }) => ({
-  background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-  padding: theme.spacing(2),
-  borderRadius: theme.shape.borderRadius,
-  fontFamily: 'monospace',
-  fontSize: '0.85rem',
-  lineHeight: 1.6,
-  '& div': {
-    marginBottom: theme.spacing(0.5),
-    '&:last-child': {
-      marginBottom: 0,
-    },
-  },
-}));
-
-const ListItem = styled('li')(({ theme }) => ({
-  marginBottom: theme.spacing(2),
-  fontSize: '1rem',
-  lineHeight: 1.5,
-  '&:last-child': {
-    marginBottom: 0,
-  },
-}));
 
 export default function LauncherPage() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [hasBeenConnected, setHasBeenConnected] = useState(false);
   const [isInitialConnection, setIsInitialConnection] = useState(true);
   const navigate = useNavigate();
-  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
-  const isLargeScreen = useMediaQuery('(min-width:1200px)');
   const {
     data: { status: healthStatus },
     refetch: checkHealth,
@@ -111,8 +37,9 @@ export default function LauncherPage() {
 
   useEffect(() => {
     const savedMode = localStorage.getItem('darkMode');
+    const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setDarkMode(savedMode === null ? prefersDarkMode : savedMode === 'true');
-  }, [prefersDarkMode]);
+  }, []);
 
   const toggleDarkMode = () => {
     setDarkMode((prevMode) => {
@@ -175,190 +102,174 @@ export default function LauncherPage() {
     return null;
   }
 
-  const theme = createAppTheme(darkMode);
+  const showConnectionWarning =
+    hasBeenConnected && !isInitialConnection && healthStatus === 'blocked';
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box
-        sx={{
-          height: '100vh',
-          bgcolor: 'background.default',
-          color: 'text.primary',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          py: { xs: 4, sm: 5 },
-          px: { xs: 2, sm: 3 },
-          position: 'relative',
-        }}
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8 text-foreground sm:px-6 sm:py-10">
+      {/* Connection lost warning */}
+      <div
+        className={cn(
+          'fixed left-1/2 top-4 z-50 w-auto max-w-[90vw] -translate-x-1/2 transition-all duration-300',
+          showConnectionWarning
+            ? 'translate-y-0 opacity-100'
+            : '-translate-y-4 opacity-0 pointer-events-none',
+        )}
       >
-        <Collapse
-          in={hasBeenConnected && !isInitialConnection && healthStatus === 'blocked'}
-          sx={{
-            position: 'fixed',
-            top: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            width: 'auto',
-            maxWidth: '90vw',
-          }}
+        <Alert variant="warning">
+          <AlertContent>
+            <AlertDescription>
+              Connection lost. Try visiting{' '}
+              <a
+                href="https://local.promptfoo.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline hover:no-underline"
+              >
+                local.promptfoo.app
+              </a>{' '}
+              instead
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+      </div>
+
+      {/* Dark mode toggle */}
+      <div className="absolute right-4 top-4">
+        <DarkModeToggle onToggleDarkMode={toggleDarkMode} />
+      </div>
+
+      {/* Header section */}
+      <div className="mb-8 flex w-full max-w-[600px] flex-col items-center sm:mb-10">
+        <img src={logoPanda} alt="Promptfoo Logo" className="mb-6 size-16 lg:size-20" />
+        <h1 className="mb-6 text-center text-2xl font-light sm:text-3xl md:text-4xl">
+          Welcome to Promptfoo
+        </h1>
+
+        <div
+          className={cn(
+            'flex items-center gap-2 text-base',
+            isConnecting ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-500',
+          )}
         >
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Connection lost. Try visiting{' '}
-            <Link href="https://local.promptfoo.app" target="_blank" rel="noopener">
-              local.promptfoo.app
-            </Link>{' '}
-            instead
-          </Alert>
-        </Collapse>
+          {isConnecting ? (
+            <>
+              Connecting to Promptfoo on localhost:15500
+              <Spinner size="sm" />
+            </>
+          ) : (
+            <>
+              <CheckCircle className="size-4" />
+              Connected to Promptfoo successfully!
+            </>
+          )}
+        </div>
+      </div>
 
-        <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-          <DarkModeToggle onToggleDarkMode={toggleDarkMode} />
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            mb: { xs: 4, sm: 5 },
-            maxWidth: '600px',
-            width: '100%',
-          }}
-        >
-          <img
-            src={logoPanda}
-            alt="Promptfoo Logo"
-            style={{
-              width: isLargeScreen ? '80px' : '64px',
-              height: isLargeScreen ? '80px' : '64px',
-              marginBottom: theme.spacing(3),
-            }}
-          />
-          <Typography
-            variant="h3"
-            component="h1"
-            sx={{
-              fontWeight: 300,
-              textAlign: 'center',
-              mb: 3,
-              fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' },
-            }}
-          >
-            Welcome to Promptfoo
-          </Typography>
-
-          <StyledText
-            variant="h6"
-            sx={{
-              color: isConnecting ? 'text.secondary' : 'success.main',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-            }}
-          >
-            {isConnecting ? (
-              <>
-                Connecting to Promptfoo on localhost:15500
-                <CircularProgress size={16} color="inherit" />
-              </>
-            ) : (
-              'Connected to Promptfoo successfully!'
-            )}
-          </StyledText>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
-            gap: { xs: 3, sm: 4 },
-            maxWidth: { xs: '600px', lg: '1000px' },
-            width: '100%',
-            mb: { xs: 4, sm: 5 },
-          }}
-        >
-          <StyledPaper elevation={0}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <TerminalIcon color="primary" fontSize="small" />
-              <StyledHeading>Getting Started</StyledHeading>
-            </Box>
-            <StyledText sx={{ mb: 2 }}>
-              This app will proxy requests to <code>localhost:15500</code> by default. You can also
-              visit{' '}
-              <Link href={DEFAULT_LOCAL_API_URL} target="_blank">
-                localhost:15500
-              </Link>{' '}
-              directly.
-            </StyledText>
-            <Box component="ol" sx={{ pl: 2.5 }}>
-              <ListItem>
-                Check our{' '}
-                <Link href="https://promptfoo.dev/docs/installation" target="_blank">
-                  installation guide
-                </Link>
-              </ListItem>
-              <ListItem>
-                <StyledText sx={{ mb: 1.5 }}>Run one of these commands:</StyledText>
-                <CodeBlock>
-                  <div># If you have promptfoo installed globally:</div>
-                  <div>promptfoo view -n</div>
-                  <div>&nbsp;</div>
-                  <div># Or using npx:</div>
-                  <div>npx promptfoo@latest view -n</div>
-                </CodeBlock>
-              </ListItem>
-            </Box>
-          </StyledPaper>
-
-          <StyledPaper elevation={0}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <LanguageIcon color="primary" fontSize="small" />
-              <StyledHeading>Using Safari or Brave?</StyledHeading>
-            </Box>
-            <StyledText sx={{ mb: 2 }}>
-              Safari and Brave block access to localhost by default. You need to install mkcert and
-              generate self-signed certificate:
-            </StyledText>
-            <Box component="ol" sx={{ pl: 2.5 }}>
-              <ListItem>
-                Follow the{' '}
-                <Link href="https://github.com/FiloSottile/mkcert#installation" target="_blank">
-                  mkcert installation steps
-                </Link>
-              </ListItem>
-              <ListItem>
-                Run <code>mkcert -install</code>
-              </ListItem>
-              <ListItem>Restart your browser</ListItem>
-            </Box>
-            <StyledText
-              sx={{
-                mt: 3,
-                pt: 2,
-                borderTop: `1px solid ${theme.palette.divider}`,
-              }}
+      {/* Info cards */}
+      <div className="mb-8 grid w-full max-w-[600px] gap-6 sm:mb-10 lg:max-w-[1000px] lg:grid-cols-2">
+        {/* Getting Started card */}
+        <Card className="border border-border bg-transparent p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <TerminalIcon className="size-5 text-primary" />
+            <h2 className="text-xl font-light">Getting Started</h2>
+          </div>
+          <p className="mb-4 leading-relaxed text-muted-foreground">
+            This app will proxy requests to <code className="text-sm">localhost:15500</code> by
+            default. You can also visit{' '}
+            <a
+              href={DEFAULT_LOCAL_API_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
             >
-              On Brave you can disable Brave Shields.
-            </StyledText>
-          </StyledPaper>
-        </Box>
+              localhost:15500
+            </a>{' '}
+            directly.
+          </p>
+          <ol className="list-decimal space-y-4 pl-5">
+            <li className="leading-relaxed">
+              Check our{' '}
+              <a
+                href="https://promptfoo.dev/docs/installation"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                installation guide
+              </a>
+            </li>
+            <li className="leading-relaxed">
+              <span className="mb-3 block text-muted-foreground">Run one of these commands:</span>
+              <div className="rounded-md bg-muted/50 p-4 font-mono text-sm leading-relaxed dark:bg-muted/20">
+                <div className="mb-1 text-muted-foreground">
+                  # If you have promptfoo installed globally:
+                </div>
+                <div>promptfoo view -n</div>
+                <div className="my-2">&nbsp;</div>
+                <div className="mb-1 text-muted-foreground"># Or using npx:</div>
+                <div>npx promptfoo@latest view -n</div>
+              </div>
+            </li>
+          </ol>
+        </Card>
 
-        <Box sx={{ textAlign: 'center', maxWidth: '600px' }}>
-          <StyledText sx={{ color: 'text.disabled' }}>
-            Still experiencing issues? Feel free to{' '}
-            <Link href="https://github.com/promptfoo/promptfoo/issues" target="_blank">
-              open an issue
-            </Link>{' '}
-            or join our{' '}
-            <Link href="https://discord.gg/promptfoo" target="_blank">
-              Discord
-            </Link>
-          </StyledText>
-        </Box>
-      </Box>
-    </ThemeProvider>
+        {/* Safari/Brave card */}
+        <Card className="border border-border bg-transparent p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <GlobeIcon className="size-5 text-primary" />
+            <h2 className="text-xl font-light">Using Safari or Brave?</h2>
+          </div>
+          <p className="mb-4 leading-relaxed text-muted-foreground">
+            Safari and Brave block access to localhost by default. You need to install mkcert and
+            generate self-signed certificate:
+          </p>
+          <ol className="list-decimal space-y-4 pl-5">
+            <li className="leading-relaxed">
+              Follow the{' '}
+              <a
+                href="https://github.com/FiloSottile/mkcert#installation"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                mkcert installation steps
+              </a>
+            </li>
+            <li className="leading-relaxed">
+              Run <code className="text-sm">mkcert -install</code>
+            </li>
+            <li className="leading-relaxed">Restart your browser</li>
+          </ol>
+          <p className="mt-6 border-t border-border pt-4 text-muted-foreground">
+            On Brave you can disable Brave Shields.
+          </p>
+        </Card>
+      </div>
+
+      {/* Footer */}
+      <div className="max-w-[600px] text-center">
+        <p className="text-muted-foreground/70">
+          Still experiencing issues? Feel free to{' '}
+          <a
+            href="https://github.com/promptfoo/promptfoo/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            open an issue
+          </a>{' '}
+          or join our{' '}
+          <a
+            href="https://discord.gg/promptfoo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            Discord
+          </a>
+        </p>
+      </div>
+    </div>
   );
 }

@@ -1,13 +1,8 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -35,6 +30,8 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -293,14 +290,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
-      logger.debug(
-        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
-      );
-      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
-      return newTestCases;
+      return addSimbaTestCases(testCases, injectVar, config);
     },
   },
   {
@@ -373,12 +366,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
   if (invalidStrategies.length > 0) {
     const validStrategiesString = Strategies.map((s) => s.id).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
-    logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}.
-
-        ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    throw new Error(
+      `Invalid strategy(s): ${invalidStrategiesString}. Valid strategies are: ${validStrategiesString}`,
     );
-    process.exit(1);
   }
 }
 

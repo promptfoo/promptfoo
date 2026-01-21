@@ -1,9 +1,9 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockUpdateApplicationDefinition = vi.fn();
@@ -41,13 +41,11 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('Purpose Component', () => {
-  const theme = createTheme();
-
   const renderComponent = (props: any) => {
     return render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider>
         <Purpose {...props} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
   };
 
@@ -110,7 +108,7 @@ describe('Purpose Component', () => {
 
     renderComponent({ onNext: vi.fn() });
 
-    const modelButton = screen.getByRole('button', { name: /test model/i });
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
     fireEvent.click(modelButton);
 
     const nextButton = screen.getByRole('button', { name: /next/i });
@@ -142,7 +140,7 @@ describe('Purpose Component', () => {
   it("should display the description 'Describe the foundation model so we can generate targeted tests.' when testMode is set to 'model'", () => {
     renderComponent({ onNext: vi.fn() });
 
-    const modelButton = screen.getByRole('button', { name: /test model/i });
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
     fireEvent.click(modelButton);
 
     expect(
@@ -158,7 +156,7 @@ describe('Purpose Component', () => {
     );
     const initialText = initialDescription.textContent;
 
-    const modelButton = screen.getByRole('button', { name: /test model/i });
+    const modelButton = screen.getByRole('button', { name: /testing a model/i });
     fireEvent.click(modelButton);
 
     const updatedDescription = screen.getByText(
@@ -276,9 +274,9 @@ describe('Purpose Component', () => {
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       rerender(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider>
           <Purpose onNext={vi.fn()} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       await waitFor(() => {

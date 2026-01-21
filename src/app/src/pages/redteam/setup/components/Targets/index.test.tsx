@@ -1,10 +1,10 @@
 import React from 'react';
 
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import Targets from './index';
@@ -43,9 +43,8 @@ vi.mock('../PageWrapper', () => ({
   ),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
 };
 
 describe('CustomTargetConfiguration - Config Field Handling', () => {
@@ -68,7 +67,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   });
 
   it('should call updateCustomTarget with "config" field when JSON is edited', () => {
-    renderWithTheme(
+    renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -76,11 +75,17 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByLabelText('Configuration (JSON)');
+    // The Editor component renders a textarea for input
+    // Find the JSON editor container and get the textarea inside it
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
     const newConfig = { temperature: 0.7, max_tokens: 100 };
     const newConfigJson = JSON.stringify(newConfig, null, 2);
 
-    fireEvent.change(configTextarea, {
+    fireEvent.change(configTextarea!, {
       target: { value: newConfigJson },
     });
 
@@ -92,7 +97,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   });
 
   it('should handle invalid JSON without calling updateCustomTarget', () => {
-    renderWithTheme(
+    renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -100,10 +105,15 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByLabelText('Configuration (JSON)');
+    // Find the JSON editor textarea
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
     const invalidJson = '{ invalid json }';
 
-    fireEvent.change(configTextarea, {
+    fireEvent.change(configTextarea!, {
       target: { value: invalidJson },
     });
 
@@ -115,7 +125,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   });
 
   it('should show error state when bodyError is provided', () => {
-    renderWithTheme(
+    renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -124,13 +134,18 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByLabelText('Configuration (JSON)');
-    expect(configTextarea).toHaveAttribute('aria-invalid', 'true');
+    // Error message should be displayed in an Alert
     expect(screen.getByText('Invalid JSON format')).toBeInTheDocument();
+
+    // The editor container should have destructive border styling
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorSection = configLabel.closest('.space-y-2');
+    const editorContainer = editorSection?.querySelector('.border-destructive');
+    expect(editorContainer).toBeTruthy();
   });
 
   it('should update target ID when changed', () => {
-    renderWithTheme(
+    renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -242,7 +257,7 @@ describe('Targets Component', () => {
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Initially Next button should be disabled (tests not completed)
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -301,7 +316,7 @@ describe('Targets Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Test buttons should be disabled when URL is empty
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
@@ -327,7 +342,7 @@ describe('Targets Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // The next button should be disabled and should show warning message in the UI
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -370,7 +385,7 @@ Content-Type: application/json
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Test the target configuration
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
@@ -399,15 +414,10 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
-        .closest('div[class*="MuiPaper-root"]');
+      // Provider list is always expanded - select WebSocket
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       fireEvent.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
@@ -441,7 +451,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
       expect(nextButton).toBeDisabled();
@@ -481,7 +491,7 @@ Content-Type: application/json
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
       fireEvent.click(testTargetButton);
@@ -520,15 +530,10 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const websocketProviderCard = screen
-        .getByText('WebSocket Endpoint')
-        .closest('div[class*="MuiPaper-root"]');
+      // Provider list is always expanded - select WebSocket
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       fireEvent.click(websocketProviderCard!);
 
       await waitFor(() => {
@@ -537,7 +542,7 @@ Content-Type: application/json
           expect.objectContaining({
             id: 'websocket',
             config: expect.objectContaining({
-              url: 'wss://example.com/ws',
+              url: 'wss://example.com/ws', // Default WebSocket config has placeholder URL
             }),
           }),
         );
@@ -559,7 +564,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // For WebSocket, Next button should be enabled with valid URL
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -567,13 +572,8 @@ Content-Type: application/json
         expect(nextButton).not.toBeDisabled();
       });
 
-      // Switch to HTTP provider
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
-      const httpProviderCard = screen
-        .getByText('HTTP/HTTPS Endpoint')
-        .closest('div[class*="MuiPaper-root"]');
+      // Provider list is always expanded - switch to HTTP provider
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
       fireEvent.click(httpProviderCard!);
 
       // For HTTP, Next button should be disabled until tests pass
@@ -603,7 +603,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+      renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Click Back button
       const backButton = screen.getAllByRole('button', { name: /Back/i })[0];
