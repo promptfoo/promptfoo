@@ -1080,7 +1080,7 @@ async function generatePressTemplate() {
 // Generate Satori JSX template for Store page OG image
 async function generateStoreTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const tshirtImage = await getImageAsBase64('/img/store-tshirt.webp', 350, 450);
+  const tshirtImage = await getImageAsBase64('/img/store-tshirt.webp', 320, 400);
 
   return {
     type: 'div',
