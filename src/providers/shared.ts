@@ -105,6 +105,22 @@ function looksLikeJson(prompt: string): boolean {
 }
 
 /**
+ * Checks if parsed JSON/YAML looks like a valid chat messages array.
+ * A valid messages array is a non-empty array where every element is an object.
+ * We don't require 'role' since different providers use different formats:
+ * - OpenAI/Azure/Mistral: [{ role: 'user', content: '...' }]
+ * - Google AI Studio: [{ content: '...' }]
+ * - Gemini: [{ parts: [...] }]
+ */
+function isValidMessagesArray(parsed: unknown): boolean {
+  return (
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed.every((msg) => msg && typeof msg === 'object' && !Array.isArray(msg))
+  );
+}
+
+/**
  * Parses a chat prompt string into a structured format.
  *
  * @template T The expected return type of the parsed prompt.
@@ -117,15 +133,25 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   const trimmedPrompt = prompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      // Try YAML - some legacy OpenAI prompts are YAML :(
-      return yaml.load(prompt) as T;
+      // Try YAML - validate same as JSON for consistency
+      const parsed = yaml.load(prompt);
+      if (isValidMessagesArray(parsed)) {
+        return parsed as T;
+      }
+      // Valid YAML but not a valid messages array - fall back to default
+      return defaultValue;
     } catch (err) {
       throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
     }
   } else {
     try {
       // Try JSON
-      return JSON.parse(prompt) as T;
+      const parsed = JSON.parse(prompt);
+      if (isValidMessagesArray(parsed)) {
+        return parsed as T;
+      }
+      // Valid JSON but not a messages array - fall back to default
+      return defaultValue;
     } catch (err) {
       if (getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') || looksLikeJson(trimmedPrompt)) {
         throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);

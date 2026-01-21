@@ -107,6 +107,57 @@ describe('Shared Provider Functions', () => {
       const result = parseChatPrompt(plainTextPrompt, defaultValue);
       expect(result).toEqual(defaultValue);
     });
+
+    it('should return default value for JSON object (not array)', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      const result = parseChatPrompt('{"a": "test"}', defaultValue);
+      expect(result).toEqual(defaultValue);
+    });
+
+    it('should return default value for nested JSON object with prompt placeholder', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      // This is the actual bug case - nested JSON that's valid but not a messages array
+      const result = parseChatPrompt('{"a": "{{prompt}}"}', defaultValue);
+      expect(result).toEqual(defaultValue);
+    });
+
+    it('should parse JSON array without role property (Google AI Studio format)', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      // Google AI Studio uses [{ content: '...' }] format without role
+      const result = parseChatPrompt('[{"content": "no role"}]', defaultValue);
+      expect(result).toEqual([{ content: 'no role' }]);
+    });
+
+    it('should return default value for empty JSON array', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      const result = parseChatPrompt('[]', defaultValue);
+      expect(result).toEqual(defaultValue);
+    });
+
+    it('should parse JSON array with null role (valid object structure)', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      // Null role is still a valid object - let provider API validate
+      const result = parseChatPrompt('[{"role": null, "content": "test"}]', defaultValue);
+      expect(result).toEqual([{ role: null, content: 'test' }]);
+    });
+
+    it('should return default value for YAML that is not a messages array', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      const yamlPrompt = `- role: user
+  notcontent: Hello`;
+      // This YAML has 'role' but is still valid - should parse
+      const result = parseChatPrompt(yamlPrompt, defaultValue);
+      expect(result).toEqual([{ role: 'user', notcontent: 'Hello' }]);
+    });
+
+    it('should parse YAML array with null role (valid object structure)', () => {
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      const yamlPrompt = `- role:
+  content: Hello`;
+      // Null role is still a valid object - let provider API validate
+      const result = parseChatPrompt(yamlPrompt, defaultValue);
+      expect(result).toEqual([{ role: null, content: 'Hello' }]);
+    });
   });
 
   describe('toTitleCase', () => {

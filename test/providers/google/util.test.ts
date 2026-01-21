@@ -1884,11 +1884,12 @@ describe('util', () => {
     });
 
     describe('edge cases for contents array handling', () => {
-      it('should handle empty contents array', () => {
+      it('should handle empty contents array by wrapping as text', () => {
         const prompt = JSON.stringify([]);
         const { contents } = geminiFormatAndSystemInstructions(prompt);
         expect(Array.isArray(contents)).toBe(true);
-        expect(contents).toEqual([]);
+        // Empty array is not a valid messages array, so it gets wrapped as text
+        expect(contents).toEqual([{ role: 'user', parts: [{ text: '[]' }] }]);
       });
 
       it('should handle malformed prompt that results in empty array gracefully', () => {
@@ -1910,7 +1911,8 @@ describe('util', () => {
         };
         const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
         expect(Array.isArray(contents)).toBe(true);
-        expect(contents).toEqual([]);
+        // Empty array is not a valid messages array, so it gets wrapped as text
+        expect(contents).toEqual([{ role: 'user', parts: [{ text: '[]' }] }]);
       });
     });
   });
