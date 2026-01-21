@@ -1,0 +1,306 @@
+import * as fs from 'fs';
+
+import chalk from 'chalk';
+import { InvalidArgumentError } from 'commander';
+import yaml from 'js-yaml';
+import { disableCache } from '../../cache';
+import { generateTestSuite } from '../../generation/index';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import { resolveConfigs } from '../../util/config/load';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
+import type { Command } from 'commander';
+
+interface TestsGenerateOptions {
+  // Common options
+  cache: boolean;
+  config?: string;
+  envFile?: string;
+  instructions?: string;
+  output?: string;
+  provider?: string;
+  write: boolean;
+  defaultConfig: Partial<UnifiedConfig>;
+  defaultConfigPath: string | undefined;
+
+  // Dataset options
+  numPersonas: string;
+  numTestCasesPerPersona: string;
+  edgeCases?: boolean;
+  diversity?: boolean;
+  diversityTarget?: string;
+  iterative?: boolean;
+
+  // Assertion options
+  numAssertions?: string;
+  type: 'pi' | 'g-eval' | 'llm-rubric';
+  coverage?: boolean;
+  validate?: boolean;
+  negativeTests?: boolean;
+
+  // Combined control options
+  datasetOnly?: boolean;
+  assertionsOnly?: boolean;
+  parallel?: boolean;
+}
+
+export async function doGenerateTests(options: TestsGenerateOptions): Promise<void> {
+  setupEnv(options.envFile);
+  if (!options.cache) {
+    logger.info('Cache is disabled.');
+    disableCache();
+  }
+
+  let testSuite: TestSuite;
+  const configPath = options.config || options.defaultConfigPath;
+  if (configPath) {
+    const resolved = await resolveConfigs(
+      {
+        config: [configPath],
+      },
+      options.defaultConfig,
+      'DatasetGeneration',
+    );
+    testSuite = resolved.testSuite;
+  } else {
+    throw new Error('Could not find config file. Please use `--config`');
+  }
+
+  const startTime = Date.now();
+  telemetry.record('command_used', {
+    name: 'generate_tests - started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+  });
+
+  // Build dataset options
+  const datasetOptions = options.datasetOnly || !options.assertionsOnly
+    ? {
+        instructions: options.instructions,
+        numPersonas: Number.parseInt(options.numPersonas, 10),
+        numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+        provider: options.provider,
+        edgeCases: options.edgeCases ? { enabled: true } : undefined,
+        diversity: options.diversity
+          ? {
+              enabled: true,
+              targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
+            }
+          : undefined,
+        iterative: options.iterative ? { enabled: true, maxRounds: 2 } : undefined,
+      }
+    : undefined;
+
+  // Build assertion options
+  const assertionOptions = options.assertionsOnly || !options.datasetOnly
+    ? {
+        instructions: options.instructions,
+        numQuestions: Number.parseInt(options.numAssertions || '5', 10),
+        provider: options.provider,
+        type: options.type,
+        coverage: options.coverage ? { enabled: true, extractRequirements: true } : undefined,
+        validation: options.validate
+          ? { enabled: true, autoGenerateSamples: true, sampleOutputs: [] }
+          : undefined,
+        negativeTests: options.negativeTests
+          ? {
+              enabled: true,
+              types: [
+                'should-not-contain' as const,
+                'should-not-hallucinate' as const,
+                'should-not-expose' as const,
+                'should-not-repeat' as const,
+                'should-not-exceed-length' as const,
+              ],
+            }
+          : undefined,
+      }
+    : undefined;
+
+  const result = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
+    dataset: datasetOptions as any,
+    assertions: assertionOptions as any,
+    parallel: options.parallel ?? false,
+    skipDataset: options.assertionsOnly ?? false,
+    skipAssertions: options.datasetOnly ?? false,
+  });
+
+  // Prepare output
+  const configAddition: Partial<UnifiedConfig> = {};
+  let testCasesCount = 0;
+  let assertionsCount = 0;
+
+  if (result.dataset) {
+    configAddition.tests = result.dataset.testCases.map((tc) => ({ vars: tc }));
+    testCasesCount = result.dataset.testCases.length;
+    logger.info(`Generated ${testCasesCount} test cases`);
+
+    if (result.dataset.edgeCases && result.dataset.edgeCases.length > 0) {
+      logger.info(`  - Including ${result.dataset.edgeCases.length} edge cases`);
+    }
+    if (result.dataset.diversity) {
+      logger.info(`  - Diversity score: ${(result.dataset.diversity.score * 100).toFixed(1)}%`);
+    }
+  }
+
+  if (result.assertions) {
+    // Add negative tests to assertions if present
+    const allAssertions = result.assertions.negativeTests
+      ? [...result.assertions.assertions, ...result.assertions.negativeTests]
+      : result.assertions.assertions;
+
+    configAddition.defaultTest = {
+      assert: allAssertions,
+    };
+    assertionsCount = allAssertions.length;
+    logger.info(`Generated ${assertionsCount} assertions`);
+
+    if (result.assertions.coverage) {
+      logger.info(`  - Coverage score: ${(result.assertions.coverage.overallScore * 100).toFixed(1)}%`);
+      if (result.assertions.coverage.gaps.length > 0) {
+        logger.info(`  - Uncovered requirements: ${result.assertions.coverage.gaps.slice(0, 3).join(', ')}${result.assertions.coverage.gaps.length > 3 ? '...' : ''}`);
+      }
+    }
+    if (result.assertions.negativeTests && result.assertions.negativeTests.length > 0) {
+      logger.info(`  - Including ${result.assertions.negativeTests.length} negative tests`);
+    }
+  }
+
+  const yamlString = yaml.dump(configAddition);
+
+  if (options.output) {
+    if (options.output.endsWith('.yaml') || options.output.endsWith('.yml')) {
+      fs.writeFileSync(options.output, yamlString);
+    } else {
+      throw new Error(`Unsupported output file type: ${options.output}. Use .yaml or .yml`);
+    }
+    printBorder();
+    logger.info(`Wrote test suite to ${options.output}`);
+    logger.info(`  - ${testCasesCount} test cases`);
+    logger.info(`  - ${assertionsCount} assertions`);
+    printBorder();
+  } else {
+    printBorder();
+    logger.info('Generated Test Suite');
+    printBorder();
+    logger.info(yamlString);
+  }
+
+  printBorder();
+  if (options.write && configPath) {
+    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+
+    // Add test cases
+    if (configAddition.tests && Array.isArray(configAddition.tests)) {
+      const existingTests = existingConfig.tests;
+      let testsArray: any[] = [];
+      if (Array.isArray(existingTests)) {
+        testsArray = existingTests as any[];
+      } else if (typeof existingTests === 'string') {
+        // If it's a path string, keep it as a single element
+        testsArray = [existingTests];
+      } else if (existingTests && typeof existingTests === 'object') {
+        testsArray = [existingTests];
+      }
+      existingConfig.tests = [...testsArray, ...(configAddition.tests as any[])] as any;
+    }
+
+    // Add assertions
+    if (configAddition.defaultTest && (configAddition.defaultTest as any).assert) {
+      const existingDefaultTest =
+        typeof existingConfig.defaultTest === 'object' && existingConfig.defaultTest !== null
+          ? existingConfig.defaultTest
+          : {};
+      const existingAssert = Array.isArray((existingDefaultTest as any)?.assert)
+        ? (existingDefaultTest as any).assert
+        : [];
+      existingConfig.defaultTest = {
+        ...existingDefaultTest,
+        assert: [...existingAssert, ...((configAddition.defaultTest as any).assert as any[])],
+      } as any;
+    }
+
+    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    logger.info(`Wrote test suite to ${configPath}`);
+    logger.info(`  - ${testCasesCount} test cases`);
+    logger.info(`  - ${assertionsCount} assertions`);
+    const runCommand = promptfooCommand('eval');
+    logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
+  } else {
+    logger.info(
+      `Copy the above or run ${chalk.greenBright(
+        'promptfoo generate tests --write',
+      )} to write directly to the config`,
+    );
+  }
+
+  telemetry.record('command_used', {
+    duration: Math.round((Date.now() - startTime) / 1000),
+    name: 'generate_tests',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: testCasesCount,
+    numAssertionsGenerated: assertionsCount,
+    provider: options.provider || 'default',
+    parallel: options.parallel || false,
+    datasetOnly: options.datasetOnly || false,
+    assertionsOnly: options.assertionsOnly || false,
+  });
+}
+
+function validateAssertionType(value: string, _previous: string) {
+  const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
+  if (!allowedStrings.includes(value)) {
+    throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);
+  }
+  return value;
+}
+
+export function generateTestsCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
+  program
+    .command('tests')
+    .description('Generate complete test suite (datasets + assertions)')
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option('-o, --output [path]', 'Path to output file (YAML)')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('--provider <provider>', 'Provider for generation. Defaults to the default grading provider.')
+    .option(
+      '-i, --instructions [instructions]',
+      'Additional instructions for generation',
+    )
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+
+    // Dataset options
+    .option('--numPersonas <number>', 'Number of personas to generate', '5')
+    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .option('--edge-cases', 'Include edge case generation')
+    .option('--diversity', 'Enable diversity optimization')
+    .option('--diversity-target <number>', 'Target diversity score (0-1)', '0.7')
+    .option('--iterative', 'Use iterative generation to fill coverage gaps')
+
+    // Assertion options
+    .option('--numAssertions <amount>', 'Number of assertions to generate', '5')
+    .option(
+      '-t, --type [type]',
+      'Assertion type (pi, g-eval, llm-rubric)',
+      validateAssertionType,
+      'pi',
+    )
+    .option('--coverage', 'Enable coverage analysis')
+    .option('--validate', 'Validate assertions against sample outputs')
+    .option('--negative-tests', 'Generate negative test assertions')
+
+    // Combined-specific options
+    .option('--dataset-only', 'Generate only datasets (skip assertions)')
+    .option('--assertions-only', 'Generate only assertions (skip datasets)')
+    .option('--parallel', 'Run dataset and assertion generation in parallel')
+
+    .action((opts) => doGenerateTests({ ...opts, defaultConfig, defaultConfigPath }));
+}

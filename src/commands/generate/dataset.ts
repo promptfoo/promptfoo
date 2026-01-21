@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { serializeObjectArrayAsCSV } from '../../csv';
+import { generateDataset } from '../../generation/dataset';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
@@ -25,6 +26,12 @@ interface DatasetGenerateOptions {
   write: boolean;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
+  // New options
+  edgeCases?: boolean;
+  diversity?: boolean;
+  diversityTarget?: string;
+  iterative?: boolean;
+  enhanced?: boolean;
 }
 
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
@@ -56,12 +63,51 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsExisting: (testSuite.tests || []).length,
   });
 
-  const results = await synthesizeFromTestSuite(testSuite, {
-    instructions: options.instructions,
-    numPersonas: Number.parseInt(options.numPersonas, 10),
-    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-    provider: options.provider,
-  });
+  // Determine whether to use the enhanced generation system
+  const useEnhanced =
+    options.enhanced || options.edgeCases || options.diversity || options.iterative;
+
+  let results: Record<string, string>[];
+  let diversityScore: number | undefined;
+
+  if (useEnhanced) {
+    logger.info('Using enhanced dataset generation...');
+
+    const genResult = await generateDataset(testSuite.prompts, testSuite.tests || [], {
+      instructions: options.instructions,
+      numPersonas: Number.parseInt(options.numPersonas, 10),
+      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+      provider: options.provider,
+      edgeCases: options.edgeCases ? ({ enabled: true } as any) : undefined,
+      diversity: options.diversity
+        ? ({
+            enabled: true,
+            targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
+          } as any)
+        : undefined,
+      iterative: options.iterative ? ({ enabled: true, maxRounds: 2 } as any) : undefined,
+    });
+
+    results = genResult.testCases;
+    diversityScore = genResult.diversity?.score;
+
+    // Log enhanced generation details
+    if (genResult.edgeCases && genResult.edgeCases.length > 0) {
+      logger.info(`Generated ${genResult.edgeCases.length} edge cases`);
+    }
+    if (genResult.diversity) {
+      logger.info(`Diversity score: ${(genResult.diversity.score * 100).toFixed(1)}%`);
+    }
+  } else {
+    // Use the original synthesis for backward compatibility
+    results = await synthesizeFromTestSuite(testSuite, {
+      instructions: options.instructions,
+      numPersonas: Number.parseInt(options.numPersonas, 10),
+      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+      provider: options.provider,
+    });
+  }
+
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
@@ -114,6 +160,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: results.length,
     provider: options.provider || 'default',
+    enhanced: useEnhanced || false,
+    ...(diversityScore !== undefined && { diversityScore }),
   });
 }
 
@@ -140,5 +188,11 @@ export function generateDatasetCommand(
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
+    // Enhanced generation options
+    .option('--enhanced', 'Use enhanced generation with concepts, personas, and diversity')
+    .option('--edge-cases', 'Include edge case generation (boundary, format, empty, special chars)')
+    .option('--diversity', 'Enable diversity measurement and optimization')
+    .option('--diversity-target <number>', 'Target diversity score (0-1)', '0.7')
+    .option('--iterative', 'Use iterative generation to fill coverage gaps')
     .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
 }
