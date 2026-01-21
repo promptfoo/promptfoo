@@ -91,56 +91,56 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
     : Severity.Low;
 }
 
+// Maximum length for policy text preview in display
+const POLICY_PREVIEW_MAX_LENGTH = 20;
+
 /**
- * Generates a unique key and display string for a plugin instance.
- * The key is used for internal tracking (must be unique), while display is human-readable.
+ * Truncates and normalizes text for display preview.
+ */
+function truncateForPreview(text: string): string {
+  const normalized = text.trim().replace(/\n+/g, ' ');
+  return normalized.length > POLICY_PREVIEW_MAX_LENGTH
+    ? normalized.slice(0, POLICY_PREVIEW_MAX_LENGTH) + '...'
+    : normalized;
+}
+
+/**
+ * Generates a unique display ID for a plugin instance.
+ * The returned string serves as both the unique key and the human-readable display.
  *
- * For policy plugins:
- * - Cloud policy with name: key=uuid, display="Policy Name"
- * - Cloud policy without name: key=uuid, display="policy [12-char-id]: preview..."
- * - Inline policy: key=hash, display="policy [hash]: preview..."
+ * For policy plugins, the ID includes a 12-char identifier (hash or UUID prefix) for uniqueness:
+ * - Named cloud policy: "Policy Name"
+ * - Unnamed cloud policy: "policy [12-char-id]: preview..."
+ * - Inline policy: "policy [hash]: preview..."
  *
  * @param plugin - The plugin configuration.
- * @returns An object with `key` (unique identifier) and `display` (human-readable string).
+ * @returns A unique display ID string.
  */
-function getPluginKeyAndDisplay(plugin: { id: string; config?: Record<string, any> }): {
-  key: string;
-  display: string;
-} {
-  if (plugin.id === 'policy') {
-    const policyConfig = plugin.config?.policy;
-
-    // For PolicyObject (cloud policies), use the existing ID as key
-    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
-      const policyId = policyConfig.id;
-      // If policy has a name, display just the name
-      if (policyConfig.name) {
-        return { key: policyId, display: policyConfig.name };
-      }
-      // Otherwise display policy [12-char-id]: preview...
-      const shortId = policyId.replace(/-/g, '').slice(0, 12);
-      const policyText = policyConfig.text
-        ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
-        : '';
-      const preview = policyText.length > 20 ? policyText.slice(0, 20) + '...' : policyText;
-      return {
-        key: policyId,
-        display: preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`,
-      };
-    }
-
-    // For inline string policies, use hash as key (hash is already 12 chars)
-    if (typeof policyConfig === 'string') {
-      const policyText = policyConfig.trim().replace(/\n+/g, ' ');
-      const hash = makeInlinePolicyIdSync(policyText);
-      const preview = policyText.length > 20 ? policyText.slice(0, 20) + '...' : policyText;
-      return { key: hash, display: `policy [${hash}]: ${preview}` };
-    }
-
-    // Fallback for edge cases
-    return { key: 'policy', display: 'policy' };
+function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
+  if (plugin.id !== 'policy') {
+    return plugin.id;
   }
-  return { key: plugin.id, display: plugin.id };
+
+  const policyConfig = plugin.config?.policy;
+
+  // Cloud policy (object with id)
+  if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
+    if (policyConfig.name) {
+      return policyConfig.name;
+    }
+    const shortId = policyConfig.id.replace(/-/g, '').slice(0, 12);
+    const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
+    return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
+  }
+
+  // Inline policy (string)
+  if (typeof policyConfig === 'string') {
+    const hash = makeInlinePolicyIdSync(policyConfig);
+    const preview = truncateForPreview(policyConfig);
+    return `policy [${hash}]: ${preview}`;
+  }
+
+  return 'policy';
 }
 
 /**
@@ -164,12 +164,12 @@ function getStatus(requested: number, generated: number): string {
 
 /**
  * Generates a report of plugin and strategy results.
- * @param pluginResults - Results from plugin executions.
+ * @param pluginResults - Results from plugin executions (key is the display ID).
  * @param strategyResults - Results from strategy executions.
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number; display: string }>,
+  pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
@@ -183,11 +183,11 @@ function generateReport(
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([_key, { requested, generated, display }]) => {
+    .forEach(([displayId, { requested, generated }]) => {
       table.push([
         rowIndex++,
         'Plugin',
-        display,
+        displayId,
         requested,
         generated,
         getStatus(requested, generated),
@@ -1057,8 +1057,7 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number; display: string }> =
-    {};
+  const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1195,30 +1194,25 @@ export async function synthesize({
       // Otherwise, use the aggregated result for the plugin
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Get the unique key and display string for this plugin
-      const { key: baseKey, display: baseDisplay } = getPluginKeyAndDisplay(plugin);
+      // Get the display ID for this plugin (also serves as the unique key)
+      const baseDisplayId = getPluginDisplayId(plugin);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
           // Use format like "(Hmong) Policy Name" so language is visible in truncated table
-          const uniqueKey = langKey === 'en' ? baseKey : `${langKey}:${baseKey}`;
-          const displayStr = langKey === 'en' ? baseDisplay : `(${langKey}) ${baseDisplay}`;
+          const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[uniqueKey] = {
-            requested,
-            generated: result.generated,
-            display: displayStr,
-          };
+          pluginResults[displayId] = { requested, generated: result.generated };
         }
       } else {
         // Single language or no language - use aggregated result
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
-        pluginResults[baseKey] = { requested, generated, display: baseDisplay };
+        pluginResults[baseDisplayId] = { requested, generated };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1261,21 +1255,20 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const { key, display } = getPluginKeyAndDisplay(plugin);
-        pluginResults[key] = {
+        const displayId = getPluginDisplayId(plugin);
+        pluginResults[displayId] = {
           requested: plugin.numTests,
           generated: customTests.length,
-          display,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        const { key, display } = getPluginKeyAndDisplay(plugin);
-        pluginResults[key] = { requested: plugin.numTests, generated: 0, display };
+        const displayId = getPluginDisplayId(plugin);
+        pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      const { key, display } = getPluginKeyAndDisplay(plugin);
-      pluginResults[key] = { requested: plugin.numTests, generated: 0, display };
+      const displayId = getPluginDisplayId(plugin);
+      pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
   });
