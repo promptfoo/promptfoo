@@ -1280,8 +1280,6 @@ async function generateStoreTemplate() {
                             height: 400,
                             style: {
                               objectFit: 'contain',
-                              borderRadius: 16,
-                              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
                             },
                           },
                         }
