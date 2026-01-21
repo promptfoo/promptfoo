@@ -354,6 +354,7 @@ describe('ProviderTypeSelector', () => {
           body: JSON.stringify({
             message: '{{prompt}}',
           }),
+          stateful: true,
         },
       },
       'http',
