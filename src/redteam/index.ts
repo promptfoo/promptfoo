@@ -1169,10 +1169,9 @@ export async function synthesize({
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
-        // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "(Hmong) policy #1: ..." so language is visible in truncated table
-          const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
+          // Use format like "policy #1: ... (Hmong)" - language suffix at end like strategies
+          const displayId = langKey === 'en' ? baseId : `${baseId} (${langKey})`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
           pluginResults[displayId] = { requested, generated: result.generated };

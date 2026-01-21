@@ -2941,11 +2941,11 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy should have separate rows for each language (language prefix first, with index)
-      expect(cleanReport).toContain('(Hmong) policy #1: "Policy 1"');
-      expect(cleanReport).toContain('(Zulu) policy #1: "Policy 1"');
-      expect(cleanReport).toContain('(Hmong) policy #2: "Policy 2"');
-      expect(cleanReport).toContain('(Zulu) policy #2: "Policy 2"');
+      // Each policy should have separate rows for each language (language suffix at end, like strategies)
+      expect(cleanReport).toContain('policy #1: "Policy 1" (Hmong)');
+      expect(cleanReport).toContain('policy #1: "Policy 1" (Zulu)');
+      expect(cleanReport).toContain('policy #2: "Policy 2" (Hmong)');
+      expect(cleanReport).toContain('policy #2: "Policy 2" (Zulu)');
       // Each should show 1 requested, 1 generated
       const oneMatches = cleanReport.match(/\b1\b/g);
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
