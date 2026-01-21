@@ -18,8 +18,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { HUMAN_ASSERTION_TYPE } from '@promptfoo/constants';
-import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,

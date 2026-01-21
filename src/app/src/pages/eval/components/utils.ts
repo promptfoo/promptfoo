@@ -1,4 +1,4 @@
-import { HUMAN_ASSERTION_TYPE } from '@promptfoo/constants';
+import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import type { EvaluateTableOutput } from '@promptfoo/types';
 
 /**

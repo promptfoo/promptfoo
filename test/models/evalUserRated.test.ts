@@ -11,7 +11,11 @@ import type { EvaluateResult, GradingResult } from '../../src/types/index';
 /**
  * Helper to create a GradingResult with a human rating assertion.
  */
-function createHumanRatedGradingResult(pass: boolean, score: number, reason: string): GradingResult {
+function createHumanRatedGradingResult(
+  pass: boolean,
+  score: number,
+  reason: string,
+): GradingResult {
   return {
     pass,
     score,

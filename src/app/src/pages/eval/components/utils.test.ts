@@ -1,4 +1,4 @@
-import { HUMAN_ASSERTION_TYPE } from '@promptfoo/constants';
+import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import { describe, expect, it } from 'vitest';
 import { getHumanRating, hasHumanRating } from './utils';
 import type { EvaluateTableOutput } from '@promptfoo/types';

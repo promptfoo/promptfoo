@@ -36,12 +36,9 @@ export const TERMINAL_MAX_WIDTH =
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
-/**
- * Identifier for manual user ratings in componentResults.
- * Used to distinguish human ratings from automated assertions.
- */
-export const HUMAN_ASSERTION_TYPE = 'human' as const;
-export type HumanAssertionType = typeof HUMAN_ASSERTION_TYPE;
+// Re-export HUMAN_ASSERTION_TYPE from providers/constants for backward compatibility
+// (providers/constants is browser-safe, constants.ts is not due to envars import)
+export { HUMAN_ASSERTION_TYPE, type HumanAssertionType } from './providers/constants';
 
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
