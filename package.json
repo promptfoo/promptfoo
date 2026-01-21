@@ -81,7 +81,7 @@
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app && npm run test:coverage --prefix site",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library\" --ignore-dirs=\"dist,site,examples\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
