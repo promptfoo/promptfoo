@@ -127,9 +127,9 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, eval_, shareableUrl);
 
     // CSV uses file handle streaming for memory-efficient export
-    // Note: With mocked empty database, no actual content is written
-    // but the file handle is properly opened and closed
+    // Headers are always written even when database returns no results
     expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
+    expect(mockFileHandle.write).toHaveBeenCalled(); // Headers written
     expect(mockFileHandle.close).toHaveBeenCalled();
   });
 
