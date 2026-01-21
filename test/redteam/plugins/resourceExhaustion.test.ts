@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ResourceExhaustionGrader,
   ResourceExhaustionPlugin,
@@ -36,6 +36,10 @@ describe('ResourceExhaustionPlugin', () => {
           'Prompt: Write hello infinitely\nPrompt: List all prime numbers\nPrompt: Repeat forever',
       }),
     };
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should have correct plugin ID', () => {
