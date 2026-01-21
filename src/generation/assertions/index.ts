@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { getDefaultProviders } from '../../providers/defaults';
@@ -8,8 +7,9 @@ import { sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { ProgressReporter } from '../shared/progressReporter';
-import { analyzeCoverage, extractRequirements } from './coverageAnalyzer';
+import { getNumAssertions } from '../types';
 import { generateSampleOutputs, validateAssertions } from './assertionValidator';
+import { analyzeCoverage, extractRequirements } from './coverageAnalyzer';
 import { generateNegativeTests } from './negativeTestGenerator';
 
 import type { ApiProvider, Assertion, AssertionSet, Prompt, TestCase } from '../../types';
@@ -29,6 +29,11 @@ function filterToAssertions(items: (Assertion | AssertionSet)[]): Assertion[] {
   return items.filter((item): item is Assertion => item.type !== 'assert-set');
 }
 
+export {
+  filterAssertionsByValidation,
+  generateSampleOutputs,
+  validateAssertions,
+} from './assertionValidator';
 // Re-export sub-modules
 export {
   analyzeCoverage,
@@ -36,19 +41,14 @@ export {
   suggestAssertions,
 } from './coverageAnalyzer';
 export {
-  filterAssertionsByValidation,
-  generateSampleOutputs,
-  validateAssertions,
-} from './assertionValidator';
-export {
   createLengthLimitAssertion,
   createNotContainsAssertion,
   createPiiCheckAssertion,
   generateNegativeTests,
 } from './negativeTestGenerator';
 
-const DEFAULT_OPTIONS: AssertionGenerationOptions = {
-  numQuestions: 5,
+// Default options - numQuestions/numAssertions are handled by getNumAssertions()
+const DEFAULT_OPTIONS: Partial<AssertionGenerationOptions> = {
   type: 'pi',
   assertionTypes: ['pi'],
 };
@@ -368,7 +368,8 @@ export async function generateAssertions(
   const totalSteps = calculateTotalSteps(mergedOptions);
   await progress.start(totalSteps, 'Initializing');
 
-  logger.debug(`Starting assertion generation with ${mergedOptions.numQuestions} questions`);
+  const numQuestions = getNumAssertions(mergedOptions);
+  logger.debug(`Starting assertion generation with ${numQuestions} questions`);
 
   // Load provider
   const provider = await loadProvider(mergedOptions.provider);
@@ -395,25 +396,23 @@ export async function generateAssertions(
   const questionsPrompt = generateQuestionsPrompt(
     promptStrings,
     filterToAssertions(existingAssertions),
-    mergedOptions.numQuestions || 5,
+    numQuestions,
     mergedOptions.instructions,
   );
 
   const questionsResponse = await provider.callApi(questionsPrompt);
   invariant(typeof questionsResponse.output !== 'undefined', 'Provider response must have output');
 
-  const questionsOutput = typeof questionsResponse.output === 'string'
-    ? questionsResponse.output
-    : JSON.stringify(questionsResponse.output);
+  const questionsOutput =
+    typeof questionsResponse.output === 'string'
+      ? questionsResponse.output
+      : JSON.stringify(questionsResponse.output);
 
   const questionObjects = extractJsonObjects(questionsOutput);
-  invariant(
-    questionObjects.length >= 1,
-    'Expected at least one JSON object in questions response',
-  );
+  invariant(questionObjects.length >= 1, 'Expected at least one JSON object in questions response');
 
   const questionsWrapper = questionObjects[0] as { questions: GeneratedQuestion[] };
-  const questions = sampleArray(questionsWrapper.questions, mergedOptions.numQuestions || 5);
+  const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
   logger.debug(`Generated ${questions.length} evaluation questions`);
   progress.increment();
@@ -511,11 +510,10 @@ export async function generateAssertions(
 
   // Update coverage with new assertions
   if (coverage && mergedOptions.coverage?.enabled) {
-    coverage = await analyzeCoverage(coverage.requirements.map((r) => r.requirement), [
-      ...filterToAssertions(existingAssertions),
-      ...assertions,
-      ...(negativeTests || []),
-    ]);
+    coverage = await analyzeCoverage(
+      coverage.requirements.map((r) => r.requirement),
+      [...filterToAssertions(existingAssertions), ...assertions, ...(negativeTests || [])],
+    );
   }
 
   progress.stop();
@@ -540,7 +538,7 @@ export async function generateAssertions(
 /**
  * Calculates total progress steps based on options.
  */
-function calculateTotalSteps(options: AssertionGenerationOptions): number {
+function calculateTotalSteps(options: Partial<AssertionGenerationOptions>): number {
   let steps = 0;
 
   // Coverage analysis
@@ -552,7 +550,7 @@ function calculateTotalSteps(options: AssertionGenerationOptions): number {
   steps += 1;
 
   // Python conversion (one per question)
-  steps += options.numQuestions || 5;
+  steps += getNumAssertions(options);
 
   // Validation
   if (options.validation?.enabled) {

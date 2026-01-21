@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import useApiConfig from '@app/stores/apiConfig';
 import type { Assertion } from '@promptfoo/types';
 
 import type { GenerationResult } from '../api/generation';
@@ -111,11 +112,19 @@ export function useGenerationStream(
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
 
-  // Get the API base URL
+  // Get the API base URL using the same config as callApi
   const getStreamUrl = useCallback((id: string) => {
-    // In development, the API is on a different port
-    const baseUrl = import.meta.env.MODE === 'development' ? 'http://localhost:15500/api' : '/api';
-    return `${baseUrl}/generation/stream/${id}`;
+    // Use the configured API base URL from the store, same as callApi
+    // This respects VITE_PUBLIC_BASENAME and custom apiBaseUrl settings
+    const { apiBaseUrl } = useApiConfig.getState();
+    let baseUrl: string;
+    if (apiBaseUrl) {
+      baseUrl = apiBaseUrl.replace(/\/$/, '');
+    } else {
+      // Fall back to base path from build-time config
+      baseUrl = import.meta.env.VITE_PUBLIC_BASENAME || '';
+    }
+    return `${baseUrl}/api/generation/stream/${id}`;
   }, []);
 
   const disconnect = useCallback(() => {

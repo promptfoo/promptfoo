@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { getDefaultProviders } from '../../providers/defaults';
@@ -48,9 +47,7 @@ function generateTestCasesPrompt(
   concepts?: ConceptAnalysis,
   instructions?: string,
 ): string {
-  const promptsString = prompts
-    .map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`)
-    .join('\n');
+  const promptsString = prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n');
 
   const personaString = typeof persona === 'string' ? persona : personaToString(persona);
 
@@ -221,12 +218,7 @@ export async function generateDataset(
   if (mergedOptions.edgeCases?.enabled) {
     progress.setPhase('Generating edge cases');
     logger.debug('Generating edge cases');
-    edgeCases = await generateEdgeCases(
-      promptStrings,
-      provider,
-      mergedOptions.edgeCases,
-      concepts,
-    );
+    edgeCases = await generateEdgeCases(promptStrings, provider, mergedOptions.edgeCases, concepts);
     progress.increment();
     logger.debug(`Generated ${edgeCases.length} edge cases`);
   }
@@ -324,13 +316,22 @@ async function generateTestCasesFromPersonas(
 ): Promise<VarMapping[]> {
   const numTestCasesPerPersona = options.numTestCasesPerPersona || 3;
   const totalTestCases = personas.length * numTestCasesPerPersona;
-  const batchSize = 20;
+
+  // Track batch index separately to ensure persona diversity
+  // We cycle through personas with each batch, regardless of test case count
+  let batchIndex = 0;
 
   const generateBatch = async (currentTestCases: VarMapping[]): Promise<VarMapping[]> => {
     const remainingCount = totalTestCases - currentTestCases.length;
-    const currentBatchSize = Math.min(remainingCount, batchSize);
-    const personaIndex = currentTestCases.length % personas.length;
+    // Generate test cases for one persona at a time (up to numTestCasesPerPersona)
+    // This ensures we cycle through all personas before repeating
+    const currentBatchSize = Math.min(remainingCount, numTestCasesPerPersona);
+
+    // Use batch index for persona selection, not test case count
+    // This ensures we rotate through all personas evenly
+    const personaIndex = batchIndex % personas.length;
     const persona = personas[personaIndex];
+    batchIndex++;
 
     logger.debug(
       `Generating ${currentBatchSize} test cases for persona ${personaIndex + 1} of ${personas.length}`,
@@ -349,13 +350,11 @@ async function generateTestCasesFromPersonas(
     const response = await provider.callApi(testCasesPrompt);
     invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-    const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+    const output =
+      typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
     const jsonObjects = extractJsonObjects(output);
 
-    invariant(
-      jsonObjects.length >= 1,
-      `Expected at least one JSON object in test case response`,
-    );
+    invariant(jsonObjects.length >= 1, `Expected at least one JSON object in test case response`);
 
     const parsed = jsonObjects[0] as { vars: VarMapping[] };
     const newCases = parsed.vars || [];
@@ -418,7 +417,8 @@ async function generateTestCasesToFillGaps(
   const response = await provider.callApi(gapPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   const jsonObjects = extractJsonObjects(output);
 
   if (jsonObjects.length === 0) {

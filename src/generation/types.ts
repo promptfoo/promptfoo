@@ -28,12 +28,14 @@ export const ConceptAnalysisSchema = z.object({
       source: z.enum(['explicit', 'implied']).optional(),
     }),
   ),
-  variableRelationships: z.array(
-    z.object({
-      variables: z.array(z.string()),
-      relationship: z.string(),
-    }),
-  ).optional(),
+  variableRelationships: z
+    .array(
+      z.object({
+        variables: z.array(z.string()),
+        relationship: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export type ConceptAnalysis = z.infer<typeof ConceptAnalysisSchema>;
@@ -124,13 +126,20 @@ export const DiversityMetricsSchema = z.object({
   maxDistance: z.number(),
   clusterCount: z.number().int().optional(),
   coverageGaps: z.array(z.string()).optional(),
-  distribution: z.object({
-    byTopic: z.record(z.string(), z.number()).optional(),
-    byVariable: z.record(z.string(), z.object({
-      uniqueValues: z.number(),
-      coverage: z.number(),
-    })).optional(),
-  }).optional(),
+  distribution: z
+    .object({
+      byTopic: z.record(z.string(), z.number()).optional(),
+      byVariable: z
+        .record(
+          z.string(),
+          z.object({
+            uniqueValues: z.number(),
+            coverage: z.number(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 export type DiversityMetrics = z.infer<typeof DiversityMetricsSchema>;
@@ -170,17 +179,21 @@ export const DatasetGenerationOptionsSchema = z.object({
   provider: z.string().optional(),
 
   // New concept options
-  concepts: z.object({
-    maxTopics: z.number().int().positive().default(5),
-    maxEntities: z.number().int().positive().default(10),
-    extractRelationships: z.boolean().default(true),
-  }).optional(),
+  concepts: z
+    .object({
+      maxTopics: z.number().int().positive().default(5),
+      maxEntities: z.number().int().positive().default(10),
+      extractRelationships: z.boolean().default(true),
+    })
+    .optional(),
 
   // New persona options
-  personas: z.object({
-    type: z.enum(['demographic', 'behavioral', 'role-based', 'mixed']).default('mixed'),
-    grounded: z.boolean().default(true),
-  }).optional(),
+  personas: z
+    .object({
+      type: z.enum(['demographic', 'behavioral', 'role-based', 'mixed']).default('mixed'),
+      grounded: z.boolean().default(true),
+    })
+    .optional(),
 
   // Edge case options
   edgeCases: EdgeCaseOptionsSchema.optional(),
@@ -189,17 +202,21 @@ export const DatasetGenerationOptionsSchema = z.object({
   diversity: DiversityOptionsSchema.optional(),
 
   // Iterative refinement options
-  iterative: z.object({
-    enabled: z.boolean().default(false),
-    maxRounds: z.number().int().positive().default(2),
-    targetDiversity: z.number().min(0).max(1).default(0.7),
-  }).optional(),
+  iterative: z
+    .object({
+      enabled: z.boolean().default(false),
+      maxRounds: z.number().int().positive().default(2),
+      targetDiversity: z.number().min(0).max(1).default(0.7),
+    })
+    .optional(),
 
   // Validation options
-  validation: z.object({
-    schemas: z.record(z.string(), z.any()).optional(),
-    constraints: z.record(z.string(), VariableConstraintsSchema).optional(),
-  }).optional(),
+  validation: z
+    .object({
+      schemas: z.record(z.string(), z.any()).optional(),
+      constraints: z.record(z.string(), VariableConstraintsSchema).optional(),
+    })
+    .optional(),
 });
 
 export type DatasetGenerationOptions = z.infer<typeof DatasetGenerationOptionsSchema>;
@@ -277,42 +294,63 @@ export type NegativeTestType = z.infer<typeof NegativeTestTypeSchema>;
 export const AssertionGenerationOptionsSchema = z.object({
   // Backward compatible options
   instructions: z.string().optional(),
-  numQuestions: z.number().int().positive().default(5),
+  // Accept both numQuestions (legacy) and numAssertions (preferred)
+  // Consumers should use getNumAssertions() helper to get the effective value
+  numQuestions: z.number().int().positive().optional(),
+  numAssertions: z.number().int().positive().optional(),
   provider: z.string().optional(),
   type: z.enum(['pi', 'g-eval', 'llm-rubric']).default('pi'),
 
   // Coverage options
-  coverage: z.object({
-    enabled: z.boolean().default(true),
-    extractRequirements: z.boolean().default(true),
-    minCoverageScore: z.number().min(0).max(1).default(0.8),
-  }).optional(),
+  coverage: z
+    .object({
+      enabled: z.boolean().default(true),
+      extractRequirements: z.boolean().default(true),
+      minCoverageScore: z.number().min(0).max(1).default(0.8),
+    })
+    .optional(),
 
   // Validation options
-  validation: z.object({
-    enabled: z.boolean().default(false),
-    sampleOutputs: z.array(z.object({
-      output: z.string(),
-      expectedPass: z.boolean(),
-    })).optional(),
-    autoGenerateSamples: z.boolean().default(false),
-    sampleCount: z.number().int().positive().default(5),
-  }).optional(),
+  validation: z
+    .object({
+      enabled: z.boolean().default(false),
+      sampleOutputs: z
+        .array(
+          z.object({
+            output: z.string(),
+            expectedPass: z.boolean(),
+          }),
+        )
+        .optional(),
+      autoGenerateSamples: z.boolean().default(false),
+      sampleCount: z.number().int().positive().default(5),
+    })
+    .optional(),
 
   // Negative tests options
-  negativeTests: z.object({
-    enabled: z.boolean().default(false),
-    types: z.array(NegativeTestTypeSchema).default(['should-not-contain']),
-    count: z.number().int().nonnegative().default(3),
-  }).optional(),
+  negativeTests: z
+    .object({
+      enabled: z.boolean().default(false),
+      types: z.array(NegativeTestTypeSchema).default(['should-not-contain']),
+      count: z.number().int().nonnegative().default(3),
+    })
+    .optional(),
 
   // Output assertion types
-  assertionTypes: z.array(
-    z.enum(['pi', 'g-eval', 'llm-rubric', 'python', 'similar', 'json-schema']),
-  ).default(['pi']),
+  assertionTypes: z
+    .array(z.enum(['pi', 'g-eval', 'llm-rubric', 'python', 'similar', 'json-schema']))
+    .default(['pi']),
 });
 
 export type AssertionGenerationOptions = z.infer<typeof AssertionGenerationOptionsSchema>;
+
+/**
+ * Get the effective number of assertions from options.
+ * Supports both numAssertions (preferred) and numQuestions (legacy) with fallback to 5.
+ */
+export function getNumAssertions(options: Partial<AssertionGenerationOptions>): number {
+  return options.numAssertions ?? options.numQuestions ?? 5;
+}
 
 export interface AssertionGenerationResult {
   assertions: Assertion[];
@@ -392,7 +430,11 @@ export type SampleOutput = z.infer<typeof SampleOutputSchema>;
 export const TestSuiteGenerationOptionsSchema = z.object({
   dataset: DatasetGenerationOptionsSchema.partial().optional(),
   assertions: AssertionGenerationOptionsSchema.partial().optional(),
-  parallel: z.boolean().optional().default(false).describe('Run dataset and assertion generation in parallel'),
+  parallel: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Run dataset and assertion generation in parallel'),
   skipDataset: z.boolean().optional().default(false),
   skipAssertions: z.boolean().optional().default(false),
 });

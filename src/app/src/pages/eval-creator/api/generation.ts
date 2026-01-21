@@ -54,6 +54,7 @@ const DiversityMetricsSchema = z.object({
   gaps: z.array(z.string()).optional(),
 });
 
+// Frontend coverage shape (what UI expects)
 const CoverageAnalysisSchema = z.object({
   requirements: z.array(
     z.object({
@@ -66,6 +67,97 @@ const CoverageAnalysisSchema = z.object({
   overallScore: z.number(),
   gaps: z.array(z.string()),
 });
+
+/**
+ * Normalize coverage data from backend shape to frontend shape.
+ * Backend: { requirement: { id, description, ... }, coveredBy: [...], coverageLevel }
+ * Frontend: { id, description, coverageLevel, matchingAssertions }
+ */
+function normalizeCoverage(coverage: unknown):
+  | {
+      requirements: Array<{
+        id: string;
+        description: string;
+        coverageLevel: 'none' | 'partial' | 'full';
+        matchingAssertions: string[];
+      }>;
+      overallScore: number;
+      gaps: string[];
+    }
+  | undefined {
+  if (!coverage || typeof coverage !== 'object') {
+    return undefined;
+  }
+
+  const cov = coverage as Record<string, unknown>;
+  if (!Array.isArray(cov.requirements)) {
+    return undefined;
+  }
+
+  const normalizedRequirements = cov.requirements.map((req: unknown) => {
+    if (!req || typeof req !== 'object') {
+      return { id: '', description: '', coverageLevel: 'none' as const, matchingAssertions: [] };
+    }
+
+    const r = req as Record<string, unknown>;
+
+    // Check if it's already in frontend shape
+    if ('id' in r && 'description' in r && 'matchingAssertions' in r) {
+      return {
+        id: String(r.id || ''),
+        description: String(r.description || ''),
+        coverageLevel: (r.coverageLevel as 'none' | 'partial' | 'full') || 'none',
+        matchingAssertions: Array.isArray(r.matchingAssertions) ? r.matchingAssertions : [],
+      };
+    }
+
+    // Convert from backend shape: { requirement: {...}, coveredBy: [...], coverageLevel }
+    const requirement = r.requirement as Record<string, unknown> | undefined;
+    return {
+      id: String(requirement?.id || requirement?.description?.toString().slice(0, 20) || ''),
+      description: String(requirement?.description || ''),
+      coverageLevel: (r.coverageLevel as 'none' | 'partial' | 'full') || 'none',
+      matchingAssertions: Array.isArray(r.coveredBy) ? r.coveredBy : [],
+    };
+  });
+
+  return {
+    requirements: normalizedRequirements,
+    overallScore: typeof cov.overallScore === 'number' ? cov.overallScore : 0,
+    gaps: Array.isArray(cov.gaps) ? cov.gaps : [],
+  };
+}
+
+/**
+ * Normalize job result to ensure coverage data is in frontend shape.
+ */
+function normalizeJobResult(job: unknown): unknown {
+  if (!job || typeof job !== 'object') {
+    return job;
+  }
+
+  const j = job as Record<string, unknown>;
+  if (!j.result || typeof j.result !== 'object') {
+    return job;
+  }
+
+  const result = j.result as Record<string, unknown>;
+
+  // Normalize assertions result coverage
+  if (result.coverage) {
+    result.coverage = normalizeCoverage(result.coverage);
+  }
+
+  // Normalize combined result assertions coverage
+  if (result.assertions && typeof result.assertions === 'object') {
+    const assertions = result.assertions as Record<string, unknown>;
+    if (assertions.coverage) {
+      assertions.coverage = normalizeCoverage(assertions.coverage);
+    }
+  }
+
+  return job;
+}
 
 // Types for generation options
 export interface DatasetGenerationOptions {
@@ -293,8 +385,11 @@ export async function getJobStatus(
     throw new Error(response.error || 'Failed to get job status');
   }
 
+  // Normalize the job result to ensure coverage data is in frontend shape
+  const normalizedJob = normalizeJobResult(response.job);
+
   // Cast result to GenerationJob type - the schema validates the structure
-  return response.job as GenerationJob;
+  return normalizedJob as GenerationJob;
 }
 
 // Synchronous analysis endpoints (for quick insights)
@@ -423,5 +518,11 @@ export async function analyzeCoverageSync(
     throw new Error(response.error || 'Failed to analyze coverage');
   }
 
-  return response.coverage;
+  // Normalize coverage data to frontend shape
+  const normalized = normalizeCoverage(response.coverage);
+  if (!normalized) {
+    throw new Error('Invalid coverage data returned from server');
+  }
+
+  return normalized;
 }
