@@ -1708,12 +1708,29 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // User interruption or max duration timeout
-        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        // Distinguish between max-duration timeout and user SIGINT
         if (evalTimedOut) {
+          // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
+          // User SIGINT: early exit, skip comparisons/afterAll/telemetry
+          // Results already persisted by addResult() calls during evaluation
+          // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          if (progressBarManager) {
+            progressBarManager.stop();
+          }
+          if (ciProgressReporter) {
+            ciProgressReporter.finish();
+          }
+          // Persist vars and prompts so UI/export shows correct headers
+          this.evalRecord.setVars(Array.from(vars));
+          await this.evalRecord.addPrompts(prompts);
+          updateSignalFile(this.evalRecord.id);
+          return this.evalRecord;
         }
       } else {
         if (ciProgressReporter) {
