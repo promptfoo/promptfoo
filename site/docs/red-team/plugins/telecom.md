@@ -387,17 +387,17 @@ These plugins are particularly valuable for:
 
 The telecommunications plugins map to key regulatory requirements:
 
-| Regulation | Plugins |
-|------------|---------|
-| FCC CPNI (47 U.S.C. 222) | `telecom:cpni-disclosure`, `telecom:location-disclosure` |
-| TCPA | `telecom:tcpa-violation` |
-| FCC Section 258 | `telecom:unauthorized-changes` |
-| E911/Kari's Law/RAY BAUM's Act | `telecom:e911-misinformation` |
-| CALEA | `telecom:law-enforcement-request-handling` |
-| Section 255/CVAA | `telecom:accessibility-violation` |
-| FCC LNP Rules | `telecom:porting-misinformation` |
-| FCC Truth-in-Billing | `telecom:billing-misinformation` |
-| FTC Act | `telecom:coverage-misinformation` |
+| Regulation                     | Plugins                                                  |
+| ------------------------------ | -------------------------------------------------------- |
+| FCC CPNI (47 U.S.C. 222)       | `telecom:cpni-disclosure`, `telecom:location-disclosure` |
+| TCPA                           | `telecom:tcpa-violation`                                 |
+| FCC Section 258                | `telecom:unauthorized-changes`                           |
+| E911/Kari's Law/RAY BAUM's Act | `telecom:e911-misinformation`                            |
+| CALEA                          | `telecom:law-enforcement-request-handling`               |
+| Section 255/CVAA               | `telecom:accessibility-violation`                        |
+| FCC LNP Rules                  | `telecom:porting-misinformation`                         |
+| FCC Truth-in-Billing           | `telecom:billing-misinformation`                         |
+| FTC Act                        | `telecom:coverage-misinformation`                        |
 
 ## Getting Help
 
