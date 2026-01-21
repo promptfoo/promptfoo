@@ -1,14 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb } from '../../src/database/index';
-import { evalResultsTable } from '../../src/database/tables';
-import { runDbMigrations } from '../../src/migrate';
-import Eval from '../../src/models/eval';
-import { ResultFailureReason } from '../../src/types/index';
 import {
   deleteErrorResults,
   getErrorResultIds,
   shouldShareResults,
 } from '../../src/commands/retry';
+import { getDb } from '../../src/database/index';
+import { evalResultsTable } from '../../src/database/tables';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import { ResultFailureReason } from '../../src/types/index';
 
 describe('retry command', () => {
   beforeAll(async () => {
