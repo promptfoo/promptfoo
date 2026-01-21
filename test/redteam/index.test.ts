@@ -3116,9 +3116,14 @@ describe('Language configuration', () => {
     it('should work correctly with both built-in plugins and policy plugins', async () => {
       // Mock different plugins
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
-      vi.spyOn(Plugins, 'find').mockImplementation((id: string) => {
-        if (id === 'policy' || id === 'hallucination' || id === 'contracts') {
-          return { action: mockPluginAction, key: id };
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          { key: 'policy', action: mockPluginAction },
+          { key: 'hallucination', action: mockPluginAction },
+          { key: 'contracts', action: mockPluginAction },
+        ];
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
         }
         return undefined;
       });
