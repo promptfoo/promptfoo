@@ -164,6 +164,7 @@ export default defineConfig({
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
+      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
       all: true,
     },
 
