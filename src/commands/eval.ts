@@ -205,7 +205,7 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
 
-      // Get all ERROR result IDs
+      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
       const errorResultIds = await getErrorResultIds(latestEval.id);
       if (errorResultIds.length === 0) {
         logger.info('✅ No ERROR results found in the latest evaluation');
@@ -214,11 +214,11 @@ export async function doEval(
 
       logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
-      // Delete the ERROR results so they will be re-evaluated when we run with resume
-      await deleteErrorResults(errorResultIds);
-
-      // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
-      await recalculatePromptMetrics(latestEval);
+      // NOTE: We do NOT delete ERROR results here anymore!
+      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
+      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
+      // Store errorResultIds for post-evaluation cleanup
+      (cliState as any)._retryErrorResultIds = errorResultIds;
 
       logger.info(
         `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
@@ -248,7 +248,9 @@ export async function doEval(
       }
 
       // Mark resume mode in CLI state so evaluator can skip completed work
+      // Enable retry mode so getCompletedIndexPairs excludes ERROR results
       cliState.resume = true;
+      cliState.retryMode = true;
     } else {
       ({
         config,
@@ -516,6 +518,29 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
       isRedteam: Boolean(config.redteam),
     });
+
+    // Post-evaluation cleanup for retry-errors mode
+    // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+    if (retryErrors && (cliState as any)._retryErrorResultIds) {
+      const errorResultIds = (cliState as any)._retryErrorResultIds as string[];
+      try {
+        await deleteErrorResults(errorResultIds);
+        await recalculatePromptMetrics(ret);
+        logger.debug(
+          `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+        );
+      } catch (cleanupError) {
+        // Cleanup failure is non-fatal - retry itself succeeded
+        logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+          error: cleanupError,
+        });
+      } finally {
+        // Clear the stored error result IDs
+        delete (cliState as any)._retryErrorResultIds;
+        // Clear retry mode flags
+        cliState.retryMode = false;
+      }
+    }
 
     // Cleanup signal handler
     /*

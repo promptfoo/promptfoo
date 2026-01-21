@@ -1281,7 +1281,10 @@ class Evaluator {
     if (cliState.resume && this.evalRecord.persisted) {
       try {
         const { default: EvalResult } = await import('./models/evalResult');
-        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        // In retry mode, exclude ERROR results from completed pairs so they can be retried
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id, {
+          excludeErrors: cliState.retryMode,
+        });
         const originalCount = runEvalOptions.length;
         // Filter out steps that already exist in DB
         for (let i = runEvalOptions.length - 1; i >= 0; i--) {
