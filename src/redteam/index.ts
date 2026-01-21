@@ -93,9 +93,9 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 
 /**
  * Generates a unique base display ID for a plugin instance.
- * For policy plugins, always includes a hash for uniqueness (names are not guaranteed unique):
- * - Named policy: "Policy Name (a1b2c3d4e5f6)"
- * - Unnamed policy: "policy (a1b2c3d4e5f6): "truncated text...""
+ * For policy plugins, always includes an ID for uniqueness (names are not guaranteed unique):
+ * - Named policy (cloud): "Policy Name (id)" where id is the existing policy ID
+ * - Unnamed policy (inline): "policy (hash): "truncated text..."" where hash is generated from text
  * @param plugin - The plugin configuration.
  * @returns A unique base display ID for the plugin.
  */
@@ -103,26 +103,33 @@ function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, an
   if (plugin.id === 'policy') {
     const policyConfig = plugin.config?.policy;
 
-    // Extract policy text for hash calculation
-    const policyText =
-      typeof policyConfig === 'string'
-        ? policyConfig.trim().replace(/\n+/g, ' ')
-        : typeof policyConfig === 'object' && policyConfig?.text
-          ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
-          : '';
-
-    // Always include hash for uniqueness (policy names are not guaranteed unique)
-    const hash = makeInlinePolicyIdSync(policyText);
-
-    // If policy has a name, show: "Policy Name (hash)"
-    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.name) {
-      return `${policyConfig.name} (${hash})`;
+    // For PolicyObject (cloud policies), use the existing ID
+    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
+      const policyId = policyConfig.id;
+      // If policy has a name, show: "Policy Name (id)"
+      if (policyConfig.name) {
+        return `${policyConfig.name} (${policyId})`;
+      }
+      // Otherwise show: "policy (id): "truncated text...""
+      const policyText = policyConfig.text
+        ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
+        : '';
+      const truncated =
+        policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
+      return `policy (${policyId}): "${truncated}"`;
     }
 
-    // Otherwise show: "policy (hash): "truncated text...""
-    const truncated =
-      policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-    return `policy (${hash}): "${truncated}"`;
+    // For inline string policies, generate hash from the text
+    if (typeof policyConfig === 'string') {
+      const policyText = policyConfig.trim().replace(/\n+/g, ' ');
+      const hash = makeInlinePolicyIdSync(policyText);
+      const truncated =
+        policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
+      return `policy (${hash}): "${truncated}"`;
+    }
+
+    // Fallback for edge cases
+    return 'policy';
   }
   return plugin.id;
 }
