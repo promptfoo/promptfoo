@@ -1233,9 +1233,9 @@ describe('synthesize', () => {
 
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
-      // Should have both policies with unique IDs
-      expect(cleanReport).toContain('policy #1');
-      expect(cleanReport).toContain('policy #2');
+      // Should have both policies with unique hash-based IDs (12-char hex hash)
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Failing/);
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Succeeding/);
       // Should show both Failed and Success statuses
       expect(cleanReport).toContain('Failed');
       expect(cleanReport).toContain('Success');
@@ -3017,10 +3017,10 @@ describe('Language configuration', () => {
       // Strip ANSI codes for easier assertion
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy plugin should have its own row with unique display ID including index
-      expect(cleanReport).toContain('policy #1: "Policy 1"');
-      expect(cleanReport).toContain('policy #2: "Policy 2"');
-      expect(cleanReport).toContain('policy #3: "Policy 3"');
+      // Each policy plugin should have its own row with unique hash-based ID (12-char hex hash)
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Policy 1/);
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Policy 2/);
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Policy 3/);
       // Each should show 2 requested, 2 generated
       const twoMatches = cleanReport.match(/\b2\b/g);
       expect(twoMatches?.length).toBeGreaterThanOrEqual(6); // At least 6 occurrences of "2"
@@ -3055,14 +3055,55 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy should have separate rows for each language (language prefix first for visibility)
-      expect(cleanReport).toContain('(Hmong) policy #1: "Policy 1"');
-      expect(cleanReport).toContain('(Zulu) policy #1: "Policy 1"');
-      expect(cleanReport).toContain('(Hmong) policy #2: "Policy 2"');
-      expect(cleanReport).toContain('(Zulu) policy #2: "Policy 2"');
+      // Each policy should have separate rows for each language with hash-based IDs (12-char hex hash)
+      // Note: Policy text may be truncated in table display, so we just verify the hash format
+      const hmongMatches = cleanReport.match(/\(Hmong\) policy \([a-f0-9]{12}\)/g);
+      const zuluMatches = cleanReport.match(/\(Zulu\) policy \([a-f0-9]{12}\)/g);
+      expect(hmongMatches?.length).toBe(2); // 2 policies in Hmong
+      expect(zuluMatches?.length).toBe(2); // 2 policies in Zulu
       // Each should show 1 requested, 1 generated
       const oneMatches = cleanReport.match(/\b1\b/g);
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
+    });
+
+    it('should use policy name when available instead of hash + truncated text', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          // Policy with a name - should display the name
+          {
+            id: 'policy',
+            numTests: 2,
+            config: { policy: { id: 'abc123def456', text: 'Some policy text', name: 'Secret Protection Policy' } },
+          },
+          // Policy without a name - should display hash + truncated text
+          { id: 'policy', numTests: 2, config: { policy: 'Another policy without a name' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Named policy should show the name directly
+      expect(cleanReport).toContain('Secret Protection Policy');
+      // Unnamed policy should show hash + truncated text (text may be truncated in table)
+      expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Another/);
     });
   });
 });

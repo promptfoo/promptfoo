@@ -41,6 +41,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
+import { makeInlinePolicyIdSync } from './plugins/policy/utils';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
@@ -92,24 +93,33 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 
 /**
  * Generates a unique base display ID for a plugin instance.
- * For policy plugins, includes an index number and truncated policy text to differentiate multiple instances.
+ * For policy plugins:
+ * - If policy has a name, use it directly (e.g., "Secret Protection Policy")
+ * - Otherwise, show hash + truncated text (e.g., "policy (a1b2c3): "Don't reveal..."")
  * @param plugin - The plugin configuration.
- * @param index - Optional index number for plugins with the same base ID (e.g., multiple policy plugins).
  * @returns A unique base display ID for the plugin.
  */
-function getPluginBaseDisplayId(
-  plugin: { id: string; config?: Record<string, any> },
-  index?: number,
-): string {
+function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
   if (plugin.id === 'policy') {
+    const policyConfig = plugin.config?.policy;
+
+    // Check if policy is an object with a name
+    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.name) {
+      return policyConfig.name;
+    }
+
+    // Fall back to hash + truncated text for unnamed policies
     const policyText =
-      typeof plugin.config?.policy === 'string'
-        ? plugin.config.policy.trim().replace(/\n+/g, ' ')
-        : '';
+      typeof policyConfig === 'string'
+        ? policyConfig.trim().replace(/\n+/g, ' ')
+        : typeof policyConfig === 'object' && policyConfig?.text
+          ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
+          : '';
     const truncated =
       policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-    // Include index to ensure uniqueness even if policy text snippets are identical
-    return index !== undefined ? `policy #${index}: "${truncated}"` : `policy: "${truncated}"`;
+    // Include hash for uniqueness when policies have similar beginnings
+    const hash = makeInlinePolicyIdSync(policyText);
+    return `policy (${hash}): "${truncated}"`;
   }
   return plugin.id;
 }
@@ -1023,15 +1033,6 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  // Pre-compute indices for each plugin to ensure unique display IDs (e.g., multiple policy plugins)
-  // This avoids race conditions when plugins are processed concurrently
-  const pluginIndices = new Map<object, number>();
-  const pluginIdCounts = new Map<string, number>();
-  for (const plugin of plugins) {
-    const currentCount = (pluginIdCounts.get(plugin.id) || 0) + 1;
-    pluginIdCounts.set(plugin.id, currentCount);
-    pluginIndices.set(plugin, currentCount);
-  }
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
@@ -1165,22 +1166,16 @@ export async function synthesize({
 
       // If multiple defined languages were used, create separate report entries for each language
       // Otherwise, use the aggregated result for the plugin
-      // NOTE: Use index to ensure unique display IDs (e.g., multiple policy plugins)
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Use pre-computed index to ensure unique display IDs (avoids race condition)
-      const currentIndex = pluginIndices.get(plugin) || 1;
-      // Only pass index for plugins that can have duplicates (like policy)
-      const baseId = getPluginBaseDisplayId(
-        plugin,
-        plugin.id === 'policy' ? currentIndex : undefined,
-      );
+      // Get the base display ID (for policy plugins, this includes truncated policy text)
+      const baseId = getPluginBaseDisplayId(plugin);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "(Hmong) policy #1: ..." so language is visible in truncated table
+          // Use format like "(Hmong) policy: ..." so language is visible in truncated table
           const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
