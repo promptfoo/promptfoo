@@ -9,9 +9,8 @@ import { useMemo } from 'react';
 
 import { Progress } from '@app/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Info } from 'lucide-react';
-
 import { cn } from '@app/lib/utils';
+import { Info } from 'lucide-react';
 
 import type { DiversityMetrics } from '../../api/generation';
 

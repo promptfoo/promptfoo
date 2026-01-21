@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jobManager from '../../../src/generation/shared/jobManager';
 import {
   createCallbackProgressReporter,
   createCliProgressReporter,
   createNoOpProgressReporter,
   ProgressReporter,
 } from '../../../src/generation/shared/progressReporter';
-import * as jobManager from '../../../src/generation/shared/jobManager';
 
 vi.mock('../../../src/generation/shared/jobManager', () => ({
   updateJobProgress: vi.fn(),

@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 
 import logger from '../../logger';
+
+import type { Assertion, VarMapping } from '../../types';
 import type {
   AssertionGenerationResult,
   DatasetGenerationResult,
@@ -9,7 +11,6 @@ import type {
   GenerationJobType,
   TestSuiteGenerationResult,
 } from '../types';
-import type { Assertion, VarMapping } from '../../types';
 
 /**
  * In-memory storage for generation jobs.

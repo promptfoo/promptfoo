@@ -109,9 +109,7 @@ describe('generation types', () => {
           { description: 'Must be under 100 words', type: 'length', source: 'explicit' },
           { description: 'No technical jargon', type: 'style' },
         ],
-        variableRelationships: [
-          { variables: ['input', 'output'], relationship: 'generates' },
-        ],
+        variableRelationships: [{ variables: ['input', 'output'], relationship: 'generates' }],
       };
 
       const result = ConceptAnalysisSchema.safeParse(analysis);
@@ -151,7 +149,7 @@ describe('generation types', () => {
         clusterCount: 3,
         coverageGaps: ['More technical queries needed'],
         distribution: {
-          byTopic: { 'AI': 10, 'ML': 5 },
+          byTopic: { AI: 10, ML: 5 },
           byVariable: {
             query: { uniqueValues: 15, coverage: 0.8 },
           },

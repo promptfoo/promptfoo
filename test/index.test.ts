@@ -75,6 +75,7 @@ describe('index.ts exports', () => {
     'cache',
     'evaluate',
     'generateTable',
+    'generation',
     'guardrails',
     'isApiProvider',
     'isGradingResult',

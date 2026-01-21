@@ -40,9 +40,7 @@ describe('conceptExtractor', () => {
           ],
           entities: [{ name: 'User', type: 'person', frequency: 'high' }],
           constraints: [{ description: 'Must be polite', source: 'explicit' }],
-          variableRelationships: [
-            { variables: ['name', 'email'], relationship: 'User identity' },
-          ],
+          variableRelationships: [{ variables: ['name', 'email'], relationship: 'User identity' }],
         }),
       };
       mockCallApi.mockResolvedValue(mockResponse);

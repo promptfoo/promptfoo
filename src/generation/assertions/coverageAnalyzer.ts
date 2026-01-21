@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
@@ -89,13 +88,11 @@ export async function extractRequirements(
   const response = await provider.callApi(extractionPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   const jsonObjects = extractJsonObjects(output);
 
-  invariant(
-    jsonObjects.length >= 1,
-    `Expected at least one JSON object in requirements response`,
-  );
+  invariant(jsonObjects.length >= 1, `Expected at least one JSON object in requirements response`);
 
   const rawResult = jsonObjects[0] as { requirements: unknown[] };
   invariant(Array.isArray(rawResult.requirements), 'Expected requirements array');
@@ -195,7 +192,9 @@ export async function analyzeCoverage(
   requirements: Requirement[],
   assertions: Assertion[],
 ): Promise<CoverageAnalysis> {
-  logger.debug(`Analyzing coverage of ${requirements.length} requirements with ${assertions.length} assertions`);
+  logger.debug(
+    `Analyzing coverage of ${requirements.length} requirements with ${assertions.length} assertions`,
+  );
 
   const coverages: RequirementCoverage[] = [];
   const uncoveredRequirements: string[] = [];
@@ -234,9 +233,7 @@ export async function analyzeCoverage(
   const fullyCovered = coverages.filter((c) => c.coverageLevel === 'full').length;
   const partiallyCovered = coverages.filter((c) => c.coverageLevel === 'partial').length;
   const overallScore =
-    requirements.length > 0
-      ? (fullyCovered + partiallyCovered * 0.5) / requirements.length
-      : 0;
+    requirements.length > 0 ? (fullyCovered + partiallyCovered * 0.5) / requirements.length : 0;
 
   // Generate suggestions
   const suggestions: string[] = [];
@@ -320,7 +317,8 @@ export async function suggestAssertions(
   const response = await provider.callApi(suggestionPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   const jsonObjects = extractJsonObjects(output);
 
   if (jsonObjects.length === 0) {

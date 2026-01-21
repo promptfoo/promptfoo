@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { emitAssertion, emitTestCase, updateJobProgress } from './jobManager';
-
 import type { SingleBar } from 'cli-progress';
+
 import type { Assertion, VarMapping } from '../../types';
 import type { ProgressCallback, ProgressReporterOptions } from '../types';
 

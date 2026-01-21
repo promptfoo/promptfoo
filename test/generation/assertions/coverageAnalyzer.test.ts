@@ -4,8 +4,8 @@ import {
   extractRequirements,
 } from '../../../src/generation/assertions/coverageAnalyzer';
 
-import type { ApiProvider, Assertion } from '../../../src/types';
 import type { Requirement } from '../../../src/generation/types';
+import type { ApiProvider, Assertion } from '../../../src/types';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -206,9 +206,7 @@ describe('coverageAnalyzer', () => {
       ];
 
       // Assertions that don't match the requirements (no keyword overlap)
-      const assertions: Assertion[] = [
-        { type: 'contains', value: 'hello world' },
-      ];
+      const assertions: Assertion[] = [{ type: 'contains', value: 'hello world' }];
 
       const result = await analyzeCoverage(requirements, assertions);
 

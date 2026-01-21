@@ -9,9 +9,8 @@ import { useMemo } from 'react';
 
 import { Progress } from '@app/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { AlertTriangle, CheckCircle, Info, XCircle } from 'lucide-react';
-
 import { cn } from '@app/lib/utils';
+import { AlertTriangle, CheckCircle, Info, XCircle } from 'lucide-react';
 
 import type { CoverageAnalysis } from '../../api/generation';
 

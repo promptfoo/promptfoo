@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
@@ -171,10 +170,7 @@ function generateEdgeCasePrompt(
  * Generates predefined edge cases without using an LLM.
  * Useful for basic edge case coverage.
  */
-function generatePredefinedEdgeCases(
-  variables: string[],
-  types: EdgeCaseType[],
-): EdgeCase[] {
+function generatePredefinedEdgeCases(variables: string[], types: EdgeCaseType[]): EdgeCase[] {
   const edgeCases: EdgeCase[] = [];
 
   for (const variable of variables) {
@@ -256,10 +252,7 @@ function generatePredefinedEdgeCases(
     if (types.includes('format')) {
       edgeCases.push({
         vars: Object.fromEntries(
-          variables.map((v) => [
-            v,
-            v === variable ? 'ALLCAPS SHOUTING TEXT' : 'normal value',
-          ]),
+          variables.map((v) => [v, v === variable ? 'ALLCAPS SHOUTING TEXT' : 'normal value']),
         ),
         type: 'format',
         description: `All caps format for ${variable}`,
@@ -308,7 +301,10 @@ export async function generateEdgeCases(
   if (variables.length === 0) {
     logger.warn('No template variables found - generating generic edge cases');
     // Return some predefined generic edge cases
-    return generatePredefinedEdgeCases(['input'], mergedOptions.types).slice(0, mergedOptions.count);
+    return generatePredefinedEdgeCases(['input'], mergedOptions.types).slice(
+      0,
+      mergedOptions.count,
+    );
   }
 
   logger.debug(
@@ -322,7 +318,8 @@ export async function generateEdgeCases(
   const response = await provider.callApi(edgeCasePrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response output must be defined');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   logger.debug(`Received edge case generation response: ${output.substring(0, 200)}...`);
 
   // Parse the JSON response
@@ -333,10 +330,7 @@ export async function generateEdgeCases(
   );
 
   const rawResult = jsonObjects[0] as { edgeCases: unknown[] };
-  invariant(
-    Array.isArray(rawResult.edgeCases),
-    'Expected edgeCases array in response',
-  );
+  invariant(Array.isArray(rawResult.edgeCases), 'Expected edgeCases array in response');
 
   // Validate and transform edge cases
   const edgeCases: EdgeCase[] = [];
@@ -369,10 +363,10 @@ export async function generateEdgeCases(
       vars: caseObj.vars as Record<string, string>,
       type,
       description: caseObj.description,
-      severity: typeof caseObj.severity === 'string' &&
-        ['low', 'medium', 'high'].includes(caseObj.severity)
-        ? (caseObj.severity as 'low' | 'medium' | 'high')
-        : undefined,
+      severity:
+        typeof caseObj.severity === 'string' && ['low', 'medium', 'high'].includes(caseObj.severity)
+          ? (caseObj.severity as 'low' | 'medium' | 'high')
+          : undefined,
     });
   }
 

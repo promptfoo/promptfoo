@@ -28,17 +28,16 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { generateAssertions } from '../../api/generation';
+import { useGenerationJob } from '../../hooks/useGenerationJob';
+import { GenerationProgressDialog } from './GenerationProgressDialog';
+import type { Assertion, TestCase } from '@promptfoo/types';
 
 import type {
   AssertionGenerationOptions,
   AssertionGenerationResult,
   GenerationPrompt,
 } from '../../api/generation';
-import { generateAssertions } from '../../api/generation';
-import { useGenerationJob } from '../../hooks/useGenerationJob';
-import { GenerationProgressDialog } from './GenerationProgressDialog';
-
-import type { Assertion, TestCase } from '@promptfoo/types';
 
 interface GenerateAssertionsDialogProps {
   open: boolean;
@@ -164,13 +163,7 @@ export function GenerateAssertionsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!hasPrompts ? (
-          <div className="py-8 text-center">
-            <p className="text-muted-foreground">
-              Add at least one prompt before generating assertions.
-            </p>
-          </div>
-        ) : (
+        {hasPrompts ? (
           <div className="space-y-4 py-4">
             {/* Number of assertions */}
             <div className="space-y-2">
@@ -196,9 +189,7 @@ export function GenerateAssertionsDialog({
               <Label htmlFor="assertionType">Assertion type</Label>
               <Select
                 value={assertionType}
-                onValueChange={(value) =>
-                  setAssertionType(value as 'pi' | 'g-eval' | 'llm-rubric')
-                }
+                onValueChange={(value) => setAssertionType(value as 'pi' | 'g-eval' | 'llm-rubric')}
               >
                 <SelectTrigger id="assertionType">
                   <SelectValue />
@@ -280,6 +271,12 @@ export function GenerateAssertionsDialog({
                 </div>
               </div>
             )}
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">
+              Add at least one prompt before generating assertions.
+            </p>
           </div>
         )}
 

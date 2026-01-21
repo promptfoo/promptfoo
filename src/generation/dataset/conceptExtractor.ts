@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
@@ -29,9 +28,7 @@ function generateConceptExtractionPrompt(
     .join('\n\n');
 
   const variablesString =
-    variables.length > 0
-      ? `\n\nVariables found in prompts: ${variables.join(', ')}`
-      : '';
+    variables.length > 0 ? `\n\nVariables found in prompts: ${variables.join(', ')}` : '';
 
   return dedent`
     You are an expert analyst tasked with extracting semantic concepts from LLM prompts.
@@ -86,13 +83,21 @@ function generateConceptExtractionPrompt(
       ],
       "entities": [
         { "name": "...", "type": "...", "occurrences": 1 }
-      ]${options.includeConstraints ? `,
+      ]${
+        options.includeConstraints
+          ? `,
       "constraints": [
         { "description": "...", "type": "format", "source": "explicit" }
-      ]` : ''}${options.includeVariableRelationships && variables.length > 0 ? `,
+      ]`
+          : ''
+      }${
+        options.includeVariableRelationships && variables.length > 0
+          ? `,
       "variableRelationships": [
         { "variables": ["var1", "var2"], "relationship": "..." }
-      ]` : ''}
+      ]`
+          : ''
+      }
     }
 
     Return ONLY the JSON object, no additional text.
@@ -137,7 +142,8 @@ export async function extractConcepts(
   const response = await provider.callApi(extractionPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response output must be defined');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   logger.debug(`Received concept extraction response: ${output.substring(0, 200)}...`);
 
   // Parse the JSON response
@@ -163,7 +169,9 @@ export async function extractConcepts(
       entities: Array.isArray(raw.entities)
         ? (raw.entities as ConceptAnalysis['entities']).slice(0, mergedOptions.maxEntities)
         : [],
-      constraints: Array.isArray(raw.constraints) ? (raw.constraints as ConceptAnalysis['constraints']) : [],
+      constraints: Array.isArray(raw.constraints)
+        ? (raw.constraints as ConceptAnalysis['constraints'])
+        : [],
       variableRelationships: Array.isArray(raw.variableRelationships)
         ? (raw.variableRelationships as ConceptAnalysis['variableRelationships'])
         : [],

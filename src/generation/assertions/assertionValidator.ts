@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import { runPythonCode } from '../../python/wrapper';
 import invariant from '../../util/invariant';
@@ -101,7 +100,8 @@ async function evaluateLlmAssertion(
   const response = await provider.callApi(evaluationPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-  const responseOutput = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const responseOutput =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   const jsonObjects = extractJsonObjects(responseOutput);
 
   if (jsonObjects.length === 0) {
@@ -328,7 +328,8 @@ export async function generateSampleOutputs(
   const response = await provider.callApi(samplePrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response must have output');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   const jsonObjects = extractJsonObjects(output);
 
   if (jsonObjects.length === 0) {

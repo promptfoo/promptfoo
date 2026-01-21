@@ -279,10 +279,9 @@ export async function identifyGaps(
  * @param testCases - Array of test cases
  * @returns Coverage statistics per variable
  */
-export function analyzeVariableCoverage(testCases: VarMapping[]): Record<
-  string,
-  { uniqueValues: number; coverage: number; sampleValues: string[] }
-> {
+export function analyzeVariableCoverage(
+  testCases: VarMapping[],
+): Record<string, { uniqueValues: number; coverage: number; sampleValues: string[] }> {
   if (testCases.length === 0) {
     return {};
   }

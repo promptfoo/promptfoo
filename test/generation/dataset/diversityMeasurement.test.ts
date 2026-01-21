@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { measureDiversity, analyzeVariableCoverage } from '../../../src/generation/dataset/diversityMeasurement';
+import {
+  analyzeVariableCoverage,
+  measureDiversity,
+} from '../../../src/generation/dataset/diversityMeasurement';
 
 describe('diversityMeasurement', () => {
   describe('measureDiversity', () => {

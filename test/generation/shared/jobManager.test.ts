@@ -185,8 +185,14 @@ describe('jobManager', () => {
       const job2 = createJob('assertions');
       createJob('combined');
 
-      completeJob(job1.id, { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' } });
-      completeJob(job2.id, { assertions: [], metadata: { totalGenerated: 0, pythonConverted: 0, durationMs: 0, provider: 'test' } });
+      completeJob(job1.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
+      completeJob(job2.id, {
+        assertions: [],
+        metadata: { totalGenerated: 0, pythonConverted: 0, durationMs: 0, provider: 'test' },
+      });
 
       const pendingJobs = listJobs({ status: 'pending' });
       expect(pendingJobs).toHaveLength(1);
@@ -200,7 +206,10 @@ describe('jobManager', () => {
       createJob('dataset');
       createJob('assertions');
 
-      completeJob(job1.id, { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' } });
+      completeJob(job1.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
 
       const jobs = listJobs({ type: 'dataset', status: 'pending' });
       expect(jobs).toHaveLength(1);
@@ -211,11 +220,17 @@ describe('jobManager', () => {
     it('should remove completed jobs older than specified age', () => {
       const oldJob = createJob('dataset');
       // Complete the old job so it can be cleaned up
-      completeJob(oldJob.id, { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' } });
+      completeJob(oldJob.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
       vi.advanceTimersByTime(10 * 60 * 1000); // 10 minutes
       const newJob = createJob('dataset');
       // Complete the new job as well
-      completeJob(newJob.id, { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' } });
+      completeJob(newJob.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
 
       // Cleanup jobs older than 5 minutes
       const cleaned = cleanupOldJobs(5 * 60 * 1000);
@@ -239,8 +254,14 @@ describe('jobManager', () => {
     it('should not remove recent completed jobs', () => {
       const job1 = createJob('dataset');
       const job2 = createJob('assertions');
-      completeJob(job1.id, { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' } });
-      completeJob(job2.id, { assertions: [], metadata: { totalGenerated: 0, pythonConverted: 0, durationMs: 0, provider: 'test' } });
+      completeJob(job1.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
+      completeJob(job2.id, {
+        assertions: [],
+        metadata: { totalGenerated: 0, pythonConverted: 0, durationMs: 0, provider: 'test' },
+      });
       vi.advanceTimersByTime(1000); // 1 second
 
       const cleaned = cleanupOldJobs(5 * 60 * 1000);

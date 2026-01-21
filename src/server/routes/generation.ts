@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import { z } from 'zod';
-
-import { generateAssertions, extractRequirements, analyzeCoverage, validateAssertions } from '../../generation/assertions';
-import { generateDataset, extractConcepts, measureDiversity } from '../../generation/dataset';
+import {
+  analyzeCoverage,
+  extractRequirements,
+  generateAssertions,
+  validateAssertions,
+} from '../../generation/assertions';
+import { extractConcepts, generateDataset, measureDiversity } from '../../generation/dataset';
 import { generateTestSuite } from '../../generation/index';
 import {
   completeJob,
   createJob,
   failJob,
   getJob,
-  listJobs,
   jobEventEmitter,
+  listJobs,
 } from '../../generation/shared/jobManager';
 import {
   AssertionGenerationOptionsSchema,
@@ -18,11 +22,11 @@ import {
   TestSuiteGenerationOptionsSchema,
 } from '../../generation/types';
 import logger from '../../logger';
-
 import type { Request, Response } from 'express';
-import type { Assertion, Prompt, TestCase } from '../../types';
-import type { GenerationJob, GenerationJobType } from '../../generation/types';
+
 import type { JobEvent } from '../../generation/shared/jobManager';
+import type { GenerationJob, GenerationJobType } from '../../generation/types';
+import type { Assertion, Prompt, TestCase } from '../../types';
 
 export const generationRouter = Router();
 
@@ -55,10 +59,12 @@ const AssertionsGenerateRequestSchema = z.object({
 
 const AnalyzeConceptsRequestSchema = z.object({
   prompts: z.array(z.string()).min(1),
-  options: z.object({
-    maxTopics: z.number().optional(),
-    maxEntities: z.number().optional(),
-  }).optional(),
+  options: z
+    .object({
+      maxTopics: z.number().optional(),
+      maxEntities: z.number().optional(),
+    })
+    .optional(),
 });
 
 const MeasureDiversityRequestSchema = z.object({
@@ -72,10 +78,14 @@ const AnalyzeCoverageRequestSchema = z.object({
 
 const ValidateAssertionsRequestSchema = z.object({
   assertions: z.array(z.any()).min(1),
-  samples: z.array(z.object({
-    output: z.string(),
-    expectedPass: z.boolean(),
-  })).min(1),
+  samples: z
+    .array(
+      z.object({
+        output: z.string(),
+        expectedPass: z.boolean(),
+      }),
+    )
+    .min(1),
 });
 
 const TestsGenerateRequestSchema = z.object({
@@ -111,23 +121,18 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
     const job = createJob('dataset');
 
     // Start generation in background with jobId for streaming
-    generateDataset(
-      prompts as Prompt[],
-      tests as TestCase[],
-      options || {},
-      {
-        jobId: job.id, // Pass jobId for SSE streaming
-        onProgress: (current, total, phase) => {
-          const existingJob = getJob(job.id);
-          if (existingJob) {
-            existingJob.progress = current;
-            existingJob.total = total;
-            existingJob.phase = phase;
-            existingJob.status = 'in-progress';
-          }
-        },
+    generateDataset(prompts as Prompt[], tests as TestCase[], options || {}, {
+      jobId: job.id, // Pass jobId for SSE streaming
+      onProgress: (current, total, phase) => {
+        const existingJob = getJob(job.id);
+        if (existingJob) {
+          existingJob.progress = current;
+          existingJob.total = total;
+          existingJob.phase = phase;
+          existingJob.status = 'in-progress';
+        }
       },
-    )
+    })
       .then((result) => {
         completeJob(job.id, result);
         logger.info(`Dataset generation job ${job.id} completed`);
@@ -167,58 +172,64 @@ generationRouter.get('/dataset/job/:id', (req: Request, res: Response): void => 
  * POST /api/generation/dataset/analyze-concepts
  * Extracts concepts from prompts (synchronous, quick operation).
  */
-generationRouter.post('/dataset/analyze-concepts', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const parseResult = AnalyzeConceptsRequestSchema.safeParse(req.body);
+generationRouter.post(
+  '/dataset/analyze-concepts',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parseResult = AnalyzeConceptsRequestSchema.safeParse(req.body);
 
-    if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
-      return;
+      if (!parseResult.success) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request body',
+          details: parseResult.error.format(),
+        });
+        return;
+      }
+
+      const { prompts, options } = parseResult.data;
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const provider = (await getDefaultProviders()).synthesizeProvider;
+
+      const concepts = await extractConcepts(prompts, provider, options);
+
+      res.json({ success: true, concepts });
+    } catch (error) {
+      logger.error(`Concept analysis failed: ${error}`);
+      res.status(500).json({ success: false, error: String(error) });
     }
-
-    const { prompts, options } = parseResult.data;
-    const { getDefaultProviders } = await import('../../providers/defaults');
-    const provider = (await getDefaultProviders()).synthesizeProvider;
-
-    const concepts = await extractConcepts(prompts, provider, options);
-
-    res.json({ success: true, concepts });
-  } catch (error) {
-    logger.error(`Concept analysis failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
-  }
-});
+  },
+);
 
 /**
  * POST /api/generation/dataset/measure-diversity
  * Measures diversity of provided test cases (synchronous).
  */
-generationRouter.post('/dataset/measure-diversity', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const parseResult = MeasureDiversityRequestSchema.safeParse(req.body);
+generationRouter.post(
+  '/dataset/measure-diversity',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parseResult = MeasureDiversityRequestSchema.safeParse(req.body);
 
-    if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
-      return;
+      if (!parseResult.success) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request body',
+          details: parseResult.error.format(),
+        });
+        return;
+      }
+
+      const { testCases } = parseResult.data;
+      const diversity = await measureDiversity(testCases);
+
+      res.json({ success: true, diversity });
+    } catch (error) {
+      logger.error(`Diversity measurement failed: ${error}`);
+      res.status(500).json({ success: false, error: String(error) });
     }
-
-    const { testCases } = parseResult.data;
-    const diversity = await measureDiversity(testCases);
-
-    res.json({ success: true, diversity });
-  } catch (error) {
-    logger.error(`Diversity measurement failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
-  }
-});
+  },
+);
 
 // =============================================================================
 // Assertion Generation Routes
@@ -247,23 +258,18 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
     const job = createJob('assertions');
 
     // Start generation in background with jobId for streaming
-    generateAssertions(
-      prompts as Prompt[],
-      tests as TestCase[],
-      options || {},
-      {
-        jobId: job.id, // Pass jobId for SSE streaming
-        onProgress: (current, total, phase) => {
-          const existingJob = getJob(job.id);
-          if (existingJob) {
-            existingJob.progress = current;
-            existingJob.total = total;
-            existingJob.phase = phase;
-            existingJob.status = 'in-progress';
-          }
-        },
+    generateAssertions(prompts as Prompt[], tests as TestCase[], options || {}, {
+      jobId: job.id, // Pass jobId for SSE streaming
+      onProgress: (current, total, phase) => {
+        const existingJob = getJob(job.id);
+        if (existingJob) {
+          existingJob.progress = current;
+          existingJob.total = total;
+          existingJob.phase = phase;
+          existingJob.status = 'in-progress';
+        }
       },
-    )
+    })
       .then((result) => {
         completeJob(job.id, result);
         logger.info(`Assertion generation job ${job.id} completed`);
@@ -303,62 +309,68 @@ generationRouter.get('/assertions/job/:id', (req: Request, res: Response): void 
  * POST /api/generation/assertions/analyze-coverage
  * Analyzes coverage of existing assertions against requirements.
  */
-generationRouter.post('/assertions/analyze-coverage', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const parseResult = AnalyzeCoverageRequestSchema.safeParse(req.body);
+generationRouter.post(
+  '/assertions/analyze-coverage',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parseResult = AnalyzeCoverageRequestSchema.safeParse(req.body);
 
-    if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
-      return;
+      if (!parseResult.success) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request body',
+          details: parseResult.error.format(),
+        });
+        return;
+      }
+
+      const { prompts, assertions } = parseResult.data;
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const provider = (await getDefaultProviders()).synthesizeProvider;
+
+      const requirements = await extractRequirements(prompts, provider);
+      const coverage = await analyzeCoverage(requirements, assertions as Assertion[]);
+
+      res.json({ success: true, coverage });
+    } catch (error) {
+      logger.error(`Coverage analysis failed: ${error}`);
+      res.status(500).json({ success: false, error: String(error) });
     }
-
-    const { prompts, assertions } = parseResult.data;
-    const { getDefaultProviders } = await import('../../providers/defaults');
-    const provider = (await getDefaultProviders()).synthesizeProvider;
-
-    const requirements = await extractRequirements(prompts, provider);
-    const coverage = await analyzeCoverage(requirements, assertions as Assertion[]);
-
-    res.json({ success: true, coverage });
-  } catch (error) {
-    logger.error(`Coverage analysis failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
-  }
-});
+  },
+);
 
 /**
  * POST /api/generation/assertions/validate
  * Validates assertions against sample outputs.
  */
-generationRouter.post('/assertions/validate', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const parseResult = ValidateAssertionsRequestSchema.safeParse(req.body);
+generationRouter.post(
+  '/assertions/validate',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const parseResult = ValidateAssertionsRequestSchema.safeParse(req.body);
 
-    if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
-      return;
+      if (!parseResult.success) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request body',
+          details: parseResult.error.format(),
+        });
+        return;
+      }
+
+      const { assertions, samples } = parseResult.data;
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const provider = (await getDefaultProviders()).synthesizeProvider;
+
+      const validation = await validateAssertions(assertions as Assertion[], samples, provider);
+
+      res.json({ success: true, validation });
+    } catch (error) {
+      logger.error(`Assertion validation failed: ${error}`);
+      res.status(500).json({ success: false, error: String(error) });
     }
-
-    const { assertions, samples } = parseResult.data;
-    const { getDefaultProviders } = await import('../../providers/defaults');
-    const provider = (await getDefaultProviders()).synthesizeProvider;
-
-    const validation = await validateAssertions(assertions as Assertion[], samples, provider);
-
-    res.json({ success: true, validation });
-  } catch (error) {
-    logger.error(`Assertion validation failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
-  }
-});
+  },
+);
 
 // =============================================================================
 // Combined Test Suite Generation Routes
@@ -387,22 +399,17 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
     const job = createJob('combined');
 
     // Start generation in background
-    generateTestSuite(
-      prompts as Prompt[],
-      tests as TestCase[],
-      options || {},
-      {
-        onProgress: (current, total, phase) => {
-          const existingJob = getJob(job.id);
-          if (existingJob) {
-            existingJob.progress = current;
-            existingJob.total = total;
-            existingJob.phase = phase;
-            existingJob.status = 'in-progress';
-          }
-        },
+    generateTestSuite(prompts as Prompt[], tests as TestCase[], options || {}, {
+      onProgress: (current, total, phase) => {
+        const existingJob = getJob(job.id);
+        if (existingJob) {
+          existingJob.progress = current;
+          existingJob.total = total;
+          existingJob.phase = phase;
+          existingJob.status = 'in-progress';
+        }
       },
-    )
+    })
       .then((result) => {
         completeJob(job.id, result);
         logger.info(`Test suite generation job ${job.id} completed`);
@@ -454,7 +461,12 @@ generationRouter.get('/jobs', (req: Request, res: Response): void => {
   if (type === 'dataset' || type === 'assertions' || type === 'combined') {
     filter.type = type;
   }
-  if (status === 'pending' || status === 'in-progress' || status === 'complete' || status === 'error') {
+  if (
+    status === 'pending' ||
+    status === 'in-progress' ||
+    status === 'complete' ||
+    status === 'error'
+  ) {
     filter.status = status;
   }
 

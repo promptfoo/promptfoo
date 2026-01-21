@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
@@ -175,7 +174,8 @@ export async function generatePersonas(
   const response = await provider.callApi(personaPrompt);
   invariant(typeof response.output !== 'undefined', 'Provider response output must be defined');
 
-  const output = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  const output =
+    typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   logger.debug(`Received persona generation response: ${output.substring(0, 200)}...`);
 
   // Parse the JSON response
@@ -186,10 +186,7 @@ export async function generatePersonas(
   );
 
   const rawResult = jsonObjects[0] as { personas: unknown[] };
-  invariant(
-    Array.isArray(rawResult.personas),
-    'Expected personas array in response',
-  );
+  invariant(Array.isArray(rawResult.personas), 'Expected personas array in response');
 
   // Validate and transform personas
   const personas: Persona[] = [];
@@ -207,9 +204,16 @@ export async function generatePersonas(
           personas.push({
             name: partial.name,
             description: partial.description,
-            demographics: typeof partial.demographics === 'object' ? partial.demographics as Persona['demographics'] : undefined,
-            goals: Array.isArray(partial.goals) ? partial.goals.filter((g): g is string => typeof g === 'string') : undefined,
-            behaviors: Array.isArray(partial.behaviors) ? partial.behaviors.filter((b): b is string => typeof b === 'string') : undefined,
+            demographics:
+              typeof partial.demographics === 'object'
+                ? (partial.demographics as Persona['demographics'])
+                : undefined,
+            goals: Array.isArray(partial.goals)
+              ? partial.goals.filter((g): g is string => typeof g === 'string')
+              : undefined,
+            behaviors: Array.isArray(partial.behaviors)
+              ? partial.behaviors.filter((b): b is string => typeof b === 'string')
+              : undefined,
             edge: typeof partial.edge === 'string' ? partial.edge : undefined,
           });
         }
@@ -221,9 +225,7 @@ export async function generatePersonas(
 
   // Ensure we have at least the requested count
   if (personas.length < mergedOptions.count) {
-    logger.warn(
-      `Generated ${personas.length} personas but ${mergedOptions.count} were requested`,
-    );
+    logger.warn(`Generated ${personas.length} personas but ${mergedOptions.count} were requested`);
   }
 
   return personas;
