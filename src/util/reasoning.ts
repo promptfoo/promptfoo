@@ -79,8 +79,17 @@ export function combineReasoningAndOutput(
   }
 
   if (response.output !== undefined && response.output !== null) {
-    const outputStr =
-      typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+    let outputStr: string;
+    if (typeof response.output === 'string') {
+      outputStr = response.output;
+    } else {
+      try {
+        outputStr = JSON.stringify(response.output);
+      } catch {
+        // Handle circular references or other serialization errors
+        outputStr = String(response.output);
+      }
+    }
     parts.push(outputStr);
   }
 

@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
+import { reasoningToString } from '../../../util/reasoning';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -119,8 +120,17 @@ export function registerTestProviderTool(server: McpServer) {
           const endTime = Date.now();
           const responseTime = endTime - startTime;
 
+          // Convert reasoning to string for quality evaluation
+          const reasoningStr = response.reasoning
+            ? reasoningToString(response.reasoning)
+            : undefined;
+
           // Evaluate response quality (skip correctness check for custom prompts)
-          const responseQuality = evaluateResponseQuality(response.output, isCustomPrompt);
+          const responseQuality = evaluateResponseQuality(
+            response.output,
+            isCustomPrompt,
+            reasoningStr,
+          );
 
           const testResult: TestResult = {
             providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
@@ -136,7 +146,7 @@ export function registerTestProviderTool(server: McpServer) {
               model: (response as any).model || 'unknown',
               responseQuality,
               promptLength: defaultPrompt.length,
-              responseLength: response.output?.length || 0,
+              responseLength: (response.output?.length || 0) + (reasoningStr?.length || 0),
               isCustomPrompt,
             },
           };
@@ -231,16 +241,23 @@ async function loadProvider(provider: string | { id: string; config?: Record<str
  * For custom prompts, we only check response length and structure (not correctness).
  * For the default prompt, we also verify the answer is correct (9).
  */
-function evaluateResponseQuality(response: string | undefined, isCustomPrompt: boolean): string {
-  if (!response) {
+function evaluateResponseQuality(
+  response: string | undefined,
+  isCustomPrompt: boolean,
+  reasoning?: string,
+): string {
+  if (!response && !reasoning) {
     return 'no_response';
   }
 
-  const length = response.length;
+  // Combine output and reasoning for quality evaluation
+  const fullContent = [response, reasoning].filter(Boolean).join(' ');
+  const length = fullContent.length;
   const hasReasoning =
-    response.toLowerCase().includes('step') ||
-    response.toLowerCase().includes('because') ||
-    response.toLowerCase().includes('therefore');
+    !!reasoning ||
+    fullContent.toLowerCase().includes('step') ||
+    fullContent.toLowerCase().includes('because') ||
+    fullContent.toLowerCase().includes('therefore');
 
   // For custom prompts, only evaluate based on response length and structure
   if (isCustomPrompt) {
@@ -257,7 +274,7 @@ function evaluateResponseQuality(response: string | undefined, isCustomPrompt: b
   }
 
   // For default prompt, also check for correct answer (9)
-  const hasCorrectAnswer = /\b9\b/.test(response);
+  const hasCorrectAnswer = response ? /\b9\b/.test(response) : false;
 
   if (length > 200 && hasReasoning && hasCorrectAnswer) {
     return 'excellent';

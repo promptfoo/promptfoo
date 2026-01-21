@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { reasoningToString, hasReasoning } from '../../src/util/reasoning';
+import { describe, expect, it } from 'vitest';
+import { hasReasoning, reasoningToString } from '../../src/util/reasoning';
+
 import type { ReasoningContent } from '../../src/types/providers';
 
 describe('reasoning utilities', () => {

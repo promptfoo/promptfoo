@@ -29,6 +29,8 @@ export function reasoningToString(reasoning: ReasoningContent[] | undefined): st
         case 'thought':
           return r.thought;
         default:
+          // Exhaustive check - TypeScript will error if we miss a type
+          const _exhaustiveCheck: never = r;
           return '';
       }
     })

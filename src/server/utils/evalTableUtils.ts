@@ -1,6 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { reasoningToString } from '../../util/reasoning';
 import { ResultFailureReason } from '../../types/index';
+import { reasoningToString } from '../../util/reasoning';
 
 import type Eval from '../../models/eval';
 import type {
@@ -8,6 +8,7 @@ import type {
   EvalResultsFilterMode,
   EvaluateTableRow,
   Prompt,
+  ReasoningContent,
 } from '../../types/index';
 
 /**
@@ -410,6 +411,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       failureReason?: ResultFailureReason;
       gradingResult?: { reason?: string; comment?: string } | null;
       metadata?: Record<string, unknown>;
+      response?: { reasoning?: ReasoningContent[] };
     }>;
     test: { description?: string };
   }> | null = null;
@@ -429,6 +431,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
           failureReason?: ResultFailureReason;
           gradingResult?: { reason?: string; comment?: string } | null;
           metadata?: Record<string, unknown>;
+          response?: { reasoning?: ReasoningContent[] };
         }>;
         test: { description?: string };
       }
@@ -458,6 +461,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
         failureReason: result.failureReason,
         gradingResult: result.gradingResult,
         metadata: result.metadata,
+        response: result.response?.reasoning ? { reasoning: result.response.reasoning } : undefined,
       };
     }
 

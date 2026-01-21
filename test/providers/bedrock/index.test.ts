@@ -2290,7 +2290,10 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('<think>Let me think about this problem...</think>\nThe answer is 42.');
+      expect(result).toEqual({
+        output: 'The answer is 42.',
+        reasoning: [{ type: 'think', content: 'Let me think about this problem...' }],
+      });
     });
 
     it('should hide thinking when showThinking is false', async () => {
@@ -2305,7 +2308,10 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('The answer is 42.');
+      expect(result).toEqual({
+        output: 'The answer is 42.',
+        reasoning: undefined,
+      });
     });
 
     it('should return full response when no thinking tags present', async () => {
@@ -2320,7 +2326,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('Direct response without thinking');
+      expect(result).toEqual({
+        output: 'Direct response without thinking',
+      });
     });
 
     it('should handle error in response', async () => {
@@ -3171,9 +3179,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe(
-        'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
-      );
+      expect(result).toEqual({
+        output:
+          'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+      });
     });
 
     it('should handle tool call response', async () => {
@@ -3217,7 +3226,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe('<think>Let me think about this step by step...</think>The answer is 42');
+      expect(result).toEqual({
+        output: 'The answer is 42',
+        reasoning: [{ type: 'think', content: 'Let me think about this step by step...' }],
+      });
     });
 
     it('should hide thinking when showThinking is false', async () => {
@@ -3234,8 +3246,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe('The answer is 42');
-      expect(result).not.toContain('think>');
+      expect(result).toEqual({
+        output: 'The answer is 42',
+        reasoning: undefined,
+      });
     });
 
     it('should handle error response', async () => {

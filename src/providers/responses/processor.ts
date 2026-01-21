@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { formatOpenAiError } from '../openai/util';
-import type { ProviderResponse, TokenUsage, ReasoningContent } from '../../types/index';
+
+import type { ProviderResponse, ReasoningContent, TokenUsage } from '../../types/index';
 import type {
   ProcessedOutput,
   ProcessorConfig,

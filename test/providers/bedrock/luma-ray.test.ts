@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
@@ -62,7 +62,7 @@ vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
+vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof fs>();
   return {
     ...actual,

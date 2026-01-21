@@ -1269,13 +1269,19 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Collect the full response while also providing a stream
       let output = '';
-      let reasoning = '';
       let stopReason: string | undefined;
       let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
 
       // Track tool use blocks being streamed
       const toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }> =
         new Map();
+
+      // Track reasoning content blocks (including signature for multi-turn extended thinking)
+      // Maps blockIndex to accumulated reasoning data
+      const reasoningBlockMap: Map<
+        number,
+        { text: string; signature?: string; isRedacted?: boolean; data?: string }
+      > = new Map();
 
       // Merge showThinking from per-call config with provider config (per-call takes priority)
       const mergedShowThinking = context?.prompt?.config?.showThinking ?? this.config.showThinking;
@@ -1305,9 +1311,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               output += delta.text;
             }
             if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
-              const rc = delta.reasoningContent as { text?: string };
+              const rc = delta.reasoningContent as {
+                text?: string;
+                signature?: string;
+                redactedContent?: Uint8Array;
+              };
+              // Initialize reasoning block if needed
+              if (!reasoningBlockMap.has(blockIndex)) {
+                reasoningBlockMap.set(blockIndex, { text: '' });
+              }
+              const block = reasoningBlockMap.get(blockIndex)!;
+
               if (rc.text) {
-                reasoning += rc.text;
+                block.text += rc.text;
+              }
+              // Capture signature when it appears (preserved for multi-turn extended thinking)
+              if (rc.signature) {
+                block.signature = rc.signature;
+              }
+              // Handle redacted reasoning content
+              if (rc.redactedContent) {
+                block.isRedacted = true;
+                block.data =
+                  rc.redactedContent instanceof Uint8Array
+                    ? Buffer.from(rc.redactedContent).toString('base64')
+                    : String(rc.redactedContent);
               }
             }
             // Handle streaming tool use input
@@ -1318,6 +1346,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               }
             }
           }
+
+          // Handle content block stop - may contain signature for reasoning blocks
+          if ('contentBlockStop' in event && event.contentBlockStop) {
+            const blockIndex = event.contentBlockStop.contentBlockIndex ?? 0;
+            const stop = event.contentBlockStop as {
+              contentBlockIndex?: number;
+              signature?: string;
+            };
+            // Capture signature if present at block stop
+            if (stop.signature && reasoningBlockMap.has(blockIndex)) {
+              reasoningBlockMap.get(blockIndex)!.signature = stop.signature;
+            }
+          }
+
           if ('messageStop' in event && event.messageStop) {
             stopReason = event.messageStop.stopReason;
           }
@@ -1348,11 +1390,24 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
       }
 
-      // Build reasoning content array if present (only when showThinking is true)
-      const reasoningContent: ReasoningContent[] | undefined =
-        reasoning && showThinking
-          ? [{ type: 'thinking' as const, thinking: reasoning }]
-          : undefined;
+      // Build reasoning content array from accumulated blocks (with signature preservation)
+      // This ensures multi-turn extended thinking works correctly with streaming
+      let reasoningContent: ReasoningContent[] | undefined;
+      if (reasoningBlockMap.size > 0 && showThinking) {
+        const blocks: ReasoningContent[] = [];
+        for (const block of reasoningBlockMap.values()) {
+          if (block.isRedacted && block.data) {
+            blocks.push({ type: 'redacted_thinking', data: block.data });
+          } else if (block.text) {
+            blocks.push({
+              type: 'thinking',
+              thinking: block.text,
+              ...(block.signature ? { signature: block.signature } : {}),
+            });
+          }
+        }
+        reasoningContent = blocks.length > 0 ? blocks : undefined;
+      }
 
       // Combine output and tool use (reasoning goes ONLY in reasoning field - no double-write)
       const parts: string[] = [];

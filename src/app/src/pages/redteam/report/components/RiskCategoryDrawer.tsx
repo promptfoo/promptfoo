@@ -15,7 +15,6 @@ import {
 } from '@promptfoo/redteam/constants';
 import { ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { reasoningToString } from '@app/utils/reasoning';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
@@ -136,14 +135,13 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
-  // Validate category BEFORE any hooks to comply with Rules of Hooks
+  // Validate category before hooks - early return must happen before any hook calls
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
     return null;
   }
 
-  // All hooks must be called unconditionally after early returns
   const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
@@ -407,6 +405,7 @@ const RiskCategoryDrawer = ({
               )}
             </TabsContent>
 
+            <TabsContent value="passed">
               {passes.length > 0 ? (
                 <div className="mt-3 space-y-3">
                   {passes.map((pass, i) => renderTestItem(pass, i, false))}
