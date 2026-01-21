@@ -120,6 +120,10 @@ describe('synthesize', () => {
     });
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   // Input handling tests
   describe('Input handling', () => {
     it('should use provided purpose and entities if given', async () => {

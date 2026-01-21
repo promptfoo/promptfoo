@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import {
   extractSortKey,
@@ -11,6 +11,10 @@ import {
 
 // Strip ANSI codes for easier testing
 const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('report', () => {
   describe('getPluginSeverity', () => {
