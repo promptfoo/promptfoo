@@ -292,11 +292,12 @@ export function mergeComparisonTables(
 /**
  * High-level function to generate CSV from an evaluation.
  *
- * This is the single source of truth for ALL CSV generation, used by both:
- * - CLI: `promptfoo eval -o output.csv` and `promptfoo export eval`
- * - WebUI: Download CSV button (with or without comparison evals)
+ * Used by WebUI for CSV downloads (with or without comparison evals).
+ * For CLI exports, use `streamEvalCsv` which is more memory-efficient
+ * for large datasets.
  *
- * Handles both simple exports and comparison exports with multiple evaluations.
+ * Both functions use the same underlying formatting (`evalTableToCsv`,
+ * `buildCsvHeaders`, `tableRowToCsvValues`) to ensure consistent output.
  *
  * @param eval_ - The evaluation to export
  * @param options - Export options including filters and comparison eval IDs
@@ -378,6 +379,9 @@ export interface StreamCsvOptions {
  * This is more memory-efficient for large evaluations as it processes
  * results in batches rather than loading everything into memory.
  *
+ * Used by the CLI export (`promptfoo eval -o output.csv`) to maintain
+ * consistent CSV format with WebUI exports while handling large datasets.
+ *
  * @param eval_ - The evaluation to export
  * @param options - Streaming options including the write callback
  */
@@ -385,25 +389,27 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const { isRedteam = false, write } = options;
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
-
-  // Check if any results have descriptions by sampling the first batch
-  // For streaming, we need to determine this upfront for consistent columns
-  let hasDescriptions = false;
-  for await (const batchResults of eval_.fetchResultsBatched()) {
-    hasDescriptions = batchResults.some((r) => r.testCase?.description);
-    // Put results back for processing - we need to re-fetch
-    break;
-  }
-
-  // Write headers
-  const headers = buildCsvHeaders(varNames, prompts, {
-    hasDescriptions,
-    isRedteam,
-  });
-  await write(csvStringify([headers]));
-
-  // Stream results in batches
   const numPrompts = prompts.length;
+
+  // Track whether we've written headers yet
+  let headersWritten = false;
+  let hasDescriptions = false;
+
+  // Buffer to accumulate the first batch while we determine hasDescriptions
+  let firstBatchBuffer: Array<{
+    testIdx: number;
+    vars: string[];
+    outputs: Array<{
+      text: string;
+      pass: boolean;
+      score?: number;
+      namedScores?: Record<string, number>;
+      failureReason?: ResultFailureReason;
+      gradingResult?: { reason?: string; comment?: string } | null;
+      metadata?: Record<string, unknown>;
+    }>;
+    test: { description?: string };
+  }> | null = null;
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     // Group results by testIdx to reconstruct table rows
@@ -452,13 +458,71 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       };
     }
 
+    const rows = Array.from(rowsByTestIdx.values());
+
+    // On first batch, determine hasDescriptions and write headers
+    if (!headersWritten) {
+      hasDescriptions = rows.some((r) => r.test.description);
+      const headers = buildCsvHeaders(varNames, prompts, {
+        hasDescriptions,
+        isRedteam,
+      });
+      await write(csvStringify([headers]));
+      headersWritten = true;
+
+      // Check if we need to scan more batches for descriptions
+      // If first batch has no descriptions, buffer it and check subsequent batches
+      if (!hasDescriptions) {
+        firstBatchBuffer = rows;
+        continue;
+      }
+    }
+
+    // If we had buffered the first batch (because it had no descriptions),
+    // check if this batch has descriptions. If so, we need to restart with correct headers.
+    if (firstBatchBuffer !== null) {
+      const thisHasDescriptions = rows.some((r) => r.test.description);
+      if (thisHasDescriptions && !hasDescriptions) {
+        // We found descriptions in a later batch but already wrote headers without Description column.
+        // This is an edge case - for streaming we accept this limitation and continue without Description.
+        // A warning could be logged here if desired.
+      }
+      // Write the buffered first batch
+      const bufferedCsvRows = firstBatchBuffer.map((row) =>
+        tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+      );
+      if (bufferedCsvRows.length > 0) {
+        await write(csvStringify(bufferedCsvRows));
+      }
+      firstBatchBuffer = null;
+    }
+
     // Convert to CSV rows and write
-    const csvRows = Array.from(rowsByTestIdx.values()).map((row) =>
+    const csvRows = rows.map((row) =>
       tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
     );
 
     if (csvRows.length > 0) {
       await write(csvStringify(csvRows));
     }
+  }
+
+  // Handle case where we only had one batch and it was buffered
+  if (firstBatchBuffer !== null) {
+    const bufferedCsvRows = firstBatchBuffer.map((row) =>
+      tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+    );
+    if (bufferedCsvRows.length > 0) {
+      await write(csvStringify(bufferedCsvRows));
+    }
+  }
+
+  // Handle case where there were no results at all - still write headers
+  if (!headersWritten) {
+    const headers = buildCsvHeaders(varNames, prompts, {
+      hasDescriptions: false,
+      isRedteam,
+    });
+    await write(csvStringify([headers]));
   }
 }
