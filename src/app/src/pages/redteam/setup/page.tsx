@@ -511,7 +511,10 @@ export default function RedTeamSetupPage() {
                   orientation="vertical"
                   className="w-full"
                 >
-                  <TabsList className="flex h-auto w-full flex-col rounded-none bg-card p-0">
+                  <TabsList
+                    variant="line"
+                    className="flex h-auto w-full flex-col rounded-none border-r-0 bg-card p-0"
+                  >
                     {TAB_CONFIG.map((tab) => {
                       const Icon = tab.icon;
                       return (
