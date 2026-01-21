@@ -1295,6 +1295,156 @@ async function generateStoreTemplate() {
   };
 }
 
+// Generate Satori JSX template for Events page OG image
+async function generateEventsTemplate() {
+  const logoBase64 = await getLogoAsBase64();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        fontFamily: 'Inter',
+        padding: 60,
+      },
+      children: [
+        // Header row (logo + brand)
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: 50,
+            },
+            children: [
+              logoBase64
+                ? {
+                    type: 'img',
+                    props: {
+                      src: logoBase64,
+                      width: 56,
+                      height: 56,
+                      style: { marginRight: 16 },
+                    },
+                  }
+                : null,
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 28,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                  },
+                  children: 'promptfoo',
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+        // Main headline
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 56,
+              fontWeight: 600,
+              color: 'white',
+              lineHeight: 1.15,
+              marginBottom: 30,
+            },
+            children: 'Events & Conferences',
+          },
+        },
+        // Subtitle
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: 40,
+            },
+            children: 'Meet our team and see live AI security demos',
+          },
+        },
+        // Event type badges
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              gap: 16,
+              marginTop: 'auto',
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    padding: '12px 24px',
+                    borderRadius: 24,
+                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                    border: '1px solid rgba(255, 122, 122, 0.3)',
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  },
+                  children: '🎪 Conferences',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    padding: '12px 24px',
+                    borderRadius: 24,
+                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                    border: '1px solid rgba(255, 122, 122, 0.3)',
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  },
+                  children: '🛠️ Workshops',
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    padding: '12px 24px',
+                    borderRadius: 24,
+                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                    border: '1px solid rgba(255, 122, 122, 0.3)',
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: '#ff7a7a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  },
+                  children: '🤝 Networking',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -1732,6 +1882,38 @@ async function generateStoreOgImage(outputPath) {
     return true;
   } catch (error) {
     console.error('❌ Failed to generate Store OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Events OG image using custom template
+async function generateEventsOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateEventsTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Events OG image:', error.message);
     return false;
   }
 }
@@ -2196,6 +2378,18 @@ module.exports = function (context, options) {
         generatedImages.set('/store/', '/img/og/store-og.png');
         successCount++;
         console.log('  ✅ Store OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Generate events page OG image
+      console.log('🎨 Generating Events page OG image...');
+      const eventsImagePath = path.join(outDir, 'img', 'og', 'events-og.png');
+      const eventsSuccess = await generateEventsOgImage(eventsImagePath);
+      if (eventsSuccess) {
+        generatedImages.set('/events/', '/img/og/events-og.png');
+        successCount++;
+        console.log('  ✅ Events OG image generated');
       } else {
         failureCount++;
       }
