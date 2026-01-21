@@ -7,6 +7,13 @@ prompts:
 providers:
   - file://test-mock-provider.js
 
+# For testing, use Vertex AI with gcloud auth, or AI Studio with GEMINI_API_KEY
+# Vertex AI: gcloud auth application-default login && set GOOGLE_PROJECT_ID
+# AI Studio: set GEMINI_API_KEY and add vertexai: false to provider config
+defaultTest:
+  options:
+    provider: vertex:gemini-2.0-flash
+
 tests:
   - vars:
       prompt: A scenic landscape video

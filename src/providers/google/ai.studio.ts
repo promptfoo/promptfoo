@@ -511,10 +511,10 @@ export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.
 export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
 export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
 export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-// Gemini 3.0 Flash Preview for video understanding (video-rubric assertion)
+// Gemini 2.0 Flash for video understanding (video-rubric assertion)
 // Uses AIStudioChatProvider since it requires actual API calls with multimodal support
-// Note: Must use a model available via AI Studio API keys with video understanding capability
-export const DefaultVideoGradingProvider = new AIStudioChatProvider('gemini-3-flash-preview', {
+// Note: AI Studio with video content may require OAuth2 - use Vertex AI mode for production
+export const DefaultVideoGradingProvider = new AIStudioChatProvider('gemini-2.0-flash', {
   config: {
     generationConfig: {
       response_mime_type: 'application/json',
