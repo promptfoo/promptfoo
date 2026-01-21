@@ -97,6 +97,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # OpenTelemetry trace data (when tracing is enabled)
     trace: Optional[TraceData]
+
+    # Shortcut to providerResponse.metadata
+    metadata: Optional[Dict[str, Any]]
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -110,6 +113,89 @@ tests:
       - type: python
         value: 'context["vars"]["example"] in output'
 ```
+
+## Accessing provider metadata
+
+Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http) includes response status and headers; other providers may include grounding metadata, custom fields, etc. Access metadata via `context.get('metadata')`:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the weather?'
+    assert:
+      # Check HTTP response status (HTTP provider)
+      - type: python
+        value: 'context.get("metadata", {}).get("http", {}).get("status") == 200'
+
+      # Check for successful response
+      - type: python
+        value: '200 <= context.get("metadata", {}).get("http", {}).get("status", 0) < 300'
+
+      # Check custom metadata fields set by your provider
+      - type: python
+        value: 'context.get("metadata", {}).get("customField", 0) <= 10'
+```
+
+For more complex checks, you can use multiline assertions:
+
+```yaml
+assert:
+  - type: python
+    value: |
+      meta = context.get('metadata', {})
+      http_info = meta.get('http', {})
+
+      # Check HTTP status if available
+      status = http_info.get('status')
+      if status and not (200 <= status < 300):
+          return {
+              'pass': False,
+              'score': 0,
+              'reason': f'HTTP request failed with status {status}'
+          }
+
+      return True
+```
+
+Or in an external file:
+
+```python
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    metadata = context.get('metadata', {})
+    http_info = metadata.get('http', {})
+
+    # Check HTTP status
+    status = http_info.get('status')
+    if status and not (200 <= status < 300):
+        return {
+            'pass': False,
+            'score': 0,
+            'reason': f'HTTP request failed with status {status}'
+        }
+
+    # Check custom metadata fields
+    custom_value = metadata.get('customField', 0)
+    if custom_value > 10:
+        return {
+            'pass': False,
+            'score': 0.5,
+            'reason': f'Custom field too high: {custom_value}'
+        }
+
+    return True
+```
+
+Common metadata fields (varies by provider):
+
+- `http['status']` - HTTP response status code ([HTTP provider](/docs/providers/http))
+- `http['statusText']` - HTTP response status text
+- `http['headers']` - HTTP response headers
+- `groundingMetadata` - Search grounding info ([Google providers](/docs/providers/vertex))
+- `redteamFinalPrompt` - Final prompt used in red team attacks
+
+:::note
+The `context.get('metadata')` property is a shortcut for `context.get('providerResponse', {}).get('metadata')`. Both work identically.
+:::
 
 ## External .py
 

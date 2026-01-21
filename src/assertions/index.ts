@@ -287,6 +287,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+    ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
   // Add trace data if traceId is available

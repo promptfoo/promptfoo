@@ -142,6 +142,9 @@ interface AssertionValueFunctionContext {
 
   // OpenTelemetry trace data (when tracing is enabled)
   trace?: TraceData;
+
+  // Shortcut to providerResponse.metadata (provider-specific fields)
+  metadata?: Record<string, any>;
 }
 ```
 
@@ -168,6 +171,61 @@ tests:
       - type: javascript
         value: 'output.length >= context.vars.min_length'
 ```
+
+## Accessing provider metadata
+
+Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http) includes response status and headers; other providers may include grounding metadata, custom fields, etc. Access metadata via `context.metadata`:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the weather?'
+    assert:
+      # Check HTTP response status (HTTP provider)
+      - type: javascript
+        value: 'context.metadata?.http?.status === 200'
+
+      # Check for successful response (use nullish coalescing for safety)
+      - type: javascript
+        value: '(context.metadata?.http?.status ?? 0) >= 200 && (context.metadata?.http?.status ?? 0) < 300'
+
+      # Check custom metadata fields set by your provider
+      - type: javascript
+        value: '(context.metadata?.customField ?? 0) <= 10'
+```
+
+For more complex checks, you can use multiline assertions:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const meta = context.metadata;
+
+      // Check HTTP status if available
+      const status = meta?.http?.status;
+      if (status && (status < 200 || status >= 300)) {
+        return {
+          pass: false,
+          score: 0,
+          reason: `HTTP request failed with status ${status}`
+        };
+      }
+
+      return true;
+```
+
+Common metadata fields (varies by provider):
+
+- `http.status` - HTTP response status code ([HTTP provider](/docs/providers/http))
+- `http.statusText` - HTTP response status text
+- `http.headers` - HTTP response headers
+- `groundingMetadata` - Search grounding info ([Google providers](/docs/providers/vertex))
+- `redteamFinalPrompt` - Final prompt used in red team attacks
+
+:::note
+The `context.metadata` property is a shortcut for `context.providerResponse.metadata`. Both work identically.
+:::
 
 ## External script
 

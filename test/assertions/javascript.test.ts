@@ -1236,4 +1236,213 @@ return s >= 0.5 && s <= 0.75;`,
       }
     });
   });
+
+  describe('Metadata access in JavaScript assertions', () => {
+    it('should access metadata via context.metadata shortcut', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.metadata?.toolCalls <= 10',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          toolCalls: 5,
+          toolNames: ['get_weather', 'search'],
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should access metadata via context.providerResponse.metadata (full path)', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.providerResponse?.metadata?.toolCalls <= 10',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          toolCalls: 5,
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail assertion when metadata check fails', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.metadata?.toolCalls <= 3',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          toolCalls: 10,
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(false);
+    });
+
+    it('should handle missing metadata gracefully with nullish coalescing', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '(context.metadata?.toolCalls ?? 0) <= 10',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        // No metadata property
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle empty metadata object gracefully', async () => {
+      // This tests the case where metadata is {} (empty object)
+      // which is truthy but has no properties
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '(context.metadata?.toolCalls ?? 0) <= 10',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {}, // Empty metadata object
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should access HTTP metadata from context.metadata', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.metadata?.http?.status === 200',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json' },
+          },
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should access array metadata properties', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.metadata?.toolNames?.includes("get_weather")',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          toolNames: ['get_weather', 'search', 'calculate'],
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle complex metadata assertions with variables', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value:
+          'const meta = context.metadata; meta && meta.toolCalls <= 10 && meta.toolNames?.length <= 5',
+      };
+
+      const output = 'Expected output';
+      const providerResponse = {
+        output,
+        metadata: {
+          toolCalls: 5,
+          toolNames: ['get_weather', 'search'],
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+  });
 });
