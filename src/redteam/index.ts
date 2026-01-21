@@ -107,7 +107,7 @@ function getPluginBaseDisplayId(
         ? plugin.config.policy.trim().replace(/\n+/g, ' ')
         : '';
     const truncated =
-      policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
+      policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
     // Include index to ensure uniqueness even if policy text snippets are identical
     return index !== undefined ? `policy #${index}: "${truncated}"` : `policy: "${truncated}"`;
   }
@@ -1023,8 +1023,15 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  // Track index per plugin id to ensure unique display IDs (e.g., multiple policy plugins)
-  const pluginIndexMap = new Map<string, number>();
+  // Pre-compute indices for each plugin to ensure unique display IDs (e.g., multiple policy plugins)
+  // This avoids race conditions when plugins are processed concurrently
+  const pluginIndices = new Map<object, number>();
+  const pluginIdCounts = new Map<string, number>();
+  for (const plugin of plugins) {
+    const currentCount = (pluginIdCounts.get(plugin.id) || 0) + 1;
+    pluginIdCounts.set(plugin.id, currentCount);
+    pluginIndices.set(plugin, currentCount);
+  }
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
@@ -1161,9 +1168,8 @@ export async function synthesize({
       // NOTE: Use index to ensure unique display IDs (e.g., multiple policy plugins)
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Get or increment index for this plugin to ensure unique display IDs
-      const currentIndex = (pluginIndexMap.get(plugin.id) || 0) + 1;
-      pluginIndexMap.set(plugin.id, currentIndex);
+      // Use pre-computed index to ensure unique display IDs (avoids race condition)
+      const currentIndex = pluginIndices.get(plugin) || 1;
       // Only pass index for plugins that can have duplicates (like policy)
       const baseId = getPluginBaseDisplayId(
         plugin,
@@ -1172,9 +1178,10 @@ export async function synthesize({
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
+        // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "policy #1: ... (Hmong)" - language suffix at end like strategies
-          const displayId = langKey === 'en' ? baseId : `${baseId} (${langKey})`;
+          // Use format like "(Hmong) policy #1: ..." so language is visible in truncated table
+          const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
           pluginResults[displayId] = { requested, generated: result.generated };
