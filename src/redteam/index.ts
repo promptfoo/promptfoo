@@ -132,7 +132,10 @@ function getPluginKeyAndDisplay(plugin: { id: string; config?: Record<string, an
         ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
         : '';
       const preview = policyText.length > 20 ? policyText.slice(0, 20) + '...' : policyText;
-      return { key: policyId, display: preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]` };
+      return {
+        key: policyId,
+        display: preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`,
+      };
     }
 
     // For inline string policies, use hash as key
