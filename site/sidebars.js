@@ -101,6 +101,7 @@ const redTeamSidebar = [
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
           'red-team/plugins/malicious-code',
+          'red-team/plugins/openai-guardrails',
           'red-team/plugins/pliny',
           'red-team/plugins/politics',
           'red-team/plugins/religion',
