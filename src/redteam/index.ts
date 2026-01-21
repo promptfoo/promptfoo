@@ -92,13 +92,22 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 }
 
 /**
+ * Converts a UUID or hash to a short 12-character identifier.
+ * @param id - The full UUID or hash.
+ * @returns A 12-character hex string.
+ */
+function getShortId(id: string): string {
+  return id.replace(/-/g, '').slice(0, 12);
+}
+
+/**
  * Generates a unique key and display string for a plugin instance.
  * The key is used for internal tracking (must be unique), while display is human-readable.
  *
  * For policy plugins:
  * - Cloud policy with name: key=uuid, display="Policy Name"
- * - Cloud policy without name: key=uuid, display="policy: truncated text..."
- * - Inline policy: key=hash, display="policy: truncated text..."
+ * - Cloud policy without name: key=uuid, display="policy [shortId]"
+ * - Inline policy: key=hash, display="policy [hash]"
  *
  * @param plugin - The plugin configuration.
  * @returns An object with `key` (unique identifier) and `display` (human-readable string).
@@ -117,22 +126,17 @@ function getPluginKeyAndDisplay(plugin: { id: string; config?: Record<string, an
       if (policyConfig.name) {
         return { key: policyId, display: policyConfig.name };
       }
-      // Otherwise display truncated text
-      const policyText = policyConfig.text
-        ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
-        : '';
-      const truncated =
-        policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
-      return { key: policyId, display: `policy: "${truncated}"` };
+      // Otherwise display policy [shortId]
+      const shortId = getShortId(policyId);
+      return { key: policyId, display: `policy [${shortId}]` };
     }
 
     // For inline string policies, use hash as key
     if (typeof policyConfig === 'string') {
       const policyText = policyConfig.trim().replace(/\n+/g, ' ');
       const hash = makeInlinePolicyIdSync(policyText);
-      const truncated =
-        policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
-      return { key: hash, display: `policy: "${truncated}"` };
+      // Hash is already 12 chars
+      return { key: hash, display: `policy [${hash}]` };
     }
 
     // Fallback for edge cases
