@@ -344,18 +344,9 @@ jobs:
         working-directory: site
         run: npm install
 
-      - name: Run Site Tests with Coverage
+      - name: Run Site Tests
         working-directory: site
-        run: npm run test:coverage
-
-      - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./site/coverage/coverage-final.json
-          flags: site
-          name: site-coverage
-          fail_ci_if_error: true
-          use_oidc: true
+        run: npm test
 
   webui:
     name: webui tests

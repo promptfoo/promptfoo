@@ -78,7 +78,7 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app && npm run test:coverage --prefix site",
+    "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\""
