@@ -77,7 +77,7 @@ redteam:
     - openai-guardrails
 
 targets:
-  - openai:gpt-4.1-mini
+  - openai:gpt-4o-mini
 ```
 
 Run with:

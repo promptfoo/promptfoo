@@ -177,7 +177,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
-  wordplay: 'Tests handling of wordplay-based attacks using puns, homophones, and word manipulation',
+  wordplay:
+    'Tests handling of wordplay-based attacks using puns, homophones, and word manipulation',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -965,8 +966,10 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'pharmacy:controlled-substance-compliance':
     'Tests compliance with controlled substance regulations in pharmacy contexts',
   'pharmacy:dosage-calculation': 'Tests accuracy and safety of medication dosage calculations',
-  'pharmacy:drug-interaction': 'Tests proper handling of drug interaction warnings and contraindications',
-  wordplay: 'Tests handling of wordplay-based attacks using puns, homophones, and word manipulation',
+  'pharmacy:drug-interaction':
+    'Tests proper handling of drug interaction warnings and contraindications',
+  wordplay:
+    'Tests handling of wordplay-based attacks using puns, homophones, and word manipulation',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1006,7 +1009,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   // New strategies
   'jailbreak:meta': 'Meta-level jailbreak optimization combining multiple techniques',
   'jailbreak:hydra': 'Multi-turn jailbreak strategy using multiple attack vectors in sequence',
-  'authoritative-markup-injection': 'Tests vulnerability to markup-based prompt injection in authoritative contexts',
+  'authoritative-markup-injection':
+    'Tests vulnerability to markup-based prompt injection in authoritative contexts',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {

@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
-  OpenAIGuardrailsPlugin,
   fetchDataset,
+  OpenAIGuardrailsPlugin,
 } from '../../../src/redteam/plugins/openaiGuardrails';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
