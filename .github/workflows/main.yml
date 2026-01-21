@@ -158,6 +158,72 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+  coverage:
+    name: Test Coverage
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Use Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.14.2
+
+      - name: Use Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 4.0.1
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Backend Tests with Coverage
+        run: npm run test -- --coverage
+
+      - name: Run Frontend Tests with Coverage
+        run: npm run test:coverage --prefix src/app
+
+      - name: Run Site Tests with Coverage
+        run: npm run test:coverage --prefix site
+
+      - name: Upload Backend Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: true
+
+      - name: Upload Frontend Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./src/app/coverage/coverage-final.json
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: true
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+
   style-check:
     name: Style Check
     timeout-minutes: 5
