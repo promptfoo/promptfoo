@@ -92,46 +92,53 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 }
 
 /**
- * Generates a unique base display ID for a plugin instance.
- * For policy plugins, always includes an ID for uniqueness (names are not guaranteed unique):
- * - Named policy (cloud): "Policy Name (id)" where id is the existing policy ID
- * - Unnamed policy (inline): "policy (hash): "truncated text..."" where hash is generated from text
+ * Generates a unique key and display string for a plugin instance.
+ * The key is used for internal tracking (must be unique), while display is human-readable.
+ *
+ * For policy plugins:
+ * - Cloud policy with name: key=uuid, display="Policy Name"
+ * - Cloud policy without name: key=uuid, display="policy: truncated text..."
+ * - Inline policy: key=hash, display="policy: truncated text..."
+ *
  * @param plugin - The plugin configuration.
- * @returns A unique base display ID for the plugin.
+ * @returns An object with `key` (unique identifier) and `display` (human-readable string).
  */
-function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
+function getPluginKeyAndDisplay(plugin: { id: string; config?: Record<string, any> }): {
+  key: string;
+  display: string;
+} {
   if (plugin.id === 'policy') {
     const policyConfig = plugin.config?.policy;
 
-    // For PolicyObject (cloud policies), use the existing ID
+    // For PolicyObject (cloud policies), use the existing ID as key
     if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
       const policyId = policyConfig.id;
-      // If policy has a name, show: "Policy Name (id)"
+      // If policy has a name, display just the name
       if (policyConfig.name) {
-        return `${policyConfig.name} (${policyId})`;
+        return { key: policyId, display: policyConfig.name };
       }
-      // Otherwise show: "policy (id): "truncated text...""
+      // Otherwise display truncated text
       const policyText = policyConfig.text
         ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
         : '';
       const truncated =
-        policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-      return `policy (${policyId}): "${truncated}"`;
+        policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
+      return { key: policyId, display: `policy: "${truncated}"` };
     }
 
-    // For inline string policies, generate hash from the text
+    // For inline string policies, use hash as key
     if (typeof policyConfig === 'string') {
       const policyText = policyConfig.trim().replace(/\n+/g, ' ');
       const hash = makeInlinePolicyIdSync(policyText);
       const truncated =
-        policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-      return `policy (${hash}): "${truncated}"`;
+        policyText.length > 30 ? policyText.slice(0, 30) + '...' : policyText || 'custom';
+      return { key: hash, display: `policy: "${truncated}"` };
     }
 
     // Fallback for edge cases
-    return 'policy';
+    return { key: 'policy', display: 'policy' };
   }
-  return plugin.id;
+  return { key: plugin.id, display: plugin.id };
 }
 
 /**
@@ -160,7 +167,7 @@ function getStatus(requested: number, generated: number): string {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
+  pluginResults: Record<string, { requested: number; generated: number; display: string }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
@@ -174,8 +181,15 @@ function generateReport(
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
+    .forEach(([_key, { requested, generated, display }]) => {
+      table.push([
+        rowIndex++,
+        'Plugin',
+        display,
+        requested,
+        generated,
+        getStatus(requested, generated),
+      ]);
     });
 
   Object.entries(strategyResults)
@@ -1041,7 +1055,8 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: Record<string, { requested: number; generated: number; display: string }> =
+    {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1178,25 +1193,30 @@ export async function synthesize({
       // Otherwise, use the aggregated result for the plugin
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Get the base display ID (for policy plugins, this includes truncated policy text)
-      const baseId = getPluginBaseDisplayId(plugin);
+      // Get the unique key and display string for this plugin
+      const { key: baseKey, display: baseDisplay } = getPluginKeyAndDisplay(plugin);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "(Hmong) policy: ..." so language is visible in truncated table
-          const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
+          // Use format like "(Hmong) Policy Name" so language is visible in truncated table
+          const uniqueKey = langKey === 'en' ? baseKey : `${langKey}:${baseKey}`;
+          const displayStr = langKey === 'en' ? baseDisplay : `(${langKey}) ${baseDisplay}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults[uniqueKey] = {
+            requested,
+            generated: result.generated,
+            display: displayStr,
+          };
         }
       } else {
         // Single language or no language - use aggregated result
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
-        pluginResults[baseId] = { requested, generated };
+        pluginResults[baseKey] = { requested, generated, display: baseDisplay };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1239,20 +1259,21 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const baseId = getPluginBaseDisplayId(plugin);
-        pluginResults[baseId] = {
+        const { key, display } = getPluginKeyAndDisplay(plugin);
+        pluginResults[key] = {
           requested: plugin.numTests,
           generated: customTests.length,
+          display,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        const baseId = getPluginBaseDisplayId(plugin);
-        pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
+        const { key, display } = getPluginKeyAndDisplay(plugin);
+        pluginResults[key] = { requested: plugin.numTests, generated: 0, display };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      const baseId = getPluginBaseDisplayId(plugin);
-      pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
+      const { key, display } = getPluginKeyAndDisplay(plugin);
+      pluginResults[key] = { requested: plugin.numTests, generated: 0, display };
       progressBar?.increment(plugin.numTests);
     }
   });
