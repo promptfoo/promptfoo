@@ -28,21 +28,19 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
-import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
-
 import { cn } from '@app/lib/utils';
+import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { generateDataset } from '../../api/generation';
+import { useGenerationJob } from '../../hooks/useGenerationJob';
+import { useGenerationStream } from '../../hooks/useGenerationStream';
+import { GenerationProgressDialog } from './GenerationProgressDialog';
+import type { TestCase } from '@promptfoo/types';
 
 import type {
   DatasetGenerationOptions,
   DatasetGenerationResult,
   GenerationPrompt,
 } from '../../api/generation';
-import { generateDataset } from '../../api/generation';
-import { useGenerationJob } from '../../hooks/useGenerationJob';
-import { useGenerationStream } from '../../hooks/useGenerationStream';
-import { GenerationProgressDialog } from './GenerationProgressDialog';
-
-import type { TestCase } from '@promptfoo/types';
 
 interface GenerateTestCasesDialogProps {
   open: boolean;
@@ -80,7 +78,7 @@ export function GenerateTestCasesDialog({
     progress,
     total,
     phase,
-    result,
+    result: _result,
     error,
     reset,
   } = useGenerationJob({
@@ -227,13 +225,7 @@ export function GenerateTestCasesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!hasPrompts ? (
-          <div className="py-8 text-center">
-            <p className="text-muted-foreground">
-              Add at least one prompt before generating test cases.
-            </p>
-          </div>
-        ) : (
+        {hasPrompts ? (
           <div className="grid grid-cols-2 gap-6 py-4">
             {/* Configuration column */}
             <div className="space-y-4">
@@ -432,6 +424,12 @@ export function GenerateTestCasesDialog({
                 </div>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">
+              Add at least one prompt before generating test cases.
+            </p>
           </div>
         )}
 

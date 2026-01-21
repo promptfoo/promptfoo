@@ -31,14 +31,32 @@
  * @module generation
  */
 
+// Imports for generateTestSuite function
+import { generateAssertions } from './assertions';
+import { generateDataset } from './dataset';
+
+import type { Prompt, TestCase } from '../types';
+import type {
+  ProgressCallback,
+  TestSuiteGenerationOptions,
+  TestSuiteGenerationResult,
+} from './types';
+
 // =============================================================================
 // Types
 // =============================================================================
 
 export type {
+  AssertionGenerateRequest,
+  // Assertion types
+  AssertionGenerationOptions,
+  AssertionGenerationResult,
+  AssertionValidationResult,
   // Dataset types
   ConceptAnalysis,
   ConceptExtractionOptions,
+  CoverageAnalysis,
+  DatasetGenerateRequest,
   DatasetGenerationOptions,
   DatasetGenerationResult,
   DiversityMetrics,
@@ -46,35 +64,28 @@ export type {
   EdgeCase,
   EdgeCaseOptions,
   EdgeCaseType,
-  Persona,
-  PersonaDemographics,
-  PersonaOptions,
-  VariableConstraints,
-  // Assertion types
-  AssertionGenerationOptions,
-  AssertionGenerationResult,
-  AssertionValidationResult,
-  CoverageAnalysis,
-  NegativeTestType,
-  Requirement,
-  RequirementCoverage,
-  SampleOutput,
-  // Combined types
-  TestSuiteGenerationOptions,
-  TestSuiteGenerationResult,
   // Job types
   GenerationJob,
   GenerationJobStatus,
   GenerationJobType,
+  NegativeTestType,
+  Persona,
+  PersonaDemographics,
+  PersonaOptions,
   // Callback types
   ProgressCallback,
   ProgressReporterOptions,
   // API request types
   PromptInput,
+  Requirement,
+  RequirementCoverage,
+  SampleOutput,
   TestCaseInput,
-  DatasetGenerateRequest,
-  AssertionGenerateRequest,
+  // Combined types
+  TestSuiteGenerationOptions,
+  TestSuiteGenerationResult,
   TestsGenerateRequest,
+  VariableConstraints,
 } from './types';
 
 // =============================================================================
@@ -82,22 +93,22 @@ export type {
 // =============================================================================
 
 export {
-  // Main function
-  generateDataset,
-  // Backward-compatible function
-  synthesize as synthesizeDataset,
+  analyzeVariableCoverage,
   // Sub-modules
   extractConcepts,
-  extractTopics,
   extractEntities,
-  generatePersonas,
-  generateSimplePersonas,
-  personaToString,
+  extractTopics,
+  // Main function
+  generateDataset,
   generateEdgeCases,
   generateEdgeCasesByType,
-  measureDiversity,
+  generatePersonas,
+  generateSimplePersonas,
   identifyGaps,
-  analyzeVariableCoverage,
+  measureDiversity,
+  personaToString,
+  // Backward-compatible function
+  synthesize as synthesizeDataset,
 } from './dataset';
 
 // =============================================================================
@@ -105,21 +116,21 @@ export {
 // =============================================================================
 
 export {
-  // Main function
-  generateAssertions,
-  // Backward-compatible function
-  synthesize as synthesizeAssertions,
-  // Sub-modules
-  extractRequirements,
   analyzeCoverage,
-  suggestAssertions,
-  validateAssertions,
-  generateSampleOutputs,
-  filterAssertionsByValidation,
-  generateNegativeTests,
+  createLengthLimitAssertion,
   createNotContainsAssertion,
   createPiiCheckAssertion,
-  createLengthLimitAssertion,
+  // Sub-modules
+  extractRequirements,
+  filterAssertionsByValidation,
+  // Main function
+  generateAssertions,
+  generateNegativeTests,
+  generateSampleOutputs,
+  suggestAssertions,
+  // Backward-compatible function
+  synthesize as synthesizeAssertions,
+  validateAssertions,
 } from './assertions';
 
 // =============================================================================
@@ -127,40 +138,30 @@ export {
 // =============================================================================
 
 export {
+  addJobLog,
+  cleanupOldJobs,
+  completeJob,
   // Job management
   createJob,
-  getJob,
-  updateJobProgress,
-  completeJob,
-  failJob,
-  addJobLog,
   deleteJob,
-  listJobs,
-  cleanupOldJobs,
+  failJob,
   generationJobs,
+  getJob,
+  listJobs,
+  updateJobProgress,
 } from './shared/jobManager';
-
 export {
-  // Progress reporting
-  ProgressReporter,
-  createNoOpProgressReporter,
   createCallbackProgressReporter,
   createCliProgressReporter,
   createJobProgressReporter,
+  createNoOpProgressReporter,
+  // Progress reporting
+  ProgressReporter,
 } from './shared/progressReporter';
 
 // =============================================================================
 // Combined Test Suite Generation
 // =============================================================================
-
-import { generateDataset } from './dataset';
-import { generateAssertions } from './assertions';
-import type { Prompt, TestCase } from '../types';
-import type {
-  ProgressCallback,
-  TestSuiteGenerationOptions,
-  TestSuiteGenerationResult,
-} from './types';
 
 /**
  * Generates a complete test suite including both datasets and assertions.

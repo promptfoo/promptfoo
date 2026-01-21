@@ -76,48 +76,52 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
   });
 
   // Build dataset options
-  const datasetOptions = options.datasetOnly || !options.assertionsOnly
-    ? {
-        instructions: options.instructions,
-        numPersonas: Number.parseInt(options.numPersonas, 10),
-        numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-        provider: options.provider,
-        edgeCases: options.edgeCases ? { enabled: true } : undefined,
-        diversity: options.diversity
-          ? {
-              enabled: true,
-              targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
-            }
-          : undefined,
-        iterative: options.iterative ? { enabled: true, maxRounds: 2 } : undefined,
-      }
-    : undefined;
+  const datasetOptions =
+    options.datasetOnly || !options.assertionsOnly
+      ? {
+          instructions: options.instructions,
+          numPersonas: Number.parseInt(options.numPersonas, 10),
+          numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+          provider: options.provider,
+          edgeCases: options.edgeCases ? { enabled: true } : undefined,
+          diversity: options.diversity
+            ? {
+                enabled: true,
+                targetScore: options.diversityTarget
+                  ? Number.parseFloat(options.diversityTarget)
+                  : 0.7,
+              }
+            : undefined,
+          iterative: options.iterative ? { enabled: true, maxRounds: 2 } : undefined,
+        }
+      : undefined;
 
   // Build assertion options
-  const assertionOptions = options.assertionsOnly || !options.datasetOnly
-    ? {
-        instructions: options.instructions,
-        numQuestions: Number.parseInt(options.numAssertions || '5', 10),
-        provider: options.provider,
-        type: options.type,
-        coverage: options.coverage ? { enabled: true, extractRequirements: true } : undefined,
-        validation: options.validate
-          ? { enabled: true, autoGenerateSamples: true, sampleOutputs: [] }
-          : undefined,
-        negativeTests: options.negativeTests
-          ? {
-              enabled: true,
-              types: [
-                'should-not-contain' as const,
-                'should-not-hallucinate' as const,
-                'should-not-expose' as const,
-                'should-not-repeat' as const,
-                'should-not-exceed-length' as const,
-              ],
-            }
-          : undefined,
-      }
-    : undefined;
+  const assertionOptions =
+    options.assertionsOnly || !options.datasetOnly
+      ? {
+          instructions: options.instructions,
+          numQuestions: Number.parseInt(options.numAssertions || '5', 10),
+          provider: options.provider,
+          type: options.type,
+          coverage: options.coverage ? { enabled: true, extractRequirements: true } : undefined,
+          validation: options.validate
+            ? { enabled: true, autoGenerateSamples: true, sampleOutputs: [] }
+            : undefined,
+          negativeTests: options.negativeTests
+            ? {
+                enabled: true,
+                types: [
+                  'should-not-contain' as const,
+                  'should-not-hallucinate' as const,
+                  'should-not-expose' as const,
+                  'should-not-repeat' as const,
+                  'should-not-exceed-length' as const,
+                ],
+              }
+            : undefined,
+        }
+      : undefined;
 
   const result = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
     dataset: datasetOptions as any,
@@ -133,12 +137,20 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
   let assertionsCount = 0;
 
   if (result.dataset) {
-    configAddition.tests = result.dataset.testCases.map((tc) => ({ vars: tc }));
-    testCasesCount = result.dataset.testCases.length;
+    // Merge main test cases and edge cases into output
+    const mainTests = result.dataset.testCases.map((tc) => ({ vars: tc }));
+    const edgeTests =
+      result.dataset.edgeCases?.map((ec) => ({
+        vars: ec.vars,
+        metadata: { edgeCase: true, type: ec.type, description: ec.description },
+      })) || [];
+
+    configAddition.tests = [...mainTests, ...edgeTests];
+    testCasesCount = mainTests.length + edgeTests.length;
     logger.info(`Generated ${testCasesCount} test cases`);
 
-    if (result.dataset.edgeCases && result.dataset.edgeCases.length > 0) {
-      logger.info(`  - Including ${result.dataset.edgeCases.length} edge cases`);
+    if (edgeTests.length > 0) {
+      logger.info(`  - Including ${edgeTests.length} edge cases`);
     }
     if (result.dataset.diversity) {
       logger.info(`  - Diversity score: ${(result.dataset.diversity.score * 100).toFixed(1)}%`);
@@ -158,9 +170,13 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
     logger.info(`Generated ${assertionsCount} assertions`);
 
     if (result.assertions.coverage) {
-      logger.info(`  - Coverage score: ${(result.assertions.coverage.overallScore * 100).toFixed(1)}%`);
+      logger.info(
+        `  - Coverage score: ${(result.assertions.coverage.overallScore * 100).toFixed(1)}%`,
+      );
       if (result.assertions.coverage.gaps.length > 0) {
-        logger.info(`  - Uncovered requirements: ${result.assertions.coverage.gaps.slice(0, 3).join(', ')}${result.assertions.coverage.gaps.length > 3 ? '...' : ''}`);
+        logger.info(
+          `  - Uncovered requirements: ${result.assertions.coverage.gaps.slice(0, 3).join(', ')}${result.assertions.coverage.gaps.length > 3 ? '...' : ''}`,
+        );
       }
     }
     if (result.assertions.negativeTests && result.assertions.negativeTests.length > 0) {
@@ -269,11 +285,11 @@ export function generateTestsCommand(
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file (YAML)')
     .option('-w, --write', 'Write results to promptfoo configuration file')
-    .option('--provider <provider>', 'Provider for generation. Defaults to the default grading provider.')
     .option(
-      '-i, --instructions [instructions]',
-      'Additional instructions for generation',
+      '--provider <provider>',
+      'Provider for generation. Defaults to the default grading provider.',
     )
+    .option('-i, --instructions [instructions]', 'Additional instructions for generation')
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
 

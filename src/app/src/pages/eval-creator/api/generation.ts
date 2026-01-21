@@ -2,11 +2,10 @@
  * API client functions for the generation system.
  * Uses callApi for proper API base URL handling.
  */
-import { z } from 'zod';
 
 import { callApi } from '@app/utils/api';
-
-import type { TestCase, Assertion } from '@promptfoo/types';
+import { z } from 'zod';
+import type { Assertion, TestCase } from '@promptfoo/types';
 
 /**
  * Simplified prompt representation for generation APIs.
@@ -369,14 +368,19 @@ export async function analyzeConceptsSync(prompts: string[]): Promise<ConceptAna
 
 /**
  * Measure diversity of test cases (synchronous).
+ * Accepts either flat VarMapping objects or wrapped { vars: ... } objects.
  */
 export async function measureDiversitySync(
-  testCases: Array<{ vars: Record<string, string> }>,
+  testCases: Array<Record<string, string> | { vars: Record<string, string> }>,
 ): Promise<DiversityMetrics> {
+  // Normalize to flat mappings (server expects Array<Record<string, string>>)
+  const normalizedTestCases = testCases.map((tc) =>
+    'vars' in tc && typeof tc.vars === 'object' ? tc.vars : (tc as Record<string, string>),
+  );
   const fetchResponse = await callApi('/generation/dataset/measure-diversity', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ testCases }),
+    body: JSON.stringify({ testCases: normalizedTestCases }),
   });
 
   const json = await fetchResponse.json();

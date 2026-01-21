@@ -6,7 +6,7 @@
  * - Individual selection with checkboxes
  * - Diversity score display
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
@@ -18,9 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { CheckCircle, ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
-
 import { cn } from '@app/lib/utils';
+import { CheckCircle, ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 
 import type { DatasetGenerationResult } from '../../api/generation';
 
@@ -52,9 +51,10 @@ export function GeneratedTestCasesPreview({
     const edge: GeneratedTestCase[] = [];
 
     // Process main test cases
+    // Note: tc is already Record<string, string> (flat VarMapping), not wrapped object
     result.testCases.forEach((tc, idx) => {
       core.push({
-        vars: tc.vars,
+        vars: tc,
         description: `Test Case #${idx + 1}`,
         type: 'core',
       });
@@ -84,6 +84,11 @@ export function GeneratedTestCasesPreview({
     return new Set(allTestCases.map((_, idx) => idx));
   });
 
+  // Reset selection when test cases change (e.g., on regenerate)
+  useEffect(() => {
+    setSelectedIndices(new Set(allTestCases.map((_, idx) => idx)));
+  }, [allTestCases]);
+
   // Group expansion state
   const [coreExpanded, setCoreExpanded] = useState(true);
   const [edgeExpanded, setEdgeExpanded] = useState(true);
@@ -94,7 +99,7 @@ export function GeneratedTestCasesPreview({
     } else {
       setSelectedIndices(new Set(allTestCases.map((_, idx) => idx)));
     }
-  }, [selectedIndices.size, allTestCases.length]);
+  }, [selectedIndices.size, allTestCases]);
 
   const handleToggle = useCallback((index: number) => {
     setSelectedIndices((prev) => {
@@ -185,11 +190,15 @@ export function GeneratedTestCasesPreview({
             </div>
             <div className="flex items-center gap-2">
               <div className="text-right">
-                <p className="text-sm font-medium">Diversity: {(diversityScore * 100).toFixed(0)}%</p>
+                <p className="text-sm font-medium">
+                  Diversity: {(diversityScore * 100).toFixed(0)}%
+                </p>
                 <p
                   className={cn(
                     'text-xs',
-                    diversityScore >= 0.6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                    diversityScore >= 0.6
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-600 dark:text-amber-400',
                   )}
                 >
                   {diversityLabel}

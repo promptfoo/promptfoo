@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Assertion } from '@promptfoo/types';
+
 import type { GenerationResult } from '../api/generation';
 
 // SSE Event types matching backend jobManager.ts
@@ -113,8 +114,7 @@ export function useGenerationStream(
   // Get the API base URL
   const getStreamUrl = useCallback((id: string) => {
     // In development, the API is on a different port
-    const baseUrl =
-      import.meta.env.MODE === 'development' ? 'http://localhost:15500/api' : '/api';
+    const baseUrl = import.meta.env.MODE === 'development' ? 'http://localhost:15500/api' : '/api';
     return `${baseUrl}/generation/stream/${id}`;
   }, []);
 
@@ -217,19 +217,20 @@ export function useGenerationStream(
           return;
         }
 
-        // EventSource automatically tries to reconnect
-        // but we track attempts for our own logic
-        if (eventSource.readyState === EventSource.CLOSED) {
-          setIsConnected(false);
+        // Track reconnect attempts on any error, not just CLOSED state
+        // EventSource often fires errors while still in CONNECTING state
+        setIsConnected(false);
+        reconnectAttemptsRef.current++;
 
-          if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
-            reconnectAttemptsRef.current++;
-            // EventSource will automatically reconnect
-          } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-            setConnectionError('Failed to connect to stream after multiple attempts');
-            disconnect();
-          }
+        if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          setConnectionError('Failed to connect to stream after multiple attempts');
+          disconnect();
+        } else if (!autoReconnect) {
+          // If auto-reconnect is disabled, disconnect on first error
+          setConnectionError('Connection failed');
+          disconnect();
         }
+        // Otherwise, EventSource will automatically try to reconnect
       };
 
       eventSourceRef.current = eventSource;

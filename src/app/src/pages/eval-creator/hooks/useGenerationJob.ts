@@ -5,8 +5,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { GenerationJob, GenerationResult } from '../api/generation';
 import { getJobStatus } from '../api/generation';
+
+import type { GenerationJob, GenerationResult } from '../api/generation';
 
 export type JobStatus = 'idle' | 'pending' | 'in-progress' | 'complete' | 'error';
 
@@ -51,7 +52,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   const { onProgress, onComplete, onError, pollInterval = 1000 } = options;
 
   const [jobId, setJobId] = useState<string | null>(null);
-  const [jobType, setJobType] = useState<'dataset' | 'assertions' | 'tests' | null>(null);
+  const [_jobType, setJobType] = useState<'dataset' | 'assertions' | 'tests' | null>(null);
   const [status, setStatus] = useState<JobStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [total, setTotal] = useState(0);
@@ -61,6 +62,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const activeJobIdRef = useRef<string | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -82,6 +84,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
 
   const reset = useCallback(() => {
     stopPolling();
+    activeJobIdRef.current = null;
     setJobId(null);
     setJobType(null);
     setStatus('idle');
@@ -98,6 +101,11 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
         const job: GenerationJob = await getJobStatus(type, id);
 
         if (!isMountedRef.current) {
+          return;
+        }
+
+        // Guard against stale responses from previous jobs
+        if (activeJobIdRef.current !== id) {
           return;
         }
 
@@ -160,6 +168,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
         }
 
         setJobId(newJobId);
+        activeJobIdRef.current = newJobId;
 
         // Start polling
         pollingRef.current = setInterval(() => {

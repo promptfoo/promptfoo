@@ -19,16 +19,14 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { Progress } from '@app/components/ui/progress';
-import { CheckCircle, Circle, FileText, Loader2, Sparkles, XCircle } from 'lucide-react';
-
 import { cn } from '@app/lib/utils';
-
+import { CheckCircle, Circle, FileText, Loader2, Sparkles, XCircle } from 'lucide-react';
 import type { Assertion } from '@promptfoo/types';
 
 interface ProgressPhase {
   id: string;
   label: string;
-  status: 'pending' | 'in-progress' | 'complete' | 'error';
+  status: 'pending' | 'in-progress' | 'completed' | 'error';
   detail?: string;
   timestamp?: number;
 }
@@ -100,7 +98,8 @@ export function GenerationProgressDialog({
   }, [streamedTestCases.length, streamedAssertions.length]);
 
   // Check if we have streamed items to show
-  const hasStreamedItems = showLivePreview && (streamedTestCases.length > 0 || streamedAssertions.length > 0);
+  const hasStreamedItems =
+    showLivePreview && (streamedTestCases.length > 0 || streamedAssertions.length > 0);
 
   // Calculate progress percentage
   const progressPercent = useMemo(() => {
@@ -274,45 +273,45 @@ export function GenerationProgressDialog({
                 ref={scrollAreaRef}
                 className="h-40 overflow-y-auto rounded-lg border border-border bg-muted/30 p-2 space-y-1.5"
               >
-                  {streamedTestCases.map((tc, index) => (
-                    <div
-                      key={`tc-${index}`}
-                      className="rounded border border-border/60 bg-background p-2 animate-in slide-in-from-bottom-2 duration-200"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="flex-shrink-0 text-xs font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                          #{index + 1}
-                        </span>
-                        <p className="text-xs text-foreground truncate flex-1">
-                          {Object.entries(tc)
-                            .slice(0, 2)
-                            .map(([key, value]) => `${key}: ${String(value).slice(0, 50)}`)
-                            .join(' | ')}
-                          {Object.keys(tc).length > 2 && ' ...'}
-                        </p>
-                      </div>
+                {streamedTestCases.map((tc, index) => (
+                  <div
+                    key={`tc-${index}`}
+                    className="rounded border border-border/60 bg-background p-2 animate-in slide-in-from-bottom-2 duration-200"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 text-xs font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5">
+                        #{index + 1}
+                      </span>
+                      <p className="text-xs text-foreground truncate flex-1">
+                        {Object.entries(tc)
+                          .slice(0, 2)
+                          .map(([key, value]) => `${key}: ${String(value).slice(0, 50)}`)
+                          .join(' | ')}
+                        {Object.keys(tc).length > 2 && ' ...'}
+                      </p>
                     </div>
-                  ))}
-                  {streamedAssertions.map((assertion, index) => (
-                    <div
-                      key={`assertion-${index}`}
-                      className={cn(
-                        'rounded border p-2 animate-in slide-in-from-bottom-2 duration-200',
-                        'border-blue-200 dark:border-blue-800/50',
-                        'bg-blue-50/50 dark:bg-blue-950/20',
-                      )}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="flex-shrink-0 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 rounded px-1.5 py-0.5">
-                          Assertion
-                        </span>
-                        <p className="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">
-                          {assertion.type}
-                          {assertion.value && `: ${String(assertion.value).slice(0, 40)}...`}
-                        </p>
-                      </div>
+                  </div>
+                ))}
+                {streamedAssertions.map((assertion, index) => (
+                  <div
+                    key={`assertion-${index}`}
+                    className={cn(
+                      'rounded border p-2 animate-in slide-in-from-bottom-2 duration-200',
+                      'border-blue-200 dark:border-blue-800/50',
+                      'bg-blue-50/50 dark:bg-blue-950/20',
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 rounded px-1.5 py-0.5">
+                        Assertion
+                      </span>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">
+                        {assertion.type}
+                        {assertion.value && `: ${String(assertion.value).slice(0, 40)}...`}
+                      </p>
                     </div>
-                  ))}
+                  </div>
+                ))}
               </div>
             </div>
           )}
