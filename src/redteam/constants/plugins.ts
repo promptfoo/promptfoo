@@ -338,6 +338,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -350,6 +351,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'vlsu',
   'wordplay',
   'xstest',
 ] as const;
@@ -372,7 +374,12 @@ export const DATASET_EXEMPT_PLUGINS = [
   'pliny',
   'unsafebench',
   'vlguard',
+  'vlsu',
 ] as const;
+
+// Plugins excluded from multi-input mode (in addition to dataset plugins)
+export const MULTI_INPUT_EXCLUDED_PLUGINS = ['ascii-smuggling'] as const;
+export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -410,6 +417,7 @@ export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
   'bola',
   'bfla',
   'rbac',
+  'rag-source-attribution',
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
@@ -452,6 +460,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'reasoning-dos',
   'religion',
   'special-token-injection',

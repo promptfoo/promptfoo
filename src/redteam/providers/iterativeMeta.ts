@@ -40,6 +40,7 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../types/index';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
@@ -109,12 +110,13 @@ export async function runMetaAgentRedteam({
   gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   inputs?: Record<string, string>;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
+  prompt?: string;
   metadata: IterativeMetaMetadata;
   tokenUsage: TokenUsage;
   error?: string;
@@ -303,7 +305,7 @@ export async function runMetaAgentRedteam({
     const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
 
     // Build updated vars - handle multi-input mode
-    const updatedVars: Record<string, string | object> = {
+    const updatedVars: Record<string, VarValue> = {
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
       ...(currentInputVars || {}),
@@ -499,6 +501,7 @@ export async function runMetaAgentRedteam({
 
   return {
     output: bestResponse || lastResponse?.output || '',
+    prompt: bestPrompt,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     metadata: {
       finalIteration,
@@ -526,7 +529,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly perTurnLayers: LayerConfig[];
   readonly inputs?: Record<string, string>;
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeMeta] Constructor config', {
       config,
     });
@@ -590,7 +593,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
         provider: this.agentProvider,
         jsonOnly: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,
         jsonOnly: true,
       }),

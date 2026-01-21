@@ -47,6 +47,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 
@@ -218,7 +219,7 @@ export class HydraProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     goal: string;
     targetProvider: ApiProvider;
     context?: CallApiContextParams;
@@ -318,6 +319,7 @@ export class HydraProvider implements ApiProvider {
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,
+        ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
@@ -408,7 +410,7 @@ export class HydraProvider implements ApiProvider {
           .replace(/%\}/g, '% }');
 
         // Build updated vars - handle multi-input mode
-        const updatedVars: Record<string, string | object> = {
+        const updatedVars: Record<string, VarValue> = {
           ...vars,
           [this.injectVar]: escapedMessage,
           ...(this.sessionId ? { sessionId: this.sessionId } : {}),

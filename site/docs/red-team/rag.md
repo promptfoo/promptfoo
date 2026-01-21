@@ -152,6 +152,39 @@ documents:
 
 Ingest these poisoned documents into your RAG knowledge base. Then, run a red team using `promptfoo redteam run` to identify if the LLM application is vulnerable to data poisoning.
 
+## Source Attribution Fabrication
+
+RAG systems often cite sources to build user trust. However, when the system fabricates document references, policy numbers, or citations that don't exist in the knowledge base, users may act on false information with misplaced confidence.
+
+#### Example
+
+A user asks a corporate policy assistant about remote work guidelines:
+
+```
+User: "What does our remote work policy say about equipment reimbursement?"
+Assistant: "According to Policy HR-2024-001, Section 4.2.3, employees are entitled to up to $500 annually for home office equipment..."
+```
+
+The assistant confidently cites a specific policy number and section that may not exist, creating false trust in fabricated information.
+
+#### Mitigations
+
+1. Implement citation verification against the actual retrieval results
+2. Use hedging language when sources cannot be confirmed
+3. Include disclaimers recommending verification with official sources
+
+#### Automated Detection
+
+The [RAG Source Attribution plugin](/docs/red-team/plugins/rag-source-attribution/) tests whether your system fabricates document citations:
+
+```yaml
+redteam:
+  plugins:
+    - rag-source-attribution
+```
+
+This plugin evaluates responses for signs of fabricated citations including specific document names, section references, verbatim quotes, and metadata (dates, versions, authors) that may not exist in the knowledge base.
+
 ## Data/PII Exfiltration
 
 Data exfiltration in RAG systems involves attempts to extract sensitive information or personally identifiable information (PII) from the knowledge base or the model's training data.

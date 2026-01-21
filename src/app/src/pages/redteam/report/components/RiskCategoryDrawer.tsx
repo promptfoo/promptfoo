@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -442,6 +443,7 @@ const RiskCategoryDrawer = ({
           }
           gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
           metadata={selectedTest?.result?.metadata}
+          providerPrompt={getActualPrompt(selectedTest?.result?.response, { formatted: true })}
         />
       </SheetContent>
     </Sheet>

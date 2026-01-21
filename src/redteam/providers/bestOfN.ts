@@ -138,6 +138,7 @@ export default class BestOfNProvider implements ApiProvider {
             currentStep++;
             if (!response.error) {
               successfulResponse = response;
+              successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
                 ...successfulResponse.metadata,
                 redteamFinalPrompt: candidatePrompt,

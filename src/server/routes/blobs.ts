@@ -21,7 +21,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const { hash } = req.params;
+  const hash = req.params.hash as string;
   if (!BLOB_HASH_REGEX.test(hash)) {
     res.status(400).json({ error: 'Invalid blob hash' });
     return;

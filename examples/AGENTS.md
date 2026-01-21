@@ -56,9 +56,9 @@ Note: Quotes around `'{{env.VAR}}'` are required in YAML to prevent parsing issu
 
 Use current model identifiers (see `site/docs/providers/` for full list):
 
-- OpenAI: `openai:responses:gpt-5.1`, `openai:responses:gpt-5.1-mini`
+- OpenAI: `openai:chat:gpt-5-mini`, `openai:chat:gpt-5.1-mini`, `openai:responses:gpt-5.2`
 - Anthropic: `anthropic:messages:claude-sonnet-4-5-20250929`
-- Google: `google:gemini-3-pro-preview`, `google:gemini-2.5-flash`
+- Google: `google:gemini-2.0-flash`, `google:gemini-2.5-pro-preview`
 
 ## Guidelines
 

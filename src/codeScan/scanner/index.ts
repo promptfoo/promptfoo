@@ -293,7 +293,25 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       githubPr: options.githubPr,
     });
   } catch (error) {
-    const msg = `Scan failed: ${error instanceof Error ? error.message : String(error)}`;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Handle fork PR auth rejection as success (helpful comment posted to PR)
+    if (errorMessage.includes('Fork PR scanning not authorized')) {
+      const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
+      if (showSpinner && spinner) {
+        spinner.succeed(msg);
+      } else {
+        logger.info(msg);
+      }
+
+      cliState.postActionCallback = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        process.exitCode = 0; // Success - not an error condition
+      };
+      return;
+    }
+
+    const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
     } else {
