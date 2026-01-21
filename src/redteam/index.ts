@@ -36,12 +36,12 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
+import { makeInlinePolicyIdSync } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
-import { makeInlinePolicyIdSync } from './plugins/policy/utils';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
@@ -93,9 +93,9 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
 
 /**
  * Generates a unique base display ID for a plugin instance.
- * For policy plugins:
- * - If policy has a name, use it directly (e.g., "Secret Protection Policy")
- * - Otherwise, show hash + truncated text (e.g., "policy (a1b2c3): "Don't reveal..."")
+ * For policy plugins, always includes a hash for uniqueness (names are not guaranteed unique):
+ * - Named policy: "Policy Name (a1b2c3d4e5f6)"
+ * - Unnamed policy: "policy (a1b2c3d4e5f6): "truncated text...""
  * @param plugin - The plugin configuration.
  * @returns A unique base display ID for the plugin.
  */
@@ -103,22 +103,25 @@ function getPluginBaseDisplayId(plugin: { id: string; config?: Record<string, an
   if (plugin.id === 'policy') {
     const policyConfig = plugin.config?.policy;
 
-    // Check if policy is an object with a name
-    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.name) {
-      return policyConfig.name;
-    }
-
-    // Fall back to hash + truncated text for unnamed policies
+    // Extract policy text for hash calculation
     const policyText =
       typeof policyConfig === 'string'
         ? policyConfig.trim().replace(/\n+/g, ' ')
         : typeof policyConfig === 'object' && policyConfig?.text
           ? String(policyConfig.text).trim().replace(/\n+/g, ' ')
           : '';
+
+    // Always include hash for uniqueness (policy names are not guaranteed unique)
+    const hash = makeInlinePolicyIdSync(policyText);
+
+    // If policy has a name, show: "Policy Name (hash)"
+    if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.name) {
+      return `${policyConfig.name} (${hash})`;
+    }
+
+    // Otherwise show: "policy (hash): "truncated text...""
     const truncated =
       policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-    // Include hash for uniqueness when policies have similar beginnings
-    const hash = makeInlinePolicyIdSync(policyText);
     return `policy (${hash}): "${truncated}"`;
   }
   return plugin.id;

@@ -3080,7 +3080,13 @@ describe('Language configuration', () => {
           {
             id: 'policy',
             numTests: 2,
-            config: { policy: { id: 'abc123def456', text: 'Some policy text', name: 'Secret Protection Policy' } },
+            config: {
+              policy: {
+                id: 'abc123def456',
+                text: 'Some policy text',
+                name: 'Secret Protection Policy',
+              },
+            },
           },
           // Policy without a name - should display hash + truncated text
           { id: 'policy', numTests: 2, config: { policy: 'Another policy without a name' } },
@@ -3100,9 +3106,9 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Named policy should show the name directly
-      expect(cleanReport).toContain('Secret Protection Policy');
-      // Unnamed policy should show hash + truncated text (text may be truncated in table)
+      // Named policy should show: "Policy Name (hash)" - hash may be truncated in table
+      expect(cleanReport).toMatch(/Secret Protection Policy \([a-f0-9]+/);
+      // Unnamed policy should show: "policy (hash): "truncated text..."" - text may be truncated
       expect(cleanReport).toMatch(/policy \([a-f0-9]{12}\):.*Another/);
     });
   });
