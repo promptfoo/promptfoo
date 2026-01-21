@@ -127,7 +127,7 @@ export class MyPlugin extends ImageDatasetPluginBase<RecordType, ConfigType> {
 }
 ```
 
-**Critical: Rubric Template Variables for Multimodal**
+### Rubric Template Variables for Multimodal
 
 For image plugins, `{{prompt}}` contains the FULL multimodal prompt including base64 image data, which can cause token limit errors in grading. Use `{{testVars.prompt}}` for the text-only query:
 

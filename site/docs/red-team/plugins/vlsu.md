@@ -41,23 +41,23 @@ Unlike text-based plugins, the VLSU plugin should not be used with any redteam s
 
 ## Available Categories
 
-| Category | Name               | Description                                       |
-| -------- | ------------------ | ------------------------------------------------- |
-| C1       | Hate Speech        | Content promoting hatred against protected groups |
-| C2       | Sexual             | Sexually explicit or suggestive content           |
-| C3       | Profanity          | Offensive or vulgar language                      |
-| C4       | Self-Harm          | Content encouraging self-injury or suicide        |
-| C5       | Legal Concerns     | Content with potential legal implications         |
-| C6       | Harassment         | Targeted harassment or bullying                   |
-| C7       | Animal Harm        | Cruelty to animals                                |
-| C8       | Financial          | Scams, fraud, or financial manipulation           |
-| C9       | Violence           | Depiction or promotion of violence                |
-| C10      | Malware            | Content related to malicious software             |
-| C11      | Privacy            | Privacy violations                                |
-| C12      | Terrorism          | Terrorism-related content                         |
-| C13      | Illegal Substances | Drug-related content                              |
-| C14      | Weapons            | Weapon-related content                            |
-| C15      | Unethical Behavior | General unethical conduct                         |
+| Category | Name                             | Description                                       |
+| -------- | -------------------------------- | ------------------------------------------------- |
+| C1       | Slurs, Hate Speech, Hate Symbols | Content promoting hatred against protected groups |
+| C2       | Discrimination                   | Discrimination and unequal treatment              |
+| C3       | Drug Abuse                       | Content promoting or enabling drug abuse          |
+| C4       | Self-Harm and Suicide            | Content encouraging self-injury or suicide        |
+| C5       | Animal Violence and Gore         | Content depicting cruelty to animals              |
+| C6       | Adult Explicit Sexual Material   | Sexually explicit content                         |
+| C7       | Adult Racy Material              | Suggestive but non-explicit content               |
+| C8       | Warfare and Armed Conflicts      | Content glorifying or enabling warfare            |
+| C9       | Interpersonal Violence           | Depiction or promotion of violence between people |
+| C10      | Weapons and Dangerous Objects    | Content related to weapons and dangerous items    |
+| C11      | Gore and Graphic Content         | Graphic depictions of violence or injury          |
+| C12      | Terrorism and Violent Extremism  | Terrorism-related content                         |
+| C13      | Jailbreaks                       | Attempts to circumvent AI safety measures         |
+| C14      | Inauthentic Practices/Fraud      | Deception, scams, and fraudulent content          |
+| C15      | Human Exploitation               | Human trafficking, forced labor, exploitation     |
 
 ## Configuration Options
 
@@ -69,7 +69,6 @@ Unlike text-based plugins, the VLSU plugin should not be used with any redteam s
 | `compositionalOnly` | boolean  | `false` | Only test safe+safe=unsafe cases             |
 | `includePrompt`     | boolean  | `true`  | Include text prompt with image               |
 | `maxConcurrency`    | number   | 5       | Image fetch concurrency                      |
-| `imageFetchTimeout` | number   | 30000   | Per-image timeout (ms)                       |
 | `skipBrokenImages`  | boolean  | `true`  | Skip unavailable images                      |
 
 ### Safety Grades
