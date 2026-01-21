@@ -377,7 +377,8 @@ describe('evaluator', () => {
       ],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
+    // Disable timeouts to avoid abort signal in test
+    await evaluate(testSuite, evalRecord, { timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
@@ -546,7 +547,8 @@ describe('evaluator', () => {
     try {
       const processedTestSuite = await processConfigFileReferences(testSuite);
       const evalRecord = await Eval.create({}, processedTestSuite.prompts, { id: randomUUID() });
-      await evaluate(processedTestSuite, evalRecord, {});
+      // Disable timeouts to avoid abort signal in test
+      await evaluate(processedTestSuite, evalRecord, { timeoutMs: 0, maxEvalTimeMs: 0 });
       const summary = await evalRecord.toEvaluateSummary();
 
       expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
@@ -2762,7 +2764,8 @@ describe('evaluator', () => {
       tests: [{ vars: { problem: '8x + 31 = 2' } }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
+    // Disable timeouts to avoid abort signal in test
+    await evaluate(testSuite, evalRecord, { timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(1);
@@ -2983,7 +2986,8 @@ describe('evaluator', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
+    // Disable timeouts to avoid abort signal in test
+    await evaluate(testSuite, evalRecord, { timeoutMs: 0, maxEvalTimeMs: 0 });
 
     // Check that the API was called with the correct prompts
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);

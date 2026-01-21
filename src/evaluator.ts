@@ -13,7 +13,7 @@ import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { getDefaultMaxEvalTimeMs, getEnvBool, getEnvInt, getEvalTimeoutMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
@@ -854,7 +854,48 @@ class Evaluator {
     let { testSuite } = this;
 
     const startTime = Date.now();
-    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+
+    // Calculate estimated total eval steps for dynamic max eval time
+    // This is an approximation since variable combinations aren't known yet
+    const baseTestCount = testSuite.tests?.length || 1;
+    const scenarioTestCount =
+      testSuite.scenarios?.reduce(
+        (acc, s) => acc + (s.tests?.length || 1) * (s.config?.length || 1),
+        0,
+      ) || 0;
+    const estimatedTestCount = baseTestCount + scenarioTestCount;
+    const estimatedTotalSteps =
+      estimatedTestCount *
+      (options.repeat || 1) *
+      testSuite.providers.length *
+      testSuite.prompts.length;
+    const maxConcurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    const testCaseTimeoutMs = getEvalTimeoutMs();
+    const isRedteam = testSuite.redteam != null;
+
+    const maxEvalTimeMs =
+      options.maxEvalTimeMs ??
+      getDefaultMaxEvalTimeMs(estimatedTotalSteps, maxConcurrency, testCaseTimeoutMs, isRedteam);
+
+    // Log timeout configuration for debugging
+    if (maxEvalTimeMs > 0) {
+      const estimatedEndTime = new Date(startTime + maxEvalTimeMs);
+      const formatDuration = (ms: number) => {
+        const minutes = Math.floor(ms / 60000);
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
+      };
+      logger.debug(
+        `[Evaluator] Timeout configuration: maxEvalTime=${formatDuration(maxEvalTimeMs)}, ` +
+          `perTestTimeout=${formatDuration(testCaseTimeoutMs)}, ` +
+          `estimatedSteps=${estimatedTotalSteps}, concurrency=${maxConcurrency}, ` +
+          `isRedteam=${isRedteam}, estimatedEndTime=${estimatedEndTime.toISOString()}`,
+      );
+    } else {
+      logger.debug('[Evaluator] Timeout disabled (maxEvalTimeMs=0)');
+    }
+
     let evalTimedOut = false;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
@@ -1498,8 +1539,9 @@ class Evaluator {
 
     // Add a wrapper function that implements timeout
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
-      // Get timeout value from options or environment, defaults to 0 (no timeout)
-      const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
+      // Get timeout value from options or environment
+      // Use explicit check for undefined to allow timeoutMs=0 to disable timeout
+      const timeoutMs = options.timeoutMs !== undefined ? options.timeoutMs : getEvalTimeoutMs();
 
       if (timeoutMs <= 0) {
         // No timeout, process normally
@@ -1512,7 +1554,12 @@ class Evaluator {
         ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
         : abortController.signal;
 
-      // Add the abort signal to the evalStep
+      // Combine the per-test timeout signal with any existing abort signal (e.g., global maxEvalTimeMs)
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, signal])
+        : signal;
+
+      // Add the combined abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
         abortSignal: combinedSignal,

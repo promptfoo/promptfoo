@@ -502,23 +502,166 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
+ * Default multiplier applied to REQUEST_TIMEOUT_MS to calculate the test case timeout.
+ * Set to 5 to allow for multiple retries and accommodate multi-turn redteam strategies
+ * (iterative, GOAT, Crescendo, etc.) which may make many API calls per test case.
+ */
+export const EVAL_TIMEOUT_MULTIPLIER = 5;
+
+/**
  * Get the timeout in milliseconds for each individual test case/provider API call.
  * When this timeout is reached, that specific test is marked as an error.
- * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
- * @returns The timeout value in milliseconds, or the default value if not set.
+ *
+ * Default behavior: If not explicitly set, calculates a default based on REQUEST_TIMEOUT_MS * 5
+ * (1,500,000ms / 25 minutes by default) to allow for multiple retry cycles and multi-turn
+ * redteam strategies like iterative, GOAT, and Crescendo.
+ *
+ * Set PROMPTFOO_EVAL_TIMEOUT_MS=0 to explicitly disable the timeout.
+ *
+ * @param defaultValue Optional override default. If undefined, uses calculated default.
+ * @returns The timeout value in milliseconds.
  */
-export function getEvalTimeoutMs(defaultValue: number = 0): number {
-  return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
+export function getEvalTimeoutMs(defaultValue?: number): number {
+  // Check if PROMPTFOO_EVAL_TIMEOUT_MS is explicitly set (including 0)
+  const explicitValue = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS');
+  if (explicitValue !== undefined) {
+    return explicitValue;
+  }
+
+  // If a default was passed in by the caller, use it
+  if (defaultValue !== undefined) {
+    return defaultValue;
+  }
+
+  // Calculate default: 5x REQUEST_TIMEOUT_MS to allow for retries and multi-turn strategies
+  // REQUEST_TIMEOUT_MS defaults to 300,000ms (5 minutes)
+  const requestTimeout = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+  return requestTimeout * EVAL_TIMEOUT_MULTIPLIER;
 }
 
 /**
  * Get the maximum total runtime in milliseconds for the entire evaluation process.
  * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
+ *
+ * Note: For most use cases, prefer `getDefaultMaxEvalTimeMs()` which auto-calculates a reasonable
+ * default based on eval characteristics. This function is useful when you need direct access to
+ * the env var value without auto-calculation.
+ *
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */
 export function getMaxEvalTimeMs(defaultValue: number = 0): number {
   return getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS', defaultValue);
+}
+
+/**
+ * Expected time per test for regular evaluations (1 minute).
+ * Most API calls complete in seconds, but we allow buffer for slower responses.
+ */
+export const EXPECTED_TIME_PER_TEST_MS = 60_000;
+
+/**
+ * Expected time per test for redteam evaluations (5 minutes).
+ * Redteam strategies involve multiple turns/iterations and API calls per test.
+ */
+export const EXPECTED_TIME_PER_REDTEAM_TEST_MS = 300_000;
+
+/**
+ * Safety multiplier for regular evaluations.
+ * Applied to expected time to provide buffer for slow tests.
+ */
+export const MAX_EVAL_TIME_SAFETY_MULTIPLIER = 3;
+
+/**
+ * Safety multiplier for redteam evaluations.
+ * Lower than regular because expected time is already padded for multi-turn strategies.
+ */
+export const MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER = 2;
+
+/**
+ * Buffer time added to max eval time calculations (1 minute).
+ * Accounts for setup, teardown, and overhead.
+ */
+export const MAX_EVAL_TIME_BUFFER_MS = 60_000;
+
+/**
+ * Calculate a reasonable default maximum evaluation time based on eval characteristics.
+ *
+ * This provides a "swiss cheese" safety layer - the last line of defense to prevent
+ * evaluations from running indefinitely. The calculation considers:
+ * - Number of eval steps and concurrency (determines batch count)
+ * - Expected time per test (longer for redteam due to multi-turn strategies)
+ * - Safety multiplier (provides buffer for slow tests)
+ * - Per-test timeout (caps the worst case)
+ *
+ * @param totalEvalSteps Total number of evaluation steps (tests × providers × prompts × repeat)
+ * @param maxConcurrency Maximum concurrent test executions
+ * @param testCaseTimeoutMs Timeout per individual test case
+ * @param isRedteam Whether this is a redteam evaluation
+ * @returns Calculated max eval time in milliseconds
+ */
+export function calculateDefaultMaxEvalTimeMs(
+  totalEvalSteps: number,
+  maxConcurrency: number,
+  testCaseTimeoutMs: number,
+  isRedteam: boolean = false,
+): number {
+  const batchCount = Math.ceil(totalEvalSteps / Math.max(1, maxConcurrency));
+
+  // Expected time per test - longer for redteam due to multi-turn strategies
+  const expectedTimePerTest = isRedteam
+    ? EXPECTED_TIME_PER_REDTEAM_TEST_MS
+    : EXPECTED_TIME_PER_TEST_MS;
+
+  // Safety multiplier - lower for redteam since expected time is already padded
+  const safetyMultiplier = isRedteam
+    ? MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER
+    : MAX_EVAL_TIME_SAFETY_MULTIPLIER;
+
+  // Calculate expected total time with safety margin
+  const expectedTime = batchCount * expectedTimePerTest;
+  const safeMaxTime = expectedTime * safetyMultiplier + MAX_EVAL_TIME_BUFFER_MS;
+
+  // Cap at worst case (all tests timeout)
+  const worstCase = batchCount * testCaseTimeoutMs;
+
+  return Math.min(safeMaxTime, worstCase);
+}
+
+/**
+ * Get the default maximum evaluation time, calculating if not explicitly set.
+ *
+ * Priority:
+ * 1. PROMPTFOO_MAX_EVAL_TIME_MS env var (if set, including 0 to disable)
+ * 2. Calculated default based on eval characteristics
+ *
+ * Set PROMPTFOO_MAX_EVAL_TIME_MS=0 to explicitly disable the max eval time limit.
+ *
+ * @param totalEvalSteps Total number of evaluation steps
+ * @param maxConcurrency Maximum concurrent test executions
+ * @param testCaseTimeoutMs Timeout per individual test case
+ * @param isRedteam Whether this is a redteam evaluation
+ * @returns Max eval time in milliseconds, or 0 if disabled
+ */
+export function getDefaultMaxEvalTimeMs(
+  totalEvalSteps: number,
+  maxConcurrency: number,
+  testCaseTimeoutMs: number,
+  isRedteam: boolean = false,
+): number {
+  // Check if explicitly set (including 0 to disable)
+  const explicitValue = getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS');
+  if (explicitValue !== undefined) {
+    return explicitValue;
+  }
+
+  // Calculate default based on eval characteristics
+  return calculateDefaultMaxEvalTimeMs(
+    totalEvalSteps,
+    maxConcurrency,
+    testCaseTimeoutMs,
+    isRedteam,
+  );
 }
 
 /**
