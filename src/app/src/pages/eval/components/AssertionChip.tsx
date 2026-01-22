@@ -1,4 +1,4 @@
-import * as React from 'react';
+import type { ReactNode } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -22,7 +22,7 @@ interface AssertionChipProps {
   /** Child assertion results for assert-sets */
   childResults?: GradingResult[];
   /** Optional tooltip content (e.g., for policy metrics) */
-  tooltipContent?: React.ReactNode;
+  tooltipContent?: ReactNode;
   /** Click handler for filtering */
   onClick?: () => void;
 }
@@ -41,6 +41,27 @@ function getThresholdLabel(threshold: number | undefined): string {
     return `≥${(threshold * 100).toFixed(0)}% must pass`;
   }
   return '';
+}
+
+/** Get a stable key for a child result */
+function getChildKey(child: GradingResult, index: number): string {
+  return child.assertion?.metric || child.assertion?.type || `assertion-${index}`;
+}
+
+/** Status icon for pass/fail/neutral states */
+function StatusIcon({ passed, neutral }: { passed: boolean; neutral: boolean }) {
+  if (neutral) {
+    return <Minus className="size-3.5 text-muted-foreground" aria-hidden="true" />;
+  }
+  if (passed) {
+    return (
+      <Check
+        className="size-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]"
+        aria-hidden="true"
+      />
+    );
+  }
+  return <X className="size-3.5 text-red-600 dark:text-red-400 stroke-[2.5]" aria-hidden="true" />;
 }
 
 function AssertionChip({
@@ -62,100 +83,92 @@ function AssertionChip({
   );
 
   const displayThresholdLabel = thresholdLabel ?? getThresholdLabel(threshold);
+  const hasChildren = isAssertSet && childResults && childResults.length > 0;
 
-  // Format score for display
-  // Hide boolean scores (0 and 1) and hide score for assert-sets (shown in popover with context)
+  // Hide boolean scores (0 and 1) and hide score for assert-sets (shown in popover)
   const displayScore = !isAssertSet && score !== 0 && score !== 1 ? score.toFixed(2) : null;
 
-  // Popover content for assert-sets
-  const popoverContent =
-    isAssertSet && childResults && childResults.length > 0 ? (
-      <PopoverContent className="w-auto min-w-[240px] p-3" align="start">
-        <div className="space-y-3">
-          {/* Header */}
-          <div className="space-y-1">
-            <h4 className="text-sm font-semibold">{metric}</h4>
-            {displayThresholdLabel && (
-              <p className="text-xs text-muted-foreground">{displayThresholdLabel}</p>
-            )}
-            <div className="flex items-center gap-1.5 text-xs">
-              <span>Score:</span>
-              <span className="font-medium">{score.toFixed(2)}</span>
-              {threshold !== undefined && (
-                <>
-                  <span className="text-muted-foreground">≥</span>
-                  <span className="text-muted-foreground">{threshold.toFixed(2)}</span>
-                </>
-              )}
-              {passed ? (
-                <Check className="size-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-              ) : (
-                <X className="size-3.5 text-red-600 dark:text-red-400 stroke-[2.5]" />
-              )}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-border" />
-
-          {/* Child assertions */}
-          <div className="space-y-2">
-            {childResults.map((child, index) => {
-              const childMetric =
-                child.assertion?.metric || child.assertion?.type || `assertion-${index}`;
-              const childScore = child.score;
-              const childPassed = child.pass;
-
-              // Determine status indicator
-              // If parent passed (e.g., Either/Or), show neutral for failed children
-              const showNeutral = passed && !childPassed;
-
-              return (
-                <div key={index} className="flex items-center justify-between gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    {showNeutral ? (
-                      <Minus className="size-3.5 text-muted-foreground" />
-                    ) : childPassed ? (
-                      <Check className="size-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-                    ) : (
-                      <X className="size-3.5 text-red-600 dark:text-red-400 stroke-[2.5]" />
-                    )}
-                    <span className={cn(showNeutral && 'text-muted-foreground')}>
-                      {childMetric}
-                    </span>
-                  </div>
-                  <span
-                    className={cn('font-medium', showNeutral && 'text-muted-foreground opacity-80')}
-                  >
-                    {childScore.toFixed(2)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </PopoverContent>
-    ) : null;
-
-  // Main chip content (without chevron for assert-sets)
+  // Main chip content
   const chipMainContent = (
     <>
       {passed ? (
-        <Check className="size-3.5 stroke-[2.5]" />
+        <Check className="size-3.5 stroke-[2.5]" aria-hidden="true" />
       ) : (
-        <X className="size-3.5 stroke-[2.5]" />
+        <X className="size-3.5 stroke-[2.5]" aria-hidden="true" />
       )}
       <span className="font-semibold">{metric}</span>
       {displayScore && <span className="opacity-80">{displayScore}</span>}
     </>
   );
 
-  // For assert-sets with children, use split click targets
-  if (isAssertSet && childResults && childResults.length > 0) {
+  // Popover content for assert-sets with children
+  const popoverContent = hasChildren ? (
+    <PopoverContent className="w-auto min-w-[240px] p-3" align="start">
+      <div className="space-y-3">
+        {/* Header */}
+        <div className="space-y-1">
+          <h4 className="text-sm font-semibold">{metric}</h4>
+          {displayThresholdLabel && (
+            <p className="text-xs text-muted-foreground">{displayThresholdLabel}</p>
+          )}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span>Score:</span>
+            <span className="font-medium">{score.toFixed(2)}</span>
+            {threshold !== undefined && (
+              <>
+                <span className="text-muted-foreground">≥</span>
+                <span className="text-muted-foreground">{threshold.toFixed(2)}</span>
+              </>
+            )}
+            <StatusIcon passed={passed} neutral={false} />
+          </div>
+        </div>
+
+        <div className="border-t border-border" />
+
+        {/* Child assertions */}
+        <div className="space-y-2">
+          {childResults!.map((child, index) => {
+            const childMetric = getChildKey(child, index);
+            const childPassed = child.pass;
+            // Show neutral for failed children when parent passed (e.g., Either/Or)
+            const showNeutral = passed && !childPassed;
+
+            return (
+              <div
+                key={childMetric}
+                className="flex items-center justify-between gap-4 text-sm"
+                data-testid={`child-assertion-${childMetric}`}
+              >
+                <div className="flex items-center gap-2">
+                  <StatusIcon passed={childPassed} neutral={showNeutral} />
+                  <span className={cn(showNeutral && 'text-muted-foreground')}>{childMetric}</span>
+                </div>
+                <span
+                  className={cn('font-medium', showNeutral && 'text-muted-foreground opacity-80')}
+                >
+                  {child.score.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </PopoverContent>
+  ) : null;
+
+  // Assert-set chip with expandable popover
+  if (hasChildren) {
     const chipContent = (
-      <div className={chipClasses}>
+      <div className={chipClasses} data-testid={`assertion-chip-${metric}`}>
         {/* Main area - click to filter */}
-        <div className="inline-flex items-center gap-1.5" onClick={onClick}>
+        <div
+          className="inline-flex items-center gap-1.5"
+          onClick={onClick}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
+        >
           {chipMainContent}
         </div>
         {/* Chevron - click to open popover */}
@@ -175,8 +188,7 @@ function AssertionChip({
       </div>
     );
 
-    // Wrap in tooltip if tooltipContent provided
-    if (tooltipContent) {
+    if (tooltipContent != null) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
@@ -190,13 +202,19 @@ function AssertionChip({
 
   // Standalone chip (no popover)
   const standaloneChip = (
-    <div className={chipClasses} onClick={onClick}>
+    <div
+      className={chipClasses}
+      onClick={onClick}
+      data-testid={`assertion-chip-${metric}`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
+    >
       {chipMainContent}
     </div>
   );
 
-  // Wrap in tooltip if tooltipContent provided
-  if (tooltipContent) {
+  if (tooltipContent != null) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>{standaloneChip}</TooltipTrigger>
