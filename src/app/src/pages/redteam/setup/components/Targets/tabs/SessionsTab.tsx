@@ -35,14 +35,15 @@ import {
 } from 'lucide-react';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface SessionEndpointConfigProps {
   session?: {
     url?: string;
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
-    body?: Record<string, any> | string;
+    body?: Record<string, unknown> | string;
     responseParser?: string;
   };
   onUpdate: (session: SessionEndpointConfigProps['session']) => void;
@@ -55,7 +56,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
       : [{ key: '', value: '' }],
   );
 
-  const updateSession = (field: string, value: any) => {
+  const updateSession = (field: string, value: unknown) => {
     onUpdate({
       ...session,
       [field]: value,
@@ -273,9 +274,13 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 };
 
 interface SessionsTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+}
+
+interface SessionRequest {
+  prompt?: string;
 }
 
 interface TestResult {
@@ -285,10 +290,10 @@ interface TestResult {
   error?: string;
   details?: {
     sessionId?: string;
-    request1?: any;
-    response1?: any;
-    request2?: any;
-    response2?: any;
+    request1?: SessionRequest;
+    response1?: unknown;
+    request2?: SessionRequest;
+    response2?: unknown;
     sessionSource?: string;
     hasSessionIdTemplate?: boolean;
     hasSessionParser?: boolean;
@@ -340,8 +345,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         body: JSON.stringify({
           provider: selectedTarget,
           sessionConfig: {
-            sessionSource: selectedTarget.config.sessionSource,
-            sessionParser: selectedTarget.config.sessionParser,
+            sessionSource: selectedTarget.config?.sessionSource,
+            sessionParser: selectedTarget.config?.sessionParser,
           },
           // Pass the main input variable for multi-input configurations
           mainInputVariable,
@@ -393,7 +398,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               type="radio"
               name="stateful"
               value="true"
-              checked={String(selectedTarget.config.stateful ?? false) === 'true'}
+              checked={String(selectedTarget.config?.stateful ?? false) === 'true'}
               onChange={(e) => {
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
@@ -412,7 +417,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               type="radio"
               name="stateful"
               value="false"
-              checked={String(selectedTarget.config.stateful ?? false) === 'false'}
+              checked={String(selectedTarget.config?.stateful ?? false) === 'false'}
               onChange={(e) => {
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
@@ -429,7 +434,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         </div>
 
         {/* Info alert when system is not stateful */}
-        {selectedTarget.config.stateful === false && (
+        {selectedTarget.config?.stateful === false && (
           <Alert variant="info" className="mt-3">
             <Info className="size-4" />
             <AlertContent>
@@ -444,7 +449,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       </div>
 
       {/* Only show session management options if the system is stateful */}
-      {selectedTarget.config.stateful !== false && (
+      {selectedTarget.config?.stateful !== false && (
         <>
           <Separator />
 
@@ -462,8 +467,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   name="sessionSource"
                   value="server"
                   checked={
-                    selectedTarget.config.sessionSource === 'server' ||
-                    !selectedTarget.config.sessionSource
+                    selectedTarget.config?.sessionSource === 'server' ||
+                    !selectedTarget.config?.sessionSource
                   }
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
@@ -487,7 +492,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="client"
-                  checked={selectedTarget.config.sessionSource === 'client'}
+                  checked={selectedTarget.config?.sessionSource === 'client'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     if (e.target.value === 'client') {
@@ -510,12 +515,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="endpoint"
-                  checked={selectedTarget.config.sessionSource === 'endpoint'}
+                  checked={selectedTarget.config?.sessionSource === 'endpoint'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     updateCustomTarget('sessionParser', undefined);
                     // Initialize session endpoint config if not present
-                    if (!selectedTarget.config.session) {
+                    if (!selectedTarget.config?.session) {
                       updateCustomTarget('session', {
                         url: '',
                         method: 'POST',
@@ -537,8 +542,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           </div>
 
           {/* Server-generated session ID configuration */}
-          {(selectedTarget.config.sessionSource === 'server' ||
-            selectedTarget.config.sessionSource == null) && (
+          {(selectedTarget.config?.sessionSource === 'server' ||
+            selectedTarget.config?.sessionSource == null) && (
             <>
               <div>
                 <Label htmlFor="session-parser" className="text-sm font-medium">
@@ -550,7 +555,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 </p>
                 <Input
                   id="session-parser"
-                  value={selectedTarget.config.sessionParser || ''}
+                  value={(selectedTarget.config?.sessionParser as string) || ''}
                   placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
                   onChange={(e) => {
                     updateCustomTarget('sessionParser', e.target.value);
@@ -588,7 +593,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Client-generated session ID configuration */}
-          {selectedTarget.config.sessionSource === 'client' && (
+          {selectedTarget.config?.sessionSource === 'client' && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -621,9 +626,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Session endpoint configuration */}
-          {selectedTarget.config.sessionSource === 'endpoint' && (
+          {selectedTarget.config?.sessionSource === 'endpoint' && (
             <SessionEndpointConfig
-              session={selectedTarget.config.session}
+              session={selectedTarget.config?.session as SessionEndpointConfigProps['session']}
               onUpdate={(session) => {
                 updateCustomTarget('session', session);
                 setTestResult(null);
@@ -651,7 +656,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config.url}
+                disabled={isTestRunning || !selectedTarget.config?.url}
                 size="sm"
                 className="mb-3"
               >
@@ -663,7 +668,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config.url && (
+              {!selectedTarget.config?.url && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>
