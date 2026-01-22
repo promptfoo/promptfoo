@@ -82,6 +82,12 @@ describe('AssertionsResult', () => {
       namedScores: {
         [metric]: 1,
       },
+      componentResults: [
+        {
+          ...succeedingResult,
+          metadata: { assertSetMetric: metric },
+        },
+      ],
     });
   });
 
@@ -189,14 +195,34 @@ describe('AssertionsResult', () => {
 
     expect(result.componentResults).toBeDefined();
     expect(result.componentResults).toHaveLength(3);
-    expect(result.componentResults?.[0]).toEqual(nestedResult);
+
+    // Parent result should have isAssertSet metadata
+    expect(result.componentResults?.[0]).toEqual({
+      ...nestedResult,
+      metadata: {
+        isAssertSet: true,
+        childCount: 2,
+        assertSetThreshold: undefined,
+        assertSetWeight: undefined,
+      },
+    });
+
+    // Child results should have parentAssertSetIndex metadata
     expect(result.componentResults?.[1]).toEqual({
       ...nestedResult.componentResults?.[0],
       assertion: nestedResult.componentResults?.[0].assertion || nestedResult.assertion,
+      metadata: {
+        parentAssertSetIndex: 0,
+        assertSetWeight: undefined,
+      },
     });
     expect(result.componentResults?.[2]).toEqual({
       ...nestedResult.componentResults?.[1],
       assertion: nestedResult.componentResults?.[1].assertion || nestedResult.assertion,
+      metadata: {
+        parentAssertSetIndex: 0,
+        assertSetWeight: undefined,
+      },
     });
   });
 

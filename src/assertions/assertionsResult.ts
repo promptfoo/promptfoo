@@ -180,13 +180,17 @@ export class AssertionsResult {
         return [parentResult, ...childResults];
       } else {
         parentIndex += 1;
-        return {
-          ...result,
-          metadata: {
-            ...result.metadata,
-            assertSetWeight: result.assertion?.weight,
-          },
-        };
+        // Only add metadata if there's actually weight to record
+        if (result.assertion?.weight !== undefined) {
+          return {
+            ...result,
+            metadata: {
+              ...result.metadata,
+              assertSetWeight: result.assertion.weight,
+            },
+          };
+        }
+        return result;
       }
     });
 
