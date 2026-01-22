@@ -207,7 +207,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@apidevtools/json-schema-ref-parser": "^15.2.0",
+    "@apidevtools/json-schema-ref-parser": "^15.2.1",
     "@googleapis/sheets": "^13.0.1",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/checkbox": "^5.0.4",
