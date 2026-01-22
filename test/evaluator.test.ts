@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import cliState from '../src/cliState';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
+  buildConversationKey,
   evaluate,
   formatVarsForDisplay,
   generateVarCombinations,
@@ -2152,6 +2153,100 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
 
+  const createConcurrencyTrackingProvider = (delayMs = 20) => {
+    const activeByKey = new Map<string, number>();
+    const maxActiveByKey = new Map<string, number>();
+    let activeTotal = 0;
+    let maxActiveTotal = 0;
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt, context) => {
+        if (!context?.originalProvider || !context.prompt || !context.test) {
+          throw new Error('Missing callApi context');
+        }
+        const conversationKey = buildConversationKey(
+          context.originalProvider,
+          context.prompt,
+          context.test,
+        );
+
+        activeTotal += 1;
+        maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
+
+        const activeForKey = (activeByKey.get(conversationKey) ?? 0) + 1;
+        activeByKey.set(conversationKey, activeForKey);
+        maxActiveByKey.set(
+          conversationKey,
+          Math.max(maxActiveByKey.get(conversationKey) ?? 0, activeForKey),
+        );
+
+        try {
+          await sleep(delayMs);
+        } finally {
+          activeTotal -= 1;
+          activeByKey.set(conversationKey, (activeByKey.get(conversationKey) ?? 1) - 1);
+        }
+
+        return {
+          output: prompt,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    return {
+      provider,
+      getMaxActiveTotal: () => maxActiveTotal,
+      maxActiveByKey,
+    };
+  };
+
+  it('parallelizes across conversation keys with _conversation', async () => {
+    const { provider, getMaxActiveTotal, maxActiveByKey } = createConcurrencyTrackingProvider();
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation[0].output }}')],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q3' }, metadata: { conversationId: 'convo-b' } },
+        { vars: { question: 'Q4' }, metadata: { conversationId: 'convo-b' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(getMaxActiveTotal()).toBeGreaterThan(1);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+  });
+
+  it('serializes steps within the same conversation key with _conversation', async () => {
+    const { provider, getMaxActiveTotal, maxActiveByKey } = createConcurrencyTrackingProvider();
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation[0].output }}')],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q3' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+
+    expect(getMaxActiveTotal()).toBe(1);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+  });
+
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
     const mockLabeledProvider: ApiProvider = {
       id: () => 'labeled-provider-id',
@@ -2988,37 +3083,39 @@ describe('evaluator', () => {
     // Check that the API was called with the correct prompts
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
 
-    // First conversation, first question
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('User: Question 1A'),
-      expect.anything(),
-      undefined,
-    );
+    // Collect all prompts that were called (order is not deterministic with per-conversation parallelism)
+    const allCalls = mockApiProvider.callApi.mock.calls.map((call) => call[0] as string);
 
-    // First conversation, second question (should include history)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
-      expect.anything(),
-      undefined,
+    // First conversation, first question (no history)
+    const conv1First = allCalls.find(
+      (p: string) => p.includes('User: Question 1A') && !p.includes('Assistant:'),
     );
+    expect(conv1First).toBeDefined();
+
+    // First conversation, second question (should include history from 1A)
+    const conv1Second = allCalls.find(
+      (p: string) =>
+        p.includes('User: Question 1A\nAssistant: Test output\nUser: Question 1B') &&
+        !p.includes('Question 2'),
+    );
+    expect(conv1Second).toBeDefined();
 
     // Second conversation, first question (should NOT include first conversation)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      3,
-      expect.stringContaining('User: Question 2A'),
-      expect.anything(),
-      undefined,
+    const conv2First = allCalls.find(
+      (p: string) =>
+        p.includes('User: Question 2A') &&
+        !p.includes('Assistant:') &&
+        !p.includes('Question 1'),
     );
+    expect(conv2First).toBeDefined();
 
     // Second conversation, second question (should only include second conversation history)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      4,
-      expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
-      expect.anything(),
-      undefined,
+    const conv2Second = allCalls.find(
+      (p: string) =>
+        p.includes('User: Question 2A\nAssistant: Test output\nUser: Question 2B') &&
+        !p.includes('Question 1'),
     );
+    expect(conv2Second).toBeDefined();
   });
 
   it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
@@ -3065,31 +3162,43 @@ describe('evaluator', () => {
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
 
+    // Collect all prompts (order is not deterministic with per-conversation parallelism)
+    const allCalls = mockApiProvider.callApi.mock.calls.map((call) => call[0] as string);
+
     // First scenario, first question - no history
-    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
-    expect(firstCall).toContain('Current: Recommend a sci-fi book');
-    expect(firstCall).not.toContain('Previous:');
+    const sciFiFirst = allCalls.find(
+      (p: string) => p.includes('Current: Recommend a sci-fi book') && !p.includes('Previous:'),
+    );
+    expect(sciFiFirst).toBeDefined();
 
     // First scenario, second question - should have first scenario's history
-    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
-    expect(secondCall).toContain('Previous: ');
-    expect(secondCall).toContain('Recommend a sci-fi book');
-    expect(secondCall).toContain('Current: Tell me more about it');
+    const sciFiSecond = allCalls.find(
+      (p: string) =>
+        p.includes('Previous: ') &&
+        p.includes('Recommend a sci-fi book') &&
+        p.includes('Current: Tell me more about it'),
+    );
+    expect(sciFiSecond).toBeDefined();
 
     // Second scenario, first question - should NOT have first scenario's history
     // This is the key assertion that verifies the fix for issue #384
-    const thirdCall = mockApiProvider.callApi.mock.calls[2][0];
-    expect(thirdCall).toContain('Current: Suggest a pasta recipe');
-    expect(thirdCall).not.toContain('Previous:');
-    expect(thirdCall).not.toContain('sci-fi');
-    expect(thirdCall).not.toContain('Recommend');
+    const pastaFirst = allCalls.find(
+      (p: string) =>
+        p.includes('Current: Suggest a pasta recipe') &&
+        !p.includes('Previous:') &&
+        !p.includes('sci-fi')
+    );
+    expect(pastaFirst).toBeDefined();
 
     // Second scenario, second question - should only have second scenario's history
-    const fourthCall = mockApiProvider.callApi.mock.calls[3][0];
-    expect(fourthCall).toContain('Previous: ');
-    expect(fourthCall).toContain('Suggest a pasta recipe');
-    expect(fourthCall).toContain('Current: How long does it take?');
-    expect(fourthCall).not.toContain('sci-fi');
+    const pastaSecond = allCalls.find(
+      (p: string) =>
+        p.includes('Previous: ') &&
+        p.includes('Suggest a pasta recipe') &&
+        p.includes('Current: How long does it take?') &&
+        !p.includes('sci-fi')
+    );
+    expect(pastaSecond).toBeDefined();
   });
 
   it('should allow scenarios to share conversation history with explicit conversationId', async () => {

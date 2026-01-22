@@ -161,6 +161,13 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 
+  /**
+   * Grouping key for per-conversation serialization.
+   * Typically `${provider}:${promptId}` plus `:${conversationId}` when set.
+   * The scheduler may override this to a unique key for fully independent steps.
+   */
+  concurrencyKey?: string;
+
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
