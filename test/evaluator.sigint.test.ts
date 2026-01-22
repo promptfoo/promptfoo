@@ -76,6 +76,7 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: mockSetVars,
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -150,6 +151,7 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn(),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -235,6 +237,7 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn(),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
     };
 
     const testSuite: TestSuite = {

@@ -5270,10 +5270,7 @@ describe('defaultTest normalization for extensions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ var1 }}')],
-      tests: [
-        { vars: { var1: 'value1' } },
-        { vars: { var1: 'value2' } },
-      ],
+      tests: [{ vars: { var1: 'value1' } }, { vars: { var1: 'value2' } }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
@@ -5289,10 +5286,7 @@ describe('defaultTest normalization for extensions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ var1 }} {{ _conversation }}')],
-      tests: [
-        { vars: { var1: 'value1' } },
-        { vars: { var1: 'value2' } },
-      ],
+      tests: [{ vars: { var1: 'value1' } }, { vars: { var1: 'value2' } }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
