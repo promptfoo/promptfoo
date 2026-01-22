@@ -26,7 +26,7 @@ import type { Assertion } from '@promptfoo/types';
 interface ProgressPhase {
   id: string;
   label: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'error';
+  status: 'pending' | 'in-progress' | 'complete' | 'error';
   detail?: string;
   timestamp?: number;
 }
@@ -152,7 +152,7 @@ export function GenerationProgressDialog({
     const phaseLower = phase.toLowerCase();
 
     if (status === 'complete') {
-      defaultPhases.forEach((p) => (p.status = 'completed'));
+      defaultPhases.forEach((p) => (p.status = 'complete'));
     } else if (phaseLower.includes('initial') || phaseLower.includes('start')) {
       defaultPhases[0].status = 'in-progress';
     } else if (phaseLower.includes('extract') || phaseLower.includes('concept')) {
@@ -191,7 +191,7 @@ export function GenerationProgressDialog({
 
   const renderPhaseIcon = (phaseStatus: ProgressPhase['status']) => {
     switch (phaseStatus) {
-      case 'completed':
+      case 'complete':
         return <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-400" />;
       case 'in-progress':
         return <Loader2 className="size-4 text-amber-500 animate-spin" />;
@@ -241,7 +241,7 @@ export function GenerationProgressDialog({
                   <div
                     className={cn(
                       'font-medium',
-                      p.status === 'completed' && 'text-muted-foreground',
+                      p.status === 'complete' && 'text-muted-foreground',
                       p.status === 'in-progress' && 'text-foreground',
                     )}
                   >

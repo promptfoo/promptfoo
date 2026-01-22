@@ -318,5 +318,12 @@ export function generateTestsCommand(
     .option('--assertions-only', 'Generate only assertions (skip datasets)')
     .option('--parallel', 'Run dataset and assertion generation in parallel')
 
-    .action((opts) => doGenerateTests({ ...opts, defaultConfig, defaultConfigPath }));
+    .action(async (opts) => {
+      try {
+        await doGenerateTests({ ...opts, defaultConfig, defaultConfigPath });
+      } catch (error) {
+        logger.error(`Failed to generate tests: ${error instanceof Error ? error.message : error}`);
+        process.exitCode = 1;
+      }
+    });
 }
