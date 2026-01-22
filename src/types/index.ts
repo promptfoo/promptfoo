@@ -61,6 +61,7 @@ export const CommandLineOptionsSchema = z.object({
   verbose: z.boolean().optional(),
   grader: z.string().optional(),
   tableCellMaxLength: z.coerce.number().int().positive().optional(),
+  showAssertions: z.boolean().optional(),
   write: z.boolean().optional(),
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
@@ -461,6 +462,19 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+
+    // Hierarchy context for assert-set display
+    // Index of parent assert-set in componentResults (for child assertions)
+    parentAssertSetIndex?: number;
+    // True if this result represents an assert-set
+    isAssertSet?: boolean;
+    // Number of child assertions in this assert-set
+    childCount?: number;
+    // Threshold applied to this assert-set
+    assertSetThreshold?: number;
+    // Weight of this assertion/set
+    assertSetWeight?: number;
+
     [key: string]: any;
   };
 }

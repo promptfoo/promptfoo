@@ -69,7 +69,21 @@ export class AssertionsResult {
   }) {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
-    this.componentResults[index] = result;
+
+    // Attach metric to result if provided and result doesn't already have one
+    // This ensures assert-sets and other aggregated results have proper metric names
+    let resultToStore = result;
+    if (metric && !result.assertion?.metric) {
+      if (result.assertion) {
+        // Assertion exists but without metric - add the metric
+        resultToStore = { ...result, assertion: { ...result.assertion, metric } };
+      } else {
+        // No assertion (e.g., assert-set aggregate result) - store metric in metadata
+        resultToStore = { ...result, metadata: { ...result.metadata, assertSetMetric: metric } };
+      }
+    }
+
+    this.componentResults[index] = resultToStore;
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
@@ -135,18 +149,44 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, and copy the assertion into the child results.
+    // Flatten nested component results, annotating parent-child relationships for hierarchy display.
+    // Parent assert-sets are marked with isAssertSet=true and childCount.
+    // Child assertions are marked with parentAssertSetIndex pointing to their parent.
+    let parentIndex = 0;
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
       if (result.componentResults) {
-        return [
-          result,
-          ...result.componentResults.map((subResult) => ({
-            ...subResult,
-            assertion: subResult.assertion || result.assertion,
-          })),
-        ];
+        const currentParentIndex = parentIndex;
+        const parentResult = {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            isAssertSet: true,
+            childCount: result.componentResults.length,
+            assertSetThreshold: result.assertion?.threshold,
+            assertSetWeight: result.assertion?.weight,
+          },
+        };
+        const childResults = result.componentResults.map((subResult) => ({
+          ...subResult,
+          assertion: subResult.assertion || result.assertion,
+          metadata: {
+            ...subResult.metadata,
+            parentAssertSetIndex: currentParentIndex,
+            assertSetWeight: subResult.assertion?.weight,
+          },
+        }));
+        // Increment parentIndex by 1 (for parent) + number of children
+        parentIndex += 1 + result.componentResults.length;
+        return [parentResult, ...childResults];
       } else {
-        return result;
+        parentIndex += 1;
+        return {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            assertSetWeight: result.assertion?.weight,
+          },
+        };
       }
     });
 

@@ -27,7 +27,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import FailReasonCarousel from './FailReasonCarousel';
+import FailReasonCarousel, { type FailReasonWithContext } from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -231,8 +231,8 @@ function EvalOutputCell({
   const inlineImageSrc = resolveImageSource(text);
   const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
-  let failReasons: string[] = [];
-  let passReasons: string[] = [];
+  const failReasons: FailReasonWithContext[] = [];
+  const passReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
@@ -242,23 +242,47 @@ function EvalOutputCell({
     | undefined;
   const responseAudioSource = resolveAudioSource(responseAudio);
 
-  // Extract failure and pass reasons from component results
-  if (output.gradingResult?.componentResults) {
-    failReasons = output.gradingResult.componentResults
-      .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason); // Filter out empty/undefined reasons
+  // Build parent lookup for hierarchy-aware fail reason extraction
+  const componentResults = output.gradingResult?.componentResults;
+  const parentLookup = new Map<number, { metric?: string; pass: boolean }>();
 
-    passReasons = output.gradingResult.componentResults
-      .filter((result) => (result ? result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason); // Filter out empty/undefined reasons
+  if (componentResults) {
+    // First pass: build lookup of parents
+    componentResults.forEach((result, index) => {
+      if (result?.metadata?.isAssertSet) {
+        parentLookup.set(index, {
+          metric: result.assertion?.metric || result.assertion?.type,
+          pass: result.pass,
+        });
+      }
+    });
+
+    // Second pass: extract failure and pass reasons with context
+    componentResults.forEach((result) => {
+      if (!result) {
+        return;
+      }
+
+      if (!result.pass && result.reason) {
+        const parentIndex = result.metadata?.parentAssertSetIndex;
+        const parent = parentIndex !== undefined ? parentLookup.get(parentIndex) : undefined;
+
+        failReasons.push({
+          reason: result.reason,
+          metric: result.assertion?.metric || result.assertion?.type,
+          parentMetric: parent?.metric,
+          parentPassed: parent?.pass,
+        });
+      } else if (result.pass && result.reason) {
+        passReasons.push(result.reason);
+      }
+    });
   }
 
   // Include provider-level error if present (e.g., from Python provider returning error)
   // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
-    failReasons.unshift(output.error);
+    failReasons.unshift({ reason: output.error });
   }
 
   if (showDiffs && firstOutput) {
@@ -578,7 +602,8 @@ function EvalOutputCell({
     ? { color: 'var(--cell-highlight-text-color)' }
     : {};
 
-  // Pass/fail badge creation
+  // Pass/fail badge creation - hierarchy-aware
+  // Don't count child "failures" if parent assert-set passed (e.g., in OR-groups)
   let passCount = 0;
   let failCount = 0;
   let errorCount = 0;
@@ -586,8 +611,26 @@ function EvalOutputCell({
 
   if (gradingResult) {
     if (gradingResult.componentResults) {
+      // Build parent pass status lookup for hierarchy-aware counting
+      const parentPassStatus = new Map<number, boolean>();
+      gradingResult.componentResults.forEach((result, index) => {
+        if (result?.metadata?.isAssertSet) {
+          parentPassStatus.set(index, result.pass);
+        }
+      });
+
       gradingResult.componentResults.forEach((result) => {
-        if (result?.pass) {
+        if (!result) {
+          return;
+        }
+
+        // Skip child assertions - only count parent assert-sets and standalone assertions
+        const parentIndex = result.metadata?.parentAssertSetIndex;
+        if (parentIndex !== undefined) {
+          return; // Skip children, their status is reflected in the parent
+        }
+
+        if (result.pass) {
           passCount++;
         } else {
           failCount++;
@@ -893,7 +936,10 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics
+            lookup={output.namedScores}
+            componentResults={output.gradingResult?.componentResults}
+          />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />

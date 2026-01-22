@@ -1,0 +1,404 @@
+{
+  "evalId": "eval-gwz-2026-01-21T22:56:55",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-01-21T22:56:55.886Z",
+    "prompts": [
+      {
+        "id": "7cbf00640e10d44528380e3662dbc83637498ff474a05ce33eae0bff1aaf65f2",
+        "raw": "Greet the user in French.",
+        "label": "Greet the user in French.",
+        "provider": "openai:gpt-4o-mini",
+        "metrics": {
+          "score": 0.8203000664800403,
+          "testPassCount": 0,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 4,
+          "assertFailCount": 2,
+          "totalLatencyMs": 1352,
+          "tokenUsage": {
+            "prompt": 14,
+            "completion": 10,
+            "cached": 0,
+            "total": 24,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 2882,
+              "prompt": 589,
+              "completion": 2293,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {
+            "Correctness": 1,
+            "Tone": 1,
+            "Topicality": 0.6015003324002018,
+            "Performance": 0.5
+          },
+          "namedScoresCount": {
+            "Correctness": 1,
+            "Tone": 1,
+            "Topicality": 1,
+            "Performance": 1
+          },
+          "cost": 0.0000081
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0.0000081,
+        "error": "Aggregate score 0.82 < 0.9 threshold",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.8203000664800403,
+          "reason": "Aggregate score 0.82 < 0.9 threshold",
+          "namedScores": {
+            "Correctness": 1,
+            "Tone": 1,
+            "Topicality": 0.6015003324002018,
+            "Performance": 0.5
+          },
+          "tokensUsed": {
+            "total": 2882,
+            "prompt": 589,
+            "completion": 2293,
+            "cached": 0,
+            "numRequests": 8
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Bonjour",
+                "weight": 2,
+                "metric": "Correctness"
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Tone is friendly and the text is in French.",
+                "weight": 1,
+                "metric": "Tone"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The message is in French and uses a polite, friendly greeting and offer of help.",
+              "tokensUsed": {
+                "total": 301,
+                "prompt": 198,
+                "completion": 103,
+                "cached": 0,
+                "numRequests": 1,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "renderedGradingPrompt": "[{\"role\":\"system\",\"content\":\"You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}\\n\\nExamples:\\n\\n<Output>Hello world</Output>\\n<Rubric>Content contains a greeting</Rubric>\\n{\\\"reason\\\": \\\"the content contains the word 'Hello'\\\", \\\"pass\\\": true, \\\"score\\\": 1.0}\\n\\n<Output>Avast ye swabs, repel the invaders!</Output>\\n<Rubric>Does not speak like a pirate</Rubric>\\n{\\\"reason\\\": \\\"'avast ye' is a common pirate term\\\", \\\"pass\\\": false, \\\"score\\\": 0.0}\"},{\"role\":\"user\",\"content\":\"<Output>\\nBonjour ! Comment puis-je vous aider aujourd'hui ?\\n</Output>\\n<Rubric>\\nTone is friendly and the text is in French.\\n</Rubric>\"}]"
+              }
+            },
+            {
+              "assertion": {
+                "type": "answer-relevance",
+                "threshold": 0.8,
+                "weight": 1,
+                "metric": "Topicality"
+              },
+              "pass": false,
+              "score": 0.6015003324002018,
+              "reason": "Relevance 0.60 is less than threshold 0.8",
+              "tokensUsed": {
+                "total": 2581,
+                "prompt": 391,
+                "completion": 2190,
+                "cached": 0,
+                "numRequests": 7,
+                "completionDetails": {
+                  "reasoning": 2112,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "generatedQuestions": [
+                  {
+                    "question": "How do you say \"Hello! How can I help you today?\" in French?",
+                    "similarity": 0.5999797864975664
+                  },
+                  {
+                    "question": "How do you say “Hello! How can I help you today?” in French?",
+                    "similarity": 0.6046731859896917
+                  },
+                  {
+                    "question": "How do you say \"Hello! How can I help you today?\" in French?",
+                    "similarity": 0.5998480247133473
+                  }
+                ],
+                "averageSimilarity": 0.6015003324002018,
+                "threshold": 0.8
+              }
+            },
+            {
+              "pass": true,
+              "score": 0.5,
+              "reason": "Aggregate score 0.50 ≥ 0.5 threshold",
+              "namedScores": {},
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0
+              },
+              "componentResults": [
+                {
+                  "pass": true,
+                  "score": 1,
+                  "reason": "Assertion passed",
+                  "assertion": {
+                    "type": "cost",
+                    "threshold": 0.0008
+                  }
+                },
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Latency 1352ms is greater than threshold 150ms",
+                  "assertion": {
+                    "type": "latency",
+                    "threshold": 150
+                  }
+                }
+              ]
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "cost",
+                "threshold": 0.0008
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Latency 1352ms is greater than threshold 150ms",
+              "assertion": {
+                "type": "latency",
+                "threshold": 150
+              }
+            }
+          ]
+        },
+        "id": "7b8f4393-11f7-4f98-8535-cb641691bda1",
+        "latencyMs": 1352,
+        "namedScores": {
+          "Correctness": 1,
+          "Tone": 1,
+          "Topicality": 0.6015003324002018,
+          "Performance": 0.5
+        },
+        "prompt": {
+          "raw": "Greet the user in French.",
+          "label": "Greet the user in French.",
+          "config": {}
+        },
+        "promptId": "7cbf00640e10d44528380e3662dbc83637498ff474a05ce33eae0bff1aaf65f2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-4o-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
+          "tokenUsage": {
+            "total": 24,
+            "prompt": 14,
+            "completion": 10,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "latencyMs": 1352,
+          "finishReason": "stop",
+          "cost": 0.0000081,
+          "guardrails": {
+            "flagged": false
+          }
+        },
+        "score": 0.8203000664800403,
+        "success": false,
+        "testCase": {
+          "type": "assert-set",
+          "threshold": 0.9,
+          "assert": [
+            {
+              "type": "contains",
+              "value": "Bonjour",
+              "weight": 2,
+              "metric": "Correctness"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Tone is friendly and the text is in French.",
+              "weight": 1,
+              "metric": "Tone"
+            },
+            {
+              "type": "answer-relevance",
+              "threshold": 0.8,
+              "weight": 1,
+              "metric": "Topicality"
+            },
+            {
+              "type": "assert-set",
+              "threshold": 0.5,
+              "metric": "Performance",
+              "assert": [
+                {
+                  "type": "cost",
+                  "threshold": 0.0008
+                },
+                {
+                  "type": "latency",
+                  "threshold": 150
+                }
+              ]
+            }
+          ],
+          "vars": {},
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {},
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 1,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 14,
+        "completion": 10,
+        "cached": 0,
+        "total": 24,
+        "numRequests": 1,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 2882,
+          "prompt": 589,
+          "completion": 2293,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      },
+      "durationMs": 36856
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Require a friendly French greeting that includes 'Bonjour' and stays within budget (either cheap or fast).",
+    "prompts": [
+      "Greet the user in French."
+    ],
+    "providers": [
+      "openai:gpt-4o-mini"
+    ],
+    "tests": [
+      {
+        "type": "assert-set",
+        "threshold": 0.9,
+        "assert": [
+          {
+            "type": "contains",
+            "value": "Bonjour",
+            "weight": 2,
+            "metric": "Correctness"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Tone is friendly and the text is in French.",
+            "weight": 1,
+            "metric": "Tone"
+          },
+          {
+            "type": "answer-relevance",
+            "threshold": 0.8,
+            "weight": 1,
+            "metric": "Topicality"
+          },
+          {
+            "type": "assert-set",
+            "threshold": 0.5,
+            "metric": "Performance",
+            "assert": [
+              {
+                "type": "cost",
+                "threshold": 0.0008
+              },
+              {
+                "type": "latency",
+                "threshold": 150
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "outputPath": [
+      "examples/french-greeting-test/output.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-gwz-2026-01-21T22:56:55",
+  "metadata": {
+    "promptfooVersion": "0.120.16",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2026-01-21T22:57:33.398Z",
+    "evaluationCreatedAt": "2026-01-21T22:56:55.886Z"
+  }
+}

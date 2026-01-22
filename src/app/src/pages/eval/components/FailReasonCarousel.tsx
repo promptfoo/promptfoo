@@ -3,8 +3,45 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import './FailReasonCarousel.css';
 
+export interface FailReasonWithContext {
+  reason: string;
+  metric?: string;
+  parentMetric?: string;
+  parentPassed?: boolean;
+}
+
 interface FailReasonCarouselProps {
-  failReasons: string[];
+  failReasons: string[] | FailReasonWithContext[];
+}
+
+/**
+ * Format a fail reason with optional parent context
+ */
+function formatFailReason(item: string | FailReasonWithContext): string {
+  if (typeof item === 'string') {
+    return item;
+  }
+
+  const { reason, metric, parentMetric, parentPassed } = item;
+  let formatted = '';
+
+  // Add metric prefix if available
+  if (metric) {
+    if (parentMetric) {
+      formatted = `[${parentMetric} > ${metric}] `;
+    } else {
+      formatted = `[${metric}] `;
+    }
+  }
+
+  formatted += reason;
+
+  // Add parent context for nested failures where parent passed
+  if (parentPassed) {
+    formatted += ' (parent passed via other assertion)';
+  }
+
+  return formatted;
 }
 
 const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
@@ -22,6 +59,8 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
   const handleNext = () => {
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
+
+  const currentReason = formatFailReason(failReasons[currentIndex]);
 
   return (
     <div className="fail-reason">
@@ -46,7 +85,7 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
           </button>
         </span>
       )}
-      {failReasons[currentIndex]
+      {currentReason
         .trim()
         .split('\n')
         .map((line, index) => (
