@@ -635,6 +635,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     return {
       output: lastResponse,
+      prompt: lastPrompt,
       metadata,
       tokenUsage: totalTokenUsage,
     };

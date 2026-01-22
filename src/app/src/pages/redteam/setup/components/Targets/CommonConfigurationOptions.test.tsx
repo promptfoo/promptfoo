@@ -6,14 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import type { ProviderOptions } from '@promptfoo/types';
 
-const mockUpdateConfig = vi.fn();
-vi.mock('../../hooks/useRedTeamConfig', () => ({
-  useRedTeamConfig: () => ({
-    config: { testGenerationInstructions: '' },
-    updateConfig: mockUpdateConfig,
-  }),
-}));
-
 vi.mock('./ExtensionEditor', () => ({
   default: ({
     extensions,
@@ -82,7 +74,10 @@ describe('CommonConfigurationOptions', () => {
   });
 
   it('should render the InputsEditor component inside Test Generation section', async () => {
-    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
+    );
 
     // Expand the Test Generation collapsible
     const testGenTrigger = screen.getByText('Test Generation');
@@ -126,9 +121,14 @@ describe('CommonConfigurationOptions', () => {
 
   it('should call updateCustomTarget when InputsEditor updates inputs', () => {
     const updateCustomTarget = vi.fn();
+    const onPromptsChange = vi.fn();
 
     renderWithProviders(
-      <CommonConfigurationOptions {...defaultProps} updateCustomTarget={updateCustomTarget} />,
+      <CommonConfigurationOptions
+        {...defaultProps}
+        updateCustomTarget={updateCustomTarget}
+        onPromptsChange={onPromptsChange}
+      />,
     );
 
     // Expand the Test Generation collapsible
@@ -186,7 +186,10 @@ describe('CommonConfigurationOptions', () => {
   });
 
   it('should render Test Generation collapsible section', () => {
-    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
+    );
 
     expect(screen.getByText('Test Generation')).toBeInTheDocument();
     expect(
@@ -197,9 +200,14 @@ describe('CommonConfigurationOptions', () => {
   describe('handleInputsChange', () => {
     it('should generate JSON template with template variables when inputs are provided', () => {
       const updateCustomTarget = vi.fn();
+      const onPromptsChange = vi.fn();
 
       renderWithProviders(
-        <CommonConfigurationOptions {...defaultProps} updateCustomTarget={updateCustomTarget} />,
+        <CommonConfigurationOptions
+          {...defaultProps}
+          updateCustomTarget={updateCustomTarget}
+          onPromptsChange={onPromptsChange}
+        />,
       );
 
       // Expand Test Generation section
@@ -213,8 +221,8 @@ describe('CommonConfigurationOptions', () => {
       // Should call updateCustomTarget with inputs
       expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
 
-      // Should call updateConfig with JSON template
-      expect(mockUpdateConfig).toHaveBeenCalledWith('prompts', ['{"testVar":"{{testVar}}"}']);
+      // Should call onPromptsChange with JSON template
+      expect(onPromptsChange).toHaveBeenCalledWith(['{"testVar":"{{testVar}}"}']);
     });
 
     it('should generate template preserving object key order for multiple variables', () => {

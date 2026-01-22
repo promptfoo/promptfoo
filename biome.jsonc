@@ -287,8 +287,6 @@
     },
     {
       "includes": [
-        "src/app/src/pages/eval/components/**/*",
-        "src/app/src/pages/redteam/setup/components/**/*",
         "src/providers/**/*",
         "src/redteam/**/*",
         "src/util/**/*",

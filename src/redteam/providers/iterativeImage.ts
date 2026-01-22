@@ -535,6 +535,7 @@ async function runRedteamConversation({
     output:
       bestResponse?.output ||
       (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+    prompt: targetPrompt || undefined,
     metadata: {
       finalIteration,
       highestScore,

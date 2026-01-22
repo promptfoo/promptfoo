@@ -54,7 +54,7 @@ import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   bodyError: string | React.ReactNode | null;
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
@@ -69,7 +69,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
