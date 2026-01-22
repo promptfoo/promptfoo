@@ -46,8 +46,10 @@ interface IndirectWebPwnConfig {
   maxFetchAttempts: number;
   stateful: boolean;
   scanId: string;
+  evalId: string;
   useLlm: boolean;
   preferSmallModel: boolean;
+  exfilWaitMs: number;
   [key: string]: unknown;
 }
 
@@ -57,6 +59,7 @@ interface IndirectWebPwnConfig {
 interface IndirectWebPwnMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Attack succeeded' | 'Max fetch attempts reached' | 'Error';
+  webPageEvalId?: string;
   webPageUuid?: string;
   webPageUrl?: string;
   webFetchActuallyUsed?: boolean;
@@ -93,20 +96,26 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts?: number;
       stateful?: boolean;
       scanId?: string;
+      evalId?: string;
       useLlm?: boolean;
       preferSmallModel?: boolean;
+      exfilWaitMs?: number;
     } = {},
   ) {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
 
+    // Use scanId as evalId if not explicitly provided (for backwards compatibility)
+    const scanId = options.scanId ?? uuidv4();
     this.config = {
       injectVar: options.injectVar,
       maxTurns: options.maxTurns ?? 5,
       maxFetchAttempts: options.maxFetchAttempts ?? 3,
       stateful: options.stateful ?? false,
-      scanId: options.scanId ?? uuidv4(),
+      scanId,
+      evalId: options.evalId ?? scanId,
       useLlm: options.useLlm ?? false,
       preferSmallModel: options.preferSmallModel ?? true,
+      exfilWaitMs: options.exfilWaitMs ?? 5000,
     };
 
     logger.debug('[IndirectWebPwn] Constructor options', {
@@ -115,8 +124,10 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts: this.config.maxFetchAttempts,
       stateful: this.config.stateful,
       scanId: this.config.scanId,
+      evalId: this.config.evalId,
       useLlm: this.config.useLlm,
       preferSmallModel: this.config.preferSmallModel,
+      exfilWaitMs: this.config.exfilWaitMs,
     });
   }
 
@@ -132,6 +143,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const url = getRemoteGenerationUrl();
     logger.debug('[IndirectWebPwn] Creating web page via task API', {
       url,
+      evalId: this.config.evalId,
       testCaseId,
       promptLength: prompt.length,
       goal,
@@ -147,10 +159,11 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task: 'create-web-page',
+          evalId: this.config.evalId,
           testCaseId,
           prompt,
           goal,
-          purpose,
+          purpose: purpose || 'Indirect web pwn security testing',
           email: getUserEmail(),
           useLlm: this.config.useLlm,
           preferSmallModel: this.config.preferSmallModel,
@@ -172,7 +185,11 @@ export default class IndirectWebPwnProvider implements ApiProvider {
    */
   private async checkPageFetched(uuid: string): Promise<WebPageTrackingResponse> {
     const url = getRemoteGenerationUrl();
-    logger.debug('[IndirectWebPwn] Checking page fetch status', { url, uuid });
+    logger.debug('[IndirectWebPwn] Checking page fetch status', {
+      url,
+      evalId: this.config.evalId,
+      uuid,
+    });
 
     const response = await fetchWithRetries(
       url,
@@ -181,6 +198,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task: 'get-web-page-tracking',
+          evalId: this.config.evalId,
           uuid,
           email: getUserEmail(),
         }),
@@ -321,6 +339,15 @@ export default class IndirectWebPwnProvider implements ApiProvider {
             (totalTokenUsage.completion || 0) + (targetResponse.tokenUsage.completion || 0);
         }
 
+        // Wait for browser to render markdown and fetch exfil URLs
+        // This is necessary when target is a browser-based provider (e.g., Playwright)
+        if (this.config.exfilWaitMs > 0) {
+          logger.debug('[IndirectWebPwn] Waiting for browser rendering/exfil fetch', {
+            exfilWaitMs: this.config.exfilWaitMs,
+          });
+          await new Promise((resolve) => setTimeout(resolve, this.config.exfilWaitMs));
+        }
+
         // 3. Check if page was fetched
         const tracking = await this.checkPageFetched(webPage.uuid);
 
@@ -369,6 +396,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         messages: messages as unknown as Record<string, unknown>[],
         stopReason,
         redteamHistory,
+        webPageEvalId: this.config.evalId,
         webPageUuid,
         webPageUrl,
         webFetchActuallyUsed,

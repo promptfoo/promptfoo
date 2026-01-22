@@ -467,12 +467,18 @@ export async function runMetaAgentRedteam({
           };
         } else {
           // Try to fetch exfil tracking from server API via webPageUuid
+          const webPageEvalId =
+            (test.metadata?.webPageEvalId as string) ||
+            (iterationTest.metadata?.webPageEvalId as string);
           const webPageUuid =
             (test.metadata?.webPageUuid as string) ||
             (iterationTest.metadata?.webPageUuid as string);
-          if (webPageUuid) {
-            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', { webPageUuid });
-            const exfilData = await checkExfilTracking(webPageUuid);
+          if (webPageEvalId && webPageUuid) {
+            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
+              webPageEvalId,
+              webPageUuid,
+            });
+            const exfilData = await checkExfilTracking(webPageEvalId, webPageUuid);
             if (exfilData) {
               gradingContext = {
                 ...(tracingOptions.includeInGrading

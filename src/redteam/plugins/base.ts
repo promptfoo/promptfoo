@@ -300,6 +300,15 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  // Exfiltration tracking (used by indirect-web-pwn strategy and data-exfil grader)
+  wasExfiltrated?: boolean;
+  exfilCount?: number;
+  exfilRecords?: Array<{
+    timestamp: string;
+    ip: string;
+    userAgent: string;
+    queryParams: Record<string, string>;
+  }>;
 }
 
 export abstract class RedteamGraderBase {

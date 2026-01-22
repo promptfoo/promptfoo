@@ -76,6 +76,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   hex: 1,
   homoglyph: 1,
   image: 1,
+  'indirect-web-pwn': 1,
   jailbreak: 10,
   'jailbreak:composite': 5,
   'jailbreak:hydra': 10,

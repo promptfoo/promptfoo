@@ -32,14 +32,94 @@ interface UpdateWebPageResponse {
  * Maps testCaseId (or fallback key) to page state.
  */
 interface PageState {
+  evalId: string;
   uuid: string;
   fullUrl: string;
   turnCount: number;
   embeddingLocation: string;
+  createdAt: number; // Timestamp for TTL cleanup
 }
+
+// Configuration for page state management
+const PAGE_STATE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL for page state entries
+const PAGE_STATE_MAX_SIZE = 10000; // Maximum number of entries before forced cleanup
+const PAGE_STATE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
 
 // Module-level state for tracking pages across per-turn calls
 const pageStateMap = new Map<string, PageState>();
+
+// Track last cleanup time to avoid running cleanup too frequently
+let lastCleanupTime = 0;
+
+/**
+ * Clean up expired page state entries.
+ * Uses TTL-based expiration and enforces max size limit.
+ */
+function cleanupPageState(): void {
+  const now = Date.now();
+
+  // Don't clean up more frequently than the interval
+  if (now - lastCleanupTime < PAGE_STATE_CLEANUP_INTERVAL_MS) {
+    return;
+  }
+  lastCleanupTime = now;
+
+  const expiredKeys: string[] = [];
+  const ttlThreshold = now - PAGE_STATE_TTL_MS;
+
+  // Find expired entries
+  for (const [key, state] of pageStateMap.entries()) {
+    if (state.createdAt < ttlThreshold) {
+      expiredKeys.push(key);
+    }
+  }
+
+  // Remove expired entries
+  for (const key of expiredKeys) {
+    pageStateMap.delete(key);
+  }
+
+  // If still over max size, remove oldest entries (LRU-style)
+  if (pageStateMap.size > PAGE_STATE_MAX_SIZE) {
+    const entries = Array.from(pageStateMap.entries()).sort(
+      ([, a], [, b]) => a.createdAt - b.createdAt,
+    );
+    const toRemove = entries.slice(0, pageStateMap.size - PAGE_STATE_MAX_SIZE);
+    for (const [key] of toRemove) {
+      pageStateMap.delete(key);
+    }
+  }
+
+  if (expiredKeys.length > 0 || pageStateMap.size > PAGE_STATE_MAX_SIZE) {
+    logger.debug('[IndirectWebPwn] Cleaned up page state', {
+      expiredCount: expiredKeys.length,
+      remainingCount: pageStateMap.size,
+    });
+  }
+}
+
+// Module-level evalId for the current scan session
+// This is used when no external evalId is provided
+let sessionEvalId: string | null = null;
+
+/**
+ * Get or create the evalId for this scan session.
+ * Used when the actual evalId isn't available from the caller.
+ */
+function getSessionEvalId(): string {
+  if (!sessionEvalId) {
+    sessionEvalId = uuidv4();
+    logger.debug('[IndirectWebPwn] Created session evalId', { sessionEvalId });
+  }
+  return sessionEvalId;
+}
+
+/**
+ * Clear the session evalId (for testing or new scan sessions).
+ */
+export function clearSessionEvalId(): void {
+  sessionEvalId = null;
+}
 
 /**
  * Response from get-web-page-tracking task API.
@@ -64,6 +144,7 @@ interface WebPageTrackingResponse {
  * Get the page state for a test case (for use by grader).
  */
 export function getPageStateForTestCase(testCaseId: string): PageState | undefined {
+  cleanupPageState(); // Run periodic cleanup
   return pageStateMap.get(testCaseId);
 }
 
@@ -71,7 +152,10 @@ export function getPageStateForTestCase(testCaseId: string): PageState | undefin
  * Check exfil tracking for a page UUID.
  * Returns tracking data that can be used for deterministic grading.
  */
-export async function checkExfilTracking(uuid: string): Promise<{
+export async function checkExfilTracking(
+  evalId: string,
+  uuid: string,
+): Promise<{
   wasExfiltrated: boolean;
   exfilCount: number;
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
@@ -85,6 +169,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task: 'get-web-page-tracking',
+          evalId,
           uuid,
         }),
       },
@@ -93,6 +178,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
 
     if (!response.ok) {
       logger.debug('[IndirectWebPwn] Failed to check exfil tracking', {
+        evalId,
         uuid,
         status: response.status,
       });
@@ -107,6 +193,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
     };
   } catch (error) {
     logger.debug('[IndirectWebPwn] Error checking exfil tracking', {
+      evalId,
       uuid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -119,28 +206,47 @@ export async function checkExfilTracking(uuid: string): Promise<{
  * This ensures that any attacker-generated URLs (e.g., from meta jailbreak)
  * are replaced with the trackable exfil endpoint.
  *
+ * Uses the URL API for robust parsing and validation, handling:
+ * - Ports (e.g., http://localhost:3000/path)
+ * - Fragments (e.g., http://example.com/page#section)
+ * - Query strings (e.g., http://example.com?data=value)
+ * - Encoded characters
+ *
  * Examples of URLs that will be replaced:
  * - https://api.red-team.sx/collect?data=...
  * - http://attacker.com/exfil
  * - https://evil.com/log.php?payload=...
+ * - http://localhost:8080/api/data
  */
 function replaceUrlsWithExfilPlaceholder(prompt: string): string {
-  // Match http/https URLs, capturing base URL and query string separately
-  // Group 1: base URL (scheme + host + path)
-  // Group 2: query string (including ?)
-  const urlRegex = /(https?:\/\/[^\s\])"'<>?]+)(\?[^\s\])"'<>]*)?/gi;
+  // Match URLs broadly - we'll validate with URL API
+  // This pattern captures URLs that might have ports, fragments, query strings
+  const urlPattern = /https?:\/\/[^\s<>'")\]]+/gi;
 
-  const replacedPrompt = prompt.replace(urlRegex, (_match, _baseUrl, queryString) => {
-    // Replace base URL with placeholder, preserve query string if present
-    return queryString ? `[EXFIL_URL]${queryString}` : '[EXFIL_URL]';
+  const foundUrls: string[] = [];
+
+  const replacedPrompt = prompt.replace(urlPattern, (match) => {
+    // Clean up any trailing punctuation that might have been captured
+    const url = match.replace(/[.,;:!?]+$/, '');
+
+    try {
+      // Validate and parse with URL API
+      const parsed = new URL(url);
+      foundUrls.push(url);
+
+      // Preserve query string if present (URL API normalizes it)
+      const queryString = parsed.search || '';
+      return queryString ? `[EXFIL_URL]${queryString}` : '[EXFIL_URL]';
+    } catch {
+      // If URL parsing fails, return original match unchanged (not a valid URL)
+      return match;
+    }
   });
 
-  // Log if we made replacements
-  const originalUrls = prompt.match(urlRegex);
-  if (originalUrls && originalUrls.length > 0) {
+  if (foundUrls.length > 0) {
     logger.debug('[IndirectWebPwn] Replaced URLs with [EXFIL_URL] placeholder', {
-      urlCount: originalUrls.length,
-      originalUrls: originalUrls.slice(0, 5), // Log first 5 URLs max
+      urlCount: foundUrls.length,
+      originalUrls: foundUrls.slice(0, 5), // Log first 5 URLs max
       preservedQueryStrings: true,
     });
   }
@@ -167,6 +273,7 @@ function generateFetchPrompt(url: string, turnNumber: number): string {
  * Create a web page via the task API.
  */
 async function createWebPage(
+  evalId: string,
   testCaseId: string,
   prompt: string,
   goal?: string,
@@ -177,6 +284,7 @@ async function createWebPage(
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
     url,
+    evalId,
     testCaseId,
     promptLength: prompt.length,
     goal,
@@ -192,10 +300,11 @@ async function createWebPage(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         task: 'create-web-page',
+        evalId,
         testCaseId,
         prompt,
         goal,
-        purpose,
+        purpose: purpose || 'Indirect injection security testing',
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
@@ -217,6 +326,7 @@ async function createWebPage(
  * This rotates the embedding location and updates the prompt.
  */
 async function updateWebPage(
+  evalId: string,
   uuid: string,
   prompt: string,
   useLlm?: boolean,
@@ -225,6 +335,7 @@ async function updateWebPage(
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
     url,
+    evalId,
     uuid,
     promptLength: prompt.length,
     useLlm,
@@ -238,6 +349,7 @@ async function updateWebPage(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         task: 'update-web-page',
+        evalId,
         uuid,
         prompt,
         updateTemplate: true, // Always regenerate HTML with new embedding location
@@ -389,56 +501,12 @@ async function transformForPerTurnLayer(
       'runtime-transform';
     const stateKey = `${testCaseId}`;
 
+    // Run periodic cleanup before accessing state
+    cleanupPageState();
+
     let pageState = pageStateMap.get(stateKey);
-    let fetchPrompt: string;
-    let turnNumber: number;
 
-    if (!pageState) {
-      // First turn: Create a new page
-      logger.debug('[IndirectWebPwn] First turn - creating new page', {
-        stateKey,
-        promptLength: attackPrompt.length,
-      });
-
-      try {
-        const goal = testCase.metadata?.goal as string | undefined;
-        const purpose = testCase.metadata?.purpose as string | undefined;
-
-        const response = await createWebPage(
-          testCaseId,
-          attackPrompt,
-          goal,
-          purpose,
-          useLlmCreate,
-          preferSmallModel,
-        );
-
-        pageState = {
-          uuid: response.uuid,
-          fullUrl: response.fullUrl,
-          turnCount: 1,
-          embeddingLocation: response.embeddingLocation || 'main_content',
-        };
-        pageStateMap.set(stateKey, pageState);
-
-        logger.info('[IndirectWebPwn] Created new page for per-turn layer', {
-          uuid: pageState.uuid,
-          fullUrl: pageState.fullUrl,
-          embeddingLocation: pageState.embeddingLocation,
-          turnCount: 1,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to create page', {
-          error: error instanceof Error ? error.message : String(error),
-          stateKey,
-        });
-        // On error, pass through the original prompt
-        results.push(testCase);
-        continue;
-      }
-
-      turnNumber = 1;
-    } else {
+    if (pageState) {
       // Subsequent turn: Update the existing page
       logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
         stateKey,
@@ -450,6 +518,7 @@ async function transformForPerTurnLayer(
 
       try {
         const response = await updateWebPage(
+          pageState.evalId,
           pageState.uuid,
           attackPrompt,
           useLlmUpdate,
@@ -475,12 +544,60 @@ async function transformForPerTurnLayer(
         });
         // On error, still use the existing URL
       }
+    } else {
+      // First turn: Create a new page
+      const evalId = getSessionEvalId();
+      logger.debug('[IndirectWebPwn] First turn - creating new page', {
+        stateKey,
+        evalId,
+        promptLength: attackPrompt.length,
+      });
 
-      turnNumber = pageState.turnCount;
+      try {
+        const goal = testCase.metadata?.goal as string | undefined;
+        const purpose = testCase.metadata?.purpose as string | undefined;
+
+        const response = await createWebPage(
+          evalId,
+          testCaseId,
+          attackPrompt,
+          goal,
+          purpose,
+          useLlmCreate,
+          preferSmallModel,
+        );
+
+        pageState = {
+          evalId,
+          uuid: response.uuid,
+          fullUrl: response.fullUrl,
+          turnCount: 1,
+          embeddingLocation: response.embeddingLocation || 'main_content',
+          createdAt: Date.now(),
+        };
+        pageStateMap.set(stateKey, pageState);
+
+        logger.info('[IndirectWebPwn] Created new page for per-turn layer', {
+          uuid: pageState.uuid,
+          fullUrl: pageState.fullUrl,
+          embeddingLocation: pageState.embeddingLocation,
+          turnCount: 1,
+        });
+      } catch (error) {
+        logger.error('[IndirectWebPwn] Failed to create page', {
+          error: error instanceof Error ? error.message : String(error),
+          stateKey,
+        });
+        // On error, pass through the original prompt
+        results.push(testCase);
+        continue;
+      }
     }
 
     // Generate the fetch prompt
-    fetchPrompt = generateFetchPrompt(pageState.fullUrl, turnNumber);
+    // turnCount is 1 for first turn, or the incremented count for subsequent turns
+    const turnNumber = pageState.turnCount;
+    const fetchPrompt = generateFetchPrompt(pageState.fullUrl, turnNumber);
 
     logger.debug('[IndirectWebPwn] Transform complete', {
       turnNumber,
@@ -503,6 +620,7 @@ async function transformForPerTurnLayer(
       },
       metadata: {
         ...testCase.metadata,
+        webPageEvalId: pageState.evalId,
         webPageUuid: pageState.uuid,
         webPageUrl: pageState.fullUrl,
         webPageEmbeddingLocation: pageState.embeddingLocation,
