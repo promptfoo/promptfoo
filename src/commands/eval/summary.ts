@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
-import type { TokenUsage } from '../../types/index';
+import type { DefaultProviderSelectionInfo, TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -41,6 +41,8 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
+  /** Information about which default provider was selected (if using defaults) */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 }
 
 /**
@@ -97,6 +99,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     duration,
     maxConcurrency,
     tracker,
+    defaultProviderInfo,
   } = params;
 
   const lines: string[] = [];
@@ -319,6 +322,14 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
 
   const durationDisplay = formatDuration(duration);
   lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+
+  // Default provider info (if using defaults)
+  if (defaultProviderInfo) {
+    lines.push(
+      chalk.gray(`Grading provider: ${defaultProviderInfo.selectedProvider} (auto-detected)`),
+    );
+  }
+
   lines.push('');
 
   return lines;

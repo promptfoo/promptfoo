@@ -297,3 +297,59 @@ export interface DefaultProviders {
   synthesizeProvider: ApiProvider;
   webSearchProvider?: ApiProvider;
 }
+
+/**
+ * Information about a provider that was skipped during default provider selection
+ */
+export interface SkippedProviderInfo {
+  /** The name of the provider (e.g., "OpenAI", "Anthropic") */
+  name: string;
+  /** The reason this provider was skipped (e.g., "OPENAI_API_KEY not set") */
+  reason: string;
+}
+
+/**
+ * Information about a selected default provider slot
+ */
+export interface DefaultProviderSlotInfo {
+  /** The provider ID (e.g., "anthropic:messages:claude-sonnet-4-20250514") */
+  id: string;
+  /** The model name if applicable */
+  model?: string;
+}
+
+/**
+ * Information about how default providers were selected.
+ * This provides visibility into the auto-detection logic.
+ */
+export interface DefaultProviderSelectionInfo {
+  /** The name of the selected provider (e.g., "OpenAI", "Anthropic", "GitHub Models") */
+  selectedProvider: string;
+  /** Human-readable reason for the selection (e.g., "ANTHROPIC_API_KEY found, OPENAI_API_KEY not set") */
+  reason: string;
+  /** List of credentials that were detected in the environment */
+  detectedCredentials: string[];
+  /** List of providers that were skipped and why */
+  skippedProviders: SkippedProviderInfo[];
+  /** Information about which provider is assigned to each slot */
+  providerSlots: {
+    grading?: DefaultProviderSlotInfo;
+    gradingJson?: DefaultProviderSlotInfo;
+    embedding?: DefaultProviderSlotInfo;
+    moderation?: DefaultProviderSlotInfo;
+    suggestions?: DefaultProviderSlotInfo;
+    synthesize?: DefaultProviderSlotInfo;
+    llmRubric?: DefaultProviderSlotInfo;
+    webSearch?: DefaultProviderSlotInfo;
+  };
+}
+
+/**
+ * Default providers bundled with selection metadata
+ */
+export interface DefaultProvidersWithInfo {
+  /** The default provider instances */
+  providers: DefaultProviders;
+  /** Information about how providers were selected */
+  selectionInfo: DefaultProviderSelectionInfo;
+}

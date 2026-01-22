@@ -23,6 +23,7 @@ import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
+  DefaultProviderSelectionInfo,
   ProviderOptions,
   ProviderResponse,
 } from './providers';
@@ -413,6 +414,8 @@ export type EvalTableDTO = {
   version: number;
   id: string;
   stats?: EvaluateStats;
+  /** Information about which default provider was selected (if using defaults) */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 };
 
 export interface ResultSuggestion {
