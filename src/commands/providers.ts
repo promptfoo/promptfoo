@@ -33,15 +33,18 @@ export function providersCommand(program: Command) {
       // Detected credentials section
       logger.info('');
       logger.info(chalk.bold('Detected Credentials:'));
+      // All credentials that getDefaultProvidersWithInfo can detect
       const allCredentials = [
         'OPENAI_API_KEY',
         'ANTHROPIC_API_KEY',
         'GEMINI_API_KEY',
         'GOOGLE_API_KEY',
+        'PALM_API_KEY',
         'MISTRAL_API_KEY',
         'GITHUB_TOKEN',
         'AZURE_OPENAI_API_KEY',
         'AZURE_CLIENT_CREDENTIALS',
+        'AZURE_CONTENT_SAFETY_ENDPOINT',
         'GOOGLE_APPLICATION_CREDENTIALS',
       ];
 

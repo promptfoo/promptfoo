@@ -47,16 +47,19 @@ export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) 
         </div>
       )}
 
-      {Object.keys(providerSlots).length > 0 && (
+      {Object.entries(providerSlots).filter(([, slotInfo]) => slotInfo !== undefined).length >
+        0 && (
         <div>
           <p className="text-xs font-medium mb-1">Provider assignments:</p>
           <ul className="text-xs text-muted-foreground space-y-0.5">
-            {Object.entries(providerSlots).map(([slot, slotInfo]) => (
-              <li key={slot}>
-                <span className="capitalize">{slot}:</span>{' '}
-                <span className="font-mono text-[10px]">{slotInfo?.model || slotInfo?.id}</span>
-              </li>
-            ))}
+            {Object.entries(providerSlots)
+              .filter(([, slotInfo]) => slotInfo !== undefined)
+              .map(([slot, slotInfo]) => (
+                <li key={slot}>
+                  <span className="capitalize">{slot}:</span>{' '}
+                  <span className="font-mono text-[10px]">{slotInfo?.model || slotInfo?.id}</span>
+                </li>
+              ))}
           </ul>
         </div>
       )}

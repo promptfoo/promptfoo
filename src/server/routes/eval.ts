@@ -344,6 +344,10 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   // Get default provider info if using default providers (no explicit grading provider set)
+  // NOTE: This shows the CURRENT environment's provider selection, not what was used at eval time.
+  // If the user's environment changes after running an eval (e.g., adds/removes API keys),
+  // the displayed provider info may differ from what was actually used during the evaluation.
+  // To fix this, we would need to persist selection info in the database at eval time.
   let defaultProviderInfo: DefaultProviderSelectionInfo | undefined;
   const hasExplicitGradingProvider = Boolean(
     eval_.config?.defaultTest &&

@@ -169,17 +169,30 @@ export async function getDefaultProvidersWithInfo(
     detectedCredentials.push('AZURE_CONTENT_SAFETY_ENDPOINT');
   }
 
-  // Check Google Default Credentials (ADC) once
-  const hasGoogleADC = await hasGoogleDefaultCredentials();
-  if (hasGoogleADC) {
-    detectedCredentials.push('GOOGLE_APPLICATION_CREDENTIALS');
-  }
-
   // Determine which provider to use with priority tracking
   const preferAzure =
     !hasOpenAiCredentials && (hasAzureApiKey || hasAzureClientCreds) && hasAzureDeploymentName;
 
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
+
+  // Only check Google ADC when it could actually affect provider selection.
+  // ADC lookup involves metadata/file probing which can add latency or hang in some environments.
+  // We only need to check ADC if:
+  // 1. No higher-priority credentials are set (OpenAI, Anthropic, Azure, Google AI Studio API keys)
+  // 2. OR we want to report it in detectedCredentials for the "skipped" list
+  const shouldCheckGoogleADC =
+    !hasOpenAiCredentials &&
+    !hasAnthropicCredentials &&
+    !preferAzure &&
+    !hasGoogleAiStudioCredentials;
+
+  let hasGoogleADC = false;
+  if (shouldCheckGoogleADC) {
+    hasGoogleADC = await hasGoogleDefaultCredentials();
+    if (hasGoogleADC) {
+      detectedCredentials.push('GOOGLE_APPLICATION_CREDENTIALS');
+    }
+  }
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
   let selectedProvider: string;
@@ -214,6 +227,8 @@ export async function getDefaultProvidersWithInfo(
     };
 
     // Track skipped providers
+    // Note: We don't check Google ADC here because ADC lookup is expensive and
+    // we've already determined Azure will be used.
     if (hasAnthropicCredentials) {
       skippedProviders.push({
         name: 'Anthropic',
@@ -223,12 +238,6 @@ export async function getDefaultProvidersWithInfo(
     if (hasGoogleAiStudioCredentials) {
       skippedProviders.push({
         name: 'Google AI Studio',
-        reason: 'Azure has higher priority',
-      });
-    }
-    if (hasGoogleADC) {
-      skippedProviders.push({
-        name: 'Google Vertex',
         reason: 'Azure has higher priority',
       });
     }
@@ -263,15 +272,11 @@ export async function getDefaultProvidersWithInfo(
     };
 
     // Track skipped providers
+    // Note: We don't check Google ADC here because ADC lookup is expensive and
+    // we've already determined Anthropic will be used.
     if (hasGoogleAiStudioCredentials) {
       skippedProviders.push({
         name: 'Google AI Studio',
-        reason: 'Anthropic has higher priority',
-      });
-    }
-    if (hasGoogleADC) {
-      skippedProviders.push({
-        name: 'Google Vertex',
         reason: 'Anthropic has higher priority',
       });
     }
@@ -421,6 +426,9 @@ export async function getDefaultProvidersWithInfo(
     };
 
     // Track skipped providers (OpenAI wins because it has the key)
+    // Note: We don't check Google ADC here because ADC lookup is expensive and
+    // we've already determined OpenAI will be used. Users with OpenAI keys
+    // typically don't need to know about Google ADC availability.
     if (hasAnthropicCredentials) {
       skippedProviders.push({
         name: 'Anthropic',
@@ -430,12 +438,6 @@ export async function getDefaultProvidersWithInfo(
     if (hasGoogleAiStudioCredentials) {
       skippedProviders.push({
         name: 'Google AI Studio',
-        reason: 'OpenAI has higher priority',
-      });
-    }
-    if (hasGoogleADC) {
-      skippedProviders.push({
-        name: 'Google Vertex',
         reason: 'OpenAI has higher priority',
       });
     }
