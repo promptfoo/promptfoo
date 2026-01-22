@@ -369,12 +369,11 @@ describe('VLSUPlugin', () => {
         statusText: 'OK',
       } as any);
 
-      // First and third succeed, second fails
-      mockFetchImageAsBase64.mockImplementation(async (_url: string) => {
-        // Since records are shuffled, we can't predict order
-        // Just return null for some calls to simulate failures
-        const random = Math.random();
-        if (random < 0.33) {
+      // Fail one specific call deterministically (second call fails)
+      let callCount = 0;
+      mockFetchImageAsBase64.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 2) {
           return null;
         }
         return 'data:image/jpeg;base64,test';
@@ -383,9 +382,8 @@ describe('VLSUPlugin', () => {
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(3);
 
-      // Should have at least some tests (depends on random shuffle)
-      expect(tests.length).toBeGreaterThanOrEqual(0);
-      expect(tests.length).toBeLessThanOrEqual(3);
+      // Should have exactly 2 tests (one failed image fetch is skipped)
+      expect(tests.length).toBe(2);
     });
 
     it('should warn when fewer records are available than requested', async () => {
