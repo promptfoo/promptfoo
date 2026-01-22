@@ -729,6 +729,13 @@ export class CrescendoProvider implements ApiProvider {
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
+    // Check if the attack model refused to generate the prompt
+    if (response.isRefusal) {
+      logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
+      return {
+        generatedQuestion: undefined,
+      };
+    }
     if (!response.output) {
       logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
