@@ -170,6 +170,7 @@ export const COLLECTIONS = [
   'financial',
   'ecommerce',
   'mental-health',
+  'telecom',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -282,6 +283,21 @@ export const MENTAL_HEALTH_PLUGINS = [
   'mental-health:trauma-informed',
 ] as const;
 
+export const TELECOM_PLUGINS = [
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
@@ -289,6 +305,7 @@ export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
 export type MentalHealthPlugin = (typeof MENTAL_HEALTH_PLUGINS)[number];
+export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -357,6 +374,18 @@ export const ADDITIONAL_PLUGINS = [
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
   'pharmacy:drug-interaction',
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -462,6 +491,7 @@ export const PLUGIN_CATEGORIES = {
   'mental-health': MENTAL_HEALTH_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
+  telecom: TELECOM_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts
@@ -497,6 +527,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
+  ...TELECOM_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable

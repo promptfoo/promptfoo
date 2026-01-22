@@ -96,6 +96,18 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { TelecomAccessibilityViolationPluginGrader } from './plugins/telecom/accessibilityViolation';
+import { TelecomAccountTakeoverPluginGrader } from './plugins/telecom/accountTakeover';
+import { TelecomBillingMisinformationPluginGrader } from './plugins/telecom/billingMisinformation';
+import { TelecomCoverageMisinformationPluginGrader } from './plugins/telecom/coverageMisinformation';
+import { TelecomCpniDisclosurePluginGrader } from './plugins/telecom/cpniDisclosure';
+import { TelecomE911MisinformationPluginGrader } from './plugins/telecom/e911Misinformation';
+import { TelecomFraudEnablementPluginGrader } from './plugins/telecom/fraudEnablement';
+import { TelecomLawEnforcementRequestHandlingPluginGrader } from './plugins/telecom/lawEnforcementRequestHandling';
+import { TelecomLocationDisclosurePluginGrader } from './plugins/telecom/locationDisclosure';
+import { TelecomPortingMisinformationPluginGrader } from './plugins/telecom/portingMisinformation';
+import { TelecomTcpaViolationPluginGrader } from './plugins/telecom/tcpaViolation';
+import { TelecomUnauthorizedChangesPluginGrader } from './plugins/telecom/unauthorizedChanges';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
@@ -208,6 +220,23 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new PharmacyControlledSubstanceCompliancePluginGrader(),
   'promptfoo:redteam:pharmacy:dosage-calculation': new PharmacyDosageCalculationPluginGrader(),
   'promptfoo:redteam:pharmacy:drug-interaction': new PharmacyDrugInteractionPluginGrader(),
+  'promptfoo:redteam:telecom:cpni-disclosure': new TelecomCpniDisclosurePluginGrader(),
+  'promptfoo:redteam:telecom:location-disclosure': new TelecomLocationDisclosurePluginGrader(),
+  'promptfoo:redteam:telecom:account-takeover': new TelecomAccountTakeoverPluginGrader(),
+  'promptfoo:redteam:telecom:e911-misinformation': new TelecomE911MisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:tcpa-violation': new TelecomTcpaViolationPluginGrader(),
+  'promptfoo:redteam:telecom:unauthorized-changes': new TelecomUnauthorizedChangesPluginGrader(),
+  'promptfoo:redteam:telecom:fraud-enablement': new TelecomFraudEnablementPluginGrader(),
+  'promptfoo:redteam:telecom:porting-misinformation':
+    new TelecomPortingMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:billing-misinformation':
+    new TelecomBillingMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:coverage-misinformation':
+    new TelecomCoverageMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:law-enforcement-request-handling':
+    new TelecomLawEnforcementRequestHandlingPluginGrader(),
+  'promptfoo:redteam:telecom:accessibility-violation':
+    new TelecomAccessibilityViolationPluginGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),

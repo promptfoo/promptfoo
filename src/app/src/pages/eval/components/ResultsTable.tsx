@@ -24,6 +24,9 @@ import {
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
+  type GradingResult,
+  type ProviderOptions,
+  type Vars,
 } from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
@@ -40,6 +43,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
+import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -446,7 +450,7 @@ function ResultsTable({
       const { componentResults: _, ...existingGradingResultWithoutComponents } =
         existingOutput.gradingResult || {};
 
-      const gradingResult = {
+      const gradingResult: GradingResult = {
         // Copy over existing fields except componentResults
         ...existingGradingResultWithoutComponents,
         // Ensure required fields have valid values
@@ -469,13 +473,13 @@ function ResultsTable({
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
       if (modifiedComponentResults && componentResults) {
-        (gradingResult as any).componentResults = componentResults;
+        gradingResult.componentResults = componentResults;
       } else if (
         !modifiedComponentResults &&
         existingOutput.gradingResult?.componentResults &&
         existingOutput.gradingResult.componentResults.length > 0
       ) {
-        (gradingResult as any).componentResults = existingOutput.gradingResult.componentResults;
+        gradingResult.componentResults = existingOutput.gradingResult.componentResults;
       }
 
       updatedOutputs[promptIndex].gradingResult = gradingResult;
@@ -796,7 +800,7 @@ function ResultsTable({
                 );
 
                 // Determine if we should show original text (decoded) even without redteamFinalPrompt
-                const testMetadata = (row as any)?.test?.metadata || {};
+                const testMetadata: Record<string, unknown> = row.test?.metadata || {};
                 const metadataOriginal =
                   typeof testMetadata.originalText === 'string'
                     ? testMetadata.originalText
@@ -804,6 +808,7 @@ function ResultsTable({
                 const strategyId = testMetadata.strategyId;
                 const shouldShowOriginal =
                   varName === injectVarName &&
+                  typeof strategyId === 'string' &&
                   isEncodingStrategy(strategyId) &&
                   Boolean(metadataOriginal);
 
@@ -1061,7 +1066,7 @@ function ResultsTable({
                 typeof prompt.provider === 'string'
                   ? prompt.provider
                   : typeof prompt.provider === 'object' && prompt.provider !== null
-                    ? (prompt.provider as any).id || JSON.stringify(prompt.provider)
+                    ? (prompt.provider as ProviderOptions).id || JSON.stringify(prompt.provider)
                     : String(prompt.provider || 'Unknown provider');
 
               return (
@@ -1071,7 +1076,7 @@ function ResultsTable({
                       <div className="provider">
                         <ProviderDisplay
                           providerString={providerString}
-                          providersArray={config?.providers as any[] | undefined}
+                          providersArray={config?.providers as ProviderDef[] | undefined}
                           fallbackIndex={idx}
                         />
                       </div>
@@ -1503,12 +1508,13 @@ function ResultsTable({
                         const injectVarName = config?.redteam?.injectVar || 'prompt';
                         const varNameForCol = head.vars[varIdx];
                         if (varNameForCol === injectVarName) {
-                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const testMeta: Record<string, unknown> =
+                            row.original.test?.metadata || {};
                           const fromMeta =
                             typeof testMeta.originalText === 'string'
                               ? testMeta.originalText
                               : undefined;
-                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const testVars: Vars = row.original.test?.vars || {};
                           const fromVars =
                             typeof testVars.image_text === 'string'
                               ? (testVars.image_text as string)

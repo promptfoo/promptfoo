@@ -839,7 +839,7 @@ export const HttpProviderConfigSchema = z.object({
    */
   session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server']).optional(),
+  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
   stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
