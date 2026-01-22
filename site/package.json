@@ -33,7 +33,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^7.3.7",
     "@segment/ajv-human-errors": "^2.15.0",
-    "@swc/core": "^1.15.8",
+    "@swc/core": "^1.15.10",
     "@swc/jest": "^0.2.39",
     "@tsconfig/docusaurus": "^2.0.7",
     "canvas-confetti": "^1.9.4",
