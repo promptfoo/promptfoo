@@ -20,11 +20,11 @@ promptfoo generate tests -c promptfooconfig.yaml -o tests.yaml
 
 ## Commands
 
-| Command              | Purpose                      |
-| -------------------- | ---------------------------- |
-| `generate dataset`   | Create diverse test cases    |
-| `generate assertions`| Create test assertions       |
-| `generate tests`     | Generate both together       |
+| Command               | Purpose                   |
+| --------------------- | ------------------------- |
+| `generate dataset`    | Create diverse test cases |
+| `generate assertions` | Create test assertions    |
+| `generate tests`      | Generate both together    |
 
 ## Dataset generation
 
@@ -44,15 +44,15 @@ promptfoo generate dataset
 
 ### Options
 
-| Option                       | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `--numPersonas <n>`          | Number of personas (default: 5)          |
-| `--numTestCasesPerPersona <n>` | Cases per persona (default: 3)         |
-| `--enhanced`                 | Use enhanced generation with concepts, personas, and diversity |
-| `--edge-cases`               | Include edge case generation             |
-| `--diversity`                | Enable diversity measurement and optimization |
-| `--diversity-target <n>`     | Target diversity score 0-1 (default: 0.7)|
-| `--iterative`                | Iteratively fill coverage gaps           |
+| Option                         | Description                                                    |
+| ------------------------------ | -------------------------------------------------------------- |
+| `--numPersonas <n>`            | Number of personas (default: 5)                                |
+| `--numTestCasesPerPersona <n>` | Cases per persona (default: 3)                                 |
+| `--enhanced`                   | Use enhanced generation with concepts, personas, and diversity |
+| `--edge-cases`                 | Include edge case generation                                   |
+| `--diversity`                  | Enable diversity measurement and optimization                  |
+| `--diversity-target <n>`       | Target diversity score 0-1 (default: 0.7)                      |
+| `--iterative`                  | Iteratively fill coverage gaps                                 |
 
 :::note
 When using `--edge-cases` or `--diversity`, the `--enhanced` mode is automatically enabled.
@@ -62,13 +62,13 @@ When using `--edge-cases` or `--diversity`, the `--enhanced` mode is automatical
 
 When `--edge-cases` is enabled, the system generates:
 
-| Type          | Description                           |
-| ------------- | ------------------------------------- |
-| boundary      | Min/max values, numeric limits        |
-| format        | Invalid formats, encoding variations  |
-| empty         | Empty strings, null-like values       |
-| special-chars | Unicode, emojis, escape sequences     |
-| length        | Very long and very short inputs       |
+| Type          | Description                          |
+| ------------- | ------------------------------------ |
+| boundary      | Min/max values, numeric limits       |
+| format        | Invalid formats, encoding variations |
+| empty         | Empty strings, null-like values      |
+| special-chars | Unicode, emojis, escape sequences    |
+| length        | Very long and very short inputs      |
 
 ### Example
 
@@ -89,26 +89,27 @@ promptfoo generate assertions
 
 Use `--type` to specify the assertion style:
 
-| Type         | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `pi`         | Prompt-based inference assertions (default)           |
-| `g-eval`     | G-Eval style numeric scoring                          |
-| `llm-rubric` | Rubric-based LLM grading                              |
+| Type         | Description                                 |
+| ------------ | ------------------------------------------- |
+| `pi`         | Prompt-based inference assertions (default) |
+| `g-eval`     | G-Eval style numeric scoring                |
+| `llm-rubric` | Rubric-based LLM grading                    |
 
 ### Options
 
-| Option               | Description                                                    |
-| -------------------- | -------------------------------------------------------------- |
-| `--type <type>`      | Assertion type: pi, g-eval, llm-rubric                         |
-| `--numAssertions <n>`| Number of assertions to generate (default: 5)                  |
-| `--enhanced`         | Use enhanced generation with coverage analysis and validation  |
-| `--coverage`         | Enable coverage analysis to map assertions to requirements     |
-| `--validate`         | Validate assertions against sample outputs                     |
-| `--negative-tests`   | Generate negative test assertions (should-not patterns)        |
+| Option                | Description                                                   |
+| --------------------- | ------------------------------------------------------------- |
+| `--type <type>`       | Assertion type: pi, g-eval, llm-rubric                        |
+| `--numAssertions <n>` | Number of assertions to generate (default: 5)                 |
+| `--enhanced`          | Use enhanced generation with coverage analysis and validation |
+| `--coverage`          | Enable coverage analysis to map assertions to requirements    |
+| `--validate`          | Validate assertions against sample outputs                    |
+| `--negative-tests`    | Generate negative test assertions (should-not patterns)       |
 
 ### Coverage analysis
 
 With `--coverage`, the system:
+
 - Extracts requirements from prompts (explicit and implied)
 - Maps assertions to requirements
 - Reports coverage score and gaps
@@ -116,6 +117,7 @@ With `--coverage`, the system:
 ### Negative tests
 
 With `--negative-tests`, generates assertions like:
+
 - **should-not-contain** - Banned phrases, competitor mentions
 - **should-not-hallucinate** - Fake citations, made-up statistics
 - **should-not-expose** - PII, system prompts, credentials
@@ -139,11 +141,11 @@ promptfoo generate tests
 
 All dataset and assertion options are available, plus:
 
-| Option              | Description                |
-| ------------------- | -------------------------- |
-| `--dataset-only`    | Skip assertion generation  |
-| `--assertions-only` | Skip dataset generation    |
-| `--parallel`        | Run both in parallel       |
+| Option              | Description               |
+| ------------------- | ------------------------- |
+| `--dataset-only`    | Skip assertion generation |
+| `--assertions-only` | Skip dataset generation   |
+| `--parallel`        | Run both in parallel      |
 
 ### Example
 
@@ -159,15 +161,15 @@ promptfoo generate tests --dataset-only --diversity --diversity-target 0.8
 
 These options work with all generate commands:
 
-| Option                    | Description                      |
-| ------------------------- | -------------------------------- |
-| `-c, --config <path>`     | Configuration file path          |
-| `-o, --output <path>`     | Output file (.yaml or .csv)      |
-| `-w, --write`             | Write directly to config file    |
-| `--provider <provider>`   | LLM provider for generation      |
+| Option                      | Description                    |
+| --------------------------- | ------------------------------ |
+| `-c, --config <path>`       | Configuration file path        |
+| `-o, --output <path>`       | Output file (.yaml or .csv)    |
+| `-w, --write`               | Write directly to config file  |
+| `--provider <provider>`     | LLM provider for generation    |
 | `-i, --instructions <text>` | Custom generation instructions |
-| `--no-cache`              | Disable caching                  |
-| `--env-file <path>`       | Path to .env file                |
+| `--no-cache`                | Disable caching                |
+| `--env-file <path>`         | Path to .env file              |
 
 ## Output format
 
@@ -175,11 +177,11 @@ Generated test cases are output as YAML:
 
 ```yaml title="tests.yaml"
 - vars:
-    location: "Tokyo, Japan"
+    location: 'Tokyo, Japan'
 - vars:
-    location: "rural Montana"
+    location: 'rural Montana'
 - vars:
-    location: ""  # edge case: empty input
+    location: '' # edge case: empty input
 ```
 
 When generating assertions, they're added to `defaultTest.assert`:
@@ -187,12 +189,12 @@ When generating assertions, they're added to `defaultTest.assert`:
 ```yaml title="output.yaml"
 tests:
   - vars:
-      location: "Paris"
+      location: 'Paris'
 
 defaultTest:
   assert:
     - type: llm-rubric
-      value: "Response should provide specific travel recommendations"
+      value: 'Response should provide specific travel recommendations'
     - type: not-contains
       value: "I don't know"
 ```
@@ -211,13 +213,13 @@ const result = await generation.generateTestSuite(
     dataset: {
       numPersonas: 5,
       edgeCases: { enabled: true },
-      diversity: { enabled: true, targetScore: 0.7 }
+      diversity: { enabled: true, targetScore: 0.7 },
     },
     assertions: {
       coverage: { enabled: true },
-      negativeTests: { enabled: true }
-    }
-  }
+      negativeTests: { enabled: true },
+    },
+  },
 );
 
 console.log(result.dataset?.testCases);
