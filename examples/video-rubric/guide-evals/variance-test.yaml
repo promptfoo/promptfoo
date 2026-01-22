@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Variance Test - Measure consistency across repeated generations'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 4
+
+defaultTest:
+  options:
+    repeat: 3 # Generate 3 samples to measure variance
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- HIGH CONSISTENCY PROMPT (Should score similarly across repeats) ---
+  - vars:
+      prompt: >
+        Cartoon red panda gives a thumbs up with a big smile.
+        Simple pose, 2D cartoon style, solid color background.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Core elements (should be consistent across repeats):
+          1. Red panda character visible
+          2. Thumbs up gesture shown
+          3. Happy/smiling expression
+          4. 2D cartoon style maintained
+
+          Quality:
+          5. Clean rendering, no artifacts
+          6. Smooth motion if any
+          7. Consistent style throughout video
+          8. Simple composition
+
+          Score 0.125 per criterion.
+          This prompt is simple - expect low variance across repeats.
+          Compare scores across the 3 generations.
+
+  # --- MEDIUM VARIANCE PROMPT (Reasonable variation expected) ---
+  - vars:
+      prompt: >
+        Cartoon red panda reviews a PR and stamps APPROVED.
+        2D cartoon style, laptop visible.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Required elements:
+          1. Red panda character
+          2. Laptop or computer
+          3. Review action (looking, reading)
+          4. Approval action (stamp, check, gesture)
+
+          Text (variable):
+          5. 'APPROVED' or similar text visible
+          6. Text is readable
+
+          Quality:
+          7. Consistent character identity
+          8. Smooth animation
+
+          Score 0.125 per criterion.
+          Text rendering may vary across repeats.
+          Track which samples render text better.
+
+  # --- HIGH VARIANCE PROMPT (Complex, expect variation) ---
+  - vars:
+      prompt: >
+        Cartoon red panda watches CI tests pass, celebrates,
+        types LGTM, then merges the PR with confetti.
+        2D cartoon, multiple actions.
+    assert:
+      - type: video-rubric
+        threshold: 0.4
+        value: |
+          Sequence elements (any order acceptable):
+          1. CI/tests reference (status, dashboard)
+          2. Celebration gesture
+          3. Typing or text input action
+          4. Merge action
+          5. Confetti or celebration effect
+
+          Text (hard):
+          6. 'LGTM' readable at some point
+          7. Any status text visible
+
+          Character:
+          8. Red panda consistent throughout sequence
+
+          Score 0.125 per criterion.
+          Complex prompts have high variance - compare across repeats.
+          Some samples may hit different subsets of criteria.
+          Use this to demonstrate why repeat is useful.

@@ -6,7 +6,7 @@ import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
-import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
+import { DEFAULT_VIDEO_GRADING_PROMPT, DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -24,6 +24,7 @@ import {
   SELECT_BEST_PROMPT,
 } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
+import { DefaultVideoGradingProvider } from './providers/google/ai.studio';
 import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
@@ -37,6 +38,12 @@ import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
+import {
+  isWithinInlineLimit,
+  resolveVideoBytes,
+  VIDEO_INLINE_LIMIT_BYTES,
+  videoToBase64,
+} from './util/video';
 
 import type {
   ApiClassificationProvider,
@@ -1931,5 +1938,264 @@ export async function matchesModeration(
     pass: true,
     score: 1,
     reason: 'No relevant moderation flags detected',
+  };
+}
+
+interface VideoResponse {
+  id?: string;
+  blobRef?: { uri: string; hash: string; mimeType: string; sizeBytes: number; provider: string };
+  storageRef?: { key?: string };
+  url?: string;
+  format?: string;
+}
+
+/**
+ * Evaluates a video against a rubric using a multimodal LLM (Gemini).
+ *
+ * This function:
+ * 1. Resolves video bytes from blob storage, media storage, or URL
+ * 2. Constructs a multimodal prompt with video and rubric
+ * 3. Calls the video grading provider (Gemini with video understanding)
+ * 4. Parses the JSON response for pass/score/reason
+ */
+export async function matchesVideoRubric(
+  rubric: string | object,
+  video: VideoResponse,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  assertion?: Assertion,
+  providerCallContext?: CallApiContextParams,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade video without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  // Resolve video bytes from various storage mechanisms
+  let resolvedVideo;
+  try {
+    resolvedVideo = await resolveVideoBytes(video);
+  } catch (error) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Failed to resolve video: ${error instanceof Error ? error.message : String(error)}`,
+      assertion,
+    };
+  }
+
+  // Check if video is within inline limit
+  if (!isWithinInlineLimit(resolvedVideo.buffer)) {
+    // TODO: Support Gemini File API for larger videos
+    const limitMB = VIDEO_INLINE_LIMIT_BYTES / 1024 / 1024;
+    return {
+      pass: false,
+      score: 0,
+      reason: `Video size (${(resolvedVideo.buffer.length / 1024 / 1024).toFixed(1)}MB) exceeds ${limitMB}MB inline limit. File API support coming soon.`,
+      assertion,
+    };
+  }
+
+  // Convert video to base64 for inline embedding
+  const videoBase64 = videoToBase64(resolvedVideo.buffer);
+
+  // Render the rubric prompt
+  const rubricString = typeof rubric === 'object' ? JSON.stringify(rubric) : rubric;
+  const prompt = nunjucks.renderString(DEFAULT_VIDEO_GRADING_PROMPT, {
+    rubric: rubricString,
+    ...(vars || {}),
+  });
+
+  // Get the video grading provider (requires multimodal capability)
+  // Video understanding requires Gemini or similar multimodal provider
+  // Always use a dedicated video grading provider, never fall back to text-only providers
+  const defaultProviders = await getDefaultProviders();
+  const defaultVideoProvider = defaultProviders.videoGradingProvider || DefaultVideoGradingProvider;
+
+  const finalProvider = await getAndCheckProvider(
+    'text',
+    grading.provider,
+    defaultVideoProvider,
+    'video-rubric check',
+  );
+
+  // Construct multimodal request with video inline using Gemini's native format
+  // Uses `inline_data` (snake_case) for video content and `text` for the prompt
+  // Note: Gemini REST API uses snake_case field names
+  const multimodalPrompt = JSON.stringify([
+    {
+      role: 'user',
+      parts: [
+        {
+          inline_data: {
+            mime_type: resolvedVideo.mimeType,
+            data: videoBase64,
+          },
+        },
+        {
+          text: prompt,
+        },
+      ],
+    },
+  ]);
+
+  logger.debug('[VideoRubric] Calling video grading provider', {
+    provider: finalProvider.id(),
+    videoSizeKB: Math.round(resolvedVideo.buffer.length / 1024),
+    mimeType: resolvedVideo.mimeType,
+  });
+
+  const resp = await callProviderWithContext(
+    finalProvider,
+    multimodalPrompt,
+    'video-rubric',
+    {
+      rubric: rubricString,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
+
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: resp.error || 'No output from video grading provider',
+      assertion,
+      tokensUsed: resp.tokenUsage
+        ? {
+            total: resp.tokenUsage.total || 0,
+            prompt: resp.tokenUsage.prompt || 0,
+            completion: resp.tokenUsage.completion || 0,
+            cached: resp.tokenUsage.cached || 0,
+            numRequests: resp.tokenUsage.numRequests || 0,
+          }
+        : undefined,
+    };
+  }
+
+  // Parse JSON response
+  let jsonObjects: object[] = [];
+  if (typeof resp.output === 'string') {
+    try {
+      jsonObjects = extractJsonObjects(resp.output);
+      if (jsonObjects.length === 0) {
+        return {
+          pass: false,
+          score: 0,
+          reason: `Could not extract JSON from video-rubric response: ${resp.output}`,
+          assertion,
+          tokensUsed: resp.tokenUsage
+            ? {
+                total: resp.tokenUsage.total || 0,
+                prompt: resp.tokenUsage.prompt || 0,
+                completion: resp.tokenUsage.completion || 0,
+                cached: resp.tokenUsage.cached || 0,
+                numRequests: resp.tokenUsage.numRequests || 0,
+              }
+            : undefined,
+        };
+      }
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `video-rubric produced malformed response: ${err}\n\n${resp.output}`,
+        assertion,
+        tokensUsed: resp.tokenUsage
+          ? {
+              total: resp.tokenUsage.total || 0,
+              prompt: resp.tokenUsage.prompt || 0,
+              completion: resp.tokenUsage.completion || 0,
+              cached: resp.tokenUsage.cached || 0,
+              numRequests: resp.tokenUsage.numRequests || 0,
+            }
+          : undefined,
+      };
+    }
+  } else if (typeof resp.output === 'object') {
+    jsonObjects = [resp.output];
+  } else {
+    return {
+      pass: false,
+      score: 0,
+      reason: `video-rubric produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+      assertion,
+      tokensUsed: resp.tokenUsage
+        ? {
+            total: resp.tokenUsage.total || 0,
+            prompt: resp.tokenUsage.prompt || 0,
+            completion: resp.tokenUsage.completion || 0,
+            cached: resp.tokenUsage.cached || 0,
+            numRequests: resp.tokenUsage.numRequests || 0,
+          }
+        : undefined,
+    };
+  }
+
+  // Parse grading result
+  const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `video-rubric produced malformed response. Output: ${JSON.stringify(resp.output)}`,
+      assertion,
+      tokensUsed: resp.tokenUsage
+        ? {
+            total: resp.tokenUsage.total || 0,
+            prompt: resp.tokenUsage.prompt || 0,
+            completion: resp.tokenUsage.completion || 0,
+            cached: resp.tokenUsage.cached || 0,
+            numRequests: resp.tokenUsage.numRequests || 0,
+          }
+        : undefined,
+    };
+  }
+
+  let pass = parsed.pass ?? true;
+  if (typeof pass !== 'boolean') {
+    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
+
+  const threshold =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+    pass = pass && score >= threshold;
+  }
+
+  const reason =
+    parsed.reason ||
+    (pass ? 'Video grading passed' : `Score ${score} below threshold ${threshold}`);
+
+  return {
+    assertion,
+    pass,
+    score,
+    reason,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
+      completionDetails: parsed.tokensUsed?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    },
+    metadata: {
+      renderedGradingPrompt: prompt,
+      videoSizeBytes: resolvedVideo.buffer.length,
+      videoMimeType: resolvedVideo.mimeType,
+    },
   };
 }

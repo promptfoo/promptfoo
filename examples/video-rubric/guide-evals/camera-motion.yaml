@@ -1,0 +1,165 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Camera Motion Challenge - Test camera control capabilities'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Nova Reel has explicit camera controls
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    label: Nova Reel - Orbit
+    config:
+      durationSeconds: 6
+      dimension: '1280x720'
+      camera:
+        motion: 'orbit_left'
+
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    label: Nova Reel - Zoom
+    config:
+      durationSeconds: 6
+      dimension: '1280x720'
+      camera:
+        motion: 'zoom_in'
+
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    label: Nova Reel - Dolly
+    config:
+      durationSeconds: 6
+      dimension: '1280x720'
+      camera:
+        motion: 'dolly_forward'
+
+  # Ray uses natural language camera control
+  - id: luma:video:ray-2
+    label: Ray - Orbit
+    config:
+      aspectRatio: '16:9'
+      duration: '5s'
+      cameraMotion: 'orbit left slowly'
+
+  - id: luma:video:ray-2
+    label: Ray - Zoom
+    config:
+      aspectRatio: '16:9'
+      duration: '5s'
+      cameraMotion: 'slow zoom in'
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- ORBIT AROUND SUBJECT ---
+  - vars:
+      prompt: >
+        Cartoon red panda sitting at a desk with a laptop, reviewing code.
+        Static scene, the red panda stays in place.
+        2D cartoon style with simple background.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Camera motion (for orbit configs):
+          1. Camera appears to move around the subject
+          2. Perspective changes throughout video
+          3. Subject (red panda) stays relatively centered
+          4. Motion is smooth, not jerky
+
+          Subject stability:
+          5. Red panda remains stationary (not walking/moving)
+          6. Desk/laptop scene consistent
+          7. No sudden scene changes
+
+          Quality:
+          8. Smooth motion, no shake or wobble
+
+          Score 0.125 per criterion.
+          Camera motion type: Check if orbit (circling) or other motion is shown.
+          Static camera (no motion): max 0.4 for orbit configs.
+          Subject moves instead of camera: max 0.5.
+
+  # --- ZOOM IN ON SUBJECT ---
+  - vars:
+      prompt: >
+        Cartoon red panda at a laptop showing a green checkmark on screen.
+        The panda is happy and gives a thumbs up.
+        2D cartoon, simple composition.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Camera motion (for zoom configs):
+          1. Frame gets tighter/closer over time (zoom in)
+          2. Subject gets larger in frame
+          3. Smooth zoom motion
+          4. Consistent zoom speed
+
+          Subject stability:
+          5. Red panda stays in frame throughout
+          6. Scene elements consistent
+          7. No jarring cuts or transitions
+
+          Content:
+          8. Green checkmark or approval element visible
+
+          Score 0.125 per criterion.
+          For zoom_in: subject should appear larger at end than start.
+          No zoom motion: max 0.4 for zoom configs.
+          Zoom out instead of in: max 0.5.
+
+  # --- DOLLY FORWARD ---
+  - vars:
+      prompt: >
+        Cartoon red panda at a desk in a cozy office.
+        The panda is typing on a laptop.
+        2D cartoon style, warm colors.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Camera motion (for dolly configs):
+          1. Camera moves forward into the scene
+          2. Objects get closer/larger
+          3. Depth perception changes (parallax effect)
+          4. Smooth forward motion
+
+          Scene:
+          5. Office/desk environment visible
+          6. Red panda typing action
+          7. Consistent environment
+
+          Quality:
+          8. No jarring motion or teleportation
+
+          Score 0.125 per criterion.
+          Dolly differs from zoom: parallax/depth should change.
+          Static camera: max 0.4 for dolly configs.
+
+  # --- STATIC BASELINE (No camera motion) ---
+  - vars:
+      prompt: >
+        Cartoon red panda stamps 'APPROVED' on a document.
+        Fixed camera angle, no camera movement.
+        2D cartoon, clean animation.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Static camera baseline:
+          1. Camera remains fixed throughout
+          2. No zooming or panning
+          3. Consistent frame composition
+          4. Only subject animates, not camera
+
+          Action:
+          5. Stamping action visible
+          6. Red panda performs the action
+          7. Smooth character animation
+
+          Quality:
+          8. Clean, stable footage
+
+          Score 0.125 per criterion.
+          This tests that camera motion configs actually change behavior.
+          Compare this baseline to orbit/zoom/dolly results.

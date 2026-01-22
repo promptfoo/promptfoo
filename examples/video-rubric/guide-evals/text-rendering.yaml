@@ -1,0 +1,217 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Text Rendering Challenge - Stress test for on-screen text'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:video:sora-2
+    label: Sora
+    config:
+      size: '1280x720'
+      seconds: 4
+  - id: vertex:video:veo-3.1-generate-preview
+    label: Veo
+    config:
+      aspectRatio: '16:9'
+      durationSeconds: 5
+
+defaultTest:
+  options:
+    provider: vertex:gemini-3-flash-preview
+
+tests:
+  # --- LGTM SIGN (Canonical text test) ---
+  - vars:
+      prompt: >
+        Cartoon red panda holds up a sign that says 'LGTM' in all caps, bold thick letters.
+        The sign stays centered and readable for at least 3 seconds.
+        2D cartoon style, high contrast text.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Text accuracy (critical):
+          1. Sign or placard visible
+          2. Text reads 'LGTM' exactly (4 letters, this order)
+          3. All 4 letters are distinguishable
+          4. Text is legible (would be readable by a human)
+
+          Temporal stability:
+          5. Text visible for majority of video (>50% of frames)
+          6. No letter morphing (L becoming I, G becoming O, etc.)
+          7. No flickering or strobing
+
+          Presentation:
+          8. High contrast (text stands out from background)
+
+          Scoring: Text accuracy worth 0.5 (criteria 1-4). Stability worth 0.3 (5-7). Presentation 0.2.
+          Wrong text entirely: 0.0. Partial text (2-3 correct letters): 0.3.
+          Text appears but morphs: max 0.5.
+
+  # --- APPROVED STAMP (Longer text) ---
+  - vars:
+      prompt: >
+        Cartoon red panda holds up a big rubber stamp that says 'APPROVED' in green.
+        The stamp text is large, bold, and readable.
+        2D cartoon, clean lines.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Text accuracy:
+          1. 'APPROVED' text visible (8 letters)
+          2. Text is legible and readable
+          3. Correct spelling (A-P-P-R-O-V-E-D)
+
+          Presentation:
+          4. Green color for text or stamp
+          5. Bold/prominent display
+          6. Stamp or badge visual element
+
+          Character:
+          7. Red panda holding or presenting the stamp
+          8. Consistent character appearance
+
+          Score 0.125 per criterion. 'APPROVED' completely unreadable: max 0.3.
+          Misspelled or wrong word: max 0.4.
+
+  # --- SPEECH BUBBLE SHORT (4 chars) ---
+  - vars:
+      prompt: >
+        Cartoon red panda with a speech bubble that says 'LGTM'.
+        The bubble is large, white with black text.
+        Keep the text stable and readable.
+        2D flat cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Speech bubble:
+          1. Speech bubble visual element present
+          2. Bubble connected to or near the red panda
+          3. Bubble has clear boundary
+
+          Text:
+          4. Text inside bubble
+          5. Text reads 'LGTM' or close variant
+          6. Text is black or dark colored
+          7. Text is legible
+
+          Stability:
+          8. Text doesn't morph or flicker
+
+          Score 0.125 per criterion. No bubble: max 0.5. No text: max 0.3.
+
+  # --- CI PASS BADGE (Short + context) ---
+  - vars:
+      prompt: >
+        Cartoon red panda points to a status badge that reads 'CI PASS'.
+        The badge is green with white text.
+        The badge stays stable while the panda nods approvingly.
+        2D cartoon.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Badge element:
+          1. Badge/status indicator visible
+          2. Green color present
+          3. Badge is distinct UI element
+
+          Text:
+          4. Text contains 'PASS' or 'CI' or similar status word
+          5. Text is readable
+          6. Text stable (not morphing)
+
+          Interaction:
+          7. Red panda pointing or gesturing at badge
+          8. Nodding or approval gesture
+
+          Score 0.125 per criterion. No badge visible: max 0.4.
+          Text completely illegible: max 0.5.
+
+  # --- MERGE BUTTON (UI element + text) ---
+  - vars:
+      prompt: >
+        Cartoon red panda clicks a big button labeled 'MERGE'.
+        The button is purple with white text.
+        Show the button press animation.
+        2D cartoon style.
+    assert:
+      - type: video-rubric
+        threshold: 0.6
+        value: |
+          Button element:
+          1. Button UI element visible
+          2. Button has distinct shape (rounded rect, etc.)
+          3. Purple/violet color present
+
+          Text:
+          4. 'MERGE' text on button (5 letters)
+          5. Text is readable before or during click
+          6. White or light colored text
+
+          Interaction:
+          7. Click/press action shown
+          8. Red panda performing the click
+
+          Score 0.125 per criterion. No button: max 0.3.
+          'MERGE' text missing or illegible: max 0.5.
+
+  # --- TWO WORDS: NEEDS TESTS (Harder) ---
+  - vars:
+      prompt: >
+        Cartoon red panda places a label on screen that says 'NEEDS TESTS'.
+        The label is red/orange with bold white text.
+        The label stays visible and stable.
+        2D cartoon.
+    assert:
+      - type: video-rubric
+        threshold: 0.5
+        value: |
+          Two-word text (harder):
+          1. Label or tag element visible
+          2. Text contains two words or concepts
+          3. 'NEEDS' or 'TESTS' partially readable
+          4. Both words somewhat legible
+
+          Stability:
+          5. Text doesn't completely morph
+          6. Label visible for >1 second
+
+          Character:
+          7. Red panda interacting with label
+          8. Placing or presenting action
+
+          Score 0.125 per criterion. This is harder - two-word text often fails.
+          Single word readable: 0.4. Neither word readable: max 0.25.
+
+  # --- DIFF SYMBOLS (Abstract text) ---
+  - vars:
+      prompt: >
+        Cartoon red panda scrolls through a simple code diff.
+        Show '+' lines in green and '-' lines in red.
+        Big readable symbols, not actual code.
+        Then stamp 'APPROVED'.
+        2D cartoon.
+    assert:
+      - type: video-rubric
+        threshold: 0.5
+        value: |
+          Diff visualization:
+          1. Code or diff-like content visible
+          2. Green color present (additions)
+          3. Red color present (deletions)
+          4. '+' or '-' symbols or line-based diff shown
+
+          Text:
+          5. 'APPROVED' or approval text appears
+          6. Approval text is readable
+
+          Sequence:
+          7. Scrolling/reading before approval
+          8. Approval action at end
+
+          Score 0.125 per criterion. This tests abstract text rendering.
+          No diff visualization: max 0.5. No approval: max 0.6.

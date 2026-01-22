@@ -166,6 +166,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                              |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output        |
+| [video-rubric](/docs/configuration/expected-outputs/model-graded/video-rubric)        | Evaluate AI-generated videos using multimodal LLMs like Gemini                   |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                              |
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                          |
