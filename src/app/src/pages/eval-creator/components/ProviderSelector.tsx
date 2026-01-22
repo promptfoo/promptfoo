@@ -163,14 +163,6 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-sonnet-4-5-20250929',
-      label: 'Anthropic: Claude 4.5 Sonnet',
-      config: {
-        max_tokens: 2048,
-        temperature: 0.5,
-      },
-    },
-    {
       id: 'anthropic:claude-agent-sdk',
       label: 'Anthropic: Claude Agent SDK',
       config: {},
