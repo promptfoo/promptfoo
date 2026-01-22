@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+import { createContext } from 'react';
 
-export interface HistoryState {
+export interface EvalHistoryContextValue {
   /**
    * Timestamp of the last eval completion.
    * Changes to this value signal that history should be refetched.
@@ -12,7 +12,4 @@ export interface HistoryState {
   signalEvalCompleted: () => void;
 }
 
-export const useHistoryStore = create<HistoryState>()((set) => ({
-  lastEvalCompletedAt: null,
-  signalEvalCompleted: () => set({ lastEvalCompletedAt: Date.now() }),
-}));
+export const EvalHistoryContext = createContext<EvalHistoryContextValue | undefined>(undefined);
