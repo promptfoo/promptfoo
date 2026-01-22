@@ -33,8 +33,6 @@ interface RedteamHistoryEntry {
   output?: string;
   outputAudio?: { data?: string; format?: string };
   outputImage?: { data?: string; format?: string };
-  score?: number;
-  graderPassed?: boolean;
 }
 
 interface CodeDisplayProps {

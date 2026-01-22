@@ -41,7 +41,7 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
                         <tr key={key} className="border-b border-border/50 last:border-0">
                           <td className="break-words px-3 py-2">{key}</td>
                           <td className="max-w-0 overflow-hidden break-all px-3 py-2">
-                            {value as string}
+                            {typeof value === 'string' ? value : String(value)}
                           </td>
                         </tr>
                       ))}
