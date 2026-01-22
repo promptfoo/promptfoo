@@ -5,7 +5,6 @@ import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { DEFAULT_ANTHROPIC_PROVIDER_ID } from '@promptfoo/constants/defaultModels';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
@@ -542,7 +541,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: DEFAULT_ANTHROPIC_PROVIDER_ID,
+          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
           config: {},
           label: currentLabel,
         },
