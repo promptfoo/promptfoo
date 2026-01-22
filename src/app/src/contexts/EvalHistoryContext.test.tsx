@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvalHistoryProvider } from './EvalHistoryContext';
@@ -134,9 +134,7 @@ describe('EvalHistoryContext', () => {
 
     const Consumer1 = () => {
       const context = useContext(EvalHistoryContext);
-      return (
-        <p data-testid="consumer-1">{context?.lastEvalCompletedAt?.toString() ?? 'null'}</p>
-      );
+      return <p data-testid="consumer-1">{context?.lastEvalCompletedAt?.toString() ?? 'null'}</p>;
     };
 
     const Consumer2 = () => {
