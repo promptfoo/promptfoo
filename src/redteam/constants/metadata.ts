@@ -498,7 +498,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ecommerce:compliance-bypass': Severity.High,
   'ecommerce:order-fraud': Severity.High,
   'ecommerce:price-manipulation': Severity.High,
-  telecom: Severity.High,
+  telecom: Severity.Critical,
   'telecom:cpni-disclosure': Severity.Critical,
   'telecom:location-disclosure': Severity.Critical,
   'telecom:account-takeover': Severity.Critical,
