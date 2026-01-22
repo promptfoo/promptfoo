@@ -36,7 +36,7 @@ This strategy does **not** cover modern prompt injection techniques such as:
 For comprehensive prompt injection testing, consider using:
 
 - [`jailbreak`](/docs/red-team/strategies/iterative) - AI-generated adaptive jailbreaks
-- [`jailbreak:composite`](/docs/red-team/strategies/composite) - Multi-technique attacks
+- [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks) - Multi-technique attacks
 - [`indirect-prompt-injection`](/docs/red-team/plugins/indirect-prompt-injection) plugin
 - Encoding strategies like `base64`, `rot13`, `leetspeak`
 
@@ -111,7 +111,7 @@ strategies:
 ## Related Strategies
 
 - [Iterative Jailbreak](/docs/red-team/strategies/iterative) - AI-generated adaptive attacks
-- [Composite Jailbreak](/docs/red-team/strategies/composite) - Multi-technique attacks
+- [Composite Jailbreak](/docs/red-team/strategies/composite-jailbreaks) - Multi-technique attacks
 - [Tree Jailbreak](/docs/red-team/strategies/tree) - Tree-search optimization
 
 For a comprehensive overview of LLM vulnerabilities, visit [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).
