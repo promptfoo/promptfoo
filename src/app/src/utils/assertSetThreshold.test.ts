@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { formatScoreThreshold, getThresholdLabel, THRESHOLD } from './assertSetThreshold';
 
 describe('assertSetThreshold', () => {
