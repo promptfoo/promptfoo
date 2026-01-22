@@ -141,7 +141,7 @@ Each model has specific rate limits and pricing. Check the [GitHub Models docume
 
 ## API Information
 
-- **Base URL**: `https://models.github.ai`
+- **Base URL**: `https://models.github.ai/inference`
 - **Format**: OpenAI-compatible API
 - **Endpoints**: Standard chat completions and embeddings
 

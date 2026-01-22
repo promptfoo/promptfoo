@@ -180,12 +180,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName.startsWith('gpt-5')
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
+      this.isGPT5Model()
     );
   }
 
@@ -209,7 +217,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
-    const isGPT5Model = this.modelName.startsWith('gpt-5');
+    const isGPT5Model = this.isGPT5Model();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -282,20 +290,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         : {}),
       // GPT-5 only: attach verbosity if provided
-      ...(this.modelName.startsWith('gpt-5') && config.verbosity
-        ? { verbosity: config.verbosity }
-        : {}),
+      ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (
-      config.reasoning_effort &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5') ||
-        this.modelName.startsWith('gpt-oss'))
-    ) {
+    if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
       body.reasoning_effort = config.reasoning_effort;
     }
 
@@ -303,7 +302,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.includes('/o1') ||
+        this.modelName.includes('/o3') ||
+        this.modelName.includes('/o4'))
     ) {
       body.reasoning = config.reasoning;
     }
