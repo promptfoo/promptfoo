@@ -173,7 +173,7 @@ describe('OpenAI Provider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });

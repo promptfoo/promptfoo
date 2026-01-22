@@ -12,6 +12,10 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
 import type { Cache } from 'cache-manager';
 
+import type { CacheOptions } from './types/cache';
+
+export type { CacheOptions };
+
 let cacheInstance: Cache | undefined;
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
@@ -126,9 +130,14 @@ export async function fetchWithCache<T = unknown>(
   options: RequestInit = {},
   timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
-  bust: boolean = false,
+  bustOrOptions: boolean | CacheOptions = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  // Normalize to CacheOptions for backward compatibility
+  const cacheOptions: CacheOptions =
+    typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : bustOrOptions;
+  const { bust = false, repeatIndex } = cacheOptions;
+
   if (!enabled || bust) {
     const fetchStart = Date.now();
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
@@ -154,7 +163,9 @@ export async function fetchWithCache<T = unknown>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  // Add repeat suffix for repeatIndex > 0 to enable per-repeat caching
+  const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}${repeatSuffix}`;
   const cache = await getCache();
 
   let cached = true;

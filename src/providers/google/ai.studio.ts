@@ -4,7 +4,9 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
+import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
@@ -278,7 +280,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -412,7 +414,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        getCacheOptions(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;

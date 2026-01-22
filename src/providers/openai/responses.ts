@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
@@ -372,7 +372,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
           timeout,
           'json',
-          context?.bustCache ?? context?.debug,
+          getCacheOptions(context),
           this.config.maxRetries,
         ));
 

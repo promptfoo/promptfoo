@@ -1,7 +1,8 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
 
-import type { ApiProvider } from '../types/index';
+import type { CacheOptions } from '../types/cache';
+import type { ApiProvider, CallApiContextParams } from '../types/index';
 
 /**
  * The default timeout for API requests in milliseconds.
@@ -149,4 +150,18 @@ export function toTitleCase(str: string) {
 export function isPromptfooSampleTarget(provider: ApiProvider) {
   const url = provider.config?.url;
   return url?.includes('promptfoo.app') || url?.includes('promptfoo.dev');
+}
+
+/**
+ * Get cache options from provider call context.
+ * Handles bustCache, debug mode, and per-repeat caching.
+ *
+ * @param context The provider call context
+ * @returns CacheOptions for use with fetchWithCache
+ */
+export function getCacheOptions(context?: CallApiContextParams): CacheOptions {
+  return {
+    bust: context?.bustCache ?? context?.debug,
+    repeatIndex: context?.repeatIndex,
+  };
 }

@@ -4,7 +4,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -159,7 +159,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           },
           REQUEST_TIMEOUT_MS,
           'json',
-          context?.bustCache ?? context?.debug,
+          getCacheOptions(context),
         ));
 
       if (status < 200 || status >= 300) {

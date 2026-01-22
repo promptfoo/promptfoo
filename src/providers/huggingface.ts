@@ -2,7 +2,7 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
 
 const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 
@@ -111,10 +111,13 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       return {};
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
       parameters: {
@@ -148,6 +151,8 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           body: JSON.stringify(params),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        getCacheOptions(context),
       );
 
       logger.debug('Huggingface API response', { data: response.data });

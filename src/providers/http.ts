@@ -28,7 +28,7 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
@@ -2204,7 +2204,7 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -2428,7 +2428,7 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
         this.config.maxRetries,
       ));
     } catch (err) {

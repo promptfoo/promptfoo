@@ -94,7 +94,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
 
@@ -131,7 +131,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -167,7 +167,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -204,7 +204,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -239,7 +239,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -277,7 +277,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -338,7 +338,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -386,7 +386,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });

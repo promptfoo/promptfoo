@@ -6,7 +6,11 @@
  * Performance benchmarking should be done with dedicated tooling, not in CI.
  */
 
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import {
+  BatchSpanProcessor,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withGenAISpan } from '../../src/tracing/genaiTracer';
@@ -185,5 +189,117 @@ describe('OTEL Tracing Smoke Tests', () => {
       const span = spans[0];
       expect(span.status.code).toBe(2); // SpanStatusCode.ERROR
     });
+  });
+
+  describe('Comparison with Simulated API Latency', () => {
+    it('should be negligible compared to typical API latency', async () => {
+      // Use fewer iterations with longer simulated latency for more stable measurements
+      // This reduces the impact of timer resolution variance (especially on Windows)
+      const iterations = 50;
+      const simulatedLatencyMs = 200; // Higher latency = more stable percentage calculation
+
+      // Warmup phase to let JIT optimize
+      for (let i = 0; i < 5; i++) {
+        await withGenAISpan(baseContext, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { output: 'warmup' };
+        });
+      }
+
+      // Pure latency
+      const latencyStart = performance.now();
+      for (let i = 0; i < iterations; i++) {
+        await new Promise((resolve) => setTimeout(resolve, simulatedLatencyMs));
+      }
+      const latencyTime = performance.now() - latencyStart;
+
+      // Latency + tracing
+      memoryExporter.reset();
+      const tracedStart = performance.now();
+      for (let i = 0; i < iterations; i++) {
+        await withGenAISpan(
+          baseContext,
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, simulatedLatencyMs));
+            return { output: 'test' };
+          },
+          resultExtractor,
+        );
+      }
+      const tracedTime = performance.now() - tracedStart;
+
+      const tracingOverhead = tracedTime - latencyTime;
+      const overheadPercentage = (tracingOverhead / latencyTime) * 100;
+
+      // Tracing overhead should be less than 10% of API latency
+      // Using 10% threshold to account for CI runner variability (especially Windows)
+      // In practice, overhead is typically < 2% but timer resolution and scheduling
+      // can cause variance in benchmark measurements
+      expect(overheadPercentage).toBeLessThan(10);
+
+      console.log(`Pure latency: ${latencyTime.toFixed(2)}ms`);
+      console.log(`With tracing: ${tracedTime.toFixed(2)}ms`);
+      console.log(
+        `Tracing overhead: ${tracingOverhead.toFixed(2)}ms (${overheadPercentage.toFixed(2)}%)`,
+      );
+    });
+  });
+});
+
+describe('BatchSpanProcessor Performance', () => {
+  let tracerProvider: NodeTracerProvider;
+  let memoryExporter: InMemorySpanExporter;
+
+  beforeAll(() => {
+    memoryExporter = new InMemorySpanExporter();
+    // Use BatchSpanProcessor like production
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [
+        new BatchSpanProcessor(memoryExporter, {
+          maxQueueSize: 2048,
+          maxExportBatchSize: 512,
+          scheduledDelayMillis: 5000,
+          exportTimeoutMillis: 30000,
+        }),
+      ],
+    });
+    tracerProvider.register();
+  });
+
+  afterAll(async () => {
+    await tracerProvider.shutdown();
+  });
+
+  beforeEach(() => {
+    memoryExporter.reset();
+  });
+
+  const baseContext: GenAISpanContext = {
+    system: 'openai',
+    operationName: 'chat',
+    model: 'gpt-4',
+    providerId: 'openai:gpt-4',
+  };
+
+  it('should handle burst traffic efficiently with batch processing', async () => {
+    const burstSize = 500;
+
+    const start = performance.now();
+
+    // Simulate burst of provider calls
+    await Promise.all(
+      Array.from({ length: burstSize }, (_, i) =>
+        withGenAISpan({ ...baseContext, testIndex: i }, async () => ({ output: `Response ${i}` })),
+      ),
+    );
+
+    const totalTime = performance.now() - start;
+    const timePerCall = totalTime / burstSize;
+
+    // Batch processor should handle bursts efficiently
+    expect(timePerCall).toBeLessThan(5);
+
+    console.log(`Burst of ${burstSize} calls: ${totalTime.toFixed(2)}ms`);
+    console.log(`Time per call: ${timePerCall.toFixed(4)}ms`);
   });
 });

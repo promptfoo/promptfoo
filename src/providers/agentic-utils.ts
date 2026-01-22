@@ -85,6 +85,8 @@ export interface AgenticCacheOptions {
   workingDir?: string;
   /** Whether to bust the cache (read bypass, but still write) */
   bustCache?: boolean;
+  /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
+  repeatIndex?: number;
 }
 
 /**
@@ -110,12 +112,19 @@ export interface CacheCheckResult {
  *
  * @param prefix - Cache key prefix (provider identifier)
  * @param data - Data to hash for the cache key
+ * @param repeatIndex - Optional repeat index for per-repeat caching
  * @returns Prefixed SHA-256 hash cache key
  */
-export function generateCacheKey(prefix: string, data: Record<string, unknown>): string {
+export function generateCacheKey(
+  prefix: string,
+  data: Record<string, unknown>,
+  repeatIndex?: number,
+): string {
   const stringified = JSON.stringify(data);
   const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-  return `${prefix}:${hash}`;
+  // Add repeat suffix for repeatIndex > 0 to enable per-repeat caching
+  const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+  return `${prefix}:${hash}${repeatSuffix}`;
 }
 
 /**
@@ -165,10 +174,14 @@ export async function initializeAgenticCache(
   }
 
   const cache = await getCache();
-  const cacheKey = generateCacheKey(options.cacheKeyPrefix, {
-    ...cacheKeyData,
-    workingDirFingerprint,
-  });
+  const cacheKey = generateCacheKey(
+    options.cacheKeyPrefix,
+    {
+      ...cacheKeyData,
+      workingDirFingerprint,
+    },
+    options.repeatIndex,
+  );
 
   return {
     shouldCache: true,
