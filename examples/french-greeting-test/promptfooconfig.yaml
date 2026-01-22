@@ -4,18 +4,18 @@ providers:
   - openai:gpt-4o-mini
 
 prompts:
-  - "Greet the user in French."
+  - 'Greet the user in French.'
 
 tests:
   - type: assert-set
     threshold: 0.9
     assert:
       - type: contains
-        value: "Bonjour"
+        value: 'Bonjour'
         weight: 2
         metric: Correctness
       - type: llm-rubric
-        value: "Tone is friendly and the text is in French."
+        value: 'Tone is friendly and the text is in French.'
         weight: 1
         metric: Tone
       - type: answer-relevance

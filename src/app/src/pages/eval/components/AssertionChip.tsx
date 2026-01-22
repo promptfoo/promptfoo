@@ -1,8 +1,9 @@
 import * as React from 'react';
-import { Check, ChevronDown, Minus, X } from 'lucide-react';
+
 import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { Check, ChevronDown, Minus, X } from 'lucide-react';
 import type { GradingResult } from '@promptfoo/types';
 
 interface AssertionChipProps {
@@ -33,10 +34,13 @@ function getThresholdLabel(threshold: number | undefined): string {
   if (threshold === 1) {
     return 'ALL must pass';
   }
-  if (threshold > 0 && threshold < 1) {
+  if (threshold === 0.5) {
     return 'Either/Or';
   }
-  return `≥${(threshold * 100).toFixed(0)}%`;
+  if (threshold > 0 && threshold < 1) {
+    return `≥${(threshold * 100).toFixed(0)}% must pass`;
+  }
+  return '';
 }
 
 function AssertionChip({
@@ -116,7 +120,9 @@ function AssertionChip({
                     ) : (
                       <X className="size-3.5 text-red-600 dark:text-red-400 stroke-[2.5]" />
                     )}
-                    <span className={cn(showNeutral && 'text-muted-foreground')}>{childMetric}</span>
+                    <span className={cn(showNeutral && 'text-muted-foreground')}>
+                      {childMetric}
+                    </span>
                   </div>
                   <span
                     className={cn('font-medium', showNeutral && 'text-muted-foreground opacity-80')}

@@ -1,9 +1,9 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { AssertionChip, getThresholdLabel } from './AssertionChip';
 import type { GradingResult } from '@promptfoo/types';
-import { TooltipProvider } from '@app/components/ui/tooltip';
 
 describe('getThresholdLabel', () => {
   it('returns empty string for undefined threshold', () => {
@@ -14,19 +14,20 @@ describe('getThresholdLabel', () => {
     expect(getThresholdLabel(1)).toBe('ALL must pass');
   });
 
-  it('returns "Either/Or" for threshold between 0 and 1', () => {
+  it('returns "Either/Or" for threshold of 0.5', () => {
     expect(getThresholdLabel(0.5)).toBe('Either/Or');
-    expect(getThresholdLabel(0.3)).toBe('Either/Or');
-    expect(getThresholdLabel(0.7)).toBe('Either/Or');
   });
 
-  it('returns percentage string for threshold >= 1', () => {
-    expect(getThresholdLabel(1.5)).toBe('≥150%');
-    expect(getThresholdLabel(2)).toBe('≥200%');
+  it('returns percentage string for other thresholds between 0 and 1', () => {
+    expect(getThresholdLabel(0.3)).toBe('≥30% must pass');
+    expect(getThresholdLabel(0.7)).toBe('≥70% must pass');
+    expect(getThresholdLabel(0.33)).toBe('≥33% must pass');
   });
 
-  it('returns percentage string for threshold of 0', () => {
-    expect(getThresholdLabel(0)).toBe('≥0%');
+  it('returns empty string for edge case thresholds', () => {
+    // These edge cases shouldn't occur in practice (threshold is always 0-1)
+    expect(getThresholdLabel(0)).toBe('');
+    expect(getThresholdLabel(1.5)).toBe('');
   });
 });
 

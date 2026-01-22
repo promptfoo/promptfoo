@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import {
   deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
@@ -137,23 +139,26 @@ const CustomMetrics = ({
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
-  // Validate props BEFORE hooks to comply with Rules of Hooks
-  if (!lookup || !Object.keys(lookup).length) {
-    return null;
-  }
-
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
+  // Memoize the metric result lookup to avoid rebuilding on every render
+  const metricResultLookup = useMemo(
+    () => buildMetricResultLookup(componentResults),
+    [componentResults],
+  );
+
+  // Early return AFTER hooks to comply with Rules of Hooks
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
+
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
-
-  // Build lookup for metric results
-  const metricResultLookup = buildMetricResultLookup(componentResults);
 
   return (
     <div className="custom-metric-container my-2" data-testid="custom-metrics">

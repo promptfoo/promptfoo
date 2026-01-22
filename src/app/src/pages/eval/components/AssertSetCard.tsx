@@ -83,7 +83,10 @@ function AssertionRow({
           !passed && !isNeutral && 'text-red-700 dark:text-red-300',
         )}
       >
-        {result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type || 'assertion'}
+        {result.assertion?.metric ||
+          result.metadata?.assertSetMetric ||
+          result.assertion?.type ||
+          'assertion'}
       </span>
 
       {/* Score */}
@@ -174,12 +177,7 @@ export function AssertSetCard({ result, children, defaultExpanded }: AssertSetCa
       {isExpanded && (
         <div className="border-t border-border bg-background/50">
           {children.map((child, index) => (
-            <AssertionRow
-              key={index}
-              result={child}
-              parentPassed={result.pass}
-              isChild={true}
-            />
+            <AssertionRow key={index} result={child} parentPassed={result.pass} isChild={true} />
           ))}
         </div>
       )}
