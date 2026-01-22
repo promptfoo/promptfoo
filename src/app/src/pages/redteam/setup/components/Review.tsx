@@ -29,6 +29,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { useHistoryStore } from '@app/stores/historyStore';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
@@ -92,6 +93,7 @@ export default function Review({
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useHistoryStore();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -426,6 +428,7 @@ export default function Review({
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
+              signalEvalCompleted();
 
               recordEvent('funnel', {
                 type: 'redteam',
@@ -453,7 +456,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {

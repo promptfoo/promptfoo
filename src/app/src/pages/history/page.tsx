@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import { useHistoryStore } from '@app/stores/historyStore';
 import { callApi } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
@@ -14,7 +15,9 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { lastEvalCompletedAt } = useHistoryStore();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally refetch when lastEvalCompletedAt changes
   useEffect(() => {
     (async () => {
       setIsLoading(true);
@@ -33,7 +36,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [lastEvalCompletedAt]);
 
   return (
     <History

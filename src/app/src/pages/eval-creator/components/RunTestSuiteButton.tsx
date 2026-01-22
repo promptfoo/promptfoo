@@ -4,12 +4,14 @@ import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useStore } from '@app/stores/evalConfig';
+import { useHistoryStore } from '@app/stores/historyStore';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const { config } = useStore();
+  const { signalEvalCompleted } = useHistoryStore();
   const {
     defaultTest,
     derivedMetrics,
@@ -80,6 +82,7 @@ const RunTestSuiteButton = () => {
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
             setIsRunning(false);
+            signalEvalCompleted();
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
