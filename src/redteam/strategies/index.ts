@@ -13,6 +13,7 @@ import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
+import { addIndirectWebPwnTestCases } from './indirectWebPwn';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
 import { addIterativeJailbreaks } from './iterative';
@@ -129,6 +130,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'indirect-web-pwn',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
+      const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Indirect Web Pwn test cases`);
       return newTestCases;
     },
   },

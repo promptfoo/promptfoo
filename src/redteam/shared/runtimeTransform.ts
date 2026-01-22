@@ -37,6 +37,8 @@ export interface TransformResult {
   image?: MediaData;
   /** Error message if transform failed - caller should skip the turn */
   error?: string;
+  /** Additional display vars from the transform (e.g., embeddedInjection, webPageUrl) */
+  displayVars?: Record<string, string>;
 }
 
 /**
@@ -148,10 +150,21 @@ export async function applyRuntimeTransforms(
     imageApplied,
   });
 
+  // Extract additional display vars (excluding the main injectVar)
+  const displayVars: Record<string, string> = {};
+  if (testCase.vars) {
+    for (const [key, value] of Object.entries(testCase.vars)) {
+      if (key !== injectVar && typeof value === 'string') {
+        displayVars[key] = value;
+      }
+    }
+  }
+
   // Build result with media metadata
   const result: TransformResult = {
     prompt: transformedPrompt,
     originalPrompt,
+    ...(Object.keys(displayVars).length > 0 && { displayVars }),
   };
 
   // Check for storage keys in metadata (set by strategies that store to file system)
