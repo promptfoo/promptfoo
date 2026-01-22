@@ -110,4 +110,5 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ env.REVIEW_PROMPT }}
           show_full_output: true
+          allowed_bots: use-tusk
           claude_args: '--model opus --max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'

@@ -527,7 +527,7 @@ export const CustomPoliciesSection = () => {
 
         // Parse CSV and take the first column regardless of header name
         const { parse } = await import('csv-parse/browser/esm/sync');
-        const records = parse(text, {
+        const records = parse<Record<string, string>>(text, {
           skip_empty_lines: true,
           columns: true,
           trim: true,
@@ -535,7 +535,7 @@ export const CustomPoliciesSection = () => {
 
         // Extract policies from the first column
         const newPolicies = records
-          .map((record: any) => Object.values(record)[0] as string)
+          .map((record) => Object.values(record)[0] as string)
           .filter((policy: string) => policy && policy.trim() !== '');
 
         if (newPolicies.length > 0) {
