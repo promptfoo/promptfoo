@@ -142,7 +142,7 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
         logger.error(`Dataset generation job ${job.id} failed: ${error}`);
       });
 
-    res.json({ success: true, jobId: job.id });
+    res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
     logger.error(`Dataset generation request failed: ${error}`);
     res.status(500).json({ success: false, error: String(error) });
@@ -164,7 +164,7 @@ generationRouter.get('/dataset/job/:id', (req: Request, res: Response): void => 
 
   res.json({
     success: true,
-    job: formatJobResponse(job),
+    data: { job: formatJobResponse(job) },
   });
 });
 
@@ -193,7 +193,7 @@ generationRouter.post(
 
       const concepts = await extractConcepts(prompts, provider, options);
 
-      res.json({ success: true, concepts });
+      res.json({ success: true, data: { concepts } });
     } catch (error) {
       logger.error(`Concept analysis failed: ${error}`);
       res.status(500).json({ success: false, error: String(error) });
@@ -223,7 +223,7 @@ generationRouter.post(
       const { testCases } = parseResult.data;
       const diversity = await measureDiversity(testCases);
 
-      res.json({ success: true, diversity });
+      res.json({ success: true, data: { diversity } });
     } catch (error) {
       logger.error(`Diversity measurement failed: ${error}`);
       res.status(500).json({ success: false, error: String(error) });
@@ -279,7 +279,7 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
         logger.error(`Assertion generation job ${job.id} failed: ${error}`);
       });
 
-    res.json({ success: true, jobId: job.id });
+    res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
     logger.error(`Assertion generation request failed: ${error}`);
     res.status(500).json({ success: false, error: String(error) });
@@ -301,7 +301,7 @@ generationRouter.get('/assertions/job/:id', (req: Request, res: Response): void 
 
   res.json({
     success: true,
-    job: formatJobResponse(job),
+    data: { job: formatJobResponse(job) },
   });
 });
 
@@ -331,7 +331,7 @@ generationRouter.post(
       const requirements = await extractRequirements(prompts, provider);
       const coverage = await analyzeCoverage(requirements, assertions as Assertion[]);
 
-      res.json({ success: true, coverage });
+      res.json({ success: true, data: { coverage } });
     } catch (error) {
       logger.error(`Coverage analysis failed: ${error}`);
       res.status(500).json({ success: false, error: String(error) });
@@ -364,7 +364,7 @@ generationRouter.post(
 
       const validation = await validateAssertions(assertions as Assertion[], samples, provider);
 
-      res.json({ success: true, validation });
+      res.json({ success: true, data: { validation } });
     } catch (error) {
       logger.error(`Assertion validation failed: ${error}`);
       res.status(500).json({ success: false, error: String(error) });
@@ -419,7 +419,7 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
         logger.error(`Test suite generation job ${job.id} failed: ${error}`);
       });
 
-    res.json({ success: true, jobId: job.id });
+    res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
     logger.error(`Test suite generation request failed: ${error}`);
     res.status(500).json({ success: false, error: String(error) });
@@ -441,7 +441,7 @@ generationRouter.get('/tests/job/:id', (req: Request, res: Response): void => {
 
   res.json({
     success: true,
-    job: formatJobResponse(job),
+    data: { job: formatJobResponse(job) },
   });
 });
 
@@ -474,7 +474,7 @@ generationRouter.get('/jobs', (req: Request, res: Response): void => {
 
   res.json({
     success: true,
-    jobs: jobs.map(formatJobResponse),
+    data: { jobs: jobs.map(formatJobResponse) },
   });
 });
 

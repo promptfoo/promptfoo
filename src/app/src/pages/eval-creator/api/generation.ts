@@ -19,7 +19,11 @@ export interface GenerationPrompt {
 // Zod schemas for API response validation
 const GenerateJobResponseSchema = z.object({
   success: z.boolean(),
-  jobId: z.string().optional(),
+  data: z
+    .object({
+      jobId: z.string(),
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
@@ -38,7 +42,11 @@ const GenerationJobSchema = z.object({
 
 const JobStatusResponseSchema = z.object({
   success: z.boolean(),
-  job: GenerationJobSchema.optional(),
+  data: z
+    .object({
+      job: GenerationJobSchema,
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
@@ -324,11 +332,11 @@ export async function generateDataset(
   }
 
   const response = result.data;
-  if (!response.success || !response.jobId) {
+  if (!response.success || !response.data?.jobId) {
     throw new Error(response.error || 'Failed to start dataset generation');
   }
 
-  return { jobId: response.jobId };
+  return { jobId: response.data.jobId };
 }
 
 /**
@@ -353,11 +361,11 @@ export async function generateAssertions(
   }
 
   const response = result.data;
-  if (!response.success || !response.jobId) {
+  if (!response.success || !response.data?.jobId) {
     throw new Error(response.error || 'Failed to start assertions generation');
   }
 
-  return { jobId: response.jobId };
+  return { jobId: response.data.jobId };
 }
 
 /**
@@ -382,11 +390,11 @@ export async function generateTestSuite(
   }
 
   const response = result.data;
-  if (!response.success || !response.jobId) {
+  if (!response.success || !response.data?.jobId) {
     throw new Error(response.error || 'Failed to start test suite generation');
   }
 
-  return { jobId: response.jobId };
+  return { jobId: response.data.jobId };
 }
 
 /**
@@ -407,12 +415,12 @@ export async function getJobStatus(
   }
 
   const response = result.data;
-  if (!response.success || !response.job) {
+  if (!response.success || !response.data?.job) {
     throw new Error(response.error || 'Failed to get job status');
   }
 
   // Normalize the job result to ensure coverage data is in frontend shape
-  const normalizedJob = normalizeJobResult(response.job);
+  const normalizedJob = normalizeJobResult(response.data.job);
 
   // Cast result to GenerationJob type - the schema validates the structure
   return normalizedJob as GenerationJob;
@@ -462,19 +470,31 @@ export interface CoverageAnalysis {
 // Zod schemas for synchronous analysis responses
 const ConceptAnalysisResponseSchema = z.object({
   success: z.boolean(),
-  concepts: ConceptAnalysisSchema.optional(),
+  data: z
+    .object({
+      concepts: ConceptAnalysisSchema,
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
 const DiversityMetricsResponseSchema = z.object({
   success: z.boolean(),
-  diversity: DiversityMetricsSchema.optional(),
+  data: z
+    .object({
+      diversity: DiversityMetricsSchema,
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
 const CoverageAnalysisResponseSchema = z.object({
   success: z.boolean(),
-  coverage: CoverageAnalysisSchema.optional(),
+  data: z
+    .object({
+      coverage: CoverageAnalysisSchema,
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
@@ -496,11 +516,11 @@ export async function analyzeConceptsSync(prompts: string[]): Promise<ConceptAna
   }
 
   const response = result.data;
-  if (!response.success || !response.concepts) {
+  if (!response.success || !response.data?.concepts) {
     throw new Error(response.error || 'Failed to analyze concepts');
   }
 
-  return response.concepts;
+  return response.data.concepts;
 }
 
 /**
@@ -528,11 +548,11 @@ export async function measureDiversitySync(
   }
 
   const response = result.data;
-  if (!response.success || !response.diversity) {
+  if (!response.success || !response.data?.diversity) {
     throw new Error(response.error || 'Failed to measure diversity');
   }
 
-  return response.diversity;
+  return response.data.diversity;
 }
 
 /**
@@ -556,12 +576,12 @@ export async function analyzeCoverageSync(
   }
 
   const response = result.data;
-  if (!response.success || !response.coverage) {
+  if (!response.success || !response.data?.coverage) {
     throw new Error(response.error || 'Failed to analyze coverage');
   }
 
   // Normalize coverage data to frontend shape
-  const normalized = normalizeCoverage(response.coverage);
+  const normalized = normalizeCoverage(response.data.coverage);
   if (!normalized) {
     throw new Error('Invalid coverage data returned from server');
   }
