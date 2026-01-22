@@ -9,6 +9,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import {
+  type Assertion,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateSummaryV2,
@@ -34,6 +35,40 @@ export const promptsTable = sqliteTable(
   },
   (table) => ({
     createdAtIdx: index('prompts_created_at_idx').on(table.createdAt),
+  }),
+);
+
+// ------------ Test Cases ------------
+
+export const testCasesTable = sqliteTable(
+  'test_cases',
+  {
+    // Primary key: deterministic ID from fingerprint
+    id: text('id').primaryKey(),
+
+    // Content-based fingerprint (SHA256 hex) for deduplication
+    fingerprint: text('fingerprint').notNull().unique(),
+
+    // Core test case fields
+    description: text('description'),
+    varsJson: text('vars_json', { mode: 'json' }).$type<Record<string, unknown>>(),
+    assertsJson: text('asserts_json', { mode: 'json' }).$type<Assertion[]>(),
+    metadataJson: text('metadata_json', { mode: 'json' }).$type<Record<string, unknown>>(),
+
+    // Source tracking for provenance
+    sourceType: text('source_type'), // 'inline' | 'csv' | 'json' | 'yaml' | 'hf' | 'generator' | 'backfill'
+    sourceRef: text('source_ref'), // file path / dataset name / generator path
+    sourceRow: integer('source_row'), // for CSV/XLSX row tracking
+
+    // Timestamps
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    fingerprintIdx: uniqueIndex('test_cases_fingerprint_idx').on(table.fingerprint),
+    descriptionIdx: index('test_cases_description_idx').on(table.description),
+    sourceTypeIdx: index('test_cases_source_type_idx').on(table.sourceType),
+    createdAtIdx: index('test_cases_created_at_idx').on(table.createdAt),
   }),
 );
 
@@ -89,6 +124,10 @@ export const evalResultsTable = sqliteTable(
     promptIdx: integer('prompt_idx').notNull(),
     testIdx: integer('test_idx').notNull(),
 
+    // Foreign key to test_cases table for stable identity across evals
+    // Note: FK constraint omitted intentionally - SQLite has issues with ALTER TABLE + FK
+    testCaseId: text('test_case_id'),
+
     testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
     prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
     promptId: text('prompt_id').references(() => promptsTable.id),
@@ -116,6 +155,11 @@ export const evalResultsTable = sqliteTable(
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
     testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
+    testCaseIdIdx: index('eval_result_test_case_id_idx').on(table.testCaseId),
+    testCaseIdEvalIdx: index('eval_result_test_case_id_eval_idx').on(
+      table.testCaseId,
+      table.evalId,
+    ),
 
     evalTestIdx: index('eval_result_eval_test_idx').on(table.evalId, table.testIdx),
     evalSuccessIdx: index('eval_result_eval_success_idx').on(table.evalId, table.success),
@@ -439,12 +483,28 @@ export const tracesTable = sqliteTable(
       .notNull()
       .references(() => evalsTable.id),
     testCaseId: text('test_case_id').notNull(),
+    // Link to specific eval result for precise correlation (Phase 2)
+    // Note: FK constraint omitted intentionally - SQLite has issues with ALTER TABLE + FK
+    evalResultId: text('eval_result_id'),
     createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
+
+    // Trace summary fields for filtering (Phase 4)
+    durationMs: integer('duration_ms'),
+    spanCount: integer('span_count'),
+    errorSpanCount: integer('error_span_count'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    totalTokens: integer('total_tokens'),
+    summaryJson: text('summary_json', { mode: 'json' }).$type<Record<string, unknown>>(),
   },
   (table) => ({
     evaluationIdx: index('traces_evaluation_idx').on(table.evaluationId),
     traceIdIdx: index('traces_trace_id_idx').on(table.traceId),
+    evalResultIdIdx: index('traces_eval_result_id_idx').on(table.evalResultId),
+    testCaseIdIdx: index('traces_test_case_id_idx').on(table.testCaseId),
+    durationMsIdx: index('traces_duration_ms_idx').on(table.durationMs),
+    errorSpanCountIdx: index('traces_error_span_count_idx').on(table.errorSpanCount),
   }),
 );
 

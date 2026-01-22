@@ -103,6 +103,7 @@ export default class EvalResult {
       testCase: preSanitizeTestCase,
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
+      testCaseId: result.testCaseId, // Stable test case ID for cross-eval tracking
       prompt,
       promptId: hashPrompt(prompt),
       error: error?.toString(),
@@ -268,6 +269,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
+  testCaseId?: string; // Stable test case ID for cross-eval tracking
 
   constructor(opts: {
     id: string;
@@ -290,6 +292,7 @@ export default class EvalResult {
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason | number;
     persisted?: boolean;
+    testCaseId?: string | null; // Stable test case ID for cross-eval tracking
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
@@ -314,6 +317,7 @@ export default class EvalResult {
       : ResultFailureReason.NONE;
     this.persisted = opts.persisted || false;
     this.pluginId = opts.testCase.metadata?.pluginId;
+    this.testCaseId = opts.testCaseId || undefined;
   }
 
   async save() {
@@ -376,6 +380,7 @@ export default class EvalResult {
       score: this.score,
       success: this.success,
       testCase,
+      testCaseId: this.testCaseId,
       testIdx: this.testIdx,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,

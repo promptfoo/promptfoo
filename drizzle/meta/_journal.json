@@ -162,6 +162,13 @@
       "when": 1765906817572,
       "tag": "0022_sleepy_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1768876800000,
+      "tag": "0023_test_cases_native",
+      "breakpoints": true
     }
   ]
 }

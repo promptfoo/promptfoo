@@ -113,7 +113,7 @@ export interface EvalOutputCellProps {
  * @param showStats - When true, renders token usage, latency, tokens/sec, cost, and other detail stats.
  * @param onRating - Callback invoked to report human grading changes. Called as `onRating(pass?: boolean, score?: number, comment?: string)`.
  * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
- * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
+ * @param testCaseId - Test case identifier passed to the prompt/details dialog. Only set for evals run after test case tracking was enabled.
  * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
  * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
  */
@@ -866,7 +866,8 @@ function EvalOutputCell({
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
-              testCaseId={testCaseId || output.id}
+              testCaseId={testCaseId}
+              evalResultId={output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.metadata?.inputVars || output.testCase?.vars}

@@ -149,6 +149,7 @@ export async function generateTraceContextIfNeeded(
   traceparent?: string;
   evaluationId?: string;
   testCaseId?: string;
+  traceId?: string;
 } | null> {
   const tracingEnabled = isTracingEnabled(test, testSuite);
 
@@ -208,5 +209,26 @@ export async function generateTraceContextIfNeeded(
     traceparent,
     evaluationId,
     testCaseId,
+    traceId,
   };
+}
+
+/**
+ * Update a trace with the eval result ID after the result is created.
+ * This enables precise correlation between traces and eval results in the UI.
+ *
+ * @param traceId - The trace ID to update
+ * @param evalResultId - The eval result ID to link to
+ */
+export async function linkTraceToEvalResult(traceId: string, evalResultId: string): Promise<void> {
+  try {
+    logger.debug(`[EvaluatorTracing] Linking trace ${traceId} to eval result ${evalResultId}`);
+    const { getTraceStore } = await import('./store');
+    const traceStore = getTraceStore();
+    await traceStore.updateTraceEvalResultId(traceId, evalResultId);
+    logger.debug('[EvaluatorTracing] Trace linked to eval result successfully');
+  } catch (error) {
+    logger.error(`[EvaluatorTracing] Failed to link trace to eval result: ${error}`);
+    // Don't throw - this is a non-critical operation
+  }
 }

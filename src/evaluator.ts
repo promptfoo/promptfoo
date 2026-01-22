@@ -55,6 +55,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { isPromptAllowed } from './util/promptMatching';
 import { isProviderAllowed } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { computeTestCaseIdentity } from './util/testCaseFingerprint';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -286,6 +287,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  testCaseId, // Stable test case ID based on content fingerprint
   repeatIndex,
   conversations,
   registers,
@@ -471,6 +473,8 @@ export async function runEval({
       },
       promptIdx,
       testIdx,
+      testCaseId, // Stable test case ID for cross-eval tracking
+      traceId: traceContext?.traceId, // OpenTelemetry trace ID for correlation
       testCase: test,
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
@@ -1222,6 +1226,15 @@ class Evaluator {
               if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
+
+              // Compute stable test case ID based on content fingerprint
+              // Uses vars (after expansion), assertions, and description
+              const { id: testCaseId } = computeTestCaseIdentity({
+                vars: vars as Record<string, unknown>,
+                assert: testCase.assert as Assertion[],
+                description: testCase.description,
+              });
+
               runEvalOptions.push({
                 delay: options.delay || 0,
                 provider,
@@ -1254,6 +1267,7 @@ class Evaluator {
                         ...testCase.metadata,
                         tracingEnabled: true,
                         evaluationId: this.evalRecord.id,
+                        testCaseId, // Include stable test case ID in metadata for tracing
                       },
                     };
                   }
@@ -1262,6 +1276,7 @@ class Evaluator {
                 nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
+                testCaseId, // Stable ID for cross-eval tracking
                 repeatIndex,
                 evaluateOptions: options,
                 conversations: this.conversations,

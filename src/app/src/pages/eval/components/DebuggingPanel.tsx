@@ -6,6 +6,7 @@ import TraceView, { type Trace } from '../../../components/traces/TraceView';
 interface DebuggingPanelProps {
   evaluationId?: string;
   testCaseId?: string;
+  evalResultId?: string; // Precise correlation to specific eval result
   testIndex?: number;
   promptIndex?: number;
   traces?: Trace[];
@@ -14,6 +15,7 @@ interface DebuggingPanelProps {
 export function DebuggingPanel({
   evaluationId,
   testCaseId,
+  evalResultId,
   testIndex,
   promptIndex,
   traces = [],
@@ -38,6 +40,7 @@ export function DebuggingPanel({
             <TraceView
               evaluationId={evaluationId}
               testCaseId={testCaseId}
+              evalResultId={evalResultId}
               testIndex={testIndex}
               promptIndex={promptIndex}
               traces={traces}

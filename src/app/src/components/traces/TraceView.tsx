@@ -9,12 +9,14 @@ import TraceTimeline from './TraceTimeline';
 export interface Trace {
   traceId: string;
   testCaseId?: string | number;
+  evalResultId?: string; // Precise correlation to specific eval result
   spans?: Partial<SpanData>[];
 }
 
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  evalResultId?: string; // For precise filtering by eval result ID
   testIndex?: number;
   promptIndex?: number;
   traces?: Trace[];
@@ -23,6 +25,7 @@ interface TraceViewProps {
 export default function TraceView({
   evaluationId,
   testCaseId,
+  evalResultId,
   testIndex,
   promptIndex,
   traces = [],
@@ -62,7 +65,7 @@ export default function TraceView({
     [evaluationId, testCaseId],
   );
 
-  // Filter traces with try-direct-match then fallback approach
+  // Filter traces with priority: evalResultId > testCaseId > index-based matching
   const isComposedId = (id: unknown): id is string =>
     typeof id === 'string' && /^\d+-\d+$/.test(id);
 
@@ -75,34 +78,45 @@ export default function TraceView({
   };
 
   // biome-ignore lint/suspicious/noExplicitAny: FIXME: We are getting confused between Trace and TraceData somewhere in here
-  let filteredTraces: any[] = traces;
+  let filteredTraces: any[] = [];
+
+  // If no filters provided, show all traces for the evaluation
+  const hasFilters = evalResultId || testCaseId || testIndex !== undefined;
 
   if (traces.length > 0) {
-    if (testCaseId) {
-      // Try direct testCaseId match first
-      const directMatches = traces.filter((trace) => trace.testCaseId === testCaseId);
+    if (hasFilters) {
+      // Priority 1: Filter by evalResultId (most precise)
+      if (evalResultId) {
+        filteredTraces = traces.filter((trace) => trace.evalResultId === evalResultId);
+      }
 
-      if (directMatches.length > 0) {
-        filteredTraces = directMatches;
-      } else if (testIndex !== undefined && promptIndex !== undefined) {
-        // Fallback: try index-based matching on composed trace.testCaseId
+      // Priority 2: Filter by testCaseId (if no evalResultId or no evalResultId matches)
+      if (filteredTraces.length === 0 && testCaseId) {
+        // Try direct testCaseId match first
+        const directMatches = traces.filter((trace) => trace.testCaseId === testCaseId);
+
+        if (directMatches.length > 0) {
+          filteredTraces = directMatches;
+        } else if (testIndex !== undefined && promptIndex !== undefined) {
+          // Fallback: try index-based matching on composed trace.testCaseId
+          filteredTraces = traces.filter((trace) =>
+            matchesIndices(trace.testCaseId, testIndex, promptIndex),
+          );
+        }
+      }
+
+      // Priority 3: Index-based filtering (legacy fallback)
+      if (filteredTraces.length === 0 && testIndex !== undefined && promptIndex !== undefined) {
         filteredTraces = traces.filter((trace) =>
           matchesIndices(trace.testCaseId, testIndex, promptIndex),
         );
-      } else {
-        // No direct match and no indices for fallback
-        filteredTraces = [];
       }
-    } else if (testIndex !== undefined && promptIndex !== undefined) {
-      // No testCaseId but indices provided - try index-based filtering
-      filteredTraces = traces.filter((trace) =>
-        matchesIndices(trace.testCaseId, testIndex, promptIndex),
-      );
+    } else {
+      filteredTraces = traces;
     }
-    // If no testCaseId and no indices, show all traces for the evaluation
   }
 
-  if (filteredTraces.length === 0 && (testCaseId || testIndex !== undefined)) {
+  if (filteredTraces.length === 0 && (evalResultId || testCaseId || testIndex !== undefined)) {
     return (
       <div className="p-2">
         <p className="text-sm text-muted-foreground">No traces available for this test case</p>

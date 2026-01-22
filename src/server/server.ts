@@ -39,6 +39,7 @@ import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
+import { testCasesRouter } from './routes/testCases';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
@@ -268,6 +269,7 @@ export function createApp() {
   app.use('/api/user', userRouter);
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
+  app.use('/api/test-cases', testCasesRouter);
   app.use('/api/traces', tracesRouter);
   app.use('/api/version', versionRouter);
 

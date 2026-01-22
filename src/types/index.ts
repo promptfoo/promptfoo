@@ -165,6 +165,12 @@ export interface RunEvalOptions {
   promptIdx: number;
   repeatIndex: number;
 
+  /**
+   * Stable test case ID based on content fingerprint.
+   * Used for cross-eval tracking and trace correlation.
+   */
+  testCaseId?: string;
+
   conversations?: EvalConversations;
   registers?: EvalRegisters;
   isRedteam: boolean;
@@ -301,6 +307,8 @@ export interface EvaluateResult {
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result
   testIdx: number; // on the new version 2, this is stored per-result
+  testCaseId?: string; // Stable test case ID based on content fingerprint (for cross-eval tracking)
+  traceId?: string; // OpenTelemetry trace ID for correlation with traces
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
   promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
@@ -333,6 +341,7 @@ export interface EvaluateTableOutput {
   response?: ProviderResponse;
   score: number;
   testCase: AtomicTestCase;
+  testCaseId?: string; // Stable test case ID for cross-eval tracking
   text: string;
   tokenUsage?: Partial<TokenUsage>;
   error?: string | null;

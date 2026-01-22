@@ -23,6 +23,12 @@ export const EVAL_ROUTES = {
   DETAIL: (id: string) => `/eval/${id}`,
 } as const;
 
+// Test Case routes
+export const TEST_CASE_ROUTES = {
+  LIST: '/test-cases',
+  DETAIL: (id: string) => `/test-cases/${id}`,
+} as const;
+
 // Red Team routes
 export const REDTEAM_ROUTES = {
   ROOT: '/redteam',

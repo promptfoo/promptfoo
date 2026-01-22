@@ -1183,7 +1183,7 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     evaluationId={evalId || undefined}
-                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    testCaseId={output.testCaseId}
                     isRedteam={isRedteam}
                   />
                 </ErrorBoundary>

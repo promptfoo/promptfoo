@@ -19,6 +19,7 @@ import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { linkTraceToEvalResult } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
@@ -702,6 +703,13 @@ export default class Eval {
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID
       updateSignalFile(this.id);
+    }
+    // Link the trace to this eval result for precise correlation in the UI
+    if (result.traceId && newResult.id) {
+      // Fire and forget - don't block on trace linking
+      linkTraceToEvalResult(result.traceId, newResult.id).catch((err) => {
+        logger.debug(`Failed to link trace to eval result: ${err}`);
+      });
     }
   }
 

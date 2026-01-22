@@ -8,6 +8,7 @@ import type { TraceData } from '../types/tracing';
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
   testCaseId: string;
+  evalResultId?: string; // Link to specific eval result for precise correlation
   metadata?: Record<string, any>;
 }
 
@@ -138,6 +139,7 @@ export class TraceStore {
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
+          evalResultId: trace.evalResultId,
           metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId });
@@ -268,6 +270,20 @@ export class TraceStore {
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
+      throw error;
+    }
+  }
+
+  async updateTraceEvalResultId(traceId: string, evalResultId: string): Promise<void> {
+    try {
+      logger.debug(`[TraceStore] Updating trace ${traceId} with evalResultId ${evalResultId}`);
+      const db = this.getDatabase();
+
+      await db.update(tracesTable).set({ evalResultId }).where(eq(tracesTable.traceId, traceId));
+
+      logger.debug(`[TraceStore] Successfully updated trace ${traceId} with evalResultId`);
+    } catch (error) {
+      logger.error(`[TraceStore] Failed to update trace evalResultId: ${error}`);
       throw error;
     }
   }

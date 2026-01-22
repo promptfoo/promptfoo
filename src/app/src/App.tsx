@@ -30,6 +30,8 @@ import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import TestCaseDetailPage from './pages/test-cases/detail/page';
+import TestCasesPage from './pages/test-cases/page';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -69,6 +71,24 @@ const router = createBrowserRouter(
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
           <Route path="/progress" element={<Navigate to="/history" replace />} />
           <Route path="/history" element={<HistoryPage />} />
+
+          {/* Test Cases routes */}
+          <Route
+            path="/test-cases"
+            element={
+              <ErrorBoundary name="Test Cases">
+                <TestCasesPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/test-cases/:id"
+            element={
+              <ErrorBoundary name="Test Case Detail">
+                <TestCaseDetailPage />
+              </ErrorBoundary>
+            }
+          />
 
           <Route path="/prompts" element={<PromptsPage />} />
 

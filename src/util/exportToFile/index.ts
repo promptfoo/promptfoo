@@ -23,6 +23,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   return {
     ...result,
     id: result.id || `${result.testIdx}-${result.promptIdx}`,
+    testCaseId: result.testCaseId, // Explicitly include for cross-eval tracking
     text: resultText || '',
     prompt: result.prompt.raw,
     provider: result.provider?.label || result.provider?.id || 'unknown provider',

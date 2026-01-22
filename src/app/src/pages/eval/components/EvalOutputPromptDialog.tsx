@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -17,6 +17,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
+import { TestCaseStatsPanel } from './TestCaseStatsPanel';
 import type { GradingResult, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
@@ -153,6 +154,7 @@ interface EvalOutputPromptDialogProps {
   providerPrompt?: string;
   evaluationId?: string;
   testCaseId?: string;
+  evalResultId?: string; // Precise correlation to specific eval result for trace filtering
   testIndex?: number;
   promptIndex?: number;
   variables?: Vars;
@@ -175,6 +177,7 @@ export default function EvalOutputPromptDialog({
   providerPrompt,
   evaluationId,
   testCaseId,
+  evalResultId,
   testIndex,
   promptIndex,
   variables,
@@ -237,6 +240,22 @@ export default function EvalOutputPromptDialog({
       controller.abort();
     };
   }, [evaluationId, fetchTraces]);
+
+  // Enhance metadata with internal IDs for debugging and tracking
+  // Only add IDs when there's already some metadata to show
+  const enhancedMetadata = useMemo(() => {
+    if (!metadata || Object.keys(metadata).length === 0) {
+      return metadata;
+    }
+    const enhanced: Record<string, unknown> = { ...metadata };
+    if (evalResultId) {
+      enhanced['__evalResultId'] = evalResultId;
+    }
+    if (testCaseId) {
+      enhanced['__testCaseId'] = testCaseId;
+    }
+    return enhanced;
+  }, [metadata, evalResultId, testCaseId]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -362,8 +381,8 @@ export default function EvalOutputPromptDialog({
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
-    metadata &&
-    Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
+    enhancedMetadata &&
+    Object.keys(enhancedMetadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
   const visibleTabs: string[] = ['prompt-output'];
   if (hasEvaluationData) {
@@ -381,6 +400,11 @@ export default function EvalOutputPromptDialog({
 
   if (hasTracesData) {
     visibleTabs.push('traces');
+  }
+
+  // Show history tab when testCaseId is available
+  if (testCaseId) {
+    visibleTabs.push('history');
   }
 
   // Ensure active tab is valid, fallback to first tab if not
@@ -455,6 +479,14 @@ export default function EvalOutputPromptDialog({
                 Traces
               </TabsTrigger>
             )}
+            {testCaseId && (
+              <TabsTrigger
+                value="history"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+              >
+                History
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Tab Panels Container */}
@@ -524,7 +556,7 @@ export default function EvalOutputPromptDialog({
             {hasMetadata && (
               <TabsContent value="metadata" className="mt-0">
                 <MetadataPanel
-                  metadata={metadata}
+                  metadata={enhancedMetadata}
                   expandedMetadata={expandedMetadata}
                   copiedFields={copiedFields}
                   onMetadataClick={handleMetadataClick}
@@ -541,10 +573,18 @@ export default function EvalOutputPromptDialog({
                 <DebuggingPanel
                   evaluationId={evaluationId}
                   testCaseId={testCaseId}
+                  evalResultId={evalResultId}
                   testIndex={testIndex}
                   promptIndex={promptIndex}
                   traces={traces}
                 />
+              </TabsContent>
+            )}
+
+            {/* History Panel */}
+            {testCaseId && (
+              <TabsContent value="history" className="mt-0">
+                <TestCaseStatsPanel testCaseId={testCaseId} />
               </TabsContent>
             )}
           </div>

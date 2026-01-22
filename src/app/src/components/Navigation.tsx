@@ -142,6 +142,11 @@ const resultsMenuItems: MenuItem[] = [
     description: 'Browse and manage all evaluation runs',
   },
   {
+    href: '/test-cases',
+    label: 'Test Cases',
+    description: 'Track test case performance across evaluations',
+  },
+  {
     href: '/reports',
     label: 'Red Team Vulnerability Reports',
     description: 'View findings from red teams',
@@ -177,7 +182,9 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                   label="View Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
-                    ['/eval', '/evals', '/reports'].some((route) => pathname.startsWith(route))
+                    ['/eval', '/evals', '/test-cases', '/reports'].some((route) =>
+                      pathname.startsWith(route),
+                    )
                   }
                 />
               </NavigationMenuList>
