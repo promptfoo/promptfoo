@@ -155,10 +155,10 @@ export const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-3-5-sonnet-20241022',
-      label: 'Anthropic: Claude 3.5 Sonnet',
+      id: 'anthropic:messages:claude-sonnet-4-5-20250929',
+      label: 'Anthropic: Claude 4.5 Sonnet',
       config: {
-        max_tokens: 1024,
+        max_tokens: 2048,
         temperature: 0.5,
       },
     },

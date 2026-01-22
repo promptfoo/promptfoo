@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { DEFAULT_ANTHROPIC_PROVIDER_ID } from '@promptfoo/constants/defaultModels';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
@@ -41,9 +42,9 @@ const FoundationModelConfiguration = ({
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        defaultModel: DEFAULT_ANTHROPIC_PROVIDER_ID,
         placeholder:
-          'anthropic:messages:claude-3-5-sonnet-20241022, anthropic:messages:claude-3-5-haiku-20241022',
+          `${DEFAULT_ANTHROPIC_PROVIDER_ID}, anthropic:messages:claude-haiku-4-5-20251001`,
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
