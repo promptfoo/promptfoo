@@ -156,6 +156,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
+  'jailbreak-templates':
+    'Tests LLM resistance to known jailbreak techniques using static templates (DAN, Skeleton Key, etc.)',
   'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
@@ -353,6 +355,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   policy: 'Policy Compliance',
   politics: 'Political Bias',
   'prompt-extraction': 'System Prompt Disclosure',
+  'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
@@ -1097,7 +1100,10 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
-  'prompt-injection': 'Tests direct prompt injection vulnerability detection',
+  'jailbreak-templates':
+    'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates',
+  'prompt-injection':
+    '[DEPRECATED] Use jailbreak-templates instead. Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
@@ -1134,7 +1140,8 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
-  'prompt-injection': 'Prompt Injection',
+  'jailbreak-templates': 'Jailbreak Templates',
+  'prompt-injection': 'Prompt Injection [DEPRECATED]',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
   video: 'Video',

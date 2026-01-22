@@ -90,6 +90,7 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
+  'jailbreak-templates',
   'layer',
   'leetspeak',
   'math-prompt',
@@ -97,7 +98,7 @@ export const ADDITIONAL_STRATEGIES = [
   'morse',
   'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
-  'prompt-injection',
+  'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
   'retry',
   'rot13',
   'video',
