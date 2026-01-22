@@ -156,16 +156,16 @@ export function GenerationProgressDialog({
     } else if (phaseLower.includes('initial') || phaseLower.includes('start')) {
       defaultPhases[0].status = 'in-progress';
     } else if (phaseLower.includes('extract') || phaseLower.includes('concept')) {
-      defaultPhases[0].status = 'completed';
+      defaultPhases[0].status = 'complete';
       defaultPhases[1].status = 'in-progress';
       defaultPhases[1].detail = 'Analyzing prompts';
     } else if (phaseLower.includes('persona')) {
-      defaultPhases[0].status = 'completed';
+      defaultPhases[0].status = 'complete';
       defaultPhases[1].status = 'in-progress';
       defaultPhases[1].detail = phase;
     } else if (phaseLower.includes('test case') || phaseLower.includes('edge')) {
-      defaultPhases[0].status = 'completed';
-      defaultPhases[1].status = 'completed';
+      defaultPhases[0].status = 'complete';
+      defaultPhases[1].status = 'complete';
       defaultPhases[2].status = 'in-progress';
       defaultPhases[2].detail = phase;
     } else if (
@@ -174,14 +174,14 @@ export function GenerationProgressDialog({
       phaseLower.includes('iterati') ||
       phaseLower.includes('final')
     ) {
-      defaultPhases[0].status = 'completed';
-      defaultPhases[1].status = 'completed';
-      defaultPhases[2].status = 'completed';
+      defaultPhases[0].status = 'complete';
+      defaultPhases[1].status = 'complete';
+      defaultPhases[2].status = 'complete';
       defaultPhases[3].status = 'in-progress';
       defaultPhases[3].detail = phase;
     } else if (phaseLower.includes('generat')) {
       // Generic generating state
-      defaultPhases[0].status = 'completed';
+      defaultPhases[0].status = 'complete';
       defaultPhases[1].status = 'in-progress';
       defaultPhases[1].detail = phase;
     }
