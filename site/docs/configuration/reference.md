@@ -865,15 +865,15 @@ interface EvaluateStats {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `successes` | number | Number of test cases that passed |
-| `failures` | number | Number of test cases that failed assertions |
-| `errors` | number | Number of test cases that resulted in errors |
-| `tokenUsage` | Required\<TokenUsage\> | Aggregated token usage across all test cases |
-| `durationMs` | number \| undefined | Total wall-clock time for the evaluation in milliseconds |
-| `maxConcurrency` | number \| undefined | The configured concurrency from CLI (`-j`), config, or environment (before runtime overrides) |
-| `concurrencyUsed` | number \| undefined | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
+| Property          | Type                   | Description                                                                                                                     |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `successes`       | number                 | Number of test cases that passed                                                                                                |
+| `failures`        | number                 | Number of test cases that failed assertions                                                                                     |
+| `errors`          | number                 | Number of test cases that resulted in errors                                                                                    |
+| `tokenUsage`      | Required\<TokenUsage\> | Aggregated token usage across all test cases                                                                                    |
+| `durationMs`      | number \| undefined    | Total wall-clock time for the evaluation in milliseconds                                                                        |
+| `maxConcurrency`  | number \| undefined    | The configured concurrency from CLI (`-j`), config, or environment (before runtime overrides)                                   |
+| `concurrencyUsed` | number \| undefined    | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
 
 The `maxConcurrency` and `concurrencyUsed` fields help diagnose performance issues. When `concurrencyUsed` is less than `maxConcurrency`, it indicates that the evaluation was forced to run with lower parallelism due to sequential dependencies (e.g., multi-turn conversations or tests that store outputs for later use).
 
