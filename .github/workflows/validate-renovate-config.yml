@@ -12,6 +12,9 @@ on:
       - 'renovate.json'
       - '.github/workflows/validate-renovate-config.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate Renovate Configuration
