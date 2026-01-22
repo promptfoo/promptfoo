@@ -72,6 +72,7 @@ For safe harbor provisions and full process details, see our [Responsible Disclo
 
 - Code execution from **explicitly configured** custom code (JS assertions, providers, transforms, plugins configured in your config file)
 - Issues requiring the user to run untrusted configs or scripts with local privileges
+- Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
@@ -80,6 +81,7 @@ For safe harbor provisions and full process details, see our [Responsible Disclo
 
 - "A malicious custom assertion reads `process.env` and posts it to a webhook" → Expected behavior; custom code runs with your permissions
 - "A third-party prompt pack includes a transform that runs shell commands" → Expected behavior; don't run untrusted configs
+- "The Web UI fetches a URL when a test variable contains a URL" → Expected behavior; users control their own config content
 
 If unsure whether something is in scope, report it anyway.
 
