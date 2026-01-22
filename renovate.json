@@ -3,7 +3,6 @@
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
   "rangeStrategy": "bump",
-  "npmInstallArgs": ["--include=optional"],
   "postUpdateOptions": [],
   "lockFileMaintenance": {
     "enabled": true,
