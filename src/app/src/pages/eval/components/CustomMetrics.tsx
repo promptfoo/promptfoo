@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import {
   deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
@@ -5,12 +7,14 @@ import {
   isPolicyMetric,
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import type { GradingResult } from '@promptfoo/types';
 import './CustomMetrics.css';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { ExternalLink } from 'lucide-react';
 import useCloudConfig from '../../../hooks/useCloudConfig';
+import AssertionChip, { getThresholdLabel } from './AssertionChip';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
 
@@ -18,6 +22,11 @@ interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
+  /**
+   * Component results from the grading result, provides hierarchy context for assert-sets.
+   * When provided, chips will be color-coded (pass/fail) and assert-sets will be expandable.
+   */
+  componentResults?: GradingResult[];
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -61,22 +70,90 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
+/**
+ * Build a lookup from metric names to their GradingResult data.
+ * This maps metrics to their pass/fail status, whether they're assert-sets, and child results.
+ */
+function buildMetricResultLookup(componentResults: GradingResult[] | undefined): Map<
+  string,
+  {
+    result: GradingResult;
+    isAssertSet: boolean;
+    childResults: GradingResult[];
+  }
+> {
+  const lookup = new Map<
+    string,
+    { result: GradingResult; isAssertSet: boolean; childResults: GradingResult[] }
+  >();
+
+  if (!componentResults) {
+    return lookup;
+  }
+
+  // First pass: identify all results and their indices
+  const indexedResults = componentResults.map((result, index) => ({ result, index }));
+
+  // Second pass: build the lookup
+  for (const { result, index } of indexedResults) {
+    if (!result) {
+      continue;
+    }
+
+    // Skip child assertions - they'll be added to their parent
+    if (result.metadata?.parentAssertSetIndex !== undefined) {
+      continue;
+    }
+
+    // Get metric name
+    const metric =
+      result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type || '';
+
+    if (!metric) {
+      continue;
+    }
+
+    const isAssertSet = result.metadata?.isAssertSet === true;
+
+    // Find children for assert-sets
+    const childResults: GradingResult[] = [];
+    if (isAssertSet) {
+      for (const { result: childResult } of indexedResults) {
+        if (childResult?.metadata?.parentAssertSetIndex === index) {
+          childResults.push(childResult);
+        }
+      }
+    }
+
+    lookup.set(metric, { result, isAssertSet, childResults });
+  }
+
+  return lookup;
+}
+
 const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
+  componentResults,
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
-  // Validate props BEFORE hooks to comply with Rules of Hooks
-  if (!lookup || !Object.keys(lookup).length) {
-    return null;
-  }
-
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
+
+  // Memoize the metric result lookup to avoid rebuilding on every render
+  const metricResultLookup = useMemo(
+    () => buildMetricResultLookup(componentResults),
+    [componentResults],
+  );
+
+  // Early return AFTER hooks to comply with Rules of Hooks
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
 
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
@@ -118,7 +195,38 @@ const CustomMetrics = ({
             }
           }
 
-          return metric && typeof score !== 'undefined' ? (
+          if (!metric || typeof score === 'undefined') {
+            return null;
+          }
+
+          // Check if we have result data for this metric
+          const resultData = metricResultLookup.get(metric);
+
+          // If we have result data, use the new AssertionChip with color coding
+          if (resultData) {
+            const { result, isAssertSet, childResults } = resultData;
+            const threshold = result.metadata?.assertSetThreshold;
+            const thresholdLabel = isAssertSet ? getThresholdLabel(threshold) : undefined;
+
+            return (
+              <div data-testid={`metric-${metric}`} key={`${metric}-${score}`}>
+                <AssertionChip
+                  metric={displayLabel}
+                  score={score}
+                  passed={result.pass}
+                  isAssertSet={isAssertSet}
+                  threshold={threshold}
+                  thresholdLabel={thresholdLabel}
+                  childResults={childResults}
+                  tooltipContent={tooltipContent}
+                  onClick={() => handleClick(metric)}
+                />
+              </div>
+            );
+          }
+
+          // Fall back to neutral styling when no component results (backward compat)
+          return (
             <div
               data-testid={`metric-${metric}`}
               className="metric-chip filterable"
@@ -143,7 +251,7 @@ const CustomMetrics = ({
                 {tooltipContent && <TooltipContent>{tooltipContent}</TooltipContent>}
               </Tooltip>
             </div>
-          ) : null;
+          );
         })}
       {metrics.length > truncationCount && (
         <div

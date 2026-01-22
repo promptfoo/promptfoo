@@ -57,6 +57,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
+  showAssertions: z.boolean().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -628,8 +629,10 @@ export async function doEval(
     // Output results table immediately (before share completes)
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
-      // Output CLI table
-      const outputTable = generateTable(table);
+      // Output CLI table with optional assertion details
+      const outputTable = generateTable(table, 250, 25, {
+        showAssertions: cmdObj.showAssertions,
+      });
 
       logger.info('\n' + outputTable.toString());
       if (table.body.length > 25) {
@@ -982,6 +985,10 @@ export function evalCommand(
       '--table-cell-max-length <number>',
       'Truncate console table cells to this length',
       '250',
+    )
+    .option(
+      '--show-assertions',
+      'Show detailed assertion table for each result (auto-shown for failures)',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')

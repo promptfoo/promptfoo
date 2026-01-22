@@ -1,8 +1,17 @@
 import chalk from 'chalk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
-import { generateTable, wrapTable } from '../src/table';
-import { type EvaluateTable, ResultFailureReason } from '../src/types/index';
+import {
+  generateAssertionSummary,
+  generateAssertionTable,
+  generateTable,
+  wrapTable,
+} from '../src/table';
+import {
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  ResultFailureReason,
+} from '../src/types/index';
 
 // Track all created instances and constructor calls
 const mockTableInstances: any[] = [];
@@ -276,6 +285,216 @@ describe('table', () => {
 
       expect(typeof result).toBe('string');
       expect(result).toBe('mocked table string');
+    });
+  });
+
+  describe('generateAssertionSummary', () => {
+    it('should return empty string for output without component results', () => {
+      const output: EvaluateTableOutput = {
+        pass: true,
+        score: 1,
+        text: 'test',
+        failureReason: ResultFailureReason.NONE,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+      };
+
+      const result = generateAssertionSummary(output);
+      expect(result).toBe('');
+    });
+
+    it('should return empty string for output with empty component results', () => {
+      const output: EvaluateTableOutput = {
+        pass: true,
+        score: 1,
+        text: 'test',
+        failureReason: ResultFailureReason.NONE,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'All passed',
+          componentResults: [],
+        },
+      };
+
+      const result = generateAssertionSummary(output);
+      expect(result).toBe('');
+    });
+
+    it('should generate summary for top-level assertions only', () => {
+      const output: EvaluateTableOutput = {
+        pass: false,
+        score: 0.5,
+        text: 'test',
+        failureReason: ResultFailureReason.ASSERT,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+        gradingResult: {
+          pass: false,
+          score: 0.5,
+          reason: 'Some failed',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Passed',
+              assertion: { type: 'contains', metric: 'Correctness' },
+            },
+            {
+              pass: false,
+              score: 0.5,
+              reason: 'Failed',
+              assertion: { type: 'llm-rubric', metric: 'Tone' },
+            },
+            // Child assertion - should be excluded
+            {
+              pass: false,
+              score: 0,
+              reason: 'Child failed',
+              assertion: { type: 'latency' },
+              metadata: { parentAssertSetIndex: 0 },
+            },
+          ],
+        },
+      };
+
+      const result = generateAssertionSummary(output);
+
+      // Should include top-level assertions
+      expect(result).toContain('Correctness');
+      expect(result).toContain('Tone');
+      // Should NOT include child assertions
+      expect(result).not.toContain('latency');
+    });
+  });
+
+  describe('generateAssertionTable', () => {
+    it('should return empty string for output without component results', () => {
+      const output: EvaluateTableOutput = {
+        pass: true,
+        score: 1,
+        text: 'test',
+        failureReason: ResultFailureReason.NONE,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+      };
+
+      const result = generateAssertionTable(output);
+      expect(result).toBe('');
+    });
+
+    it('should generate table for output with component results', () => {
+      const output: EvaluateTableOutput = {
+        pass: false,
+        score: 0.5,
+        text: 'test',
+        failureReason: ResultFailureReason.ASSERT,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+        gradingResult: {
+          pass: false,
+          score: 0.5,
+          reason: 'Some failed',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Contains check passed',
+              assertion: { type: 'contains', metric: 'Correctness' },
+            },
+            {
+              pass: false,
+              score: 0.6,
+              reason: 'Relevance score low',
+              assertion: { type: 'llm-rubric', metric: 'Tone' },
+            },
+          ],
+        },
+      };
+
+      const result = generateAssertionTable(output);
+
+      // Should create a table (using mocked cli-table3)
+      expect(result).toBe('mocked table string');
+      // Should have created a table instance
+      expect(mockTableInstances.length).toBeGreaterThan(0);
+    });
+
+    it('should group children under parent assert-sets', () => {
+      const output: EvaluateTableOutput = {
+        pass: true,
+        score: 0.75,
+        text: 'test',
+        failureReason: ResultFailureReason.NONE,
+        cost: 0,
+        id: 'test',
+        latencyMs: 0,
+        namedScores: {},
+        prompt: 'test prompt',
+        testCase: {},
+        gradingResult: {
+          pass: true,
+          score: 0.75,
+          reason: 'Passed',
+          componentResults: [
+            // Parent assert-set
+            {
+              pass: true,
+              score: 0.5,
+              reason: 'Either/Or passed',
+              assertion: { type: 'contains', metric: 'Performance' },
+              metadata: { isAssertSet: true, childCount: 2, assertSetThreshold: 0.5 },
+            },
+            // Child 1
+            {
+              pass: true,
+              score: 1,
+              reason: 'Cost low',
+              assertion: { type: 'cost' },
+              metadata: { parentAssertSetIndex: 0 },
+            },
+            // Child 2 (failed but parent passed)
+            {
+              pass: false,
+              score: 0,
+              reason: 'Latency high',
+              assertion: { type: 'latency' },
+              metadata: { parentAssertSetIndex: 0 },
+            },
+          ],
+        },
+      };
+
+      const result = generateAssertionTable(output);
+
+      // Table should be generated
+      expect(result).toBe('mocked table string');
+
+      // Check that push was called for parent and children
+      const table = mockTableInstances[mockTableInstances.length - 1];
+      expect(table.push).toHaveBeenCalled();
     });
   });
 });

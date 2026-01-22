@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -9,6 +9,7 @@ import {
 import { cn } from '@app/lib/utils';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
+import { AssertSetCard } from './AssertSetCard';
 import type { GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
@@ -40,6 +41,122 @@ function getValue(result: GradingResult): string {
     : '-';
 }
 
+interface HierarchyGroup {
+  parent: GradingResult;
+  parentIndex: number;
+  children: GradingResult[];
+}
+
+/**
+ * Check if results have hierarchy metadata
+ */
+function hasHierarchyMetadata(gradingResults: GradingResult[]): boolean {
+  return gradingResults.some(
+    (r) => r?.metadata?.isAssertSet || r?.metadata?.parentAssertSetIndex !== undefined,
+  );
+}
+
+/**
+ * Group results by parent-child relationships
+ */
+function groupByHierarchy(gradingResults: GradingResult[]): {
+  groups: HierarchyGroup[];
+  standalone: GradingResult[];
+} {
+  const groups: HierarchyGroup[] = [];
+  const standalone: GradingResult[] = [];
+  const childrenByParent = new Map<number, GradingResult[]>();
+
+  // First pass: identify parents and group children
+  gradingResults.forEach((result, index) => {
+    if (!result) {
+      return;
+    }
+
+    const parentIndex = result.metadata?.parentAssertSetIndex;
+    if (parentIndex !== undefined) {
+      // This is a child
+      if (!childrenByParent.has(parentIndex)) {
+        childrenByParent.set(parentIndex, []);
+      }
+      childrenByParent.get(parentIndex)!.push(result);
+    } else if (result.metadata?.isAssertSet) {
+      // This is a parent assert-set
+      groups.push({
+        parent: result,
+        parentIndex: index,
+        children: [],
+      });
+    } else {
+      // This is a standalone assertion
+      standalone.push(result);
+    }
+  });
+
+  // Second pass: attach children to their parents
+  groups.forEach((group) => {
+    group.children = childrenByParent.get(group.parentIndex) || [];
+  });
+
+  return { groups, standalone };
+}
+
+/**
+ * Hierarchical display of assertion results using AssertSetCard
+ */
+function HierarchicalAssertionResults({ gradingResults }: { gradingResults: GradingResult[] }) {
+  const { groups, standalone } = useMemo(() => groupByHierarchy(gradingResults), [gradingResults]);
+
+  return (
+    <div className="space-y-3">
+      {/* Render assert-set groups */}
+      {groups.map((group, index) => (
+        <AssertSetCard key={`group-${index}`} result={group.parent} children={group.children} />
+      ))}
+
+      {/* Render standalone assertions in a table */}
+      {standalone.length > 0 && (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="px-4 py-2 bg-muted/30 border-b border-border">
+            <span className="text-sm font-medium">Individual Assertions</span>
+          </div>
+          <div className="divide-y divide-border">
+            {standalone.map((result, index) => (
+              <StandaloneAssertionRow key={index} result={result} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandaloneAssertionRow({ result }: { result: GradingResult }) {
+  return (
+    <div className="flex items-center gap-3 py-2 px-4 hover:bg-muted/30">
+      <div className="flex-shrink-0">
+        {result.pass ? (
+          <CircleCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <CircleX className="size-4 text-red-600 dark:text-red-400" />
+        )}
+      </div>
+      <span className="font-medium min-w-[120px] text-sm">
+        {result.assertion?.metric ||
+          result.metadata?.assertSetMetric ||
+          result.assertion?.type ||
+          'assertion'}
+      </span>
+      <span className="text-muted-foreground tabular-nums text-sm min-w-[60px]">
+        {result.score?.toFixed(2)}
+      </span>
+      <span className="text-muted-foreground text-sm flex-1" title={result.reason}>
+        {ellipsize(result.reason || '', 80)}
+      </span>
+    </div>
+  );
+}
+
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
@@ -49,7 +166,15 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     return null;
   }
 
-  const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
+  // Check if we have hierarchy metadata and should use hierarchical display
+  if (hasHierarchyMetadata(gradingResults)) {
+    return <HierarchicalAssertionResults gradingResults={gradingResults} />;
+  }
+
+  // Fall back to flat table display for backward compatibility
+  const hasMetrics = gradingResults.some(
+    (result) => result?.assertion?.metric || result?.metadata?.assertSetMetric,
+  );
 
   const toggleExpand = (index: number) => {
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -91,7 +216,11 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
             return (
               <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
-                {hasMetrics && <td className="px-4 py-3">{result.assertion?.metric || ''}</td>}
+                {hasMetrics && (
+                  <td className="px-4 py-3">
+                    {result.assertion?.metric || result.metadata?.assertSetMetric || ''}
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   {result.pass ? (
                     <CircleCheck className="size-5 text-emerald-600 dark:text-emerald-400" />

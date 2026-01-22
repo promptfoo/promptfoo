@@ -2025,7 +2025,10 @@ describe('EvalOutputCell provider error display', () => {
     renderWithProviders(<EvalOutputCell {...propsWithAssertionFailure} />);
 
     // The error message should appear exactly once (from componentResults, not duplicated from output.error)
-    const errorMessages = screen.getAllByText('Output does not contain expected value');
+    // Fail reasons now display with a metric prefix: [metric] reason
+    const errorMessages = screen.getAllByText(
+      /\[contains\] Output does not contain expected value/,
+    );
     expect(errorMessages).toHaveLength(1);
 
     // Verify the fail reason carousel does NOT show pagination (1/2, etc.) since there's only one reason
