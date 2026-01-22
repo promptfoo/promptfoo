@@ -40,7 +40,7 @@
     "clsx": "^2.1.1",
     "dedent": "^1.7.1",
     "docusaurus-plugin-image-zoom": "^3.0.1",
-    "framer-motion": "^12.27.1",
+    "framer-motion": "^12.27.5",
     "gray-matter": "^4.0.3",
     "lucide-react": "^0.562.0",
     "prism-react-renderer": "^2.4.1",
