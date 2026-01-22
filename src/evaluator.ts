@@ -1328,6 +1328,9 @@ class Evaluator {
       }
     }
 
+    // Store the actual concurrency used for this evaluation
+    this.evalRecord.setConcurrencyUsed(concurrency);
+
     // Actually run the eval
     let numComplete = 0;
 

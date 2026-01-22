@@ -38,6 +38,7 @@ import {
   Copy,
   Edit,
   Eye,
+  Layers,
   Play,
   Settings,
   Share,
@@ -735,7 +736,9 @@ export default function ResultsView({
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             userRatedResultsCount > 0 ||
-            stats?.durationMs != null) && (
+            stats?.durationMs != null ||
+            stats?.maxConcurrency != null ||
+            stats?.concurrencyUsed != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
               {debouncedSearchText && (
@@ -889,6 +892,35 @@ export default function ResultsView({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
+                </Tooltip>
+              )}
+              {stats?.maxConcurrency != null && stats.maxConcurrency > 0 && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                      <Layers className="size-3.5 mr-1" />
+                      {stats.maxConcurrency} configured
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Configured concurrency from CLI (-j), config, or environment
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {stats?.concurrencyUsed != null && stats.concurrencyUsed > 0 && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className="bg-blue-50 text-blue-700 border border-blue-200 font-medium dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800">
+                      <Layers className="size-3.5 mr-1" />
+                      {stats.concurrencyUsed} effective
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Actual concurrency used during evaluation
+                    {stats.maxConcurrency != null &&
+                      stats.concurrencyUsed !== stats.maxConcurrency &&
+                      ' (reduced due to _conversation or storeOutputAs)'}
+                  </TooltipContent>
                 </Tooltip>
               )}
             </div>

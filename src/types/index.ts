@@ -379,12 +379,25 @@ export interface EvaluateTable {
   body: EvaluateTableRow[];
 }
 
+/**
+ * Statistics about an evaluation run.
+ * Includes success/failure counts, token usage, timing, and concurrency information.
+ */
 export interface EvaluateStats {
+  /** Number of test cases that passed */
   successes: number;
+  /** Number of test cases that failed assertions */
   failures: number;
+  /** Number of test cases that resulted in errors (e.g., API failures, timeouts) */
   errors: number;
+  /** Aggregated token usage across all test cases */
   tokenUsage: Required<TokenUsage>;
+  /** Total wall-clock time for the evaluation in milliseconds */
   durationMs?: number;
+  /** The configured/requested concurrency from CLI (-j), config, or env (before runtime overrides) */
+  maxConcurrency?: number;
+  /** The actual concurrency used during evaluation (after runtime overrides for _conversation, storeOutputAs, etc.) */
+  concurrencyUsed?: number;
 }
 
 export interface EvaluateSummaryV3 {

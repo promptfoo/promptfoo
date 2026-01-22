@@ -301,6 +301,130 @@ describe('evaluator', () => {
       const stats = persistedEval?.getStats();
       expect(stats?.durationMs).toBe(12345);
     });
+
+    it('should handle NaN concurrencyUsed in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject NaN as concurrencyUsed in the results column
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.concurrencyUsed', 'NaN') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // NaN should be filtered out, resulting in undefined
+      expect(stats?.concurrencyUsed).toBeUndefined();
+    });
+
+    it('should handle negative concurrencyUsed in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject negative number as concurrencyUsed
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.concurrencyUsed', -5) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // Negative should be filtered out, resulting in undefined
+      expect(stats?.concurrencyUsed).toBeUndefined();
+    });
+
+    it('should handle zero concurrencyUsed in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject zero as concurrencyUsed
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.concurrencyUsed', 0) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // Zero should be filtered out, resulting in undefined
+      expect(stats?.concurrencyUsed).toBeUndefined();
+    });
+
+    it('should preserve valid concurrencyUsed from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject valid concurrencyUsed
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.concurrencyUsed', 8) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      expect(stats?.concurrencyUsed).toBe(8);
+    });
+
+    it('should persist concurrencyUsed through save/load cycle (round-trip)', async () => {
+      // Create a new eval
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Set concurrencyUsed via setter
+      eval1.setConcurrencyUsed(4);
+
+      // Save to database
+      eval1.save();
+
+      // Reload from database
+      const reloadedEval = await Eval.findById(eval1.id);
+      const stats = reloadedEval?.getStats();
+
+      // Verify the value persisted correctly
+      expect(stats?.concurrencyUsed).toBe(4);
+    });
+
+    it('should persist both durationMs and concurrencyUsed in save/load cycle', async () => {
+      // Create a new eval
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Set both values
+      eval1.setDurationMs(5000);
+      eval1.setConcurrencyUsed(8);
+
+      // Save to database
+      eval1.save();
+
+      // Reload from database
+      const reloadedEval = await Eval.findById(eval1.id);
+      const stats = reloadedEval?.getStats();
+
+      // Verify both values persisted correctly
+      expect(stats?.durationMs).toBe(5000);
+      expect(stats?.concurrencyUsed).toBe(8);
+    });
+
+    it('should not persist invalid concurrencyUsed values', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Try to set invalid values - they should be ignored
+      eval1.setConcurrencyUsed(0);
+      eval1.save();
+
+      let reloadedEval = await Eval.findById(eval1.id);
+      expect(reloadedEval?.getStats().concurrencyUsed).toBeUndefined();
+
+      // Try negative
+      const eval2 = await EvalFactory.create({ numResults: 0 });
+      eval2.setConcurrencyUsed(-5);
+      eval2.save();
+
+      reloadedEval = await Eval.findById(eval2.id);
+      expect(reloadedEval?.getStats().concurrencyUsed).toBeUndefined();
+
+      // Try NaN
+      const eval3 = await EvalFactory.create({ numResults: 0 });
+      eval3.setConcurrencyUsed(Number.NaN);
+      eval3.save();
+
+      reloadedEval = await Eval.findById(eval3.id);
+      expect(reloadedEval?.getStats().concurrencyUsed).toBeUndefined();
+    });
   });
 
   describe('getStats', () => {
@@ -462,6 +586,74 @@ describe('evaluator', () => {
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(54321);
+    });
+
+    it('should include concurrencyUsed when set', () => {
+      const eval1 = new Eval({});
+      eval1.setConcurrencyUsed(4);
+
+      const stats = eval1.getStats();
+      expect(stats.concurrencyUsed).toBe(4);
+    });
+
+    it('should return undefined concurrencyUsed when not set', () => {
+      const eval1 = new Eval({});
+
+      const stats = eval1.getStats();
+      expect(stats.concurrencyUsed).toBeUndefined();
+    });
+
+    it('should preserve concurrencyUsed when passed via constructor', () => {
+      const eval1 = new Eval({}, { concurrencyUsed: 8 });
+
+      const stats = eval1.getStats();
+      expect(stats.concurrencyUsed).toBe(8);
+    });
+
+    it('should extract maxConcurrency from runtimeOptions', () => {
+      const eval1 = new Eval({}, { runtimeOptions: { maxConcurrency: 16 } });
+
+      const stats = eval1.getStats();
+      expect(stats.maxConcurrency).toBe(16);
+    });
+
+    it('should return undefined maxConcurrency when not in runtimeOptions', () => {
+      const eval1 = new Eval({}, { runtimeOptions: {} });
+
+      const stats = eval1.getStats();
+      expect(stats.maxConcurrency).toBeUndefined();
+    });
+
+    it('should return undefined maxConcurrency for invalid values', () => {
+      // Test NaN
+      const eval1 = new Eval({}, { runtimeOptions: { maxConcurrency: Number.NaN } });
+      expect(eval1.getStats().maxConcurrency).toBeUndefined();
+
+      // Test Infinity
+      const eval2 = new Eval({}, { runtimeOptions: { maxConcurrency: Number.POSITIVE_INFINITY } });
+      expect(eval2.getStats().maxConcurrency).toBeUndefined();
+
+      // Test negative
+      const eval3 = new Eval({}, { runtimeOptions: { maxConcurrency: -5 } });
+      expect(eval3.getStats().maxConcurrency).toBeUndefined();
+
+      // Test zero
+      const eval4 = new Eval({}, { runtimeOptions: { maxConcurrency: 0 } });
+      expect(eval4.getStats().maxConcurrency).toBeUndefined();
+    });
+
+    it('should return both maxConcurrency and concurrencyUsed when both are set', () => {
+      const eval1 = new Eval(
+        {},
+        {
+          runtimeOptions: { maxConcurrency: 8 },
+          concurrencyUsed: 1,
+        },
+      );
+
+      const stats = eval1.getStats();
+      expect(stats.maxConcurrency).toBe(8);
+      expect(stats.concurrencyUsed).toBe(1);
     });
   });
 
