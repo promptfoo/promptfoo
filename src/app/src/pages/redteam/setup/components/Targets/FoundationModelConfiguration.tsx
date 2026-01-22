@@ -8,7 +8,7 @@ import type { ProviderOptions } from '../../types';
 
 interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
 }
 

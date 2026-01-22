@@ -37,7 +37,7 @@ interface TransformTestDialogProps {
     testInput: string,
   ) => Promise<{
     success: boolean;
-    result?: any;
+    result?: unknown;
     error?: string;
   }>;
   onApply?: (transformCode: string) => void;
@@ -51,7 +51,7 @@ interface TransformTestDialogProps {
 
 const highlightJS = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.javascript;
+    const grammar = Prism?.languages?.javascript;
     if (!grammar) {
       return code;
     }
@@ -63,7 +63,7 @@ const highlightJS = (code: string): string => {
 
 const highlightJSON = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.json;
+    const grammar = Prism?.languages?.json;
     if (!grammar) {
       return code;
     }
@@ -91,7 +91,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   const [testLoading, setTestLoading] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{
     success: boolean;
-    result?: any;
+    result?: unknown;
     error?: string;
     noTransform?: boolean;
   } | null>(null);
