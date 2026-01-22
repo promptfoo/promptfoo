@@ -77,6 +77,7 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { createN8nProvider } from './n8n';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -1163,6 +1164,16 @@ export const providerMap: ProviderFactory[] = [
       // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('n8n:') || providerPath === 'n8n',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return createN8nProvider(providerPath, providerOptions);
     },
   },
   {
