@@ -2928,7 +2928,7 @@ describe('Language configuration', () => {
       expect(pluginListMessage).toBeDefined();
       // Should contain truncated text (70 chars + ...)
       expect(pluginListMessage).toContain(
-        '"The assistant must not reveal any internal implementation details such',
+        'The assistant must not reveal any internal implementation details such',
       );
       expect(pluginListMessage).toContain('...');
       // Should NOT contain full JSON config
