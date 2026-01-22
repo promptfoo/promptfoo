@@ -415,28 +415,4 @@ describe('AssertSetCard component', () => {
 
     expect(screen.getByText('equals')).toBeInTheDocument();
   });
-
-  it('displays type as fallback when child has no metric', () => {
-    const result: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'Passed',
-      assertion: { type: 'equals', metric: 'parent' },
-      metadata: { assertSetThreshold: 1 },
-    };
-
-    const children: GradingResult[] = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Passed',
-        assertion: { type: 'equals' },
-      },
-    ];
-
-    render(<AssertSetCard result={result} children={children} defaultExpanded={true} />);
-
-    // Falls back to type when no metric
-    expect(screen.getByText('equals')).toBeInTheDocument();
-  });
 });

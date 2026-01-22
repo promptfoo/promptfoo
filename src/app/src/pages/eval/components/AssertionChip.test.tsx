@@ -1,9 +1,13 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionChip, getThresholdLabel } from './AssertionChip';
 import type { GradingResult } from '@promptfoo/types';
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('getThresholdLabel', () => {
   it('returns "ALL must pass" for undefined threshold', () => {
@@ -295,33 +299,6 @@ describe('AssertionChip', () => {
   });
 
   it('uses assertion type as fallback for child metric name', async () => {
-    const childResults: GradingResult[] = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Passed',
-        assertion: { type: 'equals' },
-      },
-    ];
-
-    render(
-      <AssertionChip
-        metric="parent"
-        score={1}
-        passed={true}
-        isAssertSet={true}
-        threshold={1}
-        childResults={childResults}
-      />,
-    );
-
-    const chevronButton = screen.getByLabelText('Show parent details');
-    await userEvent.click(chevronButton);
-
-    expect(screen.getByText('equals')).toBeInTheDocument();
-  });
-
-  it('uses type as fallback when child has no metric', async () => {
     const childResults: GradingResult[] = [
       {
         pass: true,
