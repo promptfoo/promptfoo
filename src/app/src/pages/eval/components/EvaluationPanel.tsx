@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import ErrorBoundary from '@app/components/ErrorBoundary';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -168,7 +169,11 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   // Check if we have hierarchy metadata and should use hierarchical display
   if (hasHierarchyMetadata(gradingResults)) {
-    return <HierarchicalAssertionResults gradingResults={gradingResults} />;
+    return (
+      <ErrorBoundary name="Hierarchical Assertions">
+        <HierarchicalAssertionResults gradingResults={gradingResults} />
+      </ErrorBoundary>
+    );
   }
 
   // Fall back to flat table display for backward compatibility

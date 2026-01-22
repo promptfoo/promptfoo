@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { getThresholdLabel } from '@app/utils/assertSetThreshold';
 import { Check, ChevronDown, Minus, X } from 'lucide-react';
 import type { GradingResult } from '@promptfoo/types';
 
@@ -25,22 +26,6 @@ interface AssertionChipProps {
   tooltipContent?: ReactNode;
   /** Click handler for filtering */
   onClick?: () => void;
-}
-
-function getThresholdLabel(threshold: number | undefined): string {
-  if (threshold === undefined) {
-    return '';
-  }
-  if (threshold === 1) {
-    return 'ALL must pass';
-  }
-  if (threshold === 0.5) {
-    return 'Either/Or';
-  }
-  if (threshold > 0 && threshold < 1) {
-    return `≥${(threshold * 100).toFixed(0)}% must pass`;
-  }
-  return '';
 }
 
 /** Get a stable key for a child result */
@@ -227,5 +212,7 @@ function AssertionChip({
 }
 
 export default AssertionChip;
-export { AssertionChip, getThresholdLabel };
+export { AssertionChip };
+
+export { getThresholdLabel } from '@app/utils/assertSetThreshold';
 export type { AssertionChipProps };

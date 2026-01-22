@@ -6,8 +6,9 @@ import { AssertionChip, getThresholdLabel } from './AssertionChip';
 import type { GradingResult } from '@promptfoo/types';
 
 describe('getThresholdLabel', () => {
-  it('returns empty string for undefined threshold', () => {
-    expect(getThresholdLabel(undefined)).toBe('');
+  it('returns "ALL must pass" for undefined threshold', () => {
+    // undefined threshold defaults to "ALL must pass" semantics
+    expect(getThresholdLabel(undefined)).toBe('ALL must pass');
   });
 
   it('returns "ALL must pass" for threshold of 1', () => {
@@ -18,10 +19,21 @@ describe('getThresholdLabel', () => {
     expect(getThresholdLabel(0.5)).toBe('Either/Or');
   });
 
-  it('returns percentage string for other thresholds between 0 and 1', () => {
-    expect(getThresholdLabel(0.3)).toBe('≥30% must pass');
-    expect(getThresholdLabel(0.7)).toBe('≥70% must pass');
-    expect(getThresholdLabel(0.33)).toBe('≥33% must pass');
+  it('returns "At least one" for threshold below 0.5', () => {
+    expect(getThresholdLabel(0.3)).toBe('At least one');
+    expect(getThresholdLabel(0.25)).toBe('At least one');
+    expect(getThresholdLabel(0.1)).toBe('At least one');
+  });
+
+  it('returns "Most must pass" for threshold between 0.5 and 1', () => {
+    expect(getThresholdLabel(0.7)).toBe('Most must pass');
+    expect(getThresholdLabel(0.75)).toBe('Most must pass');
+    expect(getThresholdLabel(0.9)).toBe('Most must pass');
+  });
+
+  it('returns "Most must pass" with count when childCount provided', () => {
+    expect(getThresholdLabel(0.75, 4)).toBe('Most must pass (3/4)');
+    expect(getThresholdLabel(0.8, 5)).toBe('Most must pass (4/5)');
   });
 
   it('returns empty string for edge case thresholds', () => {

@@ -1,43 +1,9 @@
 import { useState } from 'react';
 
 import { cn } from '@app/lib/utils';
+import { formatScoreThreshold, getThresholdLabel } from '@app/utils/assertSetThreshold';
 import { ChevronDown, CircleCheck, CircleX, Minus } from 'lucide-react';
 import type { GradingResult } from '@promptfoo/types';
-
-/**
- * Get a human-readable label for an assert-set threshold
- */
-function getThresholdLabel(threshold: number | undefined, childCount?: number): string {
-  if (threshold === undefined || threshold === 1) {
-    return 'ALL must pass';
-  }
-  if (threshold === 0.5) {
-    return 'Either/Or';
-  }
-  if (threshold > 0 && threshold < 0.5) {
-    return 'At least one';
-  }
-  if (threshold > 0.5 && threshold < 1) {
-    if (childCount) {
-      const requiredCount = Math.ceil(threshold * childCount);
-      return `Most must pass (${requiredCount}/${childCount})`;
-    }
-    return 'Most must pass';
-  }
-  return '';
-}
-
-/**
- * Format score as percentage with threshold comparison
- */
-function formatScoreThreshold(score: number, threshold?: number): string {
-  const scorePercent = Math.round(score * 100);
-  if (threshold !== undefined) {
-    const thresholdPercent = Math.round(threshold * 100);
-    return `${scorePercent}% ${score >= threshold ? '≥' : '<'} ${thresholdPercent}%`;
-  }
-  return `${scorePercent}%`;
-}
 
 interface AssertSetCardProps {
   result: GradingResult;
