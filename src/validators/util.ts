@@ -76,7 +76,7 @@ export function validateSessionConfig({
     const reasonMessage =
       sessionSource === 'client'
         ? 'When using client-side sessions, you should include {{sessionId}} in your request headers or body to send the client-generated session ID.'
-        : 'When using server-side sessions, you should include {{sessionId}} in your request headers or body to send the server-extracted session ID in subsequent requests.';
+        : 'When using server-side or endpoint sessions, you should include {{sessionId}} in your request headers or body to send the session ID in subsequent requests.';
 
     logger.warn(
       '[testProviderSession] Warning: {{sessionId}} not found in provider configuration. ' +

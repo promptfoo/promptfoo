@@ -5,7 +5,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TlsHttpsConfigTab from './TlsHttpsConfigTab';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -35,11 +36,12 @@ describe('TlsHttpsConfigTab', () => {
   describe('TLS Version Selects', () => {
     it('should render TLS version selects without errors when Advanced TLS Options is expanded', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -62,11 +64,12 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should open minimum TLS version dropdown and show all options including Default', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -100,11 +103,12 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should call updateCustomTarget with undefined when Default is selected for minimum TLS version', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
             minVersion: 'TLSv1.2',
           },
         },
@@ -134,16 +138,18 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         minVersion: undefined,
+        rejectUnauthorized: true,
       });
     });
 
     it('should call updateCustomTarget with the selected TLS version for minimum version', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -172,16 +178,18 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         minVersion: 'TLSv1.3',
+        rejectUnauthorized: true,
       });
     });
 
     it('should open maximum TLS version dropdown and show all options including Default', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -215,11 +223,12 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should call updateCustomTarget with undefined when Default is selected for maximum TLS version', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
             maxVersion: 'TLSv1.3',
           },
         },
@@ -249,13 +258,14 @@ describe('TlsHttpsConfigTab', () => {
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         enabled: true,
         maxVersion: undefined,
+        rejectUnauthorized: true,
       });
     });
   });
 
   describe('TLS Enable Toggle', () => {
     it('should render the TLS enable switch', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {},
       };
@@ -272,7 +282,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should enable TLS when switch is toggled on', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {},
       };
@@ -295,11 +305,12 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should disable TLS when switch is toggled off', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -320,11 +331,12 @@ describe('TlsHttpsConfigTab', () => {
 
   describe('Certificate Type Selection', () => {
     it('should show certificate type dropdown when TLS is enabled', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
           },
         },
       };
@@ -340,11 +352,12 @@ describe('TlsHttpsConfigTab', () => {
     });
 
     it('should show PEM configuration fields when PEM certificate type is selected', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
             certificateType: 'pem',
           },
         },
@@ -363,11 +376,12 @@ describe('TlsHttpsConfigTab', () => {
     });
 
     it('should show JKS configuration fields when JKS certificate type is selected', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
             certificateType: 'jks',
           },
         },
@@ -386,11 +400,12 @@ describe('TlsHttpsConfigTab', () => {
     });
 
     it('should show PFX configuration fields when PFX certificate type is selected', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
             enabled: true,
+            rejectUnauthorized: true,
             certificateType: 'pfx',
           },
         },
@@ -411,7 +426,7 @@ describe('TlsHttpsConfigTab', () => {
 
   describe('Security Options', () => {
     it('should show warning when rejectUnauthorized is disabled', () => {
-      const selectedTarget: ProviderOptions = {
+      const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {

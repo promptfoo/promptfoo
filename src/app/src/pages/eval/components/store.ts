@@ -179,7 +179,9 @@ function computeAvailableSeverities(
 
   // Get the risk category severity map with any overrides from plugins
   const severityMap = getRiskCategorySeverityMap(
-    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+    plugins.map((plugin) =>
+      typeof plugin === 'string' ? { id: plugin } : plugin,
+    ) as RedteamPluginObject[],
   );
 
   // Extract unique severities from the map

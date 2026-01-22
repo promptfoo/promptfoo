@@ -19,7 +19,7 @@ import type { ProviderOptions } from '../../types';
 
 interface WebSocketEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateWebSocketTarget: (field: string, value: any) => void;
+  updateWebSocketTarget: (field: string, value: unknown) => void;
   urlError: string | null;
 }
 
