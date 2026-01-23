@@ -43,6 +43,7 @@ redteam:
   strategies: Array<string | { id: string }>
   numTests: number
   injectVar: string
+  inputs: Record<string, string>
   provider: string | ProviderOptions
   purpose: string
   contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
@@ -58,12 +59,13 @@ redteam:
 | Field                        | Type                      | Description                                                                                             | Default                         |
 | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts           |
+| `inputs`                     | `Record<string, string>`  | Multi-input mode: map of variable names to descriptions for generating coordinated inputs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) | None                            |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                       |
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                  |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts           |
 | `contexts`                   | `Array<object>`           | Test contexts for different app states; each generates separate test runs with context-specific grading | None                            |
-| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                                                    | `jailbreak`, `prompt-injection` |
+| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                                                    | `basic`, `jailbreak:meta`, `jailbreak:composite` |
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                     | English                         |
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks        |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                           |
