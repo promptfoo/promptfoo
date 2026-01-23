@@ -45,7 +45,10 @@ describe('validateSharpDependency', () => {
   describe('when sharp is not required', () => {
     it('should not throw when no sharp-dependent features are used', async () => {
       const strategies = [{ id: 'base64' }, { id: 'jailbreak' }];
-      const plugins = [{ id: 'harmful', numTests: 5 }, { id: 'pii', numTests: 3 }];
+      const plugins = [
+        { id: 'harmful', numTests: 5 },
+        { id: 'pii', numTests: 3 },
+      ];
 
       await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
     });

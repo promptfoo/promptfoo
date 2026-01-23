@@ -1,4 +1,5 @@
 import logger from '../logger';
+
 import type { RedteamPluginObject, RedteamStrategyObject } from './types';
 
 const SHARP_REQUIRED_STRATEGIES = ['image'];
