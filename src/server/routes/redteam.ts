@@ -93,19 +93,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    // Dataset/benchmark plugins don't support dynamic generation
-    // Multi-input excluded plugins only apply when the plugin is actually multi-input
+    // In multi-input mode, some plugins don't support dynamic generation
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
-    const excludedPlugins = hasMultiInput
-      ? [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS]
-      : [...DATASET_EXEMPT_PLUGINS];
-    if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
-      logger.debug(
-        `Skipping plugin '${plugin.id}' - uses static test cases, does not support dynamic generation`,
-      );
-      res.json({ testCases: [], count: 0 });
-      return;
+    if (hasMultiInput) {
+      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
+        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+        res.json({ testCases: [], count: 0 });
+        return;
+      }
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)

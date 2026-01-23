@@ -417,6 +417,7 @@ export const MULTI_INPUT_EXCLUDED_PLUGINS = [
   'cross-session-leak',
   'special-token-injection',
   'system-prompt-override',
+  'ascii-smuggling',
 ] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
