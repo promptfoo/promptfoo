@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import AuthorizationTab from './tabs/AuthorizationTab';
 import HttpStatusCodeTab from './tabs/HttpStatusCodeTab';
 import RequestTransformTab from './tabs/RequestTransformTab';
+import RetryConfigTab from './tabs/RetryConfigTab';
 import SessionsTab from './tabs/SessionsTab';
 import TlsHttpsConfigTab from './tabs/TlsHttpsConfigTab';
 import TokenEstimationTab from './tabs/TokenEstimationTab';
@@ -25,6 +26,7 @@ const TabValue = {
   TokenEstimation: 'token',
   TlsHttpsConfig: 'tls',
   HttpStatusCode: 'status',
+  RetryConfig: 'retry',
 } as const;
 
 interface HttpAdvancedConfigurationProps {
@@ -52,6 +54,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             <TabsTrigger value={TabValue.TokenEstimation}>Token Estimation</TabsTrigger>
             <TabsTrigger value={TabValue.TlsHttpsConfig}>TLS/HTTPS Config</TabsTrigger>
             <TabsTrigger value={TabValue.HttpStatusCode}>HTTP Status Code</TabsTrigger>
+            <TabsTrigger value={TabValue.RetryConfig}>Retry Config</TabsTrigger>
           </TabsList>
 
           <TabsContent value={TabValue.SessionManagement} className="px-2 py-6">
@@ -93,6 +96,13 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
 
           <TabsContent value={TabValue.HttpStatusCode} className="px-2 py-6">
             <HttpStatusCodeTab
+              selectedTarget={selectedTarget}
+              updateCustomTarget={updateCustomTarget}
+            />
+          </TabsContent>
+
+          <TabsContent value={TabValue.RetryConfig} className="px-2 py-6">
+            <RetryConfigTab
               selectedTarget={selectedTarget}
               updateCustomTarget={updateCustomTarget}
             />
