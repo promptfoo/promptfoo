@@ -527,7 +527,7 @@ export class XAIVoiceProvider implements ApiProvider {
               responseDone = true;
 
               // Handle pending function calls
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+              if (pendingFunctionCalls.length > 0) {
                 for (const call of pendingFunctionCalls) {
                   let parsedArgs: Record<string, unknown> = {};
                   try {
@@ -538,51 +538,65 @@ export class XAIVoiceProvider implements ApiProvider {
                     });
                   }
 
-                  try {
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
+                  if (this.config.functionCallHandler) {
+                    try {
+                      const result = await this.config.functionCallHandler(
+                        call.name,
+                        call.arguments,
+                      );
+                      functionCallResults.push(result);
 
-                    // Track function call with full details for assertions
+                      // Track function call with full details for assertions
+                      functionCallOutputs.push({
+                        name: call.name,
+                        arguments: parsedArgs,
+                        result,
+                      });
+
+                      // Send function result back
+                      sendEvent({
+                        type: 'conversation.item.create',
+                        item: {
+                          type: 'function_call_output',
+                          call_id: call.call_id,
+                          output: result,
+                        },
+                      });
+                    } catch (err) {
+                      logger.error('[xAI Voice] Function call error', { name: call.name, err });
+
+                      // Track failed function call for assertions
+                      functionCallOutputs.push({
+                        name: call.name,
+                        arguments: parsedArgs,
+                        result: JSON.stringify({ error: String(err) }),
+                      });
+
+                      sendEvent({
+                        type: 'conversation.item.create',
+                        item: {
+                          type: 'function_call_output',
+                          call_id: call.call_id,
+                          output: JSON.stringify({ error: String(err) }),
+                        },
+                      });
+                    }
+                  } else {
+                    // Track function call even without handler for assertions
                     functionCallOutputs.push({
                       name: call.name,
                       arguments: parsedArgs,
-                      result,
-                    });
-
-                    // Send function result back
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.call_id,
-                        output: result,
-                      },
-                    });
-                  } catch (err) {
-                    logger.error('[xAI Voice] Function call error', { name: call.name, err });
-
-                    // Track failed function call for assertions
-                    functionCallOutputs.push({
-                      name: call.name,
-                      arguments: parsedArgs,
-                      result: JSON.stringify({ error: String(err) }),
-                    });
-
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.call_id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
                     });
                   }
                 }
 
-                // Request continuation
-                sendEvent({ type: 'response.create' });
+                // Request continuation if we have a handler
+                if (this.config.functionCallHandler) {
+                  sendEvent({ type: 'response.create' });
+                  pendingFunctionCalls = [];
+                  return;
+                }
                 pendingFunctionCalls = [];
-                return;
               }
 
               // Calculate cost and resolve
