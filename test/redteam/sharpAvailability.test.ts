@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { validateSharpDependency } from '../../src/redteam/sharpAvailability';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -21,51 +20,76 @@ describe('validateSharpDependency', () => {
 
   describe('when sharp is available', () => {
     it('should not throw when image strategy is used', async () => {
+      // Mock sharp to simulate it being installed
+      vi.doMock('sharp', () => ({ default: {} }));
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
       const strategies = [{ id: 'image' }];
       const plugins = [{ id: 'harmful', numTests: 5 }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
 
     it('should not throw when unsafebench plugin is used', async () => {
+      vi.doMock('sharp', () => ({ default: {} }));
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
       const strategies = [{ id: 'base64' }];
       const plugins = [{ id: 'unsafebench', numTests: 5 }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
 
     it('should not throw when both image strategy and unsafebench plugin are used', async () => {
+      vi.doMock('sharp', () => ({ default: {} }));
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
       const strategies = [{ id: 'image' }];
       const plugins = [{ id: 'unsafebench', numTests: 5 }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
   });
 
   describe('when sharp is not required', () => {
     it('should not throw when no sharp-dependent features are used', async () => {
-      const strategies = [{ id: 'base64' }, { id: 'jailbreak' }];
-      const plugins = [{ id: 'harmful', numTests: 5 }, { id: 'pii', numTests: 3 }];
+      // Mock sharp to throw - but it shouldn't matter since sharp isn't needed
+      vi.doMock('sharp', () => {
+        throw new Error('Cannot find module sharp');
+      });
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      const strategies = [{ id: 'base64' }, { id: 'jailbreak' }];
+      const plugins = [
+        { id: 'harmful', numTests: 5 },
+        { id: 'pii', numTests: 3 },
+      ];
+
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
 
     it('should not throw with empty strategies and plugins', async () => {
-      await expect(validateSharpDependency([], [])).resolves.not.toThrow();
+      vi.doMock('sharp', () => {
+        throw new Error('Cannot find module sharp');
+      });
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
+      await expect(validate([], [])).resolves.not.toThrow();
     });
   });
 
   describe('when sharp is unavailable', () => {
-    beforeEach(() => {
-      // Mock sharp to simulate it not being installed
-      vi.doMock('sharp', () => {
-        throw new Error('Cannot find module sharp');
-      });
-    });
-
     it('should throw error when image strategy is used and sharp is unavailable', async () => {
-      // Re-import to get the mocked version
-      vi.resetModules();
       vi.doMock('sharp', () => {
         throw new Error('Cannot find module sharp');
       });
@@ -83,7 +107,6 @@ describe('validateSharpDependency', () => {
     });
 
     it('should throw error when unsafebench plugin is used and sharp is unavailable', async () => {
-      vi.resetModules();
       vi.doMock('sharp', () => {
         throw new Error('Cannot find module sharp');
       });
@@ -101,7 +124,6 @@ describe('validateSharpDependency', () => {
     });
 
     it('should list multiple features in error message when both are used', async () => {
-      vi.resetModules();
       vi.doMock('sharp', () => {
         throw new Error('Cannot find module sharp');
       });
@@ -117,7 +139,6 @@ describe('validateSharpDependency', () => {
     });
 
     it('should not throw when sharp is unavailable but not needed', async () => {
-      vi.resetModules();
       vi.doMock('sharp', () => {
         throw new Error('Cannot find module sharp');
       });
@@ -134,17 +155,27 @@ describe('validateSharpDependency', () => {
 
   describe('edge cases', () => {
     it('should handle strategies with config objects', async () => {
+      vi.doMock('sharp', () => ({ default: {} }));
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
       const strategies = [{ id: 'image', config: { someOption: true } }];
       const plugins = [{ id: 'harmful', numTests: 5 }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
 
     it('should handle plugins with config objects', async () => {
+      vi.doMock('sharp', () => ({ default: {} }));
+      const { validateSharpDependency: validate } = await import(
+        '../../src/redteam/sharpAvailability'
+      );
+
       const strategies = [{ id: 'base64' }];
       const plugins = [{ id: 'unsafebench', numTests: 5, config: { categories: ['Violence'] } }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      await expect(validate(strategies, plugins)).resolves.not.toThrow();
     });
   });
 });
