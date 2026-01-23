@@ -40,9 +40,11 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
+import { extractGuidanceForPlugins } from '../extraction/guidanceExtractor';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
+import { redteamProviderManager } from '../providers/shared';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
@@ -398,6 +400,112 @@ export async function doGenerateRedteam(
         if (policyPlugin.severity == null) {
           policyPlugin.severity = policyData.severity;
         }
+      }
+    }
+  }
+
+  // Load and inject external grading guidance if specified in the config
+  if (redteamConfig?.gradingGuidance) {
+    let guidanceText: string | undefined;
+    // Resolve relative paths from the config file's directory
+    const configDir = configPath ? path.dirname(path.resolve(configPath)) : process.cwd();
+
+    if (typeof redteamConfig.gradingGuidance === 'string') {
+      // If it's a string, check if it's a file path or inline text
+      const potentialPath = redteamConfig.gradingGuidance;
+      if (
+        potentialPath.endsWith('.txt') ||
+        potentialPath.endsWith('.md') ||
+        potentialPath.startsWith('file://')
+      ) {
+        // It looks like a file path
+        const filePath = potentialPath.startsWith('file://')
+          ? potentialPath.slice(7)
+          : potentialPath;
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(configDir, filePath);
+        try {
+          guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          logger.info(`Loaded grading guidance from file: ${absolutePath}`);
+        } catch (error) {
+          logger.error(
+            `Failed to load grading guidance file: ${absolutePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else {
+        // Treat as inline text
+        guidanceText = potentialPath;
+        logger.info('Using inline grading guidance text');
+      }
+    } else {
+      // Object form: { text?: string, file?: string }
+      const guidanceConfig = redteamConfig.gradingGuidance;
+      if (guidanceConfig.file) {
+        const filePath = guidanceConfig.file.startsWith('file://')
+          ? guidanceConfig.file.slice(7)
+          : guidanceConfig.file;
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(configDir, filePath);
+        try {
+          guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          logger.info(`Loaded grading guidance from file: ${absolutePath}`);
+        } catch (error) {
+          logger.error(
+            `Failed to load grading guidance file: ${absolutePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else if (guidanceConfig.text) {
+        guidanceText = guidanceConfig.text;
+        logger.info('Using inline grading guidance text');
+      }
+    }
+
+    // Inject the guidance into each plugin's config
+    if (guidanceText) {
+      const useSmartExtraction = process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false';
+
+      if (useSmartExtraction) {
+        // Smart extraction: extract relevant portions per plugin using LLM
+        logger.info('[GradingGuidance] Using smart extraction...');
+        const pluginIds = plugins.map((p) => p.id);
+
+        // Get redteam provider for extraction
+        const redteamProvider = await redteamProviderManager.getProvider({});
+        const extractions = await extractGuidanceForPlugins(guidanceText, pluginIds, redteamProvider);
+
+        // Inject per-plugin extracted guidance
+        plugins = plugins.map((plugin) => {
+          const extracted = extractions[plugin.id];
+          if (extracted) {
+            logger.info(
+              `[GradingGuidance] ${plugin.id} → ${extracted.length} chars of relevant guidance`,
+            );
+          } else {
+            logger.debug(`[GradingGuidance] ${plugin.id} → no relevant guidance found`);
+          }
+          return {
+            ...plugin,
+            config: {
+              ...plugin.config,
+              ...(extracted ? { externalGradingGuidance: extracted } : {}),
+            },
+          };
+        });
+
+        logger.info(`[GradingGuidance] Smart extraction complete for ${pluginIds.length} plugins`);
+      } else {
+        // Legacy: inject full document to all plugins
+        logger.info('[GradingGuidance] Using full document injection (legacy mode)');
+        plugins = plugins.map((plugin) => ({
+          ...plugin,
+          config: {
+            ...plugin.config,
+            externalGradingGuidance: guidanceText,
+          },
+        }));
+        logger.info(`Injected grading guidance into ${plugins.length} plugins`);
       }
     }
   }

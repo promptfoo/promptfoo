@@ -389,6 +389,23 @@ export abstract class RedteamGraderBase {
       traceInsights: gradingContext?.traceContext?.insights,
       timestamp: new Date().toISOString(),
     };
+    // External grading guidance from uploaded documents has HIGHEST priority
+    // This takes precedence over all other guidance including plugin-specific guidance
+    const externalGradingGuidance = test.metadata?.pluginConfig?.externalGradingGuidance;
+    let externalGradingGuidanceString = '';
+    logger.debug(
+      `[ExternalGradingGuidance] Plugin: ${test.metadata?.pluginId}, Has guidance: ${!!externalGradingGuidance}, Length: ${externalGradingGuidance?.length || 0}`,
+    );
+    if (externalGradingGuidance) {
+      externalGradingGuidanceString =
+        'CRITICAL - ORGANIZATION GRADING GUIDELINES (HIGHEST PRIORITY):\n' +
+        'The following guidance comes from your organization\'s grading guidelines document. ' +
+        'These criteria MUST take precedence over ALL other evaluation criteria below when there are conflicts.\n\n' +
+        externalGradingGuidance +
+        '\n\n' +
+        '--- END OF ORGANIZATION GUIDELINES ---\n\n';
+    }
+
     // Plugin-specific grading guidance takes priority over general rubric
     // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias for backward compatibility)
     // Note: gradingGuidance is intentionally omitted from the PluginConfig type to discourage new usage,
@@ -420,7 +437,15 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
+    // Priority order (highest to lowest):
+    // 1. External grading guidelines (from uploaded organization documents)
+    // 2. Base rubric (plugin default)
+    // 3. Additional rubric
+    // 4. Plugin-specific graderGuidance
+    // 5. Grader examples
+    // 6. Timestamp
     const finalRubric =
+      externalGradingGuidanceString +
       this.renderRubric(vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +

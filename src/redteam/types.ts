@@ -64,6 +64,8 @@ export const PluginConfigSchema = z.object({
     )
     .optional(),
   graderGuidance: z.string().optional(),
+  // External grading guidance from uploaded documents (highest priority - takes precedence over all other guidance)
+  externalGradingGuidance: z.string().optional(),
   severity: SeveritySchema.optional(),
   language: z.union([z.string(), z.array(z.string())]).optional(),
   prompt: z.string().optional(),
@@ -214,10 +216,20 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   strict?: boolean;
 }
 
+// Grading guidance configuration - can be inline text or a file path
+export interface GradingGuidanceConfig {
+  // Inline guidance text
+  text?: string;
+  // Path to a text/markdown file containing guidance (supports .txt, .md)
+  file?: string;
+}
+
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  // External grading guidance document - applied to all plugins with highest priority
+  gradingGuidance?: string | GradingGuidanceConfig;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

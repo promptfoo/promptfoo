@@ -314,6 +314,16 @@ export const RedteamConfigSchema = z
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
     ),
+    gradingGuidance: z
+      .union([
+        z.string(),
+        z.object({
+          text: z.string().optional(),
+          file: z.string().optional(),
+        }),
+      ])
+      .optional()
+      .describe('External grading guidance document - file path (.txt, .md) or inline text'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -547,6 +557,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.gradingGuidance ? { gradingGuidance: data.gradingGuidance } : {}),
     };
   });
 
