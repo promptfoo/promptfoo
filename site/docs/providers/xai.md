@@ -560,12 +560,13 @@ tools:
 
 #### Custom Function Tools and Assertions
 
-You can define custom function tools and use assertions to verify they are called correctly:
+You can define custom function tools inline or load them from external files:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: xai:voice:grok-3
     config:
+      # Inline tool definition
       tools:
         - type: function
           name: set_volume
@@ -578,6 +579,9 @@ providers:
                 description: Volume level from 0 to 100
             required:
               - level
+
+      # Or load from external file (YAML or JSON)
+      # tools: file://tools.yaml
 
 tests:
   - vars:
@@ -593,6 +597,35 @@ tests:
       - type: tool-call-f1
         value: ['set_volume']
         threshold: 1.0
+```
+
+**External tools file example:**
+
+```yaml title="tools.yaml"
+- type: function
+  name: get_weather
+  description: Get the current weather for a location
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+    required:
+      - location
+
+- type: function
+  name: set_reminder
+  description: Set a reminder for the user
+  parameters:
+    type: object
+    properties:
+      message:
+        type: string
+      time:
+        type: string
+    required:
+      - message
+      - time
 ```
 
 When function tools are used, the provider output includes a `functionCalls` array with:
