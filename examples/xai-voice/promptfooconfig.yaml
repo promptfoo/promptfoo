@@ -11,9 +11,13 @@ providers:
       instructions: 'You are a helpful voice assistant. Keep your responses concise and informative.'
       modalities: ['text', 'audio']
       websocketTimeout: 60000 # 60 seconds
+
       # Built-in tools work automatically
       tools:
         - type: web_search
+
+      # For custom endpoints or testing, you can override the WebSocket URL:
+      # websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz'
 
 tests:
   - vars:

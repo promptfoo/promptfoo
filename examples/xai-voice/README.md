@@ -79,6 +79,30 @@ config:
 Supported formats: `audio/pcm`, `audio/pcmu`, `audio/pcma`
 Supported sample rates: 8000, 16000, 22050, 24000, 32000, 44100, 48000 Hz
 
+### Custom WebSocket URL
+
+For local testing, proxies, or endpoints with query parameters:
+
+```yaml
+config:
+  websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz'
+```
+
+### Function Call Assertions
+
+When using custom function tools, you can assert on the function calls:
+
+```yaml
+tests:
+  - vars:
+      question: 'Set the volume to 50%'
+    assert:
+      - type: javascript
+        value: |
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_volume');
+```
+
 ## Pricing
 
 xAI Voice API is billed at $0.05 per minute of audio.
