@@ -1,7 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
-
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithRetries } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
+import {
+  type FetchAttemptFeedback,
+  generateDynamicFetchPrompt,
+} from '../strategies/indirectWebPwn';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -10,10 +18,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import { fetchWithRetries } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
@@ -50,6 +54,12 @@ interface IndirectWebPwnConfig {
   useLlm: boolean;
   preferSmallModel: boolean;
   exfilWaitMs: number;
+  /**
+   * When true, uses LLM to generate dynamic fetch prompts that adapt
+   * based on previous failures. When false, uses static prompts.
+   * Default: true
+   */
+  useDynamicFetchPrompts: boolean;
   [key: string]: unknown;
 }
 
@@ -100,6 +110,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       useLlm?: boolean;
       preferSmallModel?: boolean;
       exfilWaitMs?: number;
+      useDynamicFetchPrompts?: boolean;
     } = {},
   ) {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
@@ -113,9 +124,10 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       stateful: options.stateful ?? false,
       scanId,
       evalId: options.evalId ?? scanId,
-      useLlm: options.useLlm ?? false,
+      useLlm: options.useLlm ?? true,
       preferSmallModel: options.preferSmallModel ?? true,
       exfilWaitMs: options.exfilWaitMs ?? 5000,
+      useDynamicFetchPrompts: options.useDynamicFetchPrompts ?? true,
     };
 
     logger.debug('[IndirectWebPwn] Constructor options', {
@@ -128,6 +140,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       useLlm: this.config.useLlm,
       preferSmallModel: this.config.preferSmallModel,
       exfilWaitMs: this.config.exfilWaitMs,
+      useDynamicFetchPrompts: this.config.useDynamicFetchPrompts,
     });
   }
 
@@ -284,19 +297,48 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         path: webPage.path,
       });
 
-      // 2. Internal fetch loop
+      // 2. Internal fetch loop with adaptive prompts
+      let lastFetchPrompt: string | undefined;
+      let lastTargetResponse: string | undefined;
+
       for (let attempt = 0; attempt < this.config.maxFetchAttempts; attempt++) {
         fetchAttempts = attempt + 1;
         logger.debug(
           `[IndirectWebPwn] Fetch attempt ${attempt + 1}/${this.config.maxFetchAttempts}`,
         );
 
+        // Build feedback context for dynamic prompt generation
+        // Filter to only include user and assistant messages for conversation history
+        const conversationHistory = messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+        const feedback: FetchAttemptFeedback = {
+          attemptNumber: attempt + 1,
+          previousPrompt: attempt > 0 ? lastFetchPrompt : undefined,
+          targetResponse: attempt > 0 ? lastTargetResponse : undefined,
+          wasFetched: false,
+          conversationHistory,
+        };
+
         // Generate prompt asking target to fetch the URL
-        const fetchPrompt = this.generateFetchPrompt(webPage.fullUrl, attempt);
+        let fetchPrompt: string;
+        if (this.config.useDynamicFetchPrompts) {
+          fetchPrompt = await generateDynamicFetchPrompt(webPage.fullUrl, feedback, {
+            goal,
+            purpose,
+            preferSmallModel: this.config.preferSmallModel,
+          });
+        } else {
+          fetchPrompt = this.generateFetchPrompt(webPage.fullUrl, attempt);
+        }
+
+        lastFetchPrompt = fetchPrompt;
 
         logger.debug('[IndirectWebPwn] Sending fetch prompt to target', {
           fetchPrompt,
           attempt: attempt + 1,
+          usedDynamicPrompt: this.config.useDynamicFetchPrompts,
         });
 
         // Send to target
@@ -317,6 +359,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : JSON.stringify(targetResponse.output);
+
+        lastTargetResponse = responseOutput;
 
         logger.debug('[IndirectWebPwn] Target response', {
           webFetchUsed: targetResponse.metadata?.webFetchUsed ?? false,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { ApiProvider, CallApiContextParams, CallApiFunction } from '../../../src/types/index';
 
 const mockFetchWithRetries = vi.fn();
 
@@ -14,6 +14,13 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/task'),
+}));
+
+// Mock the dynamic fetch prompt generation to avoid remote API calls in tests
+vi.mock('../../../src/redteam/strategies/indirectWebPwn', () => ({
+  generateDynamicFetchPrompt: vi.fn().mockImplementation(async (url: string) => {
+    return `Please visit ${url} and summarize the content you find there.`;
+  }),
 }));
 
 describe('IndirectWebPwnProvider', () => {
@@ -48,7 +55,7 @@ describe('IndirectWebPwnProvider', () => {
 
     mockTargetProvider = {
       id: () => 'test-provider',
-      callApi: mockCallApi as ReturnType<typeof vi.fn>,
+      callApi: mockCallApi as unknown as CallApiFunction,
     };
   });
 
@@ -74,9 +81,10 @@ describe('IndirectWebPwnProvider', () => {
       expect(provider.config.maxTurns).toBe(5);
       expect(provider.config.maxFetchAttempts).toBe(3);
       expect(provider.config.stateful).toBe(false);
-      expect(provider.config.useLlm).toBe(false);
+      expect(provider.config.useLlm).toBe(true);
       expect(provider.config.preferSmallModel).toBe(true);
       expect(provider.config.exfilWaitMs).toBe(5000);
+      expect(provider.config.useDynamicFetchPrompts).toBe(true);
     });
 
     it('should allow custom configuration values', () => {
@@ -88,6 +96,7 @@ describe('IndirectWebPwnProvider', () => {
         preferSmallModel: false,
         exfilWaitMs: 10000,
         evalId: 'custom-eval-id',
+        useDynamicFetchPrompts: false,
       });
 
       expect(provider.config.injectVar).toBe('query');
@@ -97,6 +106,7 @@ describe('IndirectWebPwnProvider', () => {
       expect(provider.config.preferSmallModel).toBe(false);
       expect(provider.config.exfilWaitMs).toBe(10000);
       expect(provider.config.evalId).toBe('custom-eval-id');
+      expect(provider.config.useDynamicFetchPrompts).toBe(false);
     });
 
     it('should throw error without injectVar', () => {
@@ -224,6 +234,7 @@ describe('IndirectWebPwnProvider', () => {
         evalId: 'test-eval-id',
         maxFetchAttempts: 3,
         exfilWaitMs: 0,
+        useDynamicFetchPrompts: false, // Use static prompts to test variation
       });
 
       mockFetchWithRetries.mockResolvedValueOnce({
@@ -249,6 +260,40 @@ describe('IndirectWebPwnProvider', () => {
       const prompts = mockCallApi.mock.calls.map((call) => call[0]);
       expect(prompts[0]).not.toBe(prompts[1]);
       expect(prompts[1]).not.toBe(prompts[2]);
+    });
+
+    it('should use dynamic fetch prompts by default', async () => {
+      const provider = new IndirectWebPwnProvider({
+        injectVar: 'input',
+        evalId: 'test-eval-id',
+        maxFetchAttempts: 1,
+        exfilWaitMs: 0,
+        // useDynamicFetchPrompts defaults to true
+      });
+
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          uuid: 'test-uuid',
+          fullUrl: 'http://test.api/page/test-uuid',
+        }),
+      });
+
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          wasFetched: true,
+          fetchCount: 1,
+        }),
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      await provider.callApi('test prompt', context, {});
+
+      // Verify the mock generateDynamicFetchPrompt was called
+      // (confirmed by the prompt sent to the target)
+      const prompts = mockCallApi.mock.calls.map((call) => call[0]);
+      expect(prompts[0]).toContain('http://test.api/page/test-uuid');
     });
   });
 

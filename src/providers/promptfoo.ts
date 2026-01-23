@@ -146,7 +146,8 @@ interface PromptfooChatCompletionOptions {
     | 'meta-agent-decision'
     | 'hydra-decision'
     | 'voice-crescendo'
-    | 'voice-crescendo-eval';
+    | 'voice-crescendo-eval'
+    | 'indirect-web-pwn-fetch';
   /**
    * Multi-input schema for generating multiple vars at each turn.
    * Keys are variable names, values are descriptions.
