@@ -99,6 +99,7 @@ export interface XAIVoiceOptions {
   // Custom endpoint configuration
   apiBaseUrl?: string; // Full base URL e.g., "https://my-proxy.com/v1"
   apiHost?: string; // Host only e.g., "my-proxy.com" → "https://my-proxy.com/v1"
+  websocketUrl?: string; // Complete WebSocket URL override (used exactly as-is, no transformation)
 
   // Voice configuration
   voice?: XAIVoice;
@@ -280,8 +281,12 @@ export class XAIVoiceProvider implements ApiProvider {
 
   /**
    * Build full WebSocket URL for realtime endpoint
+   * If websocketUrl is provided, use it exactly as-is without any transformation
    */
   protected getWebSocketUrl(): string {
+    if (this.config.websocketUrl) {
+      return this.config.websocketUrl;
+    }
     return `${this.getWebSocketBase()}/realtime`;
   }
 

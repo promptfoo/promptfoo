@@ -484,5 +484,57 @@ describe('XAI Voice Provider', () => {
       expect(provider.config.apiBaseUrl).toBe('https://custom.example.com/v1');
       expect(provider.config.apiHost).toBe('host.example.com');
     });
+
+    it('uses websocketUrl exactly as provided', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'wss://custom.example.com/path?token=xyz&session=abc' },
+      });
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://custom.example.com/path?token=xyz&session=abc',
+      );
+    });
+
+    it('websocketUrl takes priority over apiBaseUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://override.example.com/custom',
+          apiBaseUrl: 'https://fallback.com/v1',
+        },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://override.example.com/custom');
+    });
+
+    it('websocketUrl takes priority over apiHost', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://override.example.com/custom',
+          apiHost: 'fallback.com',
+        },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://override.example.com/custom');
+    });
+
+    it('preserves query parameters in websocketUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'wss://mock.local:8080/ws?auth=token123&debug=true' },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://mock.local:8080/ws?auth=token123&debug=true');
+    });
+
+    it('allows ws:// protocol in websocketUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'ws://localhost:3000/realtime' },
+      });
+      expect(provider.getWebSocketUrl()).toBe('ws://localhost:3000/realtime');
+    });
+
+    it('accepts websocketUrl in config', () => {
+      const provider = new XAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://custom.example.com/path',
+        },
+      });
+      expect(provider.config.websocketUrl).toBe('wss://custom.example.com/path');
+    });
   });
 });
