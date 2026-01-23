@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import dedent from 'dedent';
 import logger from '../../logger';
 import { subCategoryDescriptions, pluginDescriptions } from '../constants/metadata';
@@ -261,4 +265,362 @@ export async function extractGuidanceForPlugins(
   );
 
   return merged;
+}
+
+/**
+ * Extracts keywords from a plugin's rubric and description for search purposes.
+ */
+function extractKeywordsFromPlugin(pluginId: string): string[] {
+  const { description, rubric } = getPluginContext(pluginId);
+
+  // Extract meaningful words from description and rubric
+  const allText = `${description} ${rubric}`.toLowerCase();
+
+  // Common stop words to filter out
+  const stopWords = new Set([
+    'the',
+    'a',
+    'an',
+    'and',
+    'or',
+    'but',
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'of',
+    'with',
+    'by',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
+    'have',
+    'has',
+    'had',
+    'do',
+    'does',
+    'did',
+    'will',
+    'would',
+    'could',
+    'should',
+    'may',
+    'might',
+    'must',
+    'shall',
+    'can',
+    'this',
+    'that',
+    'these',
+    'those',
+    'it',
+    'its',
+    'they',
+    'them',
+    'their',
+    'what',
+    'which',
+    'who',
+    'whom',
+    'how',
+    'when',
+    'where',
+    'why',
+    'if',
+    'then',
+    'else',
+    'so',
+    'as',
+    'not',
+    'no',
+    'yes',
+    'any',
+    'all',
+    'each',
+    'every',
+    'both',
+    'few',
+    'more',
+    'most',
+    'other',
+    'some',
+    'such',
+    'only',
+    'same',
+    'than',
+    'too',
+    'very',
+    'just',
+    'also',
+    'now',
+    'output',
+    'response',
+    'model',
+    'assistant',
+    'user',
+    'prompt',
+    'test',
+    'tests',
+    'testing',
+    'evaluate',
+    'evaluates',
+    'evaluation',
+  ]);
+
+  // Extract words (alphanumeric, 3+ chars, not stop words)
+  const words = allText.match(/\b[a-z]{3,}\b/g) || [];
+  const keywords = [...new Set(words.filter((w) => !stopWords.has(w)))];
+
+  // Prioritize domain-specific keywords
+  const priorityKeywords = keywords.filter(
+    (w) =>
+      w.includes('privacy') ||
+      w.includes('pii') ||
+      w.includes('harm') ||
+      w.includes('violent') ||
+      w.includes('crime') ||
+      w.includes('inject') ||
+      w.includes('security') ||
+      w.includes('attack') ||
+      w.includes('exploit') ||
+      w.includes('bias') ||
+      w.includes('discriminat') ||
+      w.includes('medical') ||
+      w.includes('financial') ||
+      w.includes('compliance'),
+  );
+
+  // Return priority keywords first, then others, limited to 10
+  return [...new Set([...priorityKeywords, ...keywords])].slice(0, 10);
+}
+
+/**
+ * Builds the agent prompt for extracting guidance using tools.
+ */
+function buildAgentExtractionPrompt(pluginContexts: string): string {
+  return dedent`
+    You are extracting grading guidelines for AI red-team evaluation plugins from the document "guidance.md".
+
+    TASK: Search the document for content relevant to each plugin below.
+    Extract text that helps evaluate whether an AI response passes or fails.
+
+    PLUGINS TO EXTRACT GUIDANCE FOR:
+    ${pluginContexts}
+
+    APPROACH:
+    1. Use Grep to search for keywords relevant to each plugin (use the key concepts provided)
+    2. Use Read to examine promising sections in more detail
+    3. Extract the most relevant passages for each plugin
+
+    WHAT TO EXTRACT:
+    - Sections discussing the plugin's topic (e.g., violence, privacy, honesty, manipulation)
+    - Pass/fail criteria, examples, edge cases, or specific rules
+    - Guidance on how to evaluate model responses for these concerns
+    - Severity levels or thresholds if mentioned
+
+    WHAT NOT TO EXTRACT:
+    - Generic preambles or introductions
+    - Content unrelated to the plugin's evaluation criteria
+    - Overly broad statements that don't help with grading
+
+    Return null for plugins where no relevant guidance exists in this document.
+  `;
+}
+
+/**
+ * Builds the JSON schema for structured output based on plugin IDs.
+ * Uses the format expected by Claude Agent SDK (schema at top level).
+ */
+function buildOutputSchema(pluginIds: string[]): {
+  type: 'json_schema';
+  schema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required: string[];
+    additionalProperties: false;
+  };
+} {
+  const properties: Record<string, unknown> = {};
+
+  for (const pluginId of pluginIds) {
+    properties[pluginId] = {
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+      description: `Extracted guidance for ${pluginId}, or null if no relevant guidance found`,
+    };
+  }
+
+  return {
+    type: 'json_schema',
+    schema: {
+      type: 'object',
+      properties,
+      required: pluginIds,
+      additionalProperties: false,
+    },
+  };
+}
+
+/**
+ * Extracts relevant guidance for each plugin from a guidance document using Claude Agent SDK.
+ *
+ * This function uses an agent with Grep/Read tools to intelligently search the document
+ * and extract relevant portions for each plugin. Unlike the LLM-only approach, this
+ * handles large documents efficiently by using tool-based search instead of chunking.
+ *
+ * @param fullDocument - The complete grading guidance document
+ * @param pluginIds - Array of plugin IDs to extract guidance for
+ * @param options - Optional configuration for the agent
+ * @returns A record mapping plugin IDs to their extracted guidance (or null if not relevant)
+ */
+export async function extractGuidanceForPluginsWithAgent(
+  fullDocument: string,
+  pluginIds: string[],
+  options?: { model?: string; maxTurns?: number },
+): Promise<GuidanceExtractionResult> {
+  if (pluginIds.length === 0) {
+    logger.debug('[GuidanceExtraction:Agent] No plugins provided, returning empty result');
+    return {};
+  }
+
+  // Create a temporary directory for the document
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-guidance-'));
+  const guidanceFilePath = path.join(tempDir, 'guidance.md');
+
+  try {
+    // Write the document to a temp file
+    fs.writeFileSync(guidanceFilePath, fullDocument, 'utf-8');
+    logger.debug(`[GuidanceExtraction:Agent] Wrote guidance to ${guidanceFilePath}`);
+
+    // Build plugin contexts with keywords (simplified - no full rubrics to keep prompt manageable)
+    const pluginContexts = pluginIds
+      .map((id, i) => {
+        const { description } = getPluginContext(id);
+        const keywords = extractKeywordsFromPlugin(id);
+        return dedent`
+        ${i + 1}. **${id}**
+           Description: ${description}
+           Search keywords: ${keywords.join(', ')}
+      `;
+      })
+      .join('\n\n');
+
+    // Build the agent prompt with JSON output instruction
+    const prompt =
+      buildAgentExtractionPrompt(pluginContexts) +
+      dedent`
+
+      OUTPUT FORMAT:
+      Return your final answer as a JSON object with plugin IDs as keys and extracted text as values.
+      Use null for plugins where no relevant guidance was found.
+      Example: {"harmful:violent-crime": "extracted text...", "pii:direct": null}
+    `;
+
+    // Dynamically import the Claude Agent SDK
+    const { ClaudeCodeSDKProvider } = await import('../../providers/claude-agent-sdk');
+
+    // Create the provider with appropriate configuration
+    // Use ANTHROPIC_API_KEY from environment for authentication
+    const provider = new ClaudeCodeSDKProvider({
+      config: {
+        working_dir: tempDir,
+        model: options?.model || 'sonnet',
+        // More turns needed for large documents with many plugins
+        // Each plugin may need 2-3 grep/read operations
+        // For very large documents (100K+), may need 100+ turns
+        max_turns: options?.maxTurns || 100,
+        // Allow read-only file tools for searching the document
+        custom_allowed_tools: ['Read', 'Grep', 'Glob', 'LS'],
+        // Bypass permissions since we're only using read-only tools in a temp directory
+        permission_mode: 'bypassPermissions',
+        allow_dangerously_skip_permissions: true,
+        // Don't persist the session - this is an ephemeral extraction
+        persist_session: false,
+      },
+    });
+
+    logger.info(
+      `[GuidanceExtraction:Agent] Starting agent-based extraction for ${pluginIds.length} plugins...`,
+    );
+
+    // Call the agent
+    const response = await provider.callApi(prompt);
+
+    if (response.error) {
+      logger.error(`[GuidanceExtraction:Agent] Agent error: ${response.error}`);
+      // Return empty results on error
+      const emptyResult: GuidanceExtractionResult = {};
+      for (const pluginId of pluginIds) {
+        emptyResult[pluginId] = null;
+      }
+      return emptyResult;
+    }
+
+    // Parse the structured output
+    let result: GuidanceExtractionResult;
+
+    if (typeof response.output === 'object' && response.output !== null) {
+      // Structured output was returned directly
+      result = response.output as GuidanceExtractionResult;
+    } else if (typeof response.output === 'string') {
+      // Try to parse JSON from string response
+      try {
+        const jsonMatch = response.output.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+          null,
+          response.output,
+        ];
+        const jsonStr = jsonMatch[1]?.trim() || response.output.trim();
+        result = JSON.parse(jsonStr) as GuidanceExtractionResult;
+      } catch (parseError) {
+        logger.error(
+          `[GuidanceExtraction:Agent] Failed to parse agent response: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        );
+        const emptyResult: GuidanceExtractionResult = {};
+        for (const pluginId of pluginIds) {
+          emptyResult[pluginId] = null;
+        }
+        return emptyResult;
+      }
+    } else {
+      logger.error('[GuidanceExtraction:Agent] Unexpected response format from agent');
+      const emptyResult: GuidanceExtractionResult = {};
+      for (const pluginId of pluginIds) {
+        emptyResult[pluginId] = null;
+      }
+      return emptyResult;
+    }
+
+    // Normalize results
+    const normalizedResult: GuidanceExtractionResult = {};
+    for (const pluginId of pluginIds) {
+      const value = result[pluginId];
+      if (value === null || value === 'null' || value === '' || value === undefined) {
+        normalizedResult[pluginId] = null;
+      } else {
+        normalizedResult[pluginId] = String(value);
+      }
+    }
+
+    // Log summary
+    const matchedCount = Object.values(normalizedResult).filter((v) => v !== null).length;
+    logger.info(
+      `[GuidanceExtraction:Agent] Extraction complete: ${matchedCount}/${pluginIds.length} plugins have relevant guidance`,
+    );
+
+    return normalizedResult;
+  } finally {
+    // Clean up temp directory
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      logger.debug(`[GuidanceExtraction:Agent] Cleaned up temp directory: ${tempDir}`);
+    } catch (cleanupError) {
+      logger.warn(
+        `[GuidanceExtraction:Agent] Failed to clean up temp directory: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+      );
+    }
+  }
 }

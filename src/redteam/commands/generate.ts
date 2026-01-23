@@ -42,6 +42,7 @@ import {
 } from '../constants';
 import {
   extractGuidanceForPlugins,
+  extractGuidanceForPluginsWithAgent,
   type GuidanceExtractionResult,
 } from '../extraction/guidanceExtractor';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
@@ -471,14 +472,25 @@ export async function doGenerateRedteam(
     // Start extraction early (non-blocking) - runs in PARALLEL with synthesis
     // Extraction is only needed for the output config, not for test generation
     if (guidanceText && process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false') {
-      logger.info('[GradingGuidance] Starting smart extraction (runs parallel with synthesis)...');
+      const extractionMode = process.env.GRADING_GUIDANCE_EXTRACTION_MODE || 'llm';
       const pluginIds = plugins.map((p) => p.id);
 
-      // Fire off extraction without awaiting - will be awaited after synthesis completes
-      guidanceExtractionPromise = (async () => {
-        const redteamProvider = await redteamProviderManager.getProvider({});
-        return extractGuidanceForPlugins(guidanceText!, pluginIds, redteamProvider);
-      })();
+      if (extractionMode === 'agent') {
+        logger.info(
+          '[GradingGuidance] Starting agent-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off agent-based extraction without awaiting
+        guidanceExtractionPromise = extractGuidanceForPluginsWithAgent(guidanceText!, pluginIds);
+      } else {
+        logger.info(
+          '[GradingGuidance] Starting LLM-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off LLM-based extraction without awaiting - will be awaited after synthesis completes
+        guidanceExtractionPromise = (async () => {
+          const redteamProvider = await redteamProviderManager.getProvider({});
+          return extractGuidanceForPlugins(guidanceText!, pluginIds, redteamProvider);
+        })();
+      }
     }
   }
 
