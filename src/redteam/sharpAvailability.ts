@@ -23,14 +23,6 @@ export async function isSharpAvailable(): Promise<boolean> {
 }
 
 /**
- * Resets the sharp availability cache. Exported for testing only.
- * @internal
- */
-export function _resetSharpCache(): void {
-  sharpAvailableCache = null;
-}
-
-/**
  * Validates that the sharp library is installed when required by strategies or plugins.
  * Throws an error early (before scan starts) if sharp is needed but not available.
  *
