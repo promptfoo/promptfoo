@@ -445,6 +445,51 @@ This project uses [release-please](https://github.com/googleapis/release-please)
 
 For urgent releases, contact maintainers on [Discord](https://discord.gg/promptfoo).
 
+## AI-Assisted Contributions
+
+We welcome AI-assisted development. Use whatever tools help you ship better work.
+
+We don't judge contributions by how they were produced. We judge them by the quality of the result. The same standards apply regardless of whether you wrote every character by hand or used Copilot, Cursor, Claude Code, or any other tool.
+
+:::tip You own the change
+
+If you open a pull request, you are responsible for what you submit. AI can help you write code faster, but it cannot take accountability for correctness, security, or maintainability. That stays with you.
+
+:::
+
+### Prove the change works
+
+A pull request should include enough evidence that a reviewer can trust the change without recreating your entire process.
+
+**What to include:**
+
+- What changed and why (a few sentences is fine)
+- How you verified it works
+- Any tradeoffs or edge cases you considered
+
+If the change is hard to demonstrate, include something concrete: a minimal repro, a log excerpt, a screenshot, or a short recording.
+
+### Be able to explain the diff
+
+You don't need to have typed every character. You do need to be able to answer reviewer questions about your changes:
+
+- Why is this implemented this way?
+- What alternatives did you consider?
+- What did you test?
+- What could break?
+
+If you can't explain a non-trivial part of your PR, revise it until you can.
+
+### No hypothetical platform support
+
+Don't submit changes for environments you cannot actually run or test. If you want to add support for a platform you don't have access to, open an issue or discussion describing what you need and what you can verify today.
+
+### Disclosure
+
+Disclosure of AI usage is optional. We won't try to guess whether you used AI.
+
+That said, if a maintainer asks about your process, please answer candidly. If an agent produced a large portion of the change, a short note describing how you validated the output can help reviewers and speed up the process.
+
 ## Changelog
 
 **Do not manually edit `CHANGELOG.md`.** release-please generates entries from conventional commit messages.
