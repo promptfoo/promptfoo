@@ -28,27 +28,30 @@ describe('validateSharpDependency', () => {
     vi.resetAllMocks();
   });
 
-  describe.skipIf(!sharpAvailable)('when sharp is available', () => {
-    it('should not throw when image strategy is used', async () => {
+  describe('when sharp is available', () => {
+    it.skipIf(!sharpAvailable)('should not throw when image strategy is used', async () => {
       const strategies = [{ id: 'image' }];
       const plugins = [{ id: 'harmful', numTests: 5 }];
 
       await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
     });
 
-    it('should not throw when unsafebench plugin is used', async () => {
+    it.skipIf(!sharpAvailable)('should not throw when unsafebench plugin is used', async () => {
       const strategies = [{ id: 'base64' }];
       const plugins = [{ id: 'unsafebench', numTests: 5 }];
 
       await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
     });
 
-    it('should not throw when both image strategy and unsafebench plugin are used', async () => {
-      const strategies = [{ id: 'image' }];
-      const plugins = [{ id: 'unsafebench', numTests: 5 }];
+    it.skipIf(!sharpAvailable)(
+      'should not throw when both image strategy and unsafebench plugin are used',
+      async () => {
+        const strategies = [{ id: 'image' }];
+        const plugins = [{ id: 'unsafebench', numTests: 5 }];
 
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
-    });
+        await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
+      },
+    );
   });
 
   describe('when sharp is not required', () => {
