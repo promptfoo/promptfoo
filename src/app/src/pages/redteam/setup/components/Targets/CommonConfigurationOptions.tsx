@@ -15,7 +15,7 @@ import type { ProviderOptions } from '@promptfoo/types';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onValidationChange?: (hasErrors: boolean) => void;
   extensions?: string[];
   onExtensionsChange?: (extensions: string[]) => void;
@@ -40,7 +40,7 @@ const CommonConfigurationOptions = ({
   onPromptsChange,
   hideTestGeneration = false,
 }: CommonConfigurationOptionsProps) => {
-  const inputs = (selectedTarget as any).inputs as Record<string, string> | undefined;
+  const inputs = (selectedTarget as { inputs?: Record<string, string> }).inputs;
   const hasInputs = inputs && Object.keys(inputs).length > 0;
   const hasInstructions = !!testGenerationInstructions?.trim();
   const [isTestGenExpanded, setIsTestGenExpanded] = useState(hasInputs || hasInstructions);

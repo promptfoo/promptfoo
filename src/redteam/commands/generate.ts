@@ -42,7 +42,7 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
-import { isValidPolicyObject } from '../plugins/policy/utils';
+import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
@@ -364,8 +364,12 @@ export async function doGenerateRedteam(
 
   // Resolve policy references.
   // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  // Only reusable policies (with UUID ids) need to be fetched; inline policies already have their text.
   const policyPluginsWithRefs = plugins.filter(
-    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+    (plugin) =>
+      plugin.config?.policy &&
+      isValidPolicyObject(plugin.config?.policy) &&
+      determinePolicyTypeFromId(plugin.config.policy.id) === 'reusable',
   );
   if (policyPluginsWithRefs.length > 0) {
     // Always use the calling user's team id for fetching policies.
