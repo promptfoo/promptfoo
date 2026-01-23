@@ -2385,7 +2385,7 @@ describe('ResultsView Concurrency Display', () => {
     });
   });
 
-  it('should display maxConcurrency chip when stats.maxConcurrency is available', async () => {
+  it('should display concurrency chip when stats.maxConcurrency is available', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2415,13 +2415,14 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display maxConcurrency as "8 configured"
+    // Should display consolidated concurrency chip as "Concurrency 8/8"
     await waitFor(() => {
-      expect(screen.getByText('8 configured')).toBeInTheDocument();
+      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
+      expect(screen.getByText(/8\/8/)).toBeInTheDocument();
     });
   });
 
-  it('should display concurrencyUsed chip when stats.concurrencyUsed is available', async () => {
+  it('should display concurrency chip when stats.concurrencyUsed is available', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2451,13 +2452,14 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display concurrencyUsed as "4 effective"
+    // Should display consolidated concurrency chip as "Concurrency 4/4"
     await waitFor(() => {
-      expect(screen.getByText('4 effective')).toBeInTheDocument();
+      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
+      expect(screen.getByText(/4\/4/)).toBeInTheDocument();
     });
   });
 
-  it('should display both maxConcurrency and concurrencyUsed chips when both are available', async () => {
+  it('should display consolidated concurrency chip when both values are available', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2494,14 +2496,14 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display both chips
+    // Should display consolidated chip as "Concurrency 1/8" (effective/configured)
     await waitFor(() => {
-      expect(screen.getByText('8 configured')).toBeInTheDocument();
-      expect(screen.getByText('1 effective')).toBeInTheDocument();
+      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
+      expect(screen.getByText(/1\/8/)).toBeInTheDocument();
     });
   });
 
-  it('should not display maxConcurrency chip when maxConcurrency is 0', async () => {
+  it('should not display concurrency chip when maxConcurrency is 0', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2531,11 +2533,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // maxConcurrency chip should not be present when value is 0
-    expect(screen.queryByText(/configured/)).toBeNull();
+    // Concurrency chip should not be present when value is 0
+    expect(screen.queryByText(/Concurrency/)).toBeNull();
   });
 
-  it('should not display concurrencyUsed chip when concurrencyUsed is 0', async () => {
+  it('should not display concurrency chip when concurrencyUsed is 0', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2565,11 +2567,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // concurrencyUsed chip should not be present when value is 0
-    expect(screen.queryByText(/effective/)).toBeNull();
+    // Concurrency chip should not be present when value is 0
+    expect(screen.queryByText(/Concurrency/)).toBeNull();
   });
 
-  it('should not display concurrency chips when stats is null', async () => {
+  it('should not display concurrency chip when stats is null', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2599,12 +2601,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Neither chip should be present
-    expect(screen.queryByText(/configured/)).toBeNull();
-    expect(screen.queryByText(/effective/)).toBeNull();
+    // Concurrency chip should not be present
+    expect(screen.queryByText(/Concurrency/)).toBeNull();
   });
 
-  it('should not display concurrency chips when stats has no concurrency fields', async () => {
+  it('should not display concurrency chip when stats has no concurrency fields', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2634,9 +2635,8 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Neither chip should be present
-    expect(screen.queryByText(/configured/)).toBeNull();
-    expect(screen.queryByText(/effective/)).toBeNull();
+    // Concurrency chip should not be present
+    expect(screen.queryByText(/Concurrency/)).toBeNull();
   });
 
   it('should display duration and concurrency chips together', async () => {
@@ -2677,11 +2677,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display all three chips
+    // Should display duration and consolidated concurrency chip
     await waitFor(() => {
       expect(screen.getByText('45.0s')).toBeInTheDocument();
-      expect(screen.getByText('8 configured')).toBeInTheDocument();
-      expect(screen.getByText('4 effective')).toBeInTheDocument();
+      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
+      expect(screen.getByText(/4\/8/)).toBeInTheDocument();
     });
   });
 });

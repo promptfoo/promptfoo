@@ -894,32 +894,41 @@ export default function ResultsView({
                   <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
                 </Tooltip>
               )}
-              {stats?.maxConcurrency != null && stats.maxConcurrency > 0 && (
+              {((stats?.maxConcurrency != null && stats.maxConcurrency > 0) ||
+                (stats?.concurrencyUsed != null && stats.concurrencyUsed > 0)) && (
                 <Tooltip>
                   <TooltipTrigger>
                     <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
                       <Layers className="size-3.5 mr-1" />
-                      {stats.maxConcurrency} configured
+                      Concurrency{' '}
+                      {stats?.concurrencyUsed != null && stats.concurrencyUsed > 0
+                        ? stats.concurrencyUsed
+                        : stats?.maxConcurrency}
+                      /
+                      {stats?.maxConcurrency != null && stats.maxConcurrency > 0
+                        ? stats.maxConcurrency
+                        : stats?.concurrencyUsed}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Configured concurrency from CLI (-j), config, or environment
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {stats?.concurrencyUsed != null && stats.concurrencyUsed > 0 && (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge className="bg-blue-50 text-blue-700 border border-blue-200 font-medium dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800">
-                      <Layers className="size-3.5 mr-1" />
-                      {stats.concurrencyUsed} effective
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Actual concurrency used during evaluation
-                    {stats.maxConcurrency != null &&
-                      stats.concurrencyUsed !== stats.maxConcurrency &&
-                      ' (reduced due to _conversation or storeOutputAs)'}
+                    <div className="text-sm">
+                      <div>
+                        <strong>Effective:</strong>{' '}
+                        {stats?.concurrencyUsed ?? stats?.maxConcurrency ?? 'N/A'} parallel requests
+                      </div>
+                      <div>
+                        <strong>Configured:</strong>{' '}
+                        {stats?.maxConcurrency ?? stats?.concurrencyUsed ?? 'N/A'} (from CLI -j,
+                        config, or env)
+                      </div>
+                      {stats?.maxConcurrency != null &&
+                        stats?.concurrencyUsed != null &&
+                        stats.concurrencyUsed !== stats.maxConcurrency && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Reduced due to _conversation or storeOutputAs
+                          </div>
+                        )}
+                    </div>
                   </TooltipContent>
                 </Tooltip>
               )}
