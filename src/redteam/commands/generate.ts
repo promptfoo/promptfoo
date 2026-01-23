@@ -43,6 +43,7 @@ import {
 import {
   extractGuidanceForPlugins,
   extractGuidanceForPluginsWithAgent,
+  extractGuidanceForPluginsWithOpenAIAgent,
   type GuidanceExtractionResult,
 } from '../extraction/guidanceExtractor';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
@@ -472,15 +473,25 @@ export async function doGenerateRedteam(
     // Start extraction early (non-blocking) - runs in PARALLEL with synthesis
     // Extraction is only needed for the output config, not for test generation
     if (guidanceText && process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false') {
+      // Extraction modes:
+      // - "llm" (default): LLM chunking approach - exhaustive, comprehensive
+      // - "agent": Claude Agent SDK with Grep/Read tools - focused, concise
+      // - "openai-agent": OpenAI Agents SDK with custom tools - alternative agent approach
       const extractionMode = process.env.GRADING_GUIDANCE_EXTRACTION_MODE || 'llm';
       const pluginIds = plugins.map((p) => p.id);
 
       if (extractionMode === 'agent') {
         logger.info(
-          '[GradingGuidance] Starting agent-based extraction (runs parallel with synthesis)...',
+          '[GradingGuidance] Starting Claude agent-based extraction (runs parallel with synthesis)...',
         );
-        // Fire off agent-based extraction without awaiting
+        // Fire off Claude agent-based extraction without awaiting
         guidanceExtractionPromise = extractGuidanceForPluginsWithAgent(guidanceText!, pluginIds);
+      } else if (extractionMode === 'openai-agent') {
+        logger.info(
+          '[GradingGuidance] Starting OpenAI agent-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off OpenAI agent-based extraction without awaiting
+        guidanceExtractionPromise = extractGuidanceForPluginsWithOpenAIAgent(guidanceText!, pluginIds);
       } else {
         logger.info(
           '[GradingGuidance] Starting LLM-based extraction (runs parallel with synthesis)...',
