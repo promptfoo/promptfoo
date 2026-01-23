@@ -6,8 +6,8 @@ import {
   XAI_VOICE_DEFAULT_API_URL,
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
-  XAIVoiceProvider,
   type XAIFunctionCallOutput,
+  XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
 
 vi.mock('../../../src/logger');
@@ -581,7 +581,7 @@ describe('XAI Voice Provider', () => {
     });
 
     it('accepts functionCallHandler in config', () => {
-      const handler = async (name: string, args: string) => {
+      const handler = async (_name: string, _args: string) => {
         return JSON.stringify({ success: true });
       };
       const provider = new XAIVoiceProvider('grok-3', {

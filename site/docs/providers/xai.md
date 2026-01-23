@@ -558,6 +558,49 @@ tools:
     max_num_results: 10
 ```
 
+#### Custom Function Tools and Assertions
+
+You can define custom function tools and use assertions to verify they are called correctly:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: xai:voice:grok-3
+    config:
+      tools:
+        - type: function
+          name: set_volume
+          description: Set the device volume level
+          parameters:
+            type: object
+            properties:
+              level:
+                type: number
+                description: Volume level from 0 to 100
+            required:
+              - level
+
+tests:
+  - vars:
+      question: 'Set the volume to 50 percent'
+    assert:
+      # Check that the correct function was called with correct arguments
+      - type: javascript
+        value: |
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_volume' && c.arguments?.level === 50);
+
+      # Or use tool-call-f1 for function name matching
+      - type: tool-call-f1
+        value: ['set_volume']
+        threshold: 1.0
+```
+
+When function tools are used, the provider output includes a `functionCalls` array with:
+
+- `name`: The function name that was called
+- `arguments`: The parsed arguments object
+- `result`: The result returned by your function handler (if provided)
+
 #### Custom Endpoint Configuration
 
 You can configure a custom WebSocket endpoint for the Voice API, useful for proxies or regional endpoints:
@@ -580,6 +623,25 @@ export XAI_API_BASE_URL=https://my-proxy.example.com/v1
 ```
 
 URL transformation: The provider automatically converts HTTP URLs to WebSocket URLs (`https://` → `wss://`, `http://` → `ws://`) and appends `/realtime` to reach the Voice API endpoint.
+
+#### Complete WebSocket URL Override
+
+For advanced use cases like local testing, custom proxies, or endpoints requiring query parameters, you can provide a complete WebSocket URL that will be used exactly as specified without any transformation:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Use this URL exactly as-is (no transformation applied)
+      websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
+```
+
+This is useful for:
+
+- Local development and testing with mock servers
+- Custom proxy configurations
+- Adding authentication tokens or session IDs as URL parameters
+- Using alternative WebSocket gateways or regional endpoints
 
 #### Audio Configuration
 
