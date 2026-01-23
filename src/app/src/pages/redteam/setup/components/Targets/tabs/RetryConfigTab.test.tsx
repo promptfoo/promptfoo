@@ -41,7 +41,9 @@ describe('RetryConfigTab', () => {
         />,
       );
 
-      expect(screen.getByText(/Configure retry behavior for failed HTTP requests/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Configure retry behavior for failed HTTP requests/i),
+      ).toBeInTheDocument();
     });
 
     it('should render link to documentation', () => {
@@ -58,7 +60,10 @@ describe('RetryConfigTab', () => {
       );
 
       const link = screen.getByRole('link', { name: 'docs' });
-      expect(link).toHaveAttribute('href', 'https://www.promptfoo.dev/docs/providers/http/#error-handling');
+      expect(link).toHaveAttribute(
+        'href',
+        'https://www.promptfoo.dev/docs/providers/http/#error-handling',
+      );
     });
 
     it('should display default value of 4 when maxRetries is not configured', () => {
@@ -214,7 +219,9 @@ describe('RetryConfigTab', () => {
         />,
       );
 
-      expect(screen.getByText(/Number of retry attempts after initial request fails/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Number of retry attempts after initial request fails/i),
+      ).toBeInTheDocument();
       expect(screen.getByText(/Set to 0 to disable retries/i)).toBeInTheDocument();
     });
   });
