@@ -10,15 +10,6 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Check if sharp is available at test time
-let sharpAvailable = false;
-try {
-  await import('sharp');
-  sharpAvailable = true;
-} catch {
-  sharpAvailable = false;
-}
-
 describe('validateSharpDependency', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -28,31 +19,10 @@ describe('validateSharpDependency', () => {
     vi.resetAllMocks();
   });
 
-  describe('when sharp is available', () => {
-    it.skipIf(!sharpAvailable)('should not throw when image strategy is used', async () => {
-      const strategies = [{ id: 'image' }];
-      const plugins = [{ id: 'harmful', numTests: 5 }];
-
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
-    });
-
-    it.skipIf(!sharpAvailable)('should not throw when unsafebench plugin is used', async () => {
-      const strategies = [{ id: 'base64' }];
-      const plugins = [{ id: 'unsafebench', numTests: 5 }];
-
-      await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
-    });
-
-    it.skipIf(!sharpAvailable)(
-      'should not throw when both image strategy and unsafebench plugin are used',
-      async () => {
-        const strategies = [{ id: 'image' }];
-        const plugins = [{ id: 'unsafebench', numTests: 5 }];
-
-        await expect(validateSharpDependency(strategies, plugins)).resolves.not.toThrow();
-      },
-    );
-  });
+  // NOTE: Tests for "when sharp is available" are intentionally omitted.
+  // The sharp library is optional and not installed in CI environments.
+  // The core validation logic is tested in the "when sharp is unavailable" section below,
+  // which mocks sharp to test both success and failure scenarios.
 
   describe('when sharp is not required', () => {
     it('should not throw when no sharp-dependent features are used', async () => {
