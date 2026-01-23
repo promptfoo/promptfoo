@@ -5,7 +5,9 @@ import logger from '../../logger';
 import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
+  DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   type Plugin,
   REDTEAM_MODEL,
@@ -88,6 +90,21 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });
+      return;
+    }
+
+    // Dataset/benchmark plugins don't support dynamic generation
+    // Multi-input excluded plugins only apply when the plugin is actually multi-input
+    const hasMultiInput =
+      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    const excludedPlugins = hasMultiInput
+      ? [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS]
+      : [...DATASET_EXEMPT_PLUGINS];
+    if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
+      logger.debug(
+        `Skipping plugin '${plugin.id}' - uses static test cases, does not support dynamic generation`,
+      );
+      res.json({ testCases: [], count: 0 });
       return;
     }
 

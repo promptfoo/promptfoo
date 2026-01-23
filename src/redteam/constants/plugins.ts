@@ -398,16 +398,26 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = [
+  'aegis',
   'beavertails',
   'cyberseceval',
+  'donotanswer',
+  'harmbench',
   'pliny',
+  'toxic-chat',
   'unsafebench',
   'vlguard',
   'vlsu',
+  'xstest',
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = ['ascii-smuggling'] as const;
+export const MULTI_INPUT_EXCLUDED_PLUGINS = [
+  'cca',
+  'cross-session-leak',
+  'special-token-injection',
+  'system-prompt-override',
+] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
