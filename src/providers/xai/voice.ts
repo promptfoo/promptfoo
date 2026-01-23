@@ -147,6 +147,15 @@ interface PendingFunctionCall {
   arguments: string;
 }
 
+/**
+ * Function call information exposed in output for assertions
+ */
+export interface XAIFunctionCallOutput {
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string;
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -354,8 +363,14 @@ export class XAIVoiceProvider implements ApiProvider {
     try {
       const result = await this.webSocketRequest(prompt);
 
+      // Build output - if function calls exist, include them in output for assertions
+      const output =
+        result.functionCalls && result.functionCalls.length > 0
+          ? { text: result.output, functionCalls: result.functionCalls }
+          : result.output;
+
       return {
-        output: result.output,
+        output,
         cost: result.cost,
         metadata: result.metadata,
         ...(result.audio && { audio: result.audio }),
@@ -376,6 +391,7 @@ export class XAIVoiceProvider implements ApiProvider {
     output: string;
     cost: number;
     metadata: Record<string, unknown>;
+    functionCalls?: XAIFunctionCallOutput[];
     audio?: {
       data: string;
       format: string;
@@ -410,6 +426,7 @@ export class XAIVoiceProvider implements ApiProvider {
       let hasAudioContent = false;
       let pendingFunctionCalls: PendingFunctionCall[] = [];
       const functionCallResults: string[] = [];
+      const functionCallOutputs: XAIFunctionCallOutput[] = [];
 
       // Helper to send events
       const sendEvent = (event: Record<string, unknown>) => {
@@ -512,9 +529,25 @@ export class XAIVoiceProvider implements ApiProvider {
               // Handle pending function calls
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
                 for (const call of pendingFunctionCalls) {
+                  let parsedArgs: Record<string, unknown> = {};
+                  try {
+                    parsedArgs = JSON.parse(call.arguments);
+                  } catch {
+                    logger.warn('[xAI Voice] Failed to parse function arguments', {
+                      name: call.name,
+                    });
+                  }
+
                   try {
                     const result = await this.config.functionCallHandler(call.name, call.arguments);
                     functionCallResults.push(result);
+
+                    // Track function call with full details for assertions
+                    functionCallOutputs.push({
+                      name: call.name,
+                      arguments: parsedArgs,
+                      result,
+                    });
 
                     // Send function result back
                     sendEvent({
@@ -527,6 +560,14 @@ export class XAIVoiceProvider implements ApiProvider {
                     });
                   } catch (err) {
                     logger.error('[xAI Voice] Function call error', { name: call.name, err });
+
+                    // Track failed function call for assertions
+                    functionCallOutputs.push({
+                      name: call.name,
+                      arguments: parsedArgs,
+                      result: JSON.stringify({ error: String(err) }),
+                    });
+
                     sendEvent({
                       type: 'conversation.item.create',
                       item: {
@@ -588,6 +629,8 @@ export class XAIVoiceProvider implements ApiProvider {
                   functionCallResults:
                     functionCallResults.length > 0 ? functionCallResults : undefined,
                 },
+                // Expose function calls for assertions
+                functionCalls: functionCallOutputs.length > 0 ? functionCallOutputs : undefined,
                 ...(finalAudioData && {
                   audio: {
                     data: finalAudioData,
