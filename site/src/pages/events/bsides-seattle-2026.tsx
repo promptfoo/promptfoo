@@ -6,6 +6,11 @@ import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './bsides-seattle-2026.module.css';
 
+// Event configuration
+const EVENT_DATE = '2026-02-27T09:00:00-08:00';
+const EVENT_DATE_DISPLAY = 'February 27-28, 2026';
+const EVENT_LOCATION = 'Building 92, Redmond, WA';
+
 // Icon components to reduce JSX verbosity
 const TargetIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -66,7 +71,7 @@ function CountdownTimer(): React.ReactElement {
   });
 
   useEffect(() => {
-    const targetDate = new Date('2026-02-27T09:00:00-08:00').getTime();
+    const targetDate = new Date(EVENT_DATE).getTime();
 
     const updateCountdown = () => {
       const now = new Date().getTime();
@@ -236,7 +241,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                <span>February 27-28, 2026</span>
+                <span>{EVENT_DATE_DISPLAY}</span>
               </div>
               <div className={styles.detail}>
                 <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -253,7 +258,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                <span>Building 92, Redmond, WA</span>
+                <span>{EVENT_LOCATION}</span>
               </div>
             </div>
 
@@ -390,7 +395,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>80+</div>
+                <div className={styles.statNumber}>{SITE_CONSTANTS.FORTUNE_500_COUNT}</div>
                 <div className={styles.statLabel}>Fortune 500</div>
               </div>
               <div className={styles.stat}>
