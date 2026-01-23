@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -198,13 +198,28 @@ export default class EvalResult {
   /**
    * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
    * Key format: `${testIdx}:${promptIdx}`
+   *
+   * @param evalId - The evaluation ID to query
+   * @param opts.excludeErrors - If true, excludes results with ERROR failureReason (used in retry mode)
    */
-  static async getCompletedIndexPairs(evalId: string): Promise<Set<string>> {
+  static async getCompletedIndexPairs(
+    evalId: string,
+    opts?: { excludeErrors?: boolean },
+  ): Promise<Set<string>> {
     const db = getDb();
+    const whereClause = opts?.excludeErrors
+      ? and(
+          eq(evalResultsTable.evalId, evalId),
+          // Exclude ERROR results so they can be retried
+          // This prevents resume mode from skipping ERROR results during retry
+          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+        )
+      : eq(evalResultsTable.evalId, evalId);
+
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, evalId));
+      .where(whereClause);
     const ret = new Set<string>();
     for (const r of rows) {
       ret.add(`${r.testIdx}:${r.promptIdx}`);
