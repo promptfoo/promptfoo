@@ -323,7 +323,7 @@ export class XAIVoiceProvider implements ApiProvider {
     };
 
     // Add tools if configured
-    if (this.config.tools && this.config.tools.length > 0) {
+    if (this.config.tools?.length) {
       const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
       if (loadedTools) {
         session.tools = loadedTools;
@@ -364,10 +364,10 @@ export class XAIVoiceProvider implements ApiProvider {
       const result = await this.webSocketRequest(prompt);
 
       // Build output - if function calls exist, include them in output for assertions
-      const output =
-        result.functionCalls && result.functionCalls.length > 0
-          ? { text: result.output, functionCalls: result.functionCalls }
-          : result.output;
+      const hasFunctionCalls = result.functionCalls && result.functionCalls.length > 0;
+      const output = hasFunctionCalls
+        ? { text: result.output, functionCalls: result.functionCalls }
+        : result.output;
 
       return {
         output,
@@ -590,13 +590,13 @@ export class XAIVoiceProvider implements ApiProvider {
                   }
                 }
 
+                pendingFunctionCalls = [];
+
                 // Request continuation if we have a handler
                 if (this.config.functionCallHandler) {
                   sendEvent({ type: 'response.create' });
-                  pendingFunctionCalls = [];
                   return;
                 }
-                pendingFunctionCalls = [];
               }
 
               // Calculate cost and resolve
@@ -626,10 +626,10 @@ export class XAIVoiceProvider implements ApiProvider {
               ws.close();
 
               // Handle empty transcript
-              if (!responseTranscript && hasAudioContent) {
-                responseTranscript = '[Audio response received]';
-              } else if (!responseTranscript) {
-                responseTranscript = '[No response received from API]';
+              if (!responseTranscript) {
+                responseTranscript = hasAudioContent
+                  ? '[Audio response received]'
+                  : '[No response received from API]';
               }
 
               resolve({
