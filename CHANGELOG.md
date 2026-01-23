@@ -6,31 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.120.17](https://github.com/promptfoo/promptfoo/compare/0.120.16...0.120.17) (2026-01-23)
 
-
 ### Features
 
-* **redteam:** add telecom vertical red team plugins ([#7182](https://github.com/promptfoo/promptfoo/issues/7182)) ([678fd1e](https://github.com/promptfoo/promptfoo/commit/678fd1e9828aeece905f6d17984f3478846749ee))
-* **redteam:** add VLSU compositional safety plugin ([#6855](https://github.com/promptfoo/promptfoo/issues/6855)) ([3e30cb0](https://github.com/promptfoo/promptfoo/commit/3e30cb0383991990177f3858cc19022334167974))
-* **webui:** add user-rated filter to show only manually rated results ([#6193](https://github.com/promptfoo/promptfoo/issues/6193)) ([cbc59db](https://github.com/promptfoo/promptfoo/commit/cbc59dbbe9fd7c66e7b6b44bae9559e682f8ad9b))
-
+- **redteam:** add telecom vertical red team plugins ([#7182](https://github.com/promptfoo/promptfoo/issues/7182)) ([678fd1e](https://github.com/promptfoo/promptfoo/commit/678fd1e9828aeece905f6d17984f3478846749ee))
+- **redteam:** add VLSU compositional safety plugin ([#6855](https://github.com/promptfoo/promptfoo/issues/6855)) ([3e30cb0](https://github.com/promptfoo/promptfoo/commit/3e30cb0383991990177f3858cc19022334167974))
+- **webui:** add user-rated filter to show only manually rated results ([#6193](https://github.com/promptfoo/promptfoo/issues/6193)) ([cbc59db](https://github.com/promptfoo/promptfoo/commit/cbc59dbbe9fd7c66e7b6b44bae9559e682f8ad9b))
 
 ### Bug Fixes
 
-* **app:** fix tabs padding and hover state conflicts ([#7179](https://github.com/promptfoo/promptfoo/issues/7179)) ([7edf9af](https://github.com/promptfoo/promptfoo/commit/7edf9afef478d1223498b431acc12eb8fb062c82))
-* **ci:** use gh pr diff for full reviews to avoid false positives ([#7192](https://github.com/promptfoo/promptfoo/issues/7192)) ([520f4cb](https://github.com/promptfoo/promptfoo/commit/520f4cb9491672b2ee67d1d4c93b83352f9d2d07))
-* **deps:** update dependency @apidevtools/json-schema-ref-parser to ^15.2.1 ([#7193](https://github.com/promptfoo/promptfoo/issues/7193)) ([e1e5faa](https://github.com/promptfoo/promptfoo/commit/e1e5faa5363344a2b0234ae745f0f85fc8e007fd))
-* **deps:** update dependency @openai/agents to ^0.3.9 ([#7183](https://github.com/promptfoo/promptfoo/issues/7183)) ([78cd5f4](https://github.com/promptfoo/promptfoo/commit/78cd5f4f235a32bc9c300338955b42193e1b0c95))
-* **deps:** update dependency @opencode-ai/sdk to ^1.1.24 ([#7177](https://github.com/promptfoo/promptfoo/issues/7177)) ([a34f27f](https://github.com/promptfoo/promptfoo/commit/a34f27f82767ee7ef1d109ddb750bcb6e9ddbcc6))
-* **deps:** update dependency @opencode-ai/sdk to ^1.1.25 ([#7180](https://github.com/promptfoo/promptfoo/issues/7180)) ([f960f63](https://github.com/promptfoo/promptfoo/commit/f960f63b3dd8aee3ca34960697fa5e27cb8b0b62))
-* **deps:** update dependency better-sqlite3 to ^12.6.2 ([#7194](https://github.com/promptfoo/promptfoo/issues/7194)) ([2fca1e1](https://github.com/promptfoo/promptfoo/commit/2fca1e152201788ff9f9ec143baacab8b6d61b80))
-* **deps:** update dependency posthog-node to ~5.21.1 ([#7178](https://github.com/promptfoo/promptfoo/issues/7178)) ([376b8a4](https://github.com/promptfoo/promptfoo/commit/376b8a4942a344f7f837956bd5aa6b32033ef38e))
-* **export:** unify CSV exports between CLI and WebUI ([#6659](https://github.com/promptfoo/promptfoo/issues/6659)) ([a7080b6](https://github.com/promptfoo/promptfoo/commit/a7080b63aa7b7b40415b2877a33c5ae4e79530e3))
-* **redteam:** fix policy loading and logging for inline vs reusable policies ([#7210](https://github.com/promptfoo/promptfoo/issues/7210)) ([b097386](https://github.com/promptfoo/promptfoo/commit/b0973865a3bc953425094db6d6bf2e0a728629d0))
-* **redteam:** handle isRefusal in Crescendo before parsing JSON ([#7191](https://github.com/promptfoo/promptfoo/issues/7191)) ([d0c5857](https://github.com/promptfoo/promptfoo/commit/d0c5857984826f5a89de07ddfd704d2233b03157))
-* **redteam:** use lenient provider matching for agentic strategies ([#7027](https://github.com/promptfoo/promptfoo/issues/7027)) ([552cb98](https://github.com/promptfoo/promptfoo/commit/552cb98d15a34f5a2686a6b2aed5b1badd6952ea))
-* **retry:** prevent data loss when retry fails and add cloud sync ([#7164](https://github.com/promptfoo/promptfoo/issues/7164)) ([577c4d7](https://github.com/promptfoo/promptfoo/commit/577c4d7c2fd4d6dac1e5241e31873080cfd51cd0))
-* **webui:** prevent external URL auto-loading from test variables ([#7076](https://github.com/promptfoo/promptfoo/issues/7076)) ([b7b5243](https://github.com/promptfoo/promptfoo/commit/b7b52436512198dfe63a02daa59b32f142cf5385))
-* **webui:** prevent form submission during ime composition ([#7186](https://github.com/promptfoo/promptfoo/issues/7186)) ([2f3d37a](https://github.com/promptfoo/promptfoo/commit/2f3d37acae31521fe934c043d1824662c7fe1524))
+- **app:** fix tabs padding and hover state conflicts ([#7179](https://github.com/promptfoo/promptfoo/issues/7179)) ([7edf9af](https://github.com/promptfoo/promptfoo/commit/7edf9afef478d1223498b431acc12eb8fb062c82))
+- **ci:** use gh pr diff for full reviews to avoid false positives ([#7192](https://github.com/promptfoo/promptfoo/issues/7192)) ([520f4cb](https://github.com/promptfoo/promptfoo/commit/520f4cb9491672b2ee67d1d4c93b83352f9d2d07))
+- **deps:** update dependency @apidevtools/json-schema-ref-parser to ^15.2.1 ([#7193](https://github.com/promptfoo/promptfoo/issues/7193)) ([e1e5faa](https://github.com/promptfoo/promptfoo/commit/e1e5faa5363344a2b0234ae745f0f85fc8e007fd))
+- **deps:** update dependency @openai/agents to ^0.3.9 ([#7183](https://github.com/promptfoo/promptfoo/issues/7183)) ([78cd5f4](https://github.com/promptfoo/promptfoo/commit/78cd5f4f235a32bc9c300338955b42193e1b0c95))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.24 ([#7177](https://github.com/promptfoo/promptfoo/issues/7177)) ([a34f27f](https://github.com/promptfoo/promptfoo/commit/a34f27f82767ee7ef1d109ddb750bcb6e9ddbcc6))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.25 ([#7180](https://github.com/promptfoo/promptfoo/issues/7180)) ([f960f63](https://github.com/promptfoo/promptfoo/commit/f960f63b3dd8aee3ca34960697fa5e27cb8b0b62))
+- **deps:** update dependency better-sqlite3 to ^12.6.2 ([#7194](https://github.com/promptfoo/promptfoo/issues/7194)) ([2fca1e1](https://github.com/promptfoo/promptfoo/commit/2fca1e152201788ff9f9ec143baacab8b6d61b80))
+- **deps:** update dependency posthog-node to ~5.21.1 ([#7178](https://github.com/promptfoo/promptfoo/issues/7178)) ([376b8a4](https://github.com/promptfoo/promptfoo/commit/376b8a4942a344f7f837956bd5aa6b32033ef38e))
+- **export:** unify CSV exports between CLI and WebUI ([#6659](https://github.com/promptfoo/promptfoo/issues/6659)) ([a7080b6](https://github.com/promptfoo/promptfoo/commit/a7080b63aa7b7b40415b2877a33c5ae4e79530e3))
+- **redteam:** fix policy loading and logging for inline vs reusable policies ([#7210](https://github.com/promptfoo/promptfoo/issues/7210)) ([b097386](https://github.com/promptfoo/promptfoo/commit/b0973865a3bc953425094db6d6bf2e0a728629d0))
+- **redteam:** handle isRefusal in Crescendo before parsing JSON ([#7191](https://github.com/promptfoo/promptfoo/issues/7191)) ([d0c5857](https://github.com/promptfoo/promptfoo/commit/d0c5857984826f5a89de07ddfd704d2233b03157))
+- **redteam:** use lenient provider matching for agentic strategies ([#7027](https://github.com/promptfoo/promptfoo/issues/7027)) ([552cb98](https://github.com/promptfoo/promptfoo/commit/552cb98d15a34f5a2686a6b2aed5b1badd6952ea))
+- **retry:** prevent data loss when retry fails and add cloud sync ([#7164](https://github.com/promptfoo/promptfoo/issues/7164)) ([577c4d7](https://github.com/promptfoo/promptfoo/commit/577c4d7c2fd4d6dac1e5241e31873080cfd51cd0))
+- **webui:** prevent external URL auto-loading from test variables ([#7076](https://github.com/promptfoo/promptfoo/issues/7076)) ([b7b5243](https://github.com/promptfoo/promptfoo/commit/b7b52436512198dfe63a02daa59b32f142cf5385))
+- **webui:** prevent form submission during ime composition ([#7186](https://github.com/promptfoo/promptfoo/issues/7186)) ([2f3d37a](https://github.com/promptfoo/promptfoo/commit/2f3d37acae31521fe934c043d1824662c7fe1524))
 
 ## [0.120.16](https://github.com/promptfoo/promptfoo/compare/0.120.15...0.120.16) (2026-01-21)
 
