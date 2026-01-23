@@ -179,6 +179,20 @@
   }
 }
 
+.countdownExpired {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, rgba(45, 90, 61, 0.25) 0%, rgba(111, 78, 55, 0.2) 100%);
+  border: 1px solid rgba(45, 90, 61, 0.4);
+  border-radius: 12px;
+  color: #8fbc8f;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
 .eventDetails {
   display: flex;
   flex-wrap: wrap;
@@ -393,6 +407,17 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.statNumberText {
+  font-size: 1.75rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #8fbc8f 0%, #6f4e37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
   margin-bottom: 0.5rem;
 }
 
