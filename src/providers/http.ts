@@ -1194,7 +1194,8 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (_status: number) => true;
+    // By default, accept all status codes except 401, 403, and 5xx
+    return (status: number) => status !== 401 && status !== 403 && status < 500;
   }
 
   if (typeof validator === 'function') {

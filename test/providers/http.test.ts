@@ -3472,7 +3472,7 @@ describe('error handling', () => {
 
 describe('validateStatus', () => {
   describe('default behavior', () => {
-    it('should accept all status codes when validateStatus is not provided', async () => {
+    it('should accept most status codes but reject 401, 403, and 5xx by default', async () => {
       const provider = new HttpProvider('http://test.com', {
         config: {
           method: 'POST',
@@ -3480,14 +3480,15 @@ describe('validateStatus', () => {
         },
       });
 
-      // Test various status codes
-      const testCases = [
+      // Test status codes that should be accepted
+      const acceptedCases = [
         { status: 200, statusText: 'OK' },
+        { status: 201, statusText: 'Created' },
         { status: 400, statusText: 'Bad Request' },
-        { status: 500, statusText: 'Server Error' },
+        { status: 404, statusText: 'Not Found' },
       ];
 
-      for (const { status, statusText } of testCases) {
+      for (const { status, statusText } of acceptedCases) {
         const mockResponse = {
           data: JSON.stringify({ result: 'success' }),
           status,
@@ -3498,6 +3499,28 @@ describe('validateStatus', () => {
 
         const result = await provider.callApi('test');
         expect(result.output).toEqual({ result: 'success' });
+      }
+
+      // Test status codes that should be rejected
+      const rejectedCases = [
+        { status: 401, statusText: 'Unauthorized' },
+        { status: 403, statusText: 'Forbidden' },
+        { status: 500, statusText: 'Internal Server Error' },
+        { status: 502, statusText: 'Bad Gateway' },
+      ];
+
+      for (const { status, statusText } of rejectedCases) {
+        const mockResponse = {
+          data: JSON.stringify({ error: 'error' }),
+          status,
+          statusText,
+          cached: false,
+        };
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+        await expect(provider.callApi('test')).rejects.toThrow(
+          `HTTP call failed with status ${status} ${statusText}`,
+        );
       }
     });
   });
