@@ -40,7 +40,10 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
-import { extractGuidanceForPlugins } from '../extraction/guidanceExtractor';
+import {
+  extractGuidanceForPlugins,
+  type GuidanceExtractionResult,
+} from '../extraction/guidanceExtractor';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
@@ -404,9 +407,12 @@ export async function doGenerateRedteam(
     }
   }
 
-  // Load and inject external grading guidance if specified in the config
+  // Load external grading guidance and start extraction early (non-blocking)
+  // The extraction runs in the background while other setup continues
+  let guidanceExtractionPromise: Promise<GuidanceExtractionResult> | null = null;
+  let guidanceText: string | undefined;
+
   if (redteamConfig?.gradingGuidance) {
-    let guidanceText: string | undefined;
     // Resolve relative paths from the config file's directory
     const configDir = configPath ? path.dirname(path.resolve(configPath)) : process.cwd();
 
@@ -462,53 +468,22 @@ export async function doGenerateRedteam(
       }
     }
 
-    // Inject the guidance into each plugin's config
-    if (guidanceText) {
-      const useSmartExtraction = process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false';
+    // Start extraction early (non-blocking) - runs in PARALLEL with synthesis
+    // Extraction is only needed for the output config, not for test generation
+    if (guidanceText && process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false') {
+      logger.info('[GradingGuidance] Starting smart extraction (runs parallel with synthesis)...');
+      const pluginIds = plugins.map((p) => p.id);
 
-      if (useSmartExtraction) {
-        // Smart extraction: extract relevant portions per plugin using LLM
-        logger.info('[GradingGuidance] Using smart extraction...');
-        const pluginIds = plugins.map((p) => p.id);
-
-        // Get redteam provider for extraction
+      // Fire off extraction without awaiting - will be awaited after synthesis completes
+      guidanceExtractionPromise = (async () => {
         const redteamProvider = await redteamProviderManager.getProvider({});
-        const extractions = await extractGuidanceForPlugins(guidanceText, pluginIds, redteamProvider);
-
-        // Inject per-plugin extracted guidance
-        plugins = plugins.map((plugin) => {
-          const extracted = extractions[plugin.id];
-          if (extracted) {
-            logger.info(
-              `[GradingGuidance] ${plugin.id} → ${extracted.length} chars of relevant guidance`,
-            );
-          } else {
-            logger.debug(`[GradingGuidance] ${plugin.id} → no relevant guidance found`);
-          }
-          return {
-            ...plugin,
-            config: {
-              ...plugin.config,
-              ...(extracted ? { externalGradingGuidance: extracted } : {}),
-            },
-          };
-        });
-
-        logger.info(`[GradingGuidance] Smart extraction complete for ${pluginIds.length} plugins`);
-      } else {
-        // Legacy: inject full document to all plugins
-        logger.info('[GradingGuidance] Using full document injection (legacy mode)');
-        plugins = plugins.map((plugin) => ({
-          ...plugin,
-          config: {
-            ...plugin.config,
-            externalGradingGuidance: guidanceText,
-          },
-        }));
-        logger.info(`Injected grading guidance into ${plugins.length} plugins`);
-      }
+        return extractGuidanceForPlugins(guidanceText!, pluginIds, redteamProvider);
+      })();
     }
   }
+
+  // NOTE: Guidance injection happens AFTER synthesis completes (see below)
+  // This allows extraction to run in parallel with test generation
 
   let strategies: (string | { id: string })[] =
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
@@ -696,6 +671,47 @@ export async function doGenerateRedteam(
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
     return null;
+  }
+
+  // Now that synthesis is complete, await the guidance extraction and inject into plugins
+  // This ran in parallel with synthesis, so minimal additional wait time
+  if (guidanceText) {
+    if (guidanceExtractionPromise) {
+      // Smart extraction: await the background extraction (should be done or nearly done)
+      const extractions = await guidanceExtractionPromise;
+
+      // Inject per-plugin extracted guidance
+      plugins = plugins.map((plugin) => {
+        const extracted = extractions[plugin.id];
+        if (extracted) {
+          logger.info(
+            `[GradingGuidance] ${plugin.id} → ${extracted.length} chars of relevant guidance`,
+          );
+        } else {
+          logger.debug(`[GradingGuidance] ${plugin.id} → no relevant guidance found`);
+        }
+        return {
+          ...plugin,
+          config: {
+            ...plugin.config,
+            ...(extracted ? { externalGradingGuidance: extracted } : {}),
+          },
+        };
+      });
+
+      logger.info(`[GradingGuidance] Smart extraction complete for ${plugins.length} plugins`);
+    } else {
+      // Legacy: inject full document to all plugins
+      logger.info('[GradingGuidance] Using full document injection (legacy mode)');
+      plugins = plugins.map((plugin) => ({
+        ...plugin,
+        config: {
+          ...plugin.config,
+          externalGradingGuidance: guidanceText,
+        },
+      }));
+      logger.info(`Injected grading guidance into ${plugins.length} plugins`);
+    }
   }
 
   const updatedRedteamConfig = {
