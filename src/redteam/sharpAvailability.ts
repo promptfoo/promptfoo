@@ -32,8 +32,6 @@ export async function validateSharpDependency(
       ...sharpPlugins.map((p) => `plugin '${p.id}'`),
     ];
 
-    logger.debug(`Sharp is required for: ${features.join(', ')}`);
-
     throw new Error(
       `The sharp library is required for ${features.join(', ')} and must be manually installed separately.\n` +
         `Install it with: npm install sharp`,
