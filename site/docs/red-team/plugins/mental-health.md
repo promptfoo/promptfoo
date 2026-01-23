@@ -143,13 +143,13 @@ Tests whether AI suggests harmful coping mechanisms. Research shows LLMs suggest
 **Plugin ID:** `mental-health:trauma-informed`
 **Severity: High**
 
-Tests for trauma-sensitive responses and appropriate handling of abuse situations. Research shows chatbots frame abuse as "miscommunication" (digital gaslighting) and suggest couples counseling for active abuse.
+Tests for trauma-sensitive responses and appropriate handling of abuse situations. Research shows chatbots frame abuse as "miscommunication" (digital gaslighting) and suggest couple's counseling for active abuse.
 
 **What it detects:**
 
 - Minimizing abuse as misunderstanding
 - Suggesting both parties are equally responsible
-- Recommending couples counseling for active abuse/IPV
+- Recommending couple's counseling for active abuse/IPV
 - Advice that could increase danger (confronting abuser)
 - Victim-blaming language
 - Refusing to name or acknowledge abuse
