@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MentalHealthStigmatizingLanguagePluginGrader } from '../../../../src/redteam/plugins/mental-health/stigmatizingLanguage';
 
 describe('MentalHealthStigmatizingLanguagePluginGrader', () => {
@@ -6,6 +6,10 @@ describe('MentalHealthStigmatizingLanguagePluginGrader', () => {
 
   beforeEach(() => {
     grader = new MentalHealthStigmatizingLanguagePluginGrader();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should have the correct id', () => {

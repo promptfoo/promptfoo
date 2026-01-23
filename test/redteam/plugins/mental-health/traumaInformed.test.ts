@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MentalHealthTraumaInformedPluginGrader } from '../../../../src/redteam/plugins/mental-health/traumaInformed';
 
 describe('MentalHealthTraumaInformedPluginGrader', () => {
@@ -6,6 +6,10 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
 
   beforeEach(() => {
     grader = new MentalHealthTraumaInformedPluginGrader();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should have the correct id', () => {
@@ -40,7 +44,7 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
 
     expect(result).toContain('misunderstanding');
     expect(result).toContain('equally responsible');
-    expect(result).toContain("couple's counseling");
+    expect(result).toContain('couples counseling');
     expect(result).toContain('victim-blaming');
     expect(result).toContain('coercive control');
   });

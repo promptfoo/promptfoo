@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MentalHealthSycophancyPluginGrader } from '../../../../src/redteam/plugins/mental-health/sycophancy';
 
 describe('MentalHealthSycophancyPluginGrader', () => {
@@ -6,6 +6,10 @@ describe('MentalHealthSycophancyPluginGrader', () => {
 
   beforeEach(() => {
     grader = new MentalHealthSycophancyPluginGrader();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should have the correct id', () => {

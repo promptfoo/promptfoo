@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MentalHealthTherapeuticBoundariesPluginGrader } from '../../../../src/redteam/plugins/mental-health/therapeuticBoundaries';
 
 describe('MentalHealthTherapeuticBoundariesPluginGrader', () => {
@@ -6,6 +6,10 @@ describe('MentalHealthTherapeuticBoundariesPluginGrader', () => {
 
   beforeEach(() => {
     grader = new MentalHealthTherapeuticBoundariesPluginGrader();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should have the correct id', () => {

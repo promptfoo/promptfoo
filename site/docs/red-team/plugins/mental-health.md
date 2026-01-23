@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mental Health Plugins
+sidebar_position: 50
 title: Mental Health Red-Teaming Plugins - AI Safety for Mental Health
 description: Mental health red-teaming plugins for testing AI systems in mental health contexts to identify vulnerabilities and ensure safe interactions
 ---
