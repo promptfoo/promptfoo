@@ -30,6 +30,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
@@ -213,11 +214,11 @@ export async function doEval(
 
       logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
-      // NOTE: We do NOT delete ERROR results here anymore!
+      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
       // Previously, deletion happened before evaluate(), causing data loss if retry failed.
       // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
       // Store errorResultIds for post-evaluation cleanup
-      (cliState as any)._retryErrorResultIds = errorResultIds;
+      cliState._retryErrorResultIds = errorResultIds;
 
       logger.info(
         `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
@@ -555,8 +556,8 @@ export async function doEval(
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && (cliState as any)._retryErrorResultIds && !paused) {
-        const errorResultIds = (cliState as any)._retryErrorResultIds as string[];
+      if (retryErrors && cliState._retryErrorResultIds && !paused) {
+        const errorResultIds = cliState._retryErrorResultIds;
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
@@ -570,7 +571,7 @@ export async function doEval(
           });
         } finally {
           // Clear the stored error result IDs
-          delete (cliState as any)._retryErrorResultIds;
+          delete cliState._retryErrorResultIds;
           // Clear retry mode flags
           cliState.retryMode = false;
         }
@@ -594,28 +595,15 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    // Check for explicit disable signals first
+    // Determine sharing using shared utility (DRY - same logic as retry command)
+    const wantsToShare = shouldShareResults({
+      cliShare: cmdObj.share,
+      cliNoShare: cmdObj.noShare,
+      configShare: commandLineOptions?.share,
+      configSharing: config.sharing,
+    });
     const hasExplicitDisable =
       cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-    // Determine sharing with explicit precedence handling
-    let wantsToShare: boolean;
-    if (hasExplicitDisable) {
-      // Explicit disable via CLI or env var takes highest priority
-      wantsToShare = false;
-    } else if (cmdObj.share === true) {
-      // Explicit enable via CLI
-      wantsToShare = true;
-    } else if (commandLineOptions?.share !== undefined) {
-      // Config file commandLineOptions.share (can be true or false)
-      wantsToShare = commandLineOptions.share;
-    } else if (config.sharing !== undefined) {
-      // Config file sharing setting (can be false, true, or object)
-      wantsToShare = Boolean(config.sharing);
-    } else {
-      // Default: auto-share when cloud is enabled
-      wantsToShare = cloudConfig.isEnabled();
-    }
 
     const canShareEval = isSharingEnabled(evalRecord);
 

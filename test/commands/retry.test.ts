@@ -1,19 +1,24 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
-  shouldShareResults,
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { ResultFailureReason } from '../../src/types/index';
+import { shouldShareResults } from '../../src/util/sharing';
 
 describe('retry command', () => {
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('getErrorResultIds', () => {
@@ -160,7 +165,6 @@ describe('retry command', () => {
       await deleteErrorResults([`${evalRecord.id}-del-1`]);
 
       // Verify first result is deleted
-      const { eq } = await import('drizzle-orm');
       const remaining = await db
         .select()
         .from(evalResultsTable)
@@ -204,7 +208,6 @@ describe('retry command', () => {
       await deleteErrorResults(resultIds);
 
       // Verify all deleted
-      const { eq } = await import('drizzle-orm');
       const remaining = await db
         .select()
         .from(evalResultsTable)

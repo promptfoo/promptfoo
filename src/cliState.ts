@@ -27,6 +27,13 @@ interface CliState {
    */
   retryMode?: boolean;
 
+  /**
+   * Stores the IDs of ERROR results that are being retried.
+   * These are deleted after successful retry to avoid duplicates.
+   * Added in v0.121.0 as part of the retry data safety fix.
+   */
+  _retryErrorResultIds?: string[];
+
   // debug log file
   debugLogFile?: string;
 

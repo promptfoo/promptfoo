@@ -1,17 +1,17 @@
 import chalk from 'chalk';
+import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
 import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { evaluate } from '../evaluator';
-import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
+import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
@@ -28,43 +28,6 @@ interface RetryCommandOptions {
   maxConcurrency?: number;
   delay?: number;
   share?: boolean;
-}
-
-interface ShouldShareOptions {
-  /** CLI --share flag value */
-  cliShare?: boolean;
-  /** Config file commandLineOptions.share */
-  configShare?: unknown;
-  /** Config file sharing setting */
-  configSharing?: unknown;
-}
-
-/**
- * Determines whether results should be shared to cloud.
- * Uses same precedence as eval command:
- * 1. Explicit disable (CLI --no-share or env var) takes highest priority
- * 2. Explicit enable (CLI --share)
- * 3. Config file commandLineOptions.share
- * 4. Config file sharing setting
- * 5. Default: auto-share when cloud is enabled
- */
-export function shouldShareResults(opts: ShouldShareOptions): boolean {
-  const hasExplicitDisable = opts.cliShare === false || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-  if (hasExplicitDisable) {
-    return false;
-  }
-  if (opts.cliShare === true) {
-    return true;
-  }
-  if (opts.configShare !== undefined) {
-    return Boolean(opts.configShare);
-  }
-  if (opts.configSharing !== undefined) {
-    return Boolean(opts.configSharing);
-  }
-  // Default: auto-share when cloud is enabled
-  return cloudConfig.isEnabled();
 }
 
 /**
@@ -386,16 +349,21 @@ export function setupRetryCommand(program: Command) {
     .option('--max-concurrency <number>', 'Maximum number of concurrent evaluations', parseInt)
     .option('--delay <number>', 'Delay between evaluations in milliseconds', parseInt)
     .option('--share', 'Share results to cloud (auto-shares when cloud is configured)')
+    .option('--no-share', 'Do not share results to cloud')
     .action(async (evalId: string, cmdObj: RetryCommandOptions) => {
       try {
         await retryCommand(evalId, cmdObj);
       } catch (error) {
         logger.error('Failed to retry evaluation', { error, evalId });
-        logger.info('');
-        logger.info(chalk.yellow('Recovery options:'));
-        logger.info(chalk.yellow('  - Run the same retry command again to continue'));
-        logger.info(chalk.yellow('  - Check API credentials and network connectivity'));
-        logger.info(chalk.yellow('  - Use --verbose for detailed error information'));
+        logger.info(
+          chalk.yellow(dedent`
+
+            Recovery options:
+              - Run the same retry command again to continue
+              - Check API credentials and network connectivity
+              - Use --verbose for detailed error information
+          `),
+        );
         process.exitCode = 1;
       }
     });
