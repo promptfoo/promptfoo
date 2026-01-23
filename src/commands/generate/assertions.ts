@@ -8,11 +8,13 @@ import { disableCache } from '../../cache';
 import { generateAssertions } from '../../generation/assertions';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types/index';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import type { Command } from 'commander';
+
+import type { AssertionGenerationOptions } from '../../generation/types';
+import type { Assertion, TestSuite, UnifiedConfig } from '../../types/index';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -66,37 +68,49 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   const useEnhanced =
     options.enhanced || options.coverage || options.validate || options.negativeTests;
 
-  let results: any[];
+  let results: Assertion[];
   let coverageScore: number | undefined;
   let validationAccuracy: number | undefined;
 
   if (useEnhanced) {
     logger.info('Using enhanced assertion generation...');
 
-    const genResult = await generateAssertions(testSuite.prompts, testSuite.tests || [], {
+    const assertionOpts: Partial<AssertionGenerationOptions> = {
       instructions: options.instructions,
       numQuestions: Number.parseInt(options.numAssertions || '5', 10),
       provider: options.provider,
       type: options.type,
-      coverage: options.coverage
-        ? ({ enabled: true, extractRequirements: true } as any)
-        : undefined,
-      validation: options.validate
-        ? ({ enabled: true, autoGenerateSamples: true, sampleOutputs: [] } as any)
-        : undefined,
-      negativeTests: options.negativeTests
-        ? ({
-            enabled: true,
-            types: [
-              'should-not-contain',
-              'should-not-hallucinate',
-              'should-not-expose',
-              'should-not-repeat',
-              'should-not-exceed-length',
-            ],
-          } as any)
-        : undefined,
-    });
+    };
+    if (options.coverage) {
+      assertionOpts.coverage = { enabled: true, extractRequirements: true, minCoverageScore: 0.8 };
+    }
+    if (options.validate) {
+      assertionOpts.validation = {
+        enabled: true,
+        autoGenerateSamples: true,
+        sampleCount: 5,
+        sampleOutputs: [],
+      };
+    }
+    if (options.negativeTests) {
+      assertionOpts.negativeTests = {
+        enabled: true,
+        types: [
+          'should-not-contain',
+          'should-not-hallucinate',
+          'should-not-expose',
+          'should-not-repeat',
+          'should-not-exceed-length',
+        ],
+        count: 5,
+      };
+    }
+
+    const genResult = await generateAssertions(
+      testSuite.prompts,
+      testSuite.tests || [],
+      assertionOpts,
+    );
 
     results = genResult.assertions;
     coverageScore = genResult.coverage?.overallScore;

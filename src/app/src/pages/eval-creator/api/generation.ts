@@ -588,3 +588,30 @@ export async function analyzeCoverageSync(
 
   return normalized;
 }
+
+// =============================================================================
+// Capabilities
+// =============================================================================
+
+export interface GenerationCapabilities {
+  hasPiAccess: boolean;
+  defaultAssertionType: 'pi' | 'g-eval' | 'llm-rubric';
+}
+
+/**
+ * Get available generation capabilities based on server environment.
+ */
+export async function getGenerationCapabilities(): Promise<GenerationCapabilities> {
+  try {
+    const response = await callApi('/generation/capabilities');
+    const data = await response.json();
+    if (!data.success) {
+      // Default to llm-rubric if check fails
+      return { hasPiAccess: false, defaultAssertionType: 'llm-rubric' };
+    }
+    return data.data;
+  } catch {
+    // Default to llm-rubric if request fails
+    return { hasPiAccess: false, defaultAssertionType: 'llm-rubric' };
+  }
+}

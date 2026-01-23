@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import {
   analyzeCoverage,
   extractRequirements,
@@ -29,6 +30,25 @@ import type { GenerationJob, GenerationJobType } from '../../generation/types';
 import type { Assertion, Prompt, TestCase } from '../../types';
 
 export const generationRouter = Router();
+
+// =============================================================================
+// Capabilities Endpoint
+// =============================================================================
+
+/**
+ * GET /api/generation/capabilities
+ * Returns available generation capabilities based on environment.
+ */
+generationRouter.get('/capabilities', (_req: Request, res: Response): void => {
+  const hasPiAccess = !!getEnvString('WITHPI_API_KEY');
+  res.json({
+    success: true,
+    data: {
+      hasPiAccess,
+      defaultAssertionType: hasPiAccess ? 'pi' : 'llm-rubric',
+    },
+  });
+});
 
 // =============================================================================
 // Request Validation Schemas

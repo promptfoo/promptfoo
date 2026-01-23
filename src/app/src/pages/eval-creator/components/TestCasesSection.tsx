@@ -24,7 +24,7 @@ import { testCaseFromCsvRow } from '@promptfoo/csv';
 import { Sparkles } from 'lucide-react';
 import { GenerateTestCasesDialog } from './generation';
 import TestCaseDialog from './TestCaseDialog';
-import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { Assertion, CsvRow, TestCase } from '@promptfoo/types';
 
 import type { GenerationPrompt } from '../api/generation';
 
@@ -226,6 +226,7 @@ const TestCasesSection = ({ varsList, prompts = [] }: TestCasesSectionProps) => 
 
   const handleGeneratedTestCases = (
     generatedTestCases: Array<{ vars: Record<string, string>; description?: string }>,
+    assertions?: Assertion[],
   ) => {
     // Convert to TestCase format and add to existing test cases
     const newTestCases: TestCase[] = generatedTestCases.map((tc, idx) => ({
@@ -233,8 +234,32 @@ const TestCasesSection = ({ varsList, prompts = [] }: TestCasesSectionProps) => 
       vars: tc.vars,
     }));
     setTestCases([...testCases, ...newTestCases]);
+
+    // If assertions were generated, add them to defaultTest.assert in the config
+    if (assertions && assertions.length > 0) {
+      // Handle case where defaultTest might be a string or undefined
+      const existingDefaultTest =
+        typeof config.defaultTest === 'object' && config.defaultTest !== null
+          ? config.defaultTest
+          : {};
+      const existingAssertions = Array.isArray(existingDefaultTest.assert)
+        ? existingDefaultTest.assert
+        : [];
+      updateConfig({
+        defaultTest: {
+          ...existingDefaultTest,
+          assert: [...existingAssertions, ...assertions],
+        },
+      });
+    }
+
+    // Show success message
+    const assertionMsg =
+      assertions && assertions.length > 0
+        ? ` and ${assertions.length} assertion${assertions.length === 1 ? '' : 's'}`
+        : '';
     showToast(
-      `Successfully generated ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
+      `Successfully generated ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}${assertionMsg}`,
       'success',
     );
   };

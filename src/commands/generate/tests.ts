@@ -7,11 +7,13 @@ import { disableCache } from '../../cache';
 import { generateTestSuite } from '../../generation/index';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types/index';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import type { Command } from 'commander';
+
+import type { AssertionGenerationOptions, DatasetGenerationOptions } from '../../generation/types';
+import type { Assertion, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 
 interface TestsGenerateOptions {
   // Common options
@@ -76,63 +78,86 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
   });
 
   // Build dataset options
-  const datasetOptions =
-    options.datasetOnly || !options.assertionsOnly
-      ? {
-          instructions: options.instructions,
-          numPersonas: Number.parseInt(options.numPersonas, 10),
-          numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-          provider: options.provider,
-          edgeCases: options.edgeCases ? { enabled: true } : undefined,
-          diversity: options.diversity
-            ? {
-                enabled: true,
-                targetScore: options.diversityTarget
-                  ? Number.parseFloat(options.diversityTarget)
-                  : 0.7,
-              }
-            : undefined,
-          iterative: options.iterative ? { enabled: true, maxRounds: 2 } : undefined,
-        }
-      : undefined;
+  let datasetOptions: Partial<DatasetGenerationOptions> | undefined;
+  if (options.datasetOnly || !options.assertionsOnly) {
+    datasetOptions = {
+      instructions: options.instructions,
+      numPersonas: Number.parseInt(options.numPersonas, 10),
+      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+      provider: options.provider,
+    };
+    if (options.edgeCases) {
+      datasetOptions.edgeCases = {
+        enabled: true,
+        types: ['boundary', 'format', 'empty', 'special-chars'],
+        count: 10,
+        includeAdversarial: false,
+      };
+    }
+    if (options.diversity) {
+      datasetOptions.diversity = {
+        enabled: true,
+        targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
+        measureMethod: 'text',
+      };
+    }
+    if (options.iterative) {
+      datasetOptions.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
+    }
+  }
 
   // Build assertion options
-  const assertionOptions =
-    options.assertionsOnly || !options.datasetOnly
-      ? {
-          instructions: options.instructions,
-          numQuestions: Number.parseInt(options.numAssertions || '5', 10),
-          provider: options.provider,
-          type: options.type,
-          coverage: options.coverage ? { enabled: true, extractRequirements: true } : undefined,
-          validation: options.validate
-            ? { enabled: true, autoGenerateSamples: true, sampleOutputs: [] }
-            : undefined,
-          negativeTests: options.negativeTests
-            ? {
-                enabled: true,
-                types: [
-                  'should-not-contain' as const,
-                  'should-not-hallucinate' as const,
-                  'should-not-expose' as const,
-                  'should-not-repeat' as const,
-                  'should-not-exceed-length' as const,
-                ],
-              }
-            : undefined,
-        }
-      : undefined;
+  let assertionOptions: Partial<AssertionGenerationOptions> | undefined;
+  if (options.assertionsOnly || !options.datasetOnly) {
+    assertionOptions = {
+      instructions: options.instructions,
+      numQuestions: Number.parseInt(options.numAssertions || '5', 10),
+      provider: options.provider,
+      type: options.type,
+    };
+    if (options.coverage) {
+      assertionOptions.coverage = {
+        enabled: true,
+        extractRequirements: true,
+        minCoverageScore: 0.8,
+      };
+    }
+    if (options.validate) {
+      assertionOptions.validation = {
+        enabled: true,
+        autoGenerateSamples: true,
+        sampleCount: 5,
+        sampleOutputs: [],
+      };
+    }
+    if (options.negativeTests) {
+      assertionOptions.negativeTests = {
+        enabled: true,
+        types: [
+          'should-not-contain',
+          'should-not-hallucinate',
+          'should-not-expose',
+          'should-not-repeat',
+          'should-not-exceed-length',
+        ],
+        count: 5,
+      };
+    }
+  }
 
   const result = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
-    dataset: datasetOptions as any,
-    assertions: assertionOptions as any,
+    dataset: datasetOptions,
+    assertions: assertionOptions,
     parallel: options.parallel ?? false,
     skipDataset: options.assertionsOnly ?? false,
     skipAssertions: options.datasetOnly ?? false,
   });
 
-  // Prepare output
-  const configAddition: Partial<UnifiedConfig> = {};
+  // Prepare output - use explicit type to avoid union issues with defaultTest
+  const configAddition: {
+    tests?: Array<{ vars: Record<string, string>; metadata?: Record<string, unknown> }>;
+    defaultTest?: { assert: Assertion[] };
+  } = {};
   let testCasesCount = 0;
   let assertionsCount = 0;
 
@@ -211,31 +236,32 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
     // Add test cases
     if (configAddition.tests && Array.isArray(configAddition.tests)) {
       const existingTests = existingConfig.tests;
-      let testsArray: any[] = [];
+      type TestArrayItem = TestCase | string | { vars: Record<string, string> };
+      let testsArray: TestArrayItem[] = [];
       if (Array.isArray(existingTests)) {
-        testsArray = existingTests as any[];
+        testsArray = existingTests as TestArrayItem[];
       } else if (typeof existingTests === 'string') {
         // If it's a path string, keep it as a single element
         testsArray = [existingTests];
       } else if (existingTests && typeof existingTests === 'object') {
-        testsArray = [existingTests];
+        testsArray = [existingTests as TestCase];
       }
-      existingConfig.tests = [...testsArray, ...(configAddition.tests as any[])] as any;
+      existingConfig.tests = [...testsArray, ...configAddition.tests];
     }
 
     // Add assertions
-    if (configAddition.defaultTest && (configAddition.defaultTest as any).assert) {
+    if (configAddition.defaultTest?.assert) {
       const existingDefaultTest =
         typeof existingConfig.defaultTest === 'object' && existingConfig.defaultTest !== null
           ? existingConfig.defaultTest
           : {};
-      const existingAssert = Array.isArray((existingDefaultTest as any)?.assert)
-        ? (existingDefaultTest as any).assert
+      const existingAssert = Array.isArray((existingDefaultTest as { assert?: Assertion[] }).assert)
+        ? (existingDefaultTest as { assert: Assertion[] }).assert
         : [];
       existingConfig.defaultTest = {
         ...existingDefaultTest,
-        assert: [...existingAssert, ...((configAddition.defaultTest as any).assert as any[])],
-      } as any;
+        assert: [...existingAssert, ...configAddition.defaultTest.assert],
+      };
     }
 
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
