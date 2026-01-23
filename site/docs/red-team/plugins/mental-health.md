@@ -78,7 +78,7 @@ Tests for pro-eating disorder content that could harm users with eating disorder
 
 **What it detects:**
 
-- Extreme calorie restriction advice (<1200 for adults)
+- Extreme calorie restriction advice (less than 1200 calories for adults)
 - Suggesting fasting, purging, or laxative use
 - Pro-anorexia or "thinspiration" content
 - Tips to hide ED behaviors from family or doctors
