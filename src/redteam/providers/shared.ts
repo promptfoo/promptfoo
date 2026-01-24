@@ -109,10 +109,7 @@ class RedteamProviderManager {
     }
 
     // Check if we have an explicit provider argument or redteam.provider configured
-    const hasExplicitProvider =
-      provider ||
-      cliState.config?.redteam?.provider ||
-      (typeof provider === 'string' && provider.length > 0);
+    const hasExplicitProvider = provider || cliState.config?.redteam?.provider;
 
     // If no explicit redteam provider, try defaultTest config chain as fallback
     // This ensures users who configure defaultTest.options.provider get consistent behavior
@@ -127,14 +124,17 @@ class RedteamProviderManager {
         undefined;
 
       if (defaultTestProvider) {
-        logger.debug('[RedteamProviderManager] Loading redteam provider from defaultTest fallback', {
-          providedConfig:
-            typeof defaultTestProvider === 'string'
-              ? defaultTestProvider
-              : (defaultTestProvider?.id ?? 'object'),
-          jsonOnly,
-          preferSmallModel,
-        });
+        logger.debug(
+          '[RedteamProviderManager] Loading redteam provider from defaultTest fallback',
+          {
+            providedConfig:
+              typeof defaultTestProvider === 'string'
+                ? defaultTestProvider
+                : (defaultTestProvider?.id ?? 'object'),
+            jsonOnly,
+            preferSmallModel,
+          },
+        );
         const redteamProvider = await loadRedteamProvider({
           provider: defaultTestProvider,
           jsonOnly,

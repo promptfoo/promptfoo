@@ -3183,7 +3183,6 @@ describe('Language configuration', () => {
 
   describe('redteamProvider config propagation to strategies', () => {
     beforeEach(() => {
-      vi.clearAllMocks();
       vi.resetAllMocks();
 
       vi.mocked(logger.info).mockImplementation(() => logger as any);
