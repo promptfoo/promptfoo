@@ -57,7 +57,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.12.0",
     "react-simple-code-editor": "^0.14.1",
-    "recharts": "^3.6.0",
+    "recharts": "^3.7.0",
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.4.0",
