@@ -70,7 +70,10 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
     return withApiBase(`/api/media/${path}`);
   }
 
-  if (/^(https?:)?\/\//.test(uri) || uri.startsWith('/') || uri.startsWith('data:')) {
+  // Only allow safe internal paths and data URIs
+  // External URLs (http://, https://, //) are NOT allowed to prevent SSRF
+  // See SECURITY.md - test data and model outputs are untrusted inputs
+  if (uri.startsWith('/api/') || uri.startsWith('data:')) {
     return uri;
   }
 

@@ -37,9 +37,10 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
-import { makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
+import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
@@ -47,6 +48,7 @@ import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } fro
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
   FailedPluginInfo,
+  Policy,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -793,6 +795,7 @@ export async function synthesize({
   });
 
   await validateStrategies(strategies);
+  await validateSharpDependency(strategies, plugins);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
@@ -826,12 +829,22 @@ export async function synthesize({
           // Build a concise display string for the plugin
           let configSummary = '';
           if (p.config) {
-            if (p.id === 'policy' && typeof p.config.policy === 'string') {
-              // For policy plugins, show truncated policy text to help differentiate
-              const policyText = p.config.policy.trim().replace(/\n+/g, ' ');
-              const truncated =
-                policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-              configSummary = ` "${truncated}"`;
+            if (p.id === 'policy') {
+              const policy = p.config?.policy as Policy;
+              if (isValidPolicyObject(policy)) {
+                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                if (policy.name) {
+                  configSummary = ` ${policy.name}:`;
+                }
+                configSummary += ` "${truncated}"`;
+              } else {
+                const policyText = policy.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                configSummary = truncated;
+              }
             } else {
               // For other plugins with config, just indicate config exists
               configSummary = ' (custom config)';

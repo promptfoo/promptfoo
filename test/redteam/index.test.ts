@@ -2928,7 +2928,7 @@ describe('Language configuration', () => {
       expect(pluginListMessage).toBeDefined();
       // Should contain truncated text (70 chars + ...)
       expect(pluginListMessage).toContain(
-        '"The assistant must not reveal any internal implementation details such',
+        'The assistant must not reveal any internal implementation details such',
       );
       expect(pluginListMessage).toContain('...');
       // Should NOT contain full JSON config
@@ -3395,6 +3395,176 @@ describe('Language configuration', () => {
       } finally {
         cliState.config = originalConfig;
       }
+    });
+  });
+
+  describe('Multi-input mode plugin exclusion', () => {
+    it('should exclude dataset-exempt plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'aegis', numTests: 1 }, // DATASET_EXEMPT_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // aegis should be excluded, contracts should remain
+      // Result should only contain test cases from contracts
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('aegis');
+    });
+
+    it('should exclude multi-input excluded plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // cca and cross-session-leak should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+    });
+
+    it('should NOT exclude plugins when inputs is empty object', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: {}, // Empty inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should NOT exclude plugins when inputs is undefined', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        // No inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should log info about using multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'contracts', numTests: 1 }],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that logger.info was called with multi-input mode message
+      const multiInputMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('multi-input mode'));
+
+      expect(multiInputMessage).toBeDefined();
+      expect(multiInputMessage).toContain('2 variables');
+      expect(multiInputMessage).toContain('query');
+      expect(multiInputMessage).toContain('context');
+    });
+
+    it('should exclude all MULTI_INPUT_EXCLUDED_PLUGINS in multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 },
+          { id: 'cross-session-leak', numTests: 1 },
+          { id: 'special-token-injection', numTests: 1 },
+          { id: 'system-prompt-override', numTests: 1 },
+          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that all 4 MULTI_INPUT_EXCLUDED_PLUGINS are in skip message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 4 plugin'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+      expect(skipMessage).toContain('special-token-injection');
+      expect(skipMessage).toContain('system-prompt-override');
     });
   });
 });
