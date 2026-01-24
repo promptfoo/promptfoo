@@ -1445,6 +1445,263 @@ async function generateEventsTemplate() {
   };
 }
 
+// Generate Satori JSX template for Solutions pages OG image
+async function generateSolutionTemplate(options) {
+  const { vertical, headline, subtitle, badges = [] } = options;
+
+  const logoBase64 = await getLogoAsBase64();
+  const constants = await getSiteConstants();
+
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+      },
+      children: [
+        // Top accent bar
+        {
+          type: 'div',
+          props: {
+            style: {
+              width: '100%',
+              height: 4,
+              background: 'linear-gradient(90deg, #e53a3a 0%, #cb3434 100%)',
+            },
+          },
+        },
+        // Main content card
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              margin: 40,
+              padding: 40,
+              borderRadius: 12,
+              backgroundColor: 'rgba(23, 37, 43, 0.4)',
+              borderLeft: '6px solid #e53a3a',
+              flex: 1,
+            },
+            children: [
+              // Header section (logo + brand + vertical badge)
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: 30,
+                  },
+                  children: [
+                    // Logo
+                    logoBase64
+                      ? {
+                          type: 'img',
+                          props: {
+                            src: logoBase64,
+                            width: 56,
+                            height: 56,
+                            style: { marginRight: 16 },
+                          },
+                        }
+                      : null,
+                    // Brand name
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          fontSize: 24,
+                          fontWeight: 600,
+                          color: '#ff7a7a',
+                          marginRight: 'auto',
+                        },
+                        children: 'promptfoo',
+                      },
+                    },
+                    // Vertical badge
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          padding: '8px 20px',
+                          borderRadius: 16,
+                          backgroundColor: 'rgba(229, 58, 58, 0.15)',
+                          border: '1px solid #e53a3a',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: '#ff7a7a',
+                        },
+                        children: vertical,
+                      },
+                    },
+                  ].filter(Boolean),
+                },
+              },
+              // Main headline
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 48,
+                    fontWeight: 600,
+                    color: 'white',
+                    lineHeight: 1.2,
+                    marginBottom: 20,
+                  },
+                  children: headline,
+                },
+              },
+              // Subtitle
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    fontSize: 22,
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    marginBottom: 30,
+                    lineHeight: 1.4,
+                  },
+                  children: subtitle,
+                },
+              },
+              // Bottom section (badges + trust signal)
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    marginTop: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 20,
+                  },
+                  children: [
+                    // Compliance badges row
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          gap: 12,
+                        },
+                        children: badges.map((badge) => ({
+                          type: 'div',
+                          props: {
+                            style: {
+                              padding: '10px 18px',
+                              borderRadius: 8,
+                              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: 'rgba(255, 255, 255, 0.9)',
+                            },
+                            children: badge,
+                          },
+                        })),
+                      },
+                    },
+                    // Trust signal
+                    {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: 8,
+                        },
+                        children: [
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 18,
+                                color: 'rgba(255, 255, 255, 0.6)',
+                              },
+                              children: 'Trusted by',
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 22,
+                                fontWeight: 600,
+                                color: 'white',
+                              },
+                              children: `${constants.fortune500Count} Fortune 500`,
+                            },
+                          },
+                          {
+                            type: 'div',
+                            props: {
+                              style: {
+                                fontSize: 18,
+                                color: 'rgba(255, 255, 255, 0.6)',
+                              },
+                              children: `and ${constants.userCountShort}+ developers`,
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ].filter(Boolean),
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Healthcare solutions page template
+async function generateHealthcareTemplate() {
+  return generateSolutionTemplate({
+    vertical: 'Healthcare',
+    headline: 'AI Security for Healthcare',
+    subtitle: 'Red team AI assistants for patient safety, clinical accuracy, and HIPAA compliance',
+    badges: ['HIPAA', 'FDA 21 CFR Part 11', 'SOC2', 'HITRUST'],
+  });
+}
+
+// Finance solutions page template
+async function generateFinanceTemplate() {
+  return generateSolutionTemplate({
+    vertical: 'Finance',
+    headline: 'AI Security for Finance',
+    subtitle: 'Red team AI agents for fraud prevention, risk management, and regulatory compliance',
+    badges: ['SOC2', 'SOX', 'PCI DSS', 'GLBA'],
+  });
+}
+
+// Insurance solutions page template
+async function generateInsuranceTemplate() {
+  return generateSolutionTemplate({
+    vertical: 'Insurance',
+    headline: 'AI Security for Insurance',
+    subtitle: 'Red team AI agents for underwriting accuracy and regulatory compliance',
+    badges: ['SOC2', 'NAIC', 'State DOI', 'CCPA'],
+  });
+}
+
+// Telecom solutions page template
+async function generateTelecomTemplate() {
+  return generateSolutionTemplate({
+    vertical: 'Telecom',
+    headline: 'AI Security for Telecom',
+    subtitle: 'Red team voice and text AI agents at carrier scale with audio-to-audio testing',
+    badges: ['FCC/CPNI', 'TCPA', 'CALEA', 'E911'],
+  });
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -1914,6 +2171,134 @@ async function generateEventsOgImage(outputPath) {
     return true;
   } catch (error) {
     console.error('❌ Failed to generate Events OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Healthcare solutions OG image using custom template
+async function generateHealthcareOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateHealthcareTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Healthcare OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Finance solutions OG image using custom template
+async function generateFinanceOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateFinanceTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Finance OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Insurance solutions OG image using custom template
+async function generateInsuranceOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateInsuranceTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Insurance OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Telecom solutions OG image using custom template
+async function generateTelecomOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateTelecomTemplate();
+
+    // Generate SVG using Satori
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+    // Convert SVG to PNG using Sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+        palette: false,
+      })
+      .toBuffer();
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Write PNG file
+    await fs.writeFile(outputPath, pngBuffer);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Telecom OG image:', error.message);
     return false;
   }
 }
@@ -2392,6 +2777,96 @@ module.exports = function (context, options) {
         console.log('  ✅ Events OG image generated');
       } else {
         failureCount++;
+      }
+
+      // Generate solutions page OG images
+      console.log('🎨 Generating Solutions page OG images...');
+
+      // Healthcare solutions page
+      const healthcareImagePath = path.join(outDir, 'img', 'og', 'solutions-healthcare-og.png');
+      const healthcareSuccess = await generateHealthcareOgImage(healthcareImagePath);
+      if (healthcareSuccess) {
+        generatedImages.set('/solutions/healthcare/', '/img/og/solutions-healthcare-og.png');
+        successCount++;
+        console.log('  ✅ Healthcare solutions OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Finance solutions page
+      const financeImagePath = path.join(outDir, 'img', 'og', 'solutions-finance-og.png');
+      const financeSuccess = await generateFinanceOgImage(financeImagePath);
+      if (financeSuccess) {
+        generatedImages.set('/solutions/finance/', '/img/og/solutions-finance-og.png');
+        successCount++;
+        console.log('  ✅ Finance solutions OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Insurance solutions page
+      const insuranceImagePath = path.join(outDir, 'img', 'og', 'solutions-insurance-og.png');
+      const insuranceSuccess = await generateInsuranceOgImage(insuranceImagePath);
+      if (insuranceSuccess) {
+        generatedImages.set('/solutions/insurance/', '/img/og/solutions-insurance-og.png');
+        successCount++;
+        console.log('  ✅ Insurance solutions OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Telecom solutions page
+      const telecomImagePath = path.join(outDir, 'img', 'og', 'solutions-telecom-og.png');
+      const telecomSuccess = await generateTelecomOgImage(telecomImagePath);
+      if (telecomSuccess) {
+        generatedImages.set('/solutions/telecom/', '/img/og/solutions-telecom-og.png');
+        successCount++;
+        console.log('  ✅ Telecom solutions OG image generated');
+      } else {
+        failureCount++;
+      }
+
+      // Inject meta tags for special pages (careers, pricing, about, contact, press, store, events, solutions)
+      console.log('🔄 Injecting OG image meta tags for special pages...');
+      const specialPages = [
+        '/careers/',
+        '/pricing/',
+        '/about/',
+        '/contact/',
+        '/press/',
+        '/store/',
+        '/events/',
+        '/solutions/healthcare/',
+        '/solutions/finance/',
+        '/solutions/insurance/',
+        '/solutions/telecom/',
+      ];
+
+      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
+      for (const routePath of specialPages) {
+        const imageUrl = generatedImages.get(routePath);
+        if (imageUrl) {
+          const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
+          try {
+            if (
+              await fs
+                .stat(htmlPath)
+                .then((stat) => stat.isFile())
+                .catch(() => false)
+            ) {
+              let html = await fs.readFile(htmlPath, 'utf8');
+              const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
+
+              // Replace default thumbnail with custom OG image
+              if (html.includes(defaultThumbnailUrl)) {
+                html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
+                await fs.writeFile(htmlPath, html);
+              }
+            }
+          } catch (error) {
+            console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+          }
+        }
       }
 
       // Create a manifest file for the generated images
