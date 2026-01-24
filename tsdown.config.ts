@@ -40,6 +40,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -60,6 +61,7 @@ export default defineConfig([
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -92,6 +94,7 @@ export default defineConfig([
     shims: true, // Ensure library ESM build has shims
     clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -111,6 +114,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     fixedExtension: true, // Use .cjs extension for CJS output
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
