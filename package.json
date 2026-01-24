@@ -163,7 +163,7 @@
     "ts-dedent": "^2.2.0",
     "tsdown": "^0.20.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17",
+    "vitest": "^4.0.18",
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
