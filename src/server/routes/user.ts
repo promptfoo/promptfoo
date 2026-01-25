@@ -110,12 +110,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { apiKey, apiHost } = z
-      .object({
-        apiKey: z.string().min(1, 'API key is required').max(512, 'API key too long'),
-        apiHost: z.url().optional(),
-      })
-      .parse(req.body);
+    const { apiKey, apiHost } = UserSchemas.Login.Request.parse(req.body);
 
     const host = apiHost || cloudConfig.getApiHost();
 
@@ -139,21 +134,23 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       source: 'web_login',
     });
 
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
-      organization: {
-        id: organization.id,
-        name: organization.name,
-      },
-      app: {
-        url: app.url,
-      },
-    });
+    res.json(
+      UserSchemas.Login.Response.parse({
+        success: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+        organization: {
+          id: organization.id,
+          name: organization.name,
+        },
+        app: {
+          url: app.url,
+        },
+      }),
+    );
   } catch (error) {
     logger.error(
       `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -176,10 +173,12 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
 
     logger.info('User logged out successfully');
 
-    res.json({
-      success: true,
-      message: 'Logged out successfully',
-    });
+    res.json(
+      UserSchemas.Logout.Response.parse({
+        success: true,
+        message: 'Logged out successfully',
+      }),
+    );
   } catch (error) {
     logger.error(
       `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -193,15 +192,12 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const cloudConfigData = {
-      appUrl: cloudConfig.getAppUrl(),
-      isEnabled: cloudConfig.isEnabled(),
-    };
-
-    res.json({
-      appUrl: cloudConfigData.appUrl,
-      isEnabled: cloudConfigData.isEnabled,
-    });
+    res.json(
+      UserSchemas.CloudConfig.Response.parse({
+        appUrl: cloudConfig.getAppUrl(),
+        isEnabled: cloudConfig.isEnabled(),
+      }),
+    );
   } catch (error) {
     logger.error(`Error getting cloud config: ${error}`);
     res.status(500).json({ error: 'Failed to get cloud config' });
