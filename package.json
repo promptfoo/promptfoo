@@ -203,13 +203,13 @@
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^6.0.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "@huggingface/transformers": "^3.8.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@apidevtools/json-schema-ref-parser": "^15.2.1",
     "@googleapis/sheets": "^13.0.1",
-    "@huggingface/transformers": "^3.8.1",
     "@inquirer/checkbox": "^5.0.4",
     "@inquirer/confirm": "^6.0.4",
     "@inquirer/core": "^11.1.1",
@@ -304,6 +304,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@huggingface/transformers",
       "@playwright/browser-chromium",
       "@swc/core",
       "better-sqlite3",
