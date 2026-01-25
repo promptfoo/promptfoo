@@ -41,11 +41,12 @@ export function getUnifiedConfig(
   const defaultTest = {
     ...(config.defaultTest ?? {}),
     options: {
-      ...(config.defaultTest?.options ?? {}),
+      ...((config.defaultTest?.options as Record<string, unknown> | undefined) ?? {}),
       transformVars: '{ ...vars, sessionId: context.uuid }',
     },
     vars: config.defaultTest?.vars as Record<string, Vars>,
-  };
+    assert: config.defaultTest?.assert,
+  } as UnifiedConfig['defaultTest'];
 
   return {
     description: config.description,
@@ -73,7 +74,10 @@ export function getUnifiedConfig(
       }),
       strategies: config.strategies.map((strategy) => {
         if (typeof strategy === 'string') {
-          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config.stateful) {
+          if (
+            MULTI_TURN_STRATEGIES.includes(strategy as (typeof MULTI_TURN_STRATEGIES)[number]) &&
+            config.target.config.stateful
+          ) {
             return { id: strategy, config: { stateful: true } };
           }
           return { id: strategy };
@@ -81,7 +85,8 @@ export function getUnifiedConfig(
 
         // Determine if this is a stateful multi-turn strategy
         const isStatefulMultiTurn =
-          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config.stateful;
+          MULTI_TURN_STRATEGIES.includes(strategy.id as (typeof MULTI_TURN_STRATEGIES)[number]) &&
+          config.target.config.stateful;
 
         // Check if we have any custom configuration
         const hasCustomConfig = strategy.config && Object.keys(strategy.config).length > 0;

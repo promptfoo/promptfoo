@@ -365,20 +365,33 @@ export function calculateSystemRiskScore(pluginScores: PluginRiskScore[]): Syste
   };
 }
 
+interface TestWithMetadata {
+  metadata?: {
+    strategyId?: string;
+  };
+  result?: {
+    testCase?: {
+      metadata?: {
+        strategyId?: string;
+      };
+    };
+  };
+}
+
 /**
  * Helper function to prepare test results from component data
  */
 export function prepareTestResultsFromStats(
-  failuresByPlugin: Record<string, any[]> | undefined,
-  passesByPlugin: Record<string, any[]> | undefined,
+  failuresByPlugin: Record<string, TestWithMetadata[]> | undefined,
+  passesByPlugin: Record<string, TestWithMetadata[]> | undefined,
   subCategory: string,
   categoryStats: Record<string, { pass: number; total: number }>,
-  getStrategyId?: (test: any) => string,
+  getStrategyId?: (test: TestWithMetadata) => string,
 ): Array<{ strategy: string; results: TestResults }> {
   // Default strategy extraction function
   const extractStrategyId =
     getStrategyId ||
-    ((test: any) => {
+    ((test: TestWithMetadata) => {
       // Check metadata directly on test
       if (test.metadata?.strategyId) {
         return test.metadata.strategyId as string;
@@ -399,7 +412,7 @@ export function prepareTestResultsFromStats(
     const strategyResults: Record<string, { passed: number; failed: number }> = {};
 
     // Count failures by strategy (note: "failure" means the attack succeeded)
-    failures.forEach((test: any) => {
+    failures.forEach((test: TestWithMetadata) => {
       const strategyId = extractStrategyId(test);
       if (!strategyResults[strategyId]) {
         strategyResults[strategyId] = { passed: 0, failed: 0 };
@@ -408,7 +421,7 @@ export function prepareTestResultsFromStats(
     });
 
     // Count passes by strategy
-    passes.forEach((test: any) => {
+    passes.forEach((test: TestWithMetadata) => {
       const strategyId = extractStrategyId(test);
       if (!strategyResults[strategyId]) {
         strategyResults[strategyId] = { passed: 0, failed: 0 };

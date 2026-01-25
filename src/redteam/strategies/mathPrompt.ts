@@ -11,6 +11,7 @@ import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -23,7 +24,7 @@ export const EXAMPLES = [
 export async function generateMathPrompt(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   try {
     const batchSize = 8;
@@ -143,7 +144,7 @@ export async function encodeMathPrompt(text: string, concept: string): Promise<s
 export async function addMathPrompt(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   if (shouldGenerateRemote()) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);

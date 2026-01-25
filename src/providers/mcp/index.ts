@@ -65,7 +65,7 @@ export class MCPProvider implements ApiProvider {
       await this.initializationPromise;
 
       // Parse the prompt as JSON to extract tool call information
-      let toolCallData: any;
+      let toolCallData: unknown;
       try {
         toolCallData = JSON.parse(context?.vars.prompt as string);
       } catch {
@@ -75,13 +75,22 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
+      // Type guard: ensure toolCallData is an object
+      if (typeof toolCallData !== 'object' || toolCallData === null) {
+        return {
+          error: 'Invalid JSON payload. Expected an object with tool call information.',
+        };
+      }
+
+      const toolCallRecord = toolCallData as Record<string, unknown>;
+
       // Extract tool name from various possible fields
       const toolName =
-        toolCallData.tool ||
-        toolCallData.toolName ||
-        toolCallData.function ||
-        toolCallData.functionName ||
-        toolCallData.name;
+        toolCallRecord.tool ||
+        toolCallRecord.toolName ||
+        toolCallRecord.function ||
+        toolCallRecord.functionName ||
+        toolCallRecord.name;
 
       if (!toolName || typeof toolName !== 'string') {
         return {
@@ -92,10 +101,10 @@ export class MCPProvider implements ApiProvider {
 
       // Extract tool arguments from various possible fields
       let toolArgs =
-        toolCallData.args ||
-        toolCallData.arguments ||
-        toolCallData.params ||
-        toolCallData.parameters ||
+        toolCallRecord.args ||
+        toolCallRecord.arguments ||
+        toolCallRecord.params ||
+        toolCallRecord.parameters ||
         {};
 
       // Ensure toolArgs is an object

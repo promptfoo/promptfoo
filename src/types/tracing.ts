@@ -4,7 +4,7 @@ export interface TraceSpan {
   name: string;
   startTime: number;
   endTime?: number;
-  attributes?: Record<string, any>;
+  attributes?: Record<string, unknown>;
   statusCode?: number;
   statusMessage?: string;
 }
@@ -13,6 +13,6 @@ export interface TraceData {
   traceId: string;
   evaluationId: string;
   testCaseId: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   spans: TraceSpan[];
 }

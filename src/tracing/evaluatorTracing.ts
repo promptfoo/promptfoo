@@ -180,7 +180,8 @@ export async function generateTraceContextIfNeeded(
     );
     evaluationId = `eval-${Date.now()}`;
   }
-  const testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
+  const testCaseId =
+    test.metadata?.testCaseId || (test as { id?: string }).id || `${testIdx}-${promptIdx}`;
 
   // Store trace association in trace store
   try {

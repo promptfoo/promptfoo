@@ -119,8 +119,8 @@ export interface DecodedSpan {
   endTimeUnixNano?: Long | number;
   attributes?: DecodedAttribute[];
   status?: DecodedStatus;
-  events?: any[];
-  links?: any[];
+  events?: unknown[];
+  links?: unknown[];
   droppedAttributesCount?: number;
   droppedEventsCount?: number;
   droppedLinksCount?: number;

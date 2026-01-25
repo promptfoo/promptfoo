@@ -28,9 +28,9 @@ import type {
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
-    let properties: Record<string, any> = {};
+    let properties: Record<string, unknown> = {};
     let required: string[] | undefined = undefined;
-    let additionalProperties: boolean | Record<string, any> | undefined = undefined;
+    let additionalProperties: boolean | Record<string, unknown> | undefined = undefined;
 
     if (schema && typeof schema === 'object' && 'properties' in schema) {
       // Extract properties and required fields from the schema
@@ -39,7 +39,13 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
 
       // Preserve additionalProperties if it exists
       if ('additionalProperties' in schema) {
-        additionalProperties = schema.additionalProperties;
+        const addlProps = schema.additionalProperties;
+        if (
+          typeof addlProps === 'boolean' ||
+          (typeof addlProps === 'object' && addlProps !== null)
+        ) {
+          additionalProperties = addlProps as boolean | Record<string, unknown>;
+        }
       }
     } else if (schema && typeof schema === 'object') {
       // Schema exists but doesn't have properties field

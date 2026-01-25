@@ -17,7 +17,7 @@ export function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as any)) {
+  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as (typeof STRATEGY_EXEMPT_PLUGINS)[number])) {
     return false;
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {

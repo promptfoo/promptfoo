@@ -32,6 +32,7 @@ import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -72,7 +73,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'basic',
-    action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
+    action: async (_testCases: TestCase[], _injectVar: string, _config?: StrategyConfig) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];

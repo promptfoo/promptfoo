@@ -8,15 +8,18 @@ import invariant from '../../util/invariant';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
 import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 // Single-turn strategies = AGENTIC but NOT MULTI_TURN
 // These strategies iterate to find successful attacks but each attempt is a single turn
 const SINGLE_TURN_STRATEGIES = AGENTIC_STRATEGIES.filter(
-  (s) => !MULTI_TURN_STRATEGIES.includes(s as any),
+  (s) => !MULTI_TURN_STRATEGIES.includes(s as (typeof MULTI_TURN_STRATEGIES)[number]),
 );
 
 function isSingleTurnStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
+  return strategyId
+    ? SINGLE_TURN_STRATEGIES.includes(strategyId as (typeof SINGLE_TURN_STRATEGIES)[number])
+    : false;
 }
 
 /**
@@ -39,7 +42,13 @@ function transformResult(
       const redteamFinalPrompt = response?.metadata?.redteamFinalPrompt;
       if (redteamFinalPrompt) {
         // Find the injectVar key (usually 'prompt') and replace with final prompt
-        const injectVar = (testCase.provider as any)?.config?.injectVar || 'prompt';
+        const providerConfig =
+          typeof testCase.provider === 'object' &&
+          testCase.provider !== null &&
+          'config' in testCase.provider
+            ? (testCase.provider.config as Record<string, unknown> | undefined)
+            : undefined;
+        const injectVar = (providerConfig?.injectVar as string | undefined) || 'prompt';
         finalVars = {
           ...testCase.vars,
           [injectVar]: redteamFinalPrompt,
@@ -129,7 +138,7 @@ async function getFailedTestCases(
       .from(evalResultsTable)
       .where(
         and(
-          eq(evalResultsTable.success, 0 as any),
+          eq(evalResultsTable.success, false),
           sql`json_valid(provider)`,
           sql`json_extract(provider, '$.id') = ${targetId}`,
         ),
@@ -146,7 +155,7 @@ async function getFailedTestCases(
       .from(evalResultsTable)
       .where(
         and(
-          eq(evalResultsTable.success, 0 as any),
+          eq(evalResultsTable.success, false),
           sql`json_valid(provider)`,
           sql`json_extract(provider, '$.id') = ${targetId}`,
           sql`json_valid(test_case)`,
@@ -184,7 +193,7 @@ async function getFailedTestCases(
 export async function addRetryTestCases(
   testCases: TestCaseWithPlugin[],
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
-  config: Record<string, unknown>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   // Group test cases by plugin ID
   const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();

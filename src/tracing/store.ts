@@ -2,13 +2,40 @@ import { asc, eq, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import type { Attributes } from '@opentelemetry/api';
 
 import type { TraceData } from '../types/tracing';
 
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
   testCaseId: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+}
+
+interface TraceRow {
+  id: string;
+  traceId: string;
+  evaluationId: string;
+  testCaseId: string;
+  createdAt: number;
+  metadata: Record<string, unknown> | null;
+}
+
+interface SpanRow {
+  id: string;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  startTime: number;
+  endTime: number | null;
+  attributes: Record<string, unknown> | null;
+  statusCode: number | null;
+  statusMessage: string | null;
+}
+
+interface TraceWithSpans extends TraceRow {
+  spans: SpanRow[];
 }
 
 export interface SpanData {
@@ -17,7 +44,7 @@ export interface SpanData {
   name: string;
   startTime: number;
   endTime?: number;
-  attributes?: Record<string, any>;
+  attributes?: Record<string, unknown>;
   statusCode?: number;
   statusMessage?: string;
 }
@@ -49,13 +76,13 @@ const SENSITIVE_ATTRIBUTE_KEYS = [
 ];
 
 function sanitizeAttributes(
-  attributes: Record<string, any> | null | undefined,
-): Record<string, any> {
+  attributes: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
   if (!attributes) {
     return {};
   }
 
-  const sanitizeValue = (value: any): any => {
+  const sanitizeValue = (value: unknown): unknown => {
     if (typeof value === 'string') {
       return value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
@@ -63,12 +90,12 @@ function sanitizeAttributes(
       return value.map(sanitizeValue);
     }
     if (value && typeof value === 'object') {
-      return sanitizeAttributes(value as Record<string, any>);
+      return sanitizeAttributes(value as Record<string, unknown>);
     }
     return value;
   };
 
-  const sanitized: Record<string, any> = {};
+  const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attributes)) {
     const lowerKey = key.toLowerCase();
     if (SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey) => lowerKey.includes(sensitiveKey))) {
@@ -185,13 +212,14 @@ export class TraceStore {
           id: crypto.randomUUID(),
           traceId,
           spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
+          parentSpanId: span.parentSpanId ?? null,
           name: span.name,
           startTime: span.startTime,
-          endTime: span.endTime,
-          attributes: span.attributes,
-          statusCode: span.statusCode,
-          statusMessage: span.statusMessage,
+          endTime: span.endTime ?? null,
+          // Cast to OpenTelemetry Attributes type for database storage
+          attributes: (span.attributes ?? null) as Attributes | null,
+          statusCode: span.statusCode ?? null,
+          statusMessage: span.statusMessage ?? null,
         };
       });
 
@@ -204,7 +232,7 @@ export class TraceStore {
     }
   }
 
-  async getTracesByEvaluation(evaluationId: string): Promise<any[]> {
+  async getTracesByEvaluation(evaluationId: string): Promise<TraceWithSpans[]> {
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
       const db = this.getDatabase();
@@ -241,7 +269,7 @@ export class TraceStore {
     }
   }
 
-  async getTrace(traceId: string): Promise<any | null> {
+  async getTrace(traceId: string): Promise<TraceWithSpans | null> {
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = this.getDatabase();
@@ -394,7 +422,10 @@ export async function getTraceSpans(
   } = options;
 
   const traceStoreInstance = getTraceStore();
-  const db = (traceStoreInstance as any).getDatabase?.() ?? traceStoreInstance['getDatabase']?.();
+  // Access private method - this is safe as we control both the class and this function
+  const db = (
+    traceStoreInstance as unknown as { getDatabase: () => ReturnType<typeof getDb> }
+  ).getDatabase();
   if (!db) {
     throw new Error('TraceStore database has not been initialized');
   }

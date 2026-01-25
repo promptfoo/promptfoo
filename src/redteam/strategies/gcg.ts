@@ -8,13 +8,18 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export const CONCURRENCY = 10;
+
+interface GcgConfig extends StrategyConfig {
+  n?: number;
+}
 
 async function generateGcgPrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any> & { n?: number },
+  config: GcgConfig,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -120,7 +125,7 @@ async function generateGcgPrompts(
 export async function addGcgTestCases(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, unknown>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error('GCG strategy requires remote generation to be enabled');

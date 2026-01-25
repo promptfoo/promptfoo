@@ -62,7 +62,7 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const finalOptions: FetchOptions & { dispatcher?: any } = {
+  const finalOptions: FetchOptions & { dispatcher?: unknown } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),

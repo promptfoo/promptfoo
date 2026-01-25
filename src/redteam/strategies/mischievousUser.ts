@@ -1,9 +1,10 @@
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export function addMischievousUser(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): TestCase[] {
   return testCases.map((testCase) => ({
     ...testCase,

@@ -8,11 +8,17 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
+
+interface CompositeConfig extends StrategyConfig {
+  n?: number;
+  modelFamily?: string;
+}
 
 async function generateCompositePrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any> & { n?: number; modelFamily?: string },
+  config: CompositeConfig,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -125,7 +131,7 @@ async function generateCompositePrompts(
 export async function addCompositeTestCases(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, unknown>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error('Composite jailbreak strategy requires remote generation to be enabled');

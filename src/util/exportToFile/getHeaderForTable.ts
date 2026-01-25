@@ -1,4 +1,5 @@
 import type Eval from '../../models/eval';
+import type { TestCase, TestGeneratorConfig } from '../../types';
 
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
@@ -20,7 +21,7 @@ export function getHeaderForTable(eval_: Eval) {
 
   // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
   const tests = eval_.config.tests;
-  let testsArray: any[] = [];
+  let testsArray: (string | TestCase | TestGeneratorConfig)[] = [];
   if (Array.isArray(tests)) {
     testsArray = tests;
   } else if (tests) {
@@ -36,7 +37,7 @@ export function getHeaderForTable(eval_: Eval) {
       continue;
     }
     // Only process actual test cases with vars
-    if (test && 'vars' in test) {
+    if (test && typeof test === 'object' && 'vars' in test) {
       for (const varName of Object.keys(test.vars || {})) {
         varsForHeader.add(varName);
       }

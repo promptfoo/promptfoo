@@ -5,7 +5,7 @@ import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './stor
 export interface TraceEvent {
   name: string;
   timestamp: number;
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface TraceSpan {
@@ -16,7 +16,7 @@ export interface TraceSpan {
   startTime: number;
   endTime?: number;
   durationMs?: number;
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
   status: {
     code: 'unset' | 'ok' | 'error';
     message?: string;

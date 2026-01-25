@@ -1,10 +1,11 @@
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export function addIterativeJailbreaks(
   testCases: TestCase[],
   injectVar: string,
   strategy: 'iterative' | 'iterative:tree' | 'iterative:meta' = 'iterative',
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): TestCase[] {
   const providerName =
     strategy === 'iterative'

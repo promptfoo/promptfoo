@@ -11,22 +11,62 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ApiProvider } from '../../types/providers';
-import type { OpenAiSharedOptions } from '../openai/types';
 
 /**
  * Configuration options for Nscale image generation.
- * Extends OpenAI shared options with Nscale-specific parameters.
+ * Similar to OpenAI shared options but with broader size parameter support.
+ * Nscale accepts any valid size string, not just predefined DallE sizes.
  */
-type NscaleImageOptions = OpenAiSharedOptions & {
+type NscaleImageOptions = {
+  /** API key for authentication (prefer NSCALE_SERVICE_TOKEN) */
+  apiKey?: string;
+  /** API key environment variable name */
+  apiKeyEnvar?: string;
+  /** Whether API key is required (default: true) */
+  apiKeyRequired?: boolean;
+  /** API base URL override */
+  apiBaseUrl?: string;
+  /** API host override */
+  apiHost?: string;
+  /** Organization ID */
+  organization?: string;
+  /** Cost override */
+  cost?: number;
+  /** Additional HTTP headers */
+  headers?: Record<string, string>;
   /** Number of images to generate (default: 1) */
   n?: number;
   /** Response format for generated images */
   response_format?: 'url' | 'b64_json';
   /** User identifier for tracking */
   user?: string;
-  /** Image size specification (e.g., '1024x1024') */
+  /** Image size specification - accepts any string (e.g., '1024x1024', '512x512') */
   size?: string;
 };
+
+/**
+ * Request body structure for Nscale image generation API.
+ */
+interface NscaleImageRequestBody {
+  model: string;
+  prompt: string;
+  n: number;
+  response_format: 'url' | 'b64_json';
+  size?: string;
+  user?: string;
+}
+
+/**
+ * Response structure from Nscale/OpenAI image generation API.
+ */
+interface NscaleImageApiResponse {
+  data?: unknown;
+  error?: string | { message: string; type: string; code?: string };
+  cached?: boolean;
+  status?: number;
+  statusText?: string;
+  deleteFromCache?: () => Promise<void>;
+}
 
 /**
  * Nscale image generation provider.
@@ -38,7 +78,8 @@ type NscaleImageOptions = OpenAiSharedOptions & {
  * Defaults to base64 JSON response format for compatibility with Nscale API.
  */
 export class NscaleImageProvider extends OpenAiImageProvider {
-  config: NscaleImageOptions & any;
+  // Store Nscale-specific config separately to preserve broader size parameter support
+  private nscaleConfig: NscaleImageOptions;
 
   /**
    * Create a new Nscale image provider instance.
@@ -51,15 +92,24 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     options: { config?: NscaleImageOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const nscaleConfig = options.config || {};
+    // Pass config to parent class for OpenAI compatibility
+    // Size parameter is treated as unknown to parent since Nscale accepts any string
     super(modelName, {
       ...options,
       config: {
-        ...nscaleConfig,
-        apiBaseUrl: 'https://inference.api.nscale.com/v1',
         apiKey: NscaleImageProvider.getApiKey(options),
-      } as any, // Use type assertion since Nscale supports OpenAI-compatible parameters
+        apiBaseUrl: 'https://inference.api.nscale.com/v1',
+        apiKeyEnvar: nscaleConfig.apiKeyEnvar,
+        apiKeyRequired: nscaleConfig.apiKeyRequired,
+        apiHost: nscaleConfig.apiHost,
+        organization: nscaleConfig.organization,
+        cost: nscaleConfig.cost,
+        headers: nscaleConfig.headers,
+        n: nscaleConfig.n,
+        response_format: nscaleConfig.response_format,
+      },
     });
-    this.config = nscaleConfig;
+    this.nscaleConfig = nscaleConfig;
   }
 
   /**
@@ -90,7 +140,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    * @returns The API key or service token, or undefined if not found
    */
   getApiKey(): string | undefined {
-    return this.config?.apiKey || NscaleImageProvider.getApiKey({ config: this.config });
+    return (
+      this.nscaleConfig?.apiKey || NscaleImageProvider.getApiKey({ config: this.nscaleConfig })
+    );
   }
 
   /**
@@ -153,7 +205,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     }
 
     const config = {
-      ...this.config,
+      ...this.nscaleConfig,
       ...context?.prompt?.config,
     } as NscaleImageOptions;
 
@@ -161,7 +213,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     const responseFormat = config.response_format || 'b64_json'; // Default to b64_json for Nscale
     const endpoint = '/images/generations';
 
-    const body: Record<string, any> = {
+    const body: NscaleImageRequestBody = {
       model,
       prompt,
       n: config.n || 1,
@@ -181,7 +233,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       ...config.headers,
     } as Record<string, string>;
 
-    let data: any, status: number, statusText: string;
+    let data: NscaleImageApiResponse | undefined;
+    let status: number;
+    let statusText: string;
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await callOpenAiImageApi(
@@ -197,14 +251,24 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      if (data?.deleteFromCache) {
+        await data.deleteFromCache();
+      }
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
+    if (!data) {
+      return {
+        error: 'No response data received from API',
+      };
+    }
+
     if (data.error) {
-      await data?.deleteFromCache?.();
+      if (data.deleteFromCache) {
+        await data.deleteFromCache();
+      }
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
@@ -225,7 +289,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      if (data.deleteFromCache) {
+        await data.deleteFromCache();
+      }
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };

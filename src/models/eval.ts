@@ -1222,38 +1222,21 @@ export default class Eval {
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
 
       // Transform trace data to match the expected schema
-      return tracesData.map((trace: TraceData) => ({
+      return tracesData.map((trace) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
-        metadata: trace.metadata,
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME yeah that aint right
-        spans: (trace.spans || []).map((span: any) => {
-          // Calculate duration
-          const durationMs =
-            span.endTime && span.startTime ? (span.endTime - span.startTime) / 1000000 : undefined;
-
-          // Map status code
-          const statusCode =
-            span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
-
-          return {
-            spanId: span.spanId,
-            parentSpanId: span.parentSpanId,
-            name: span.name,
-            kind: span.kind || 'unspecified',
-            startTime: span.startTime,
-            endTime: span.endTime,
-            durationMs,
-            attributes: span.attributes || {},
-            status: {
-              code: statusCode,
-              message: span.statusMessage,
-            },
-            depth: 0, // Will be calculated on the server side when storing
-            events: span.events || [],
-          };
-        }),
+        metadata: trace.metadata ?? undefined,
+        spans: trace.spans.map((span) => ({
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId ?? undefined,
+          name: span.name,
+          startTime: span.startTime,
+          endTime: span.endTime ?? undefined,
+          attributes: span.attributes ?? {},
+          statusCode: span.statusCode ?? undefined,
+          statusMessage: span.statusMessage ?? undefined,
+        })),
       }));
     } catch (error) {
       logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);

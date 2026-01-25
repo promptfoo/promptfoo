@@ -48,6 +48,7 @@ import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } fro
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
   FailedPluginInfo,
+  PluginConfig,
   Policy,
   RedteamPluginObject,
   RedteamStrategyObject,
@@ -83,7 +84,7 @@ const MAX_MAX_CONCURRENCY = 20;
  * @param pluginConfig - Optional configuration for the plugin.
  * @returns The severity level.
  */
-function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>): Severity {
+function getPluginSeverity(pluginId: string, pluginConfig?: PluginConfig): Severity {
   if (pluginConfig?.severity) {
     return pluginConfig.severity;
   }
@@ -119,7 +120,7 @@ function truncateForPreview(text: string): string {
  * @param plugin - The plugin configuration.
  * @returns A unique display ID string.
  */
-function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
+function getPluginDisplayId(plugin: { id: string; config?: PluginConfig }): string {
   if (plugin.id !== 'policy') {
     return plugin.id;
   }
@@ -127,13 +128,20 @@ function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }
   const policyConfig = plugin.config?.policy;
 
   // Cloud policy (object with id)
-  if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
-    if (policyConfig.name) {
-      return policyConfig.name;
+  if (typeof policyConfig === 'object' && policyConfig !== null) {
+    const policyObject = policyConfig as { id?: unknown; name?: unknown; text?: unknown };
+    const policyId = typeof policyObject.id === 'string' ? policyObject.id : undefined;
+    const policyName = typeof policyObject.name === 'string' ? policyObject.name : undefined;
+    const policyText = typeof policyObject.text === 'string' ? policyObject.text : undefined;
+
+    if (policyId) {
+      if (policyName) {
+        return policyName;
+      }
+      const shortId = policyId.replace(/-/g, '').slice(0, 12);
+      const preview = policyText ? truncateForPreview(policyText) : '';
+      return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
     }
-    const shortId = policyConfig.id.replace(/-/g, '').slice(0, 12);
-    const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
-    return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
   }
 
   // Inline policy (string)
@@ -215,12 +223,13 @@ function generateReport(
 
 /**
  * Resolves top-level file paths in the plugin configuration.
+ * Accepts any config shape since it needs to process arbitrary properties with file:// references.
  * @param config - The plugin configuration to resolve.
  * @returns The resolved plugin configuration.
  */
-export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+export function resolvePluginConfig<T extends Record<string, unknown>>(config: T | undefined): T {
   if (!config) {
-    return {};
+    return {} as T;
   }
 
   for (const key in config) {
@@ -233,11 +242,11 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
       }
 
       if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8')) as T[Extract<keyof T, string>];
       } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8')) as T[Extract<keyof T, string>];
       } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
+        config[key] = fs.readFileSync(filePath, 'utf8') as T[Extract<keyof T, string>];
       }
     }
   }
@@ -489,7 +498,7 @@ async function applyStrategies(
     // Compute a display id for reporting (helpful for layered strategies)
     const displayId =
       strategy.id === 'layer' && Array.isArray(strategy.config?.steps)
-        ? `layer(${(strategy.config!.steps as any[])
+        ? `layer(${(strategy.config!.steps as Array<string | { id?: string }>)
             .map((st) => (typeof st === 'string' ? st : st.id))
             .join('→')})`
         : strategy.id;
@@ -912,8 +921,12 @@ export async function synthesize({
 
     // Some plugins don't support multi-input mode; skip them
     const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
-    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
+    const removedPlugins = plugins.filter((p) =>
+      multiInputExcluded.includes(p.id as (typeof multiInputExcluded)[number]),
+    );
+    plugins = plugins.filter(
+      (p) => !multiInputExcluded.includes(p.id as (typeof multiInputExcluded)[number]),
+    );
     if (removedPlugins.length > 0) {
       logger.info(
         `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
@@ -1191,7 +1204,9 @@ export async function synthesize({
           const policy = getPolicyText(testCase.metadata);
           const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+          if (testCase.metadata) {
+            (testCase.metadata as Record<string, unknown>).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array
@@ -1263,7 +1278,9 @@ export async function synthesize({
           const policy = getPolicyText(testCase.metadata);
           const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+          if (testCase.metadata) {
+            (testCase.metadata as Record<string, unknown>).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array

@@ -10,10 +10,13 @@ declare module 'istextorbinary' {
 
 declare module '@ibm-cloud/watsonx-ai' {
   export interface WatsonXAI {
+    // biome-ignore lint/suspicious/noExplicitAny: External library type declaration
     newInstance(config: any): any;
+    // biome-ignore lint/suspicious/noExplicitAny: External library type declaration
     generateText(params: any): Promise<any>;
   }
   export const WatsonXAI: {
+    // biome-ignore lint/suspicious/noExplicitAny: External library type declaration
     newInstance(config: any): any;
   };
 }
