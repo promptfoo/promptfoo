@@ -311,6 +311,7 @@ export async function runEval({
   testIdx,
   promptIdx,
   repeatIndex,
+  concurrencyKey,
   conversations,
   registers,
   isRedteam,
@@ -336,13 +337,15 @@ export async function runEval({
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
-  const conversationKey = buildConversationKey(provider, prompt, test, repeatIndex);
+  // use the concurrency key for the conversation history key
+  const conversationKey = concurrencyKey;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
     usesConversation
   ) {
+    //
     vars._conversation = conversations?.[conversationKey] || [];
   }
 

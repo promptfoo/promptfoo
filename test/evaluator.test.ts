@@ -27,6 +27,8 @@ import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
+const defaultConcurrencyKey = 'test-concurrency-key';
+
 vi.mock('../src/util/transform', () => ({
   TransformInputType: {
     OUTPUT: 'output',
@@ -2315,6 +2317,77 @@ describe('evaluator', () => {
     expect(callOrderByKey.get(convoKey)).toEqual(['Q1', 'Q2', 'Q3']);
   });
 
+  it('removes concurrency grouping when PROMPTFOO_DISABLE_CONVERSATION_VAR is set', async () => {
+    const { provider, getMaxActiveTotal, maxActiveByKey, waitForStarts, release } =
+      createConcurrencyTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation[0].output }}')],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    vi.stubEnv('PROMPTFOO_DISABLE_CONVERSATION_VAR', 'true');
+    try {
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+      try {
+        await waitForStarts();
+      } finally {
+        release();
+      }
+      await evalPromise;
+
+      const prompt = testSuite.prompts[0];
+      const tests = testSuite.tests!;
+      const convoKey = buildConversationKey(provider, prompt, tests[0], 0);
+      expect(getMaxActiveTotal()).toBe(2);
+      expect(maxActiveByKey.get(convoKey)).toBe(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('removes concurrency grouping when disableConversationVar is set per test', async () => {
+    const { provider, getMaxActiveTotal, maxActiveByKey, waitForStarts, release } =
+      createConcurrencyTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation[0].output }}')],
+      tests: [
+        {
+          vars: { question: 'Q1' },
+          metadata: { conversationId: 'convo-a' },
+          options: { disableConversationVar: true },
+        },
+        {
+          vars: { question: 'Q2' },
+          metadata: { conversationId: 'convo-a' },
+          options: { disableConversationVar: true },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests!;
+    const convoKey = buildConversationKey(provider, prompt, tests[0], 0);
+    expect(getMaxActiveTotal()).toBe(2);
+    expect(maxActiveByKey.get(convoKey)).toBe(2);
+  });
+
   it('parallelizes repeat iterations within the same conversation', async () => {
     const {
       provider,
@@ -3853,6 +3926,7 @@ describe('evaluator', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
+      concurrencyKey: defaultConcurrencyKey,
     };
 
     const results = await runEval({
@@ -3924,6 +3998,7 @@ describe('evaluator', () => {
       conversations: {},
       registers: {},
       isRedteam: false,
+      concurrencyKey: defaultConcurrencyKey,
     };
 
     await runEval({
@@ -4349,6 +4424,7 @@ describe('runEval', () => {
     promptIdx: 0,
     repeatIndex: 0,
     isRedteam: false,
+    concurrencyKey: defaultConcurrencyKey,
   };
 
   it('should handle basic prompt evaluation', async () => {
@@ -4369,20 +4445,29 @@ describe('runEval', () => {
 
   it('should handle conversation history', async () => {
     const conversations = {} as Record<string, any>;
+    const prompt = { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' };
+    const test = {};
+    const concurrencyKey = buildConversationKey(
+      mockProvider,
+      prompt,
+      test,
+      defaultOptions.repeatIndex,
+    );
 
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
-      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
-      test: {},
+      prompt,
+      test,
       conversations,
       registers: {},
+      concurrencyKey,
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:undefined');
-    expect(conversations['test-provider:undefined']).toHaveLength(1);
-    expect(conversations['test-provider:undefined'][0]).toEqual({
+    expect(conversations).toHaveProperty(concurrencyKey);
+    expect(conversations[concurrencyKey]).toHaveLength(1);
+    expect(conversations[concurrencyKey][0]).toEqual({
       prompt: 'Hello ',
       input: 'Hello ',
       output: 'Test output',
@@ -4391,18 +4476,31 @@ describe('runEval', () => {
 
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
+    const prompt = {
+      raw: 'Hello {{_conversation[0].output}}',
+      label: 'test-label',
+      id: 'custom-id',
+    };
+    const test = { metadata: { conversationId: 'conv1' } };
+    const concurrencyKey = buildConversationKey(
+      mockProvider,
+      prompt,
+      test,
+      defaultOptions.repeatIndex,
+    );
 
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
-      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label', id: 'custom-id' },
-      test: { metadata: { conversationId: 'conv1' } },
+      prompt,
+      test,
       conversations,
       registers: {},
+      concurrencyKey,
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+    expect(conversations).toHaveProperty(concurrencyKey);
   });
 
   it('should include sessionId from response in result metadata', async () => {
@@ -4637,6 +4735,7 @@ describe('runEval', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
+      concurrencyKey: defaultConcurrencyKey,
     };
 
     const results = await runEval({
