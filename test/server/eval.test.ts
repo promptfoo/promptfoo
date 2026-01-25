@@ -1,4 +1,3 @@
-import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -6,9 +5,10 @@ import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { honoRequest } from '../util/honoTestHelper';
 
 describe('eval routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>['app'];
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
@@ -16,7 +16,7 @@ describe('eval routes', () => {
   });
 
   beforeEach(() => {
-    app = createApp();
+    app = createApp().app;
   });
 
   afterEach(async () => {
@@ -70,7 +70,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.score).toBe(1);
       const ratingPayload = createManualRatingPayload(result, true);
 
-      const res = await request(app)
+      const res = await honoRequest(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -108,7 +108,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.pass).toBe(true);
       expect(result.gradingResult?.score).toBe(1);
       const ratingPayload = createManualRatingPayload(result, false);
-      const res = await request(app)
+      const res = await honoRequest(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -147,7 +147,7 @@ describe('eval routes', () => {
 
       const ratingPayload = createManualRatingPayload(result, true);
 
-      const res = await request(app)
+      const res = await honoRequest(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -187,7 +187,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.pass).toBe(false);
       expect(result.gradingResult?.score).toBe(0);
       const ratingPayload = createManualRatingPayload(result, false);
-      const res = await request(app)
+      const res = await honoRequest(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -227,7 +227,7 @@ describe('eval routes', () => {
         ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
       );
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+      const res = await honoRequest(app).get(`/api/eval/${eval_.id}/metadata-keys`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
@@ -235,7 +235,7 @@ describe('eval routes', () => {
     });
 
     it('should return 404 for non-existent eval', async () => {
-      const res = await request(app).get('/api/eval/non-existent-id/metadata-keys');
+      const res = await honoRequest(app).get('/api/eval/non-existent-id/metadata-keys');
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('error', 'Eval not found');
@@ -245,7 +245,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+      const res = await honoRequest(app).get(`/api/eval/${eval_.id}/metadata-keys`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');

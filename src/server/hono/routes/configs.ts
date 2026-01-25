@@ -1,16 +1,16 @@
 import { and, eq } from 'drizzle-orm';
-import { Router } from 'express';
-import { getDb } from '../../database/index';
-import { configsTable } from '../../database/tables';
-import logger from '../../logger';
-import type { Request, Response } from 'express';
+import { Hono } from 'hono';
 
-export const configsRouter = Router();
+import { getDb } from '../../../database/index';
+import { configsTable } from '../../../database/tables';
+import logger from '../../../logger';
 
-configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+export const configsRouter = new Hono();
+
+configsRouter.get('/', async (c) => {
   const db = await getDb();
   try {
-    const type = req.query.type as string;
+    const type = c.req.query('type');
     const query = db
       .select({
         id: configsTable.id,
@@ -29,17 +29,17 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     const configs = await query;
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
-    res.json({ configs });
+    return c.json({ configs });
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    return c.json({ error: 'Failed to fetch configs' }, 500);
   }
 });
 
-configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+configsRouter.post('/', async (c) => {
   const db = await getDb();
   try {
-    const { name, type, config } = req.body;
+    const { name, type, config } = await c.req.json();
     const id = crypto.randomUUID();
 
     const [result] = await db
@@ -57,16 +57,16 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json(result);
+    return c.json(result);
   } catch (error) {
     logger.error(`Error saving config: ${error}`);
-    res.status(500).json({ error: 'Failed to save config' });
+    return c.json({ error: 'Failed to save config' }, 500);
   }
 });
 
-configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
+configsRouter.get('/:type', async (c) => {
   const db = await getDb();
-  const type = req.params.type as string;
+  const type = c.req.param('type');
   try {
     const configs = await db
       .select({
@@ -81,17 +81,17 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 
     logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
-    res.json({ configs });
+    return c.json({ configs });
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    return c.json({ error: 'Failed to fetch configs' }, 500);
   }
 });
 
-configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
+configsRouter.get('/:type/:id', async (c) => {
   const db = await getDb();
-  const type = req.params.type as string;
-  const id = req.params.id as string;
+  const type = c.req.param('type');
+  const id = c.req.param('id');
   try {
     const config = await db
       .select()
@@ -102,13 +102,14 @@ configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<voi
     logger.info(`Loaded config ${id} of type ${type}`);
 
     if (!config.length) {
-      res.status(404).json({ error: 'Config not found' });
-      return;
+      return c.json({ error: 'Config not found' }, 404);
     }
 
-    res.json(config[0]);
+    return c.json(config[0]);
   } catch (error) {
     logger.error(`Error fetching config: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch config' });
+    return c.json({ error: 'Failed to fetch config' }, 500);
   }
 });
+
+export default configsRouter;

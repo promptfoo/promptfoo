@@ -1,60 +1,58 @@
-import { Router } from 'express';
+import { Hono } from 'hono';
 import { z } from 'zod';
-import { getEnvBool } from '../../envars';
+
+import { getEnvBool } from '../../../envars';
 import {
   checkEmailStatus,
   clearUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
-} from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
-import { ApiSchemas } from '../apiSchemas';
-import type { Request, Response } from 'express';
+} from '../../../globalConfig/accounts';
+import { cloudConfig } from '../../../globalConfig/cloud';
+import logger from '../../../logger';
+import telemetry from '../../../telemetry';
+import { ApiSchemas } from '../../apiSchemas';
 
-export const userRouter = Router();
+export const userRouter = new Hono();
 
-userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => {
+userRouter.get('/email', async (c) => {
   try {
     const email = getUserEmail();
-    // Return 200 with null email instead of 404 to avoid console errors when no email is configured
-    res.json(ApiSchemas.User.Get.Response.parse({ email: email || null }));
+    return c.json(ApiSchemas.User.Get.Response.parse({ email: email || null }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting email: ${z.prettifyError(error)}`);
     } else {
       logger.error(`Error getting email: ${error}`);
     }
-    res.status(500).json({ error: 'Failed to get email' });
+    return c.json({ error: 'Failed to get email' }, 500);
   }
 });
 
-userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
+userRouter.get('/id', async (c) => {
   try {
     const id = getUserId();
-    res.json(ApiSchemas.User.GetId.Response.parse({ id }));
+    return c.json(ApiSchemas.User.GetId.Response.parse({ id }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting user ID: ${z.prettifyError(error)}`);
     } else {
       logger.error(`Error getting user ID: ${error}`);
     }
-    res.status(500).json({ error: 'Failed to get user ID' });
+    return c.json({ error: 'Failed to get user ID' }, 500);
   }
 });
 
-userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
+userRouter.post('/email', async (c) => {
   try {
-    const { email } = ApiSchemas.User.Update.Request.parse(req.body);
+    const body = await c.req.json();
+    const { email } = ApiSchemas.User.Update.Request.parse(body);
     setUserEmail(email);
-    res.json(
-      ApiSchemas.User.Update.Response.parse({
-        success: true,
-        message: `Email updated`,
-      }),
-    );
+    const response = ApiSchemas.User.Update.Response.parse({
+      success: true,
+      message: `Email updated`,
+    });
     await telemetry.record('webui_api', {
       event: 'email_set',
       email,
@@ -63,33 +61,33 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     await telemetry.saveConsent(email, {
       source: 'webui_redteam',
     });
+    return c.json(response);
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
+      return c.json({ error: z.prettifyError(error) }, 400);
     } else {
-      res.status(500).json({ error: String(error) });
+      return c.json({ error: String(error) }, 500);
     }
   }
 });
 
-userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
+userRouter.put('/email/clear', async (c) => {
   try {
     clearUserEmail();
-    res.json({ success: true, message: 'Email cleared' });
+    return c.json({ success: true, message: 'Email cleared' });
   } catch (error) {
     logger.error(`Error clearing email: ${error}`);
-    res.status(500).json({ error: 'Failed to clear email' });
+    return c.json({ error: 'Failed to clear email' }, 500);
   }
 });
 
-userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/email/status', async (c) => {
   try {
-    // Extract validate query parameter
-    const validate = req.query.validate === 'true';
+    const validate = c.req.query('validate') === 'true';
     const result = await checkEmailStatus({ validate });
 
-    res.json(
+    return c.json(
       ApiSchemas.User.EmailStatus.Response.parse({
         hasEmail: result.hasEmail,
         email: result.email,
@@ -100,22 +98,23 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
+      return c.json({ error: z.prettifyError(error) }, 400);
     } else {
-      res.status(500).json({ error: 'Failed to check email status' });
+      return c.json({ error: 'Failed to check email status' }, 500);
     }
   }
 });
 
 // New API key authentication endpoint that mirrors CLI behavior
-userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
+userRouter.post('/login', async (c) => {
   try {
+    const body = await c.req.json();
     const { apiKey, apiHost } = z
       .object({
         apiKey: z.string().min(1, 'API key is required').max(512, 'API key too long'),
         apiHost: z.url().optional(),
       })
-      .parse(req.body);
+      .parse(body);
 
     const host = apiHost || cloudConfig.getApiHost();
 
@@ -139,7 +138,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       source: 'web_login',
     });
 
-    res.json({
+    return c.json({
       success: true,
       user: {
         id: user.id,
@@ -159,24 +158,22 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
+      return c.json({ error: z.prettifyError(error) }, 400);
     } else {
-      // Don't expose internal error details to client
-      res.status(401).json({ error: 'Invalid API key or authentication failed' });
+      return c.json({ error: 'Invalid API key or authentication failed' }, 401);
     }
   }
 });
 
 // Logout endpoint - clears local authentication data
-userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> => {
+userRouter.post('/logout', async (c) => {
   try {
-    // Clear stored email and cloud config (same as CLI logout)
     setUserEmail('');
     cloudConfig.delete();
 
     logger.info('User logged out successfully');
 
-    res.json({
+    return c.json({
       success: true,
       message: 'Logged out successfully',
     });
@@ -184,26 +181,28 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
     logger.error(
       `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
-    res.status(500).json({ error: 'Logout failed' });
+    return c.json({ error: 'Logout failed' }, 500);
   }
 });
 
 /**
  * Returns information about the Promptfoo Cloud config for the current user.
  */
-userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
+userRouter.get('/cloud-config', async (c) => {
   try {
     const cloudConfigData = {
       appUrl: cloudConfig.getAppUrl(),
       isEnabled: cloudConfig.isEnabled(),
     };
 
-    res.json({
+    return c.json({
       appUrl: cloudConfigData.appUrl,
       isEnabled: cloudConfigData.isEnabled,
     });
   } catch (error) {
     logger.error(`Error getting cloud config: ${error}`);
-    res.status(500).json({ error: 'Failed to get cloud config' });
+    return c.json({ error: 'Failed to get cloud config' }, 500);
   }
 });
+
+export default userRouter;

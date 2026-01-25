@@ -1,13 +1,11 @@
-import express from 'express';
-import semverGt from 'semver/functions/gt.js';
-import semverValid from 'semver/functions/valid.js';
-import { VERSION } from '../../constants';
-import { getEnvBool } from '../../envars';
-import logger from '../../logger';
-import { getLatestVersion } from '../../updates';
-import { getUpdateCommands } from '../../updates/updateCommands';
-import { isRunningUnderNpx } from '../../util/promptfooCommand';
-import type { Request, Response } from 'express';
+import { Hono } from 'hono';
+
+import { VERSION } from '../../../constants';
+import { getEnvBool } from '../../../envars';
+import logger from '../../../logger';
+import { getLatestVersion } from '../../../updates';
+import { getUpdateCommands } from '../../../updates/updateCommands';
+import { isRunningUnderNpx } from '../../../util/promptfooCommand';
 
 /**
  * Check if a version string indicates a development build.
@@ -20,7 +18,7 @@ function isDevVersion(version: string): boolean {
  * Determine if an update is available using semantic version comparison.
  * Returns false for development builds to avoid spurious update prompts.
  */
-function isUpdateAvailable(latestVersion: string | null, currentVersion: string): boolean {
+async function isUpdateAvailable(latestVersion: string | null, currentVersion: string): Promise<boolean> {
   // No update info available
   if (!latestVersion) {
     return false;
@@ -30,6 +28,12 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
   if (isDevVersion(currentVersion)) {
     return false;
   }
+
+  // Dynamic import for semver to avoid top-level import issues
+  const [semverGt, semverValid] = await Promise.all([
+    import('semver/functions/gt.js').then((m) => m.default),
+    import('semver/functions/valid.js').then((m) => m.default),
+  ]);
 
   // Use semver comparison if both versions are valid semver
   if (semverValid(latestVersion) && semverValid(currentVersion)) {
@@ -41,13 +45,11 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
   return latestVersion !== currentVersion;
 }
 
-const router = express.Router();
-
 // Cache for the latest version check
 let versionCache: {
   latestVersion: string | null;
   timestamp: number;
-  lastAttempt: number; // Track when we last tried to fetch (for rate limiting failures)
+  lastAttempt: number;
 } = {
   latestVersion: null,
   timestamp: 0,
@@ -55,12 +57,11 @@ let versionCache: {
 };
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
-// Rate limit failed fetches to prevent hammering upstream during outages.
-// 60s is a balance between quick recovery and not overwhelming the update service.
-// During outages: ~60 requests/hour vs ~12 with 5-minute delay.
 const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+export const versionRouter = new Hono();
+
+versionRouter.get('/', async (c) => {
   try {
     const now = Date.now();
     let latestVersion = versionCache.latestVersion;
@@ -70,10 +71,9 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 
     // Fetch if: (no cache OR cache expired) AND we haven't tried recently
     if ((!latestVersion || cacheExpired) && canRetry) {
-      versionCache.lastAttempt = now; // Mark attempt time before trying
+      versionCache.lastAttempt = now;
       try {
         latestVersion = await getLatestVersion();
-        // Update cache only on success
         versionCache = {
           latestVersion,
           timestamp: now,
@@ -81,9 +81,6 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
         };
       } catch (error) {
         logger.debug(`Failed to fetch latest version: ${error}`);
-        // On failure, use stale cache if available, otherwise fall back to VERSION
-        // This maintains API contract (latestVersion is always a string)
-        // lastAttempt already updated above - prevents hammering
         latestVersion = versionCache.latestVersion ?? VERSION;
       }
     }
@@ -92,37 +89,37 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
 
-    // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
 
-    const response = {
+    return c.json({
       currentVersion: VERSION,
       latestVersion: resolvedLatestVersion,
-      updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
+      updateAvailable: await isUpdateAvailable(resolvedLatestVersion, VERSION),
       selfHosted,
       isNpx,
       updateCommands,
       commandType: updateCommands.commandType,
-    };
-
-    res.json(response);
+    });
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
 
-    res.status(500).json({
-      error: 'Failed to check version',
-      currentVersion: VERSION,
-      latestVersion: VERSION,
-      updateAvailable: false,
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
-    });
+    return c.json(
+      {
+        error: 'Failed to check version',
+        currentVersion: VERSION,
+        latestVersion: VERSION,
+        updateAvailable: false,
+        selfHosted,
+        isNpx,
+        updateCommands,
+        commandType: updateCommands.commandType,
+      },
+      500,
+    );
   }
 });
 
-export default router;
+export default versionRouter;

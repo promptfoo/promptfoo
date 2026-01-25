@@ -3,9 +3,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { honoRequest } from '../../util/honoTestHelper';
 import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
 
 // Mock dependencies
@@ -21,7 +21,7 @@ const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
 const mockedSpawn = vi.mocked(spawn);
 
 describe('Model Audit Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>['app'];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -29,7 +29,7 @@ describe('Model Audit Routes', () => {
     // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
-    app = createApp();
+    app = createApp().app;
   });
 
   describe('POST /api/model-audit/scan', () => {
@@ -61,7 +61,7 @@ describe('Model Audit Routes', () => {
       mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request WITHOUT options - this would have caused "Cannot read properties of undefined" before the fix
-      const response = await request(app)
+      const response = await honoRequest(app)
         .post('/api/model-audit/scan')
         .send({ paths: [testFilePath] });
 
@@ -100,7 +100,7 @@ describe('Model Audit Routes', () => {
       mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request with empty options object
-      const response = await request(app)
+      const response = await honoRequest(app)
         .post('/api/model-audit/scan')
         .send({ paths: [testFilePath], options: {} });
 
@@ -111,14 +111,14 @@ describe('Model Audit Routes', () => {
     });
 
     it('should return 400 when no paths provided', async () => {
-      const response = await request(app).post('/api/model-audit/scan').send({});
+      const response = await honoRequest(app).post('/api/model-audit/scan').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error', 'No paths provided');
     });
 
     it('should return 400 when paths is empty array', async () => {
-      const response = await request(app).post('/api/model-audit/scan').send({ paths: [] });
+      const response = await honoRequest(app).post('/api/model-audit/scan').send({ paths: [] });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error', 'No paths provided');
@@ -130,7 +130,7 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-not-installed.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .post('/api/model-audit/scan')
         .send({ paths: [testFilePath] });
 
@@ -144,7 +144,7 @@ describe('Model Audit Routes', () => {
     it('should return 400 when path does not exist', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .post('/api/model-audit/scan')
         .send({ paths: ['/nonexistent/path/to/model.pkl'] });
 
@@ -158,7 +158,7 @@ describe('Model Audit Routes', () => {
     it('should return installed status when modelaudit is available', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
-      const response = await request(app).get('/api/model-audit/check-installed');
+      const response = await honoRequest(app).get('/api/model-audit/check-installed');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('installed', true);
@@ -168,7 +168,7 @@ describe('Model Audit Routes', () => {
     it('should return not installed status when modelaudit is unavailable', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
 
-      const response = await request(app).get('/api/model-audit/check-installed');
+      const response = await honoRequest(app).get('/api/model-audit/check-installed');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('installed', false);

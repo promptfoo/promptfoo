@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
+import { getDownloadHeaders, setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
 import type { Response } from 'express';
 
 describe('downloadHelpers', () => {
@@ -128,6 +128,67 @@ describe('downloadHelpers', () => {
         'Content-Disposition',
         'attachment; filename="path/to/file.csv"',
       );
+    });
+  });
+
+  describe('getDownloadHeaders', () => {
+    it('should return correct headers for CSV download', () => {
+      const headers = getDownloadHeaders('test-file.csv', 'text/csv');
+
+      expect(headers['Content-Type']).toBe('text/csv');
+      expect(headers['Content-Disposition']).toBe('attachment; filename="test-file.csv"');
+      expect(headers['Cache-Control']).toBe('no-cache, no-store, must-revalidate');
+      expect(headers['Pragma']).toBe('no-cache');
+      expect(headers['Expires']).toBe('0');
+    });
+
+    it('should return correct headers for JSON download', () => {
+      const headers = getDownloadHeaders('data.json', 'application/json');
+
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['Content-Disposition']).toBe('attachment; filename="data.json"');
+    });
+
+    it('should handle special characters in filename', () => {
+      const headers = getDownloadHeaders('file with spaces & special.csv', 'text/csv');
+
+      expect(headers['Content-Disposition']).toBe(
+        'attachment; filename="file with spaces & special.csv"',
+      );
+    });
+
+    it('should handle Unicode characters in filename', () => {
+      const headers = getDownloadHeaders('测试文件.csv', 'text/csv');
+
+      expect(headers['Content-Disposition']).toBe('attachment; filename="测试文件.csv"');
+    });
+
+    it('should return exactly 5 headers', () => {
+      const headers = getDownloadHeaders('test.csv', 'text/csv');
+
+      expect(Object.keys(headers)).toHaveLength(5);
+    });
+
+    it('should handle empty filename', () => {
+      const headers = getDownloadHeaders('', 'text/csv');
+
+      expect(headers['Content-Disposition']).toBe('attachment; filename=""');
+    });
+
+    it('should handle different content types', () => {
+      const testCases = [
+        { fileName: 'file.pdf', contentType: 'application/pdf' },
+        { fileName: 'file.xml', contentType: 'application/xml' },
+        { fileName: 'file.txt', contentType: 'text/plain' },
+        { fileName: 'file.yaml', contentType: 'application/x-yaml' },
+      ];
+
+      testCases.forEach(({ fileName, contentType }) => {
+        const headers = getDownloadHeaders(fileName, contentType);
+
+        expect(headers['Content-Type']).toBe(contentType);
+        expect(headers['Content-Disposition']).toBe(`attachment; filename="${fileName}"`);
+      });
     });
   });
 });

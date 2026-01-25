@@ -1,6 +1,6 @@
-import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { honoRequest } from '../../util/honoTestHelper';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
 import type { ProviderTestResult } from '../../../src/validators/testProvider';
@@ -21,18 +21,18 @@ const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 
 describe('Providers Routes', () => {
   describe('GET /providers', () => {
-    let app: ReturnType<typeof createApp>;
+    let app: ReturnType<typeof createApp>['app'];
 
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
+      app = createApp().app;
     });
 
     it('should return default providers when no custom config exists', async () => {
       // getAvailableProviders returns empty array when no config
       mockedGetAvailableProviders.mockReturnValue([]);
 
-      const response = await request(app).get('/api/providers');
+      const response = await honoRequest(app).get('/api/providers');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('success');
@@ -56,7 +56,7 @@ describe('Providers Routes', () => {
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
 
-      const response = await request(app).get('/api/providers');
+      const response = await honoRequest(app).get('/api/providers');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -82,7 +82,7 @@ describe('Providers Routes', () => {
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
 
-      const response = await request(app).get('/api/providers');
+      const response = await honoRequest(app).get('/api/providers');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -96,18 +96,18 @@ describe('Providers Routes', () => {
   });
 
   describe('GET /providers/config-status', () => {
-    let app: ReturnType<typeof createApp>;
+    let app: ReturnType<typeof createApp>['app'];
 
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
+      app = createApp().app;
     });
 
     it('should return hasCustomConfig: false when no custom config exists', async () => {
       // getAvailableProviders returns empty array when no config
       mockedGetAvailableProviders.mockReturnValue([]);
 
-      const response = await request(app).get('/api/providers/config-status');
+      const response = await honoRequest(app).get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -124,7 +124,7 @@ describe('Providers Routes', () => {
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
 
-      const response = await request(app).get('/api/providers/config-status');
+      const response = await honoRequest(app).get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -134,12 +134,12 @@ describe('Providers Routes', () => {
     });
   });
   describe('POST /providers/test', () => {
-    let app: ReturnType<typeof createApp>;
+    let app: ReturnType<typeof createApp>['app'];
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
+      app = createApp().app;
 
       // Setup mock provider
       mockProvider = {
@@ -170,7 +170,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         prompt: testPrompt,
         providerOptions,
       });
@@ -219,7 +219,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -232,7 +232,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 for missing providerOptions', async () => {
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         prompt: 'Test prompt',
       });
 
@@ -249,7 +249,7 @@ describe('Providers Routes', () => {
         config: {},
       };
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -265,7 +265,7 @@ describe('Providers Routes', () => {
 
       mockedLoadApiProvider.mockRejectedValue(new Error('Failed to load provider'));
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -287,7 +287,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
         prompt: 'Test',
       });
@@ -329,7 +329,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
         prompt: 'Test',
       });
@@ -382,7 +382,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
         prompt: 'Comprehensive test',
       });
@@ -428,7 +428,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await honoRequest(app).post('/api/providers/test').send({
         providerOptions,
       });
 

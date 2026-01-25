@@ -1,7 +1,12 @@
-import { Router } from 'express';
+/**
+ * Red team routes for the local web UI.
+ */
+
+import { Hono } from 'hono';
 import { z } from 'zod';
-import cliState from '../../cliState';
-import logger from '../../logger';
+
+import cliState from '../../../cliState';
+import logger from '../../../logger';
 import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
@@ -12,30 +17,29 @@ import {
   type Plugin,
   REDTEAM_MODEL,
   type Strategy,
-} from '../../redteam/constants';
-import { PluginFactory, Plugins } from '../../redteam/plugins/index';
-import { redteamProviderManager } from '../../redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
-import { doRedteamRun } from '../../redteam/shared';
-import { Strategies } from '../../redteam/strategies/index';
-import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+} from '../../../redteam/constants';
+import { PluginFactory, Plugins } from '../../../redteam/plugins/index';
+import { redteamProviderManager } from '../../../redteam/providers/shared';
+import { getRemoteGenerationUrl } from '../../../redteam/remoteGeneration';
+import { doRedteamRun } from '../../../redteam/shared';
+import { Strategies } from '../../../redteam/strategies/index';
+import { type Strategy as StrategyFactory } from '../../../redteam/strategies/types';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
-} from '../../redteam/types';
-import { TestCaseWithPlugin } from '../../types';
-import { fetchWithProxy } from '../../util/fetch/index';
+} from '../../../redteam/types';
+import { TestCaseWithPlugin } from '../../../types';
+import { fetchWithProxy } from '../../../util/fetch/index';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
-} from '../services/redteamTestCaseGenerationService';
+} from '../../services/redteamTestCaseGenerationService';
 import { evalJobs } from './eval';
-import type { Request, Response } from 'express';
 
-export const redteamRouter = Router();
+export const redteamRouter = new Hono();
 
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
@@ -60,19 +64,24 @@ const TestCaseGenerationSchema = z.object({
   history: z.array(ConversationMessageSchema).optional().prefault([]),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
-  // Batch generation: number of test cases to generate (1-10, default 1)
   count: z.int().min(1).max(10).optional().prefault(1),
 });
 
+// Track the current running job
+let currentJobId: string | null = null;
+let currentAbortController: AbortController | null = null;
+
 /**
+ * POST /api/redteam/generate-test
+ *
  * Generates a test case for a given plugin/strategy combination.
  */
-redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.post('/generate-test', async (c) => {
   try {
-    const parsedBody = TestCaseGenerationSchema.safeParse(req.body);
+    const body = await c.req.json();
+    const parsedBody = TestCaseGenerationSchema.safeParse(body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: 'Invalid request body', details: parsedBody.error.message });
-      return;
+      return c.json({ error: 'Invalid request body', details: parsedBody.error.message }, 400);
     }
 
     const {
@@ -89,8 +98,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {
-      res.status(400).json({ error: pluginConfigurationError });
-      return;
+      return c.json({ error: pluginConfigurationError }, 400);
     }
 
     // In multi-input mode, some plugins don't support dynamic generation
@@ -100,48 +108,38 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
       if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
         logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
-        res.json({ testCases: [], count: 0 });
-        return;
+        return c.json({ testCases: [], count: 0 });
       }
     }
 
-    // For multi-turn strategies, force count to 1 (each turn depends on previous response)
+    // For multi-turn strategies, force count to 1
     const effectiveCount = isMultiTurnStrategy(strategy.id) ? 1 : count;
 
     logger.debug('Generating red team test case', { plugin, strategy, count: effectiveCount });
 
-    // Find the plugin
     const pluginFactory = Plugins.find((p) => p.key === plugin.id) as PluginFactory;
-
-    // TODO: Add support for this? Was previously misconfigured such that the no value would ever
-    // be passed in as a configuration option.
     const injectVar = 'query';
-
-    // Get the red team provider
     const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
 
     const testCases = await pluginFactory.action({
       provider: redteamProvider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
-      n: effectiveCount, // Generate requested number of test cases
+      n: effectiveCount,
       delayMs: 0,
       config: {
         ...plugin.config,
         language: plugin.config.language ?? 'en',
-        __nonce: Math.floor(Math.random() * 1000000), // Use a nonce to prevent caching
+        __nonce: Math.floor(Math.random() * 1000000),
       },
     });
 
     if (testCases.length === 0) {
-      res.status(500).json({ error: 'Failed to generate test case' });
-      return;
+      return c.json({ error: 'Failed to generate test case' }, 500);
     }
 
-    // Apply strategy to test case
     let finalTestCases = testCases;
 
-    // Skip applying strategy if it's 'basic' as they don't transform test cases
     if (!['basic', 'default'].includes(strategy.id)) {
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
@@ -158,18 +156,20 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         }
       } catch (error) {
         logger.error(`Error applying strategy ${strategy.id}: ${error}`);
-        res.status(500).json({
-          error: `Failed to apply strategy ${strategy.id}`,
-          details: error instanceof Error ? error.message : String(error),
-        });
-        return;
+        return c.json(
+          {
+            error: `Failed to apply strategy ${strategy.id}`,
+            details: error instanceof Error ? error.message : String(error),
+          },
+          500,
+        );
       }
     }
 
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
     const purpose = config.applicationDefinition.purpose ?? null;
 
-    // Handle multi-turn strategies (always single test case)
+    // Handle multi-turn strategies
     if (isMultiTurnStrategy(strategy.id)) {
       const testCase = finalTestCases[0];
       const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
@@ -195,27 +195,27 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           stateful,
         });
 
-        res.json({
+        return c.json({
           prompt: multiTurnResult.prompt,
           context,
           metadata: multiTurnResult.metadata,
         });
-        return;
       } catch (error) {
         if (error instanceof RemoteGenerationDisabledError) {
-          res.status(400).json({ error: error.message });
-          return;
+          return c.json({ error: error.message }, 400);
         }
 
         logger.error('[Multi-turn] Error generating prompt', {
           message: error instanceof Error ? error.message : String(error),
           strategy: strategy.id,
         });
-        res.status(500).json({
-          error: 'Failed to generate multi-turn prompt',
-          details: error instanceof Error ? error.message : String(error),
-        });
-        return;
+        return c.json(
+          {
+            error: 'Failed to generate multi-turn prompt',
+            details: error instanceof Error ? error.message : String(error),
+          },
+          500,
+        );
       }
     }
 
@@ -228,38 +228,41 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         return { prompt, context, metadata };
       });
 
-      res.json({
+      return c.json({
         testCases: batchResults,
         count: batchResults.length,
       });
-      return;
     }
 
-    // Handle single test case response (backward compatible)
+    // Handle single test case response
     const testCase = finalTestCases[0];
     const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
     const baseMetadata =
       testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
-    res.json({
+    return c.json({
       prompt: generatedPrompt,
       context,
       metadata: baseMetadata,
     });
   } catch (error) {
     logger.error(`Error generating test case: ${error}`);
-    res.status(500).json({
-      error: 'Failed to generate test case',
-      details: error instanceof Error ? error.message : String(error),
-    });
+    return c.json(
+      {
+        error: 'Failed to generate test case',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
   }
 });
 
-// Track the current running job
-let currentJobId: string | null = null;
-let currentAbortController: AbortController | null = null;
-
-redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+/**
+ * POST /api/redteam/run
+ *
+ * Run a red team evaluation.
+ */
+redteamRouter.post('/run', async (c) => {
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -272,12 +275,11 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = req.body;
+  const { config, force, verbose, delay, maxConcurrency } = await c.req.json();
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
 
-  // Initialize job status with empty logs array
   evalJobs.set(id, {
     evalId: null,
     status: 'in-progress',
@@ -287,13 +289,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     logs: [],
   });
 
-  // Set web UI mode
   cliState.webUI = true;
 
-  // Validate and normalize maxConcurrency
   const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
 
-  // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
     force,
@@ -341,13 +340,17 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     });
 
-  res.json({ id });
+  return c.json({ id });
 });
 
-redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
+/**
+ * POST /api/redteam/cancel
+ *
+ * Cancel the current red team run.
+ */
+redteamRouter.post('/cancel', async (c) => {
   if (!currentJobId) {
-    res.status(400).json({ error: 'No job currently running' });
-    return;
+    return c.json({ error: 'No job currently running' }, 400);
   }
 
   const jobId = currentJobId;
@@ -362,35 +365,43 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
     job.logs.push('Job cancelled by user');
   }
 
-  // Clear state
   cliState.webUI = false;
   currentJobId = null;
   currentAbortController = null;
 
-  // Wait a moment to ensure cleanup
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  res.json({ message: 'Job cancelled' });
+  return c.json({ message: 'Job cancelled' });
 });
 
 /**
- * Proxies requests to Promptfoo Cloud to invoke tasks.
+ * GET /api/redteam/status
  *
- * This route is defined last such that it acts as a catch-all for tasks.
- *
- * TODO(out of scope for #6461): Prepend a /tasks prefix to route i.e. /task/:taskId to avoid conflicts w/ other routes.
- *
- * @param taskId - The ID of the task to invoke. Note that IDs must be defined in
- * Cloud's task registry (See server/src/routes/task.ts).
+ * Get the status of the current red team run.
  */
-redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
-  const { taskId } = req.params;
+redteamRouter.get('/status', (c) => {
+  return c.json({
+    hasRunningJob: currentJobId !== null,
+    jobId: currentJobId,
+  });
+});
+
+/**
+ * POST /api/redteam/:taskId
+ *
+ * Proxy requests to Promptfoo Cloud to invoke tasks.
+ * This is a catch-all route and must be defined last.
+ */
+redteamRouter.post('/:taskId', async (c) => {
+  const taskId = c.req.param('taskId');
   const cloudFunctionUrl = getRemoteGenerationUrl();
+  const body = await c.req.json();
+
   logger.debug(
     `Received ${taskId} task request: ${JSON.stringify({
-      method: req.method,
-      url: req.url,
-      body: req.body,
+      method: c.req.method,
+      url: c.req.url,
+      body,
     })}`,
   );
 
@@ -403,7 +414,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
       },
       body: JSON.stringify({
         task: taskId,
-        ...req.body,
+        ...body,
       }),
     });
 
@@ -414,16 +425,11 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
     const data = await response.json();
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
-    res.json(data);
+    return c.json(data);
   } catch (error) {
     logger.error(`Error in ${taskId} task: ${error}`);
-    res.status(500).json({ error: `Failed to process ${taskId} task` });
+    return c.json({ error: `Failed to process ${taskId} task` }, 500);
   }
 });
 
-redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
-  res.json({
-    hasRunningJob: currentJobId !== null,
-    jobId: currentJobId,
-  });
-});
+export default redteamRouter;

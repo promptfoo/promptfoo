@@ -1,45 +1,46 @@
-import { Router } from 'express';
-import logger from '../../logger';
-import { getTraceStore } from '../../tracing/store';
-import type { Request, Response } from 'express';
+import { Hono } from 'hono';
 
-export const tracesRouter = Router();
+import logger from '../../../logger';
+import { getTraceStore } from '../../../tracing/store';
+
+export const tracesRouter = new Hono();
 
 // Get traces for a specific evaluation
-tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
+tracesRouter.get('/evaluation/:evaluationId', async (c) => {
   try {
-    const evaluationId = req.params.evaluationId as string;
+    const evaluationId = c.req.param('evaluationId');
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
     const traces = await traceStore.getTracesByEvaluation(evaluationId);
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
-    res.json({ traces });
+    return c.json({ traces });
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching traces: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch traces' });
+    return c.json({ error: 'Failed to fetch traces' }, 500);
   }
 });
 
 // Get a specific trace by ID
-tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
+tracesRouter.get('/:traceId', async (c) => {
   try {
-    const traceId = req.params.traceId as string;
+    const traceId = c.req.param('traceId');
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();
     const trace = await traceStore.getTrace(traceId);
 
     if (!trace) {
-      res.status(404).json({ error: 'Trace not found' });
-      return;
+      return c.json({ error: 'Trace not found' }, 404);
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
-    res.json({ trace });
+    return c.json({ trace });
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching trace: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch trace' });
+    return c.json({ error: 'Failed to fetch trace' }, 500);
   }
 });
+
+export default tracesRouter;

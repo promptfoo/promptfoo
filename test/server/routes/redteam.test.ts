@@ -1,6 +1,6 @@
-import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { honoRequest } from '../../util/honoTestHelper';
 
 // Mock dependencies
 vi.mock('../../../src/redteam/plugins/index');
@@ -22,11 +22,11 @@ const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 
 describe('Redteam Routes', () => {
   describe('POST /redteam/generate-test', () => {
-    let app: ReturnType<typeof createApp>;
+    let app: ReturnType<typeof createApp>['app'];
 
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
+      app = createApp().app;
 
       // Default mock implementations
       mockedGetPluginConfigurationError.mockReturnValue(null);
@@ -46,7 +46,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -72,7 +72,7 @@ describe('Redteam Routes', () => {
 
       it('should exclude dataset-exempt plugins with multi-input config', async () => {
         // 'beavertails' is a DATASET_EXEMPT_PLUGIN - should be excluded with inputs
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -98,7 +98,7 @@ describe('Redteam Routes', () => {
 
       it('should exclude multi-input excluded plugins when plugin has multi-input config', async () => {
         // 'cca' is a MULTI_INPUT_EXCLUDED_PLUGIN - should be excluded only with multi-input
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -130,7 +130,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -163,7 +163,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -190,7 +190,7 @@ describe('Redteam Routes', () => {
 
       it('should exclude system-prompt-override with multi-input config', async () => {
         // 'system-prompt-override' is a MULTI_INPUT_EXCLUDED_PLUGIN
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -222,7 +222,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -252,7 +252,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -284,7 +284,7 @@ describe('Redteam Routes', () => {
         };
         mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -312,7 +312,7 @@ describe('Redteam Routes', () => {
 
     describe('validation', () => {
       it('should return 400 for invalid plugin ID', async () => {
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -335,7 +335,7 @@ describe('Redteam Routes', () => {
       });
 
       it('should return 400 for invalid strategy ID', async () => {
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {
@@ -362,7 +362,7 @@ describe('Redteam Routes', () => {
           'Plugin requires additional configuration',
         );
 
-        const response = await request(app)
+        const response = await honoRequest(app)
           .post('/api/redteam/generate-test')
           .send({
             plugin: {

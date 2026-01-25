@@ -8,22 +8,22 @@
  * 4. Handles errors gracefully
  */
 
-import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
+import { honoRequest } from '../../util/honoTestHelper';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>['app'];
 
   beforeAll(async () => {
     await runDbMigrations();
   });
 
   beforeEach(() => {
-    app = createApp();
+    app = createApp().app;
   });
 
   beforeEach(async () => {
@@ -49,7 +49,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'errors' });
 
@@ -81,7 +81,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'all' }); // No filters
 
@@ -97,7 +97,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'passes' });
 
@@ -112,7 +112,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         searchableContent: 'searchable',
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ search: 'searchable' });
 
@@ -127,7 +127,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         withNamedScores: true,
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({
           filter: JSON.stringify({
@@ -150,7 +150,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         searchableContent: 'searchable',
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({
           filterMode: 'failures',
@@ -175,7 +175,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'errors' });
 
@@ -194,7 +194,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'failures' });
 
@@ -213,7 +213,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'passes' });
 
@@ -233,7 +233,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         withNamedScores: true,
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'passes' });
 
@@ -250,7 +250,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Error handling', () => {
     it('should handle nonexistent eval gracefully', async () => {
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get('/api/eval/nonexistent-id/table')
         .query({ filterMode: 'errors' });
 
@@ -268,7 +268,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       const db = getDb();
       await db.run(`DELETE FROM eval_results WHERE eval_id = '${eval_.id}'`);
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'errors' });
 
@@ -293,7 +293,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'errors' });
 
@@ -313,7 +313,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'errors' });
 
@@ -337,21 +337,21 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       });
 
       // CSV export should not include filteredMetrics
-      const csvResponse = await request(app)
+      const csvResponse = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ format: 'csv', filterMode: 'errors' });
 
       expect(csvResponse.status).toBe(200);
-      expect(csvResponse.headers['content-type']).toContain('text/csv');
+      expect(csvResponse.headers.get('content-type')).toContain('text/csv');
       expect(typeof csvResponse.text).toBe('string');
 
       // JSON export should not include filteredMetrics (returns table object, not array)
-      const jsonResponse = await request(app)
+      const jsonResponse = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
         .query({ format: 'json', filterMode: 'errors' });
 
       expect(jsonResponse.status).toBe(200);
-      expect(jsonResponse.headers['content-type']).toContain('application/json');
+      expect(jsonResponse.headers.get('content-type')).toContain('application/json');
       // JSON export returns table structure { head, body }, not full EvalTableDTO
       expect(jsonResponse.body).toHaveProperty('head');
       expect(jsonResponse.body).toHaveProperty('body');
@@ -367,9 +367,9 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       });
 
       // Request first page (limited results)
-      const response = await request(app)
+      const response = await honoRequest(app)
         .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'passes', limit: 10, offset: 0 });
+        .query({ filterMode: 'passes', limit: '10', offset: '0' });
 
       expect(response.status).toBe(200);
       expect(response.body.table.body).toHaveLength(10); // Paginated results
@@ -392,7 +392,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app).get(`/api/eval/${eval1.id}/table`).query({
+      const response = await honoRequest(app).get(`/api/eval/${eval1.id}/table`).query({
         filterMode: 'passes',
         comparisonEvalIds: eval2.id,
       });
