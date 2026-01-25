@@ -1011,6 +1011,50 @@ export default class Eval {
     });
   }
 
+  /**
+   * Gets all test indices matching the given filter WITHOUT pagination.
+   * Used for bulk operations that need to process all matching results.
+   *
+   * SECURITY: Uses parameterized SQL queries to prevent SQL injection.
+   *
+   * @returns Object containing testIndices array and filteredCount
+   */
+  async getAllFilteredTestIndices(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+
+    // Use the same WHERE clause as other filter methods
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
+
+    // Get total filtered count
+    const countQuery = sql`
+      SELECT COUNT(DISTINCT test_idx) as count
+      FROM eval_results
+      WHERE ${whereSql}
+    `;
+    const countResult = await db.get<{ count: number | null }>(countQuery);
+    const filteredCount = countResult?.count || 0;
+
+    // Get all matching test indices (no limit)
+    const idxQuery = sql`
+      SELECT DISTINCT test_idx
+      FROM eval_results
+      WHERE ${whereSql}
+      ORDER BY test_idx
+    `;
+    const rows = await db.all<{ test_idx: number }>(idxQuery);
+    const testIndices = rows.map((row) => row.test_idx);
+
+    return { testIndices, filteredCount };
+  }
+
   async getTablePage(opts: {
     offset?: number;
     limit?: number;
