@@ -2153,11 +2153,23 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
 
-  const createConcurrencyTrackingProvider = (delayMs = 20) => {
+  const createConcurrencyTrackingProvider = (expectedConcurrentStarts = 1) => {
     const activeByKey = new Map<string, number>();
     const maxActiveByKey = new Map<string, number>();
+    const callOrderByKey = new Map<string, string[]>();
     let activeTotal = 0;
     let maxActiveTotal = 0;
+    let startedCount = 0;
+    let startedResolved = false;
+    let releaseCalled = false;
+    let resolveStarted: () => void = () => {};
+    let resolveRelease: () => void = () => {};
+    const startedPromise = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const releasePromise = new Promise<void>((resolve) => {
+      resolveRelease = resolve;
+    });
 
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -2169,7 +2181,12 @@ describe('evaluator', () => {
           context.originalProvider,
           context.prompt,
           context.test,
+          context.repeatIndex,
         );
+        const orderLabel = String(context.test.vars?.question ?? '');
+        const orderForKey = callOrderByKey.get(conversationKey) ?? [];
+        orderForKey.push(orderLabel);
+        callOrderByKey.set(conversationKey, orderForKey);
 
         activeTotal += 1;
         maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
@@ -2182,7 +2199,12 @@ describe('evaluator', () => {
         );
 
         try {
-          await sleep(delayMs);
+          startedCount += 1;
+          if (!startedResolved && startedCount >= expectedConcurrentStarts) {
+            startedResolved = true;
+            resolveStarted();
+          }
+          await releasePromise;
         } finally {
           activeTotal -= 1;
           activeByKey.set(conversationKey, (activeByKey.get(conversationKey) ?? 1) - 1);
@@ -2199,11 +2221,26 @@ describe('evaluator', () => {
       provider,
       getMaxActiveTotal: () => maxActiveTotal,
       maxActiveByKey,
+      getCallOrderByKey: () => callOrderByKey,
+      waitForStarts: () => startedPromise,
+      release: () => {
+        if (!releaseCalled) {
+          releaseCalled = true;
+          resolveRelease();
+        }
+      },
     };
   };
 
   it('parallelizes across conversation keys with _conversation', async () => {
-    const { provider, getMaxActiveTotal, maxActiveByKey } = createConcurrencyTrackingProvider();
+    const {
+      provider,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      getCallOrderByKey,
+      waitForStarts,
+      release,
+    } = createConcurrencyTrackingProvider(2);
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -2217,16 +2254,36 @@ describe('evaluator', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
 
-    expect(getMaxActiveTotal()).toBeGreaterThan(1);
+    expect(getMaxActiveTotal()).toBe(2);
     for (const value of maxActiveByKey.values()) {
       expect(value).toBe(1);
     }
+    const callOrderByKey = getCallOrderByKey();
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests!;
+    const convoAKey = buildConversationKey(provider, prompt, tests[0], 0);
+    const convoBKey = buildConversationKey(provider, prompt, tests[2], 0);
+    expect(callOrderByKey.get(convoAKey)).toEqual(['Q1', 'Q2']);
+    expect(callOrderByKey.get(convoBKey)).toEqual(['Q3', 'Q4']);
   });
 
   it('serializes steps within the same conversation key with _conversation', async () => {
-    const { provider, getMaxActiveTotal, maxActiveByKey } = createConcurrencyTrackingProvider();
+    const {
+      provider,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      getCallOrderByKey,
+      waitForStarts,
+      release,
+    } = createConcurrencyTrackingProvider(1);
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -2239,12 +2296,64 @@ describe('evaluator', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
 
     expect(getMaxActiveTotal()).toBe(1);
     for (const value of maxActiveByKey.values()) {
       expect(value).toBe(1);
     }
+    const callOrderByKey = getCallOrderByKey();
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests!;
+    const convoKey = buildConversationKey(provider, prompt, tests[0], 0);
+    expect(callOrderByKey.get(convoKey)).toEqual(['Q1', 'Q2', 'Q3']);
+  });
+
+  it('parallelizes repeat iterations within the same conversation', async () => {
+    const {
+      provider,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      getCallOrderByKey,
+      waitForStarts,
+      release,
+    } = createConcurrencyTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation[0].output }}')],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2, repeat: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    expect(getMaxActiveTotal()).toBe(2);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+    const callOrderByKey = getCallOrderByKey();
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests!;
+    const repeat0Key = buildConversationKey(provider, prompt, tests[0], 0);
+    const repeat1Key = buildConversationKey(provider, prompt, tests[0], 1);
+    expect(callOrderByKey.get(repeat0Key)).toEqual(['Q1', 'Q2']);
+    expect(callOrderByKey.get(repeat1Key)).toEqual(['Q1', 'Q2']);
   });
 
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
@@ -3103,9 +3212,7 @@ describe('evaluator', () => {
     // Second conversation, first question (should NOT include first conversation)
     const conv2First = allCalls.find(
       (p: string) =>
-        p.includes('User: Question 2A') &&
-        !p.includes('Assistant:') &&
-        !p.includes('Question 1'),
+        p.includes('User: Question 2A') && !p.includes('Assistant:') && !p.includes('Question 1'),
     );
     expect(conv2First).toBeDefined();
 
@@ -3116,6 +3223,66 @@ describe('evaluator', () => {
         !p.includes('Question 1'),
     );
     expect(conv2Second).toBeDefined();
+  });
+
+  it('should keep conversation history isolated across repeat iterations for the same conversationId', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt, context) => {
+        const question = context?.test?.vars?.question ?? 'unknown';
+        const repeatIndex = context?.repeatIndex ?? 0;
+        return {
+          output: `Answer for ${question} (repeat ${repeatIndex})`,
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.output }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation repeat test',
+        },
+      ],
+      tests: [
+        {
+          vars: { question: 'Question 1' },
+          metadata: { conversationId: 'conversation1' },
+        },
+        {
+          vars: { question: 'Question 2' },
+          metadata: { conversationId: 'conversation1' },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { repeat: 2, maxConcurrency: 2 });
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+
+    const calls = mockApiProvider.callApi.mock.calls.map(([prompt, context]) => ({
+      prompt: prompt as string,
+      repeatIndex: context?.repeatIndex ?? 0,
+      question: context?.test?.vars?.question,
+    }));
+
+    const repeat0Second = calls.find(
+      (call) => call.repeatIndex === 0 && call.question === 'Question 2',
+    );
+    const repeat1Second = calls.find(
+      (call) => call.repeatIndex === 1 && call.question === 'Question 2',
+    );
+
+    expect(repeat0Second).toBeDefined();
+    expect(repeat1Second).toBeDefined();
+    expect(repeat0Second?.prompt).toContain('Previous: Answer for Question 1 (repeat 0)');
+    expect(repeat0Second?.prompt).toContain('Current: Question 2');
+    expect(repeat0Second?.prompt).not.toContain('repeat 1');
+    expect(repeat1Second?.prompt).toContain('Previous: Answer for Question 1 (repeat 1)');
+    expect(repeat1Second?.prompt).toContain('Current: Question 2');
+    expect(repeat1Second?.prompt).not.toContain('repeat 0');
   });
 
   it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
@@ -3186,7 +3353,7 @@ describe('evaluator', () => {
       (p: string) =>
         p.includes('Current: Suggest a pasta recipe') &&
         !p.includes('Previous:') &&
-        !p.includes('sci-fi')
+        !p.includes('sci-fi'),
     );
     expect(pastaFirst).toBeDefined();
 
@@ -3196,7 +3363,7 @@ describe('evaluator', () => {
         p.includes('Previous: ') &&
         p.includes('Suggest a pasta recipe') &&
         p.includes('Current: How long does it take?') &&
-        !p.includes('sci-fi')
+        !p.includes('sci-fi'),
     );
     expect(pastaSecond).toBeDefined();
   });

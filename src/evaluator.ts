@@ -88,18 +88,21 @@ import type { CallApiContextParams } from './types/providers';
  * @param provider - The API provider
  * @param prompt - The prompt being evaluated
  * @param test - The test case with optional conversationId metadata
+ * @param repeatIndex - The repeat iteration index (when repeat > 1)
  * @returns A string key identifying the conversation thread
  */
 export function buildConversationKey(
   provider: ApiProvider,
   prompt: Prompt,
   test: AtomicTestCase,
+  repeatIndex: number,
 ): string {
   const providerKey = provider.label || provider.id();
   const conversationId = test.metadata?.conversationId;
+  const repeatSuffix = repeatIndex > 0 ? `:repeat:${repeatIndex}` : '';
   // Note: prompt.id may be undefined, which becomes 'undefined' in the string
   // This maintains backward compatibility with existing conversation key format
-  return `${providerKey}:${prompt.id}${conversationId ? `:${conversationId}` : ''}`;
+  return `${providerKey}:${prompt.id}${conversationId ? `:${conversationId}` : ''}${repeatSuffix}`;
 }
 
 /**
@@ -333,7 +336,7 @@ export async function runEval({
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
-  const conversationKey = buildConversationKey(provider, prompt, test);
+  const conversationKey = buildConversationKey(provider, prompt, test, repeatIndex);
   const usesConversation = prompt.raw.includes('_conversation');
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -1283,9 +1286,14 @@ class Evaluator {
                 testSuite,
                 test: resolvedTest,
                 nunjucksFilters: testSuite.nunjucksFilters,
-                // Base grouping key derived from provider/prompt/conversationId.
+                // Base grouping key derived from provider/prompt/conversationId/repeatIndex.
                 // The scheduler may override this for independent steps.
-                concurrencyKey: buildConversationKey(provider, resolvedPrompt, resolvedTest),
+                concurrencyKey: buildConversationKey(
+                  provider,
+                  resolvedPrompt,
+                  resolvedTest,
+                  repeatIndex,
+                ),
                 testIdx,
                 promptIdx,
                 repeatIndex,
@@ -1293,7 +1301,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                concurrency,
                 abortSignal: options.abortSignal,
                 evalId: this.evalRecord.id,
               });
@@ -1350,31 +1357,6 @@ class Evaluator {
       // storeOutputAs requires global serialization because later tests depend on earlier outputs
       logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
       concurrency = 1;
-    }
-
-    const conversationKeysRequiringSerial = new Set<string>();
-    const conversationVarDisabled = getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR');
-    if (concurrency > 1 && !conversationVarDisabled) {
-      for (const evalStep of runEvalOptions) {
-        const stepUsesConversationVar =
-          evalStep.prompt.raw.includes('_conversation') &&
-          !evalStep.test.options?.disableConversationVar;
-        if (stepUsesConversationVar) {
-        const conversationKey =
-          evalStep.concurrencyKey ??
-          buildConversationKey(evalStep.provider, evalStep.prompt, evalStep.test);
-          conversationKeysRequiringSerial.add(conversationKey);
-        }
-      }
-    }
-
-    const shouldSerializeConversations =
-      conversationKeysRequiringSerial.size > 0 && concurrency > 1;
-    if (shouldSerializeConversations) {
-      // _conversation uses per-conversation serialization (handled in scheduling below)
-      logger.info(
-        `Using per-conversation serialization: different ${chalk.cyan('conversationId')}s will run in parallel (up to ${concurrency}), while steps within the same conversation run sequentially.`,
-      );
     }
 
     // Actually run the eval
@@ -1712,10 +1694,11 @@ class Evaluator {
 
     // Separate serial and concurrent eval options, and precompute concurrent groups
     const serialRunEvalOptions: RunEvalOptions[] = [];
-    const concurrentRunEvalOptions: RunEvalOptions[] = [];
-    const conversationGroups = new Map<string, RunEvalOptions[]>();
+    const conversationVarDisabled = getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR');
+    // group eval options with the same concurrency key together (running them sequentially)
+    const concurrencyGroups = new Map<string, RunEvalOptions[]>();
     const concurrentGroupKeys: string[] = [];
-    let independentGroupCounter = 0;
+    let independentGroupIndex = 0;
 
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.options?.runSerially) {
@@ -1723,24 +1706,25 @@ class Evaluator {
         continue;
       }
 
-      concurrentRunEvalOptions.push(evalOption);
+      // this step uses the conversation var
+      const stepUsesConversationVar =
+        evalOption.prompt.raw.includes('_conversation') &&
+        !evalOption.test.options?.disableConversationVar;
 
-      let groupKey = `__independent_${independentGroupCounter++}`;
-      if (shouldSerializeConversations) {
-        const conversationKey =
-          evalOption.concurrencyKey ??
-          buildConversationKey(evalOption.provider, evalOption.prompt, evalOption.test);
-        if (conversationKeysRequiringSerial.has(conversationKey)) {
-          groupKey = conversationKey;
+      const concurrencyKey = evalOption.concurrencyKey;
+
+      if (!conversationVarDisabled && stepUsesConversationVar) {
+        if (!concurrencyGroups.has(concurrencyKey)) {
+          concurrencyGroups.set(concurrencyKey, []);
+          concurrentGroupKeys.push(concurrencyKey);
         }
+        concurrencyGroups.get(concurrencyKey)!.push(evalOption);
+      } else {
+        // don't group them together when conversation var is disabled or not used
+        const independentKey = `${concurrencyKey}:independent:${independentGroupIndex++}`;
+        concurrencyGroups.set(independentKey, [evalOption]);
+        concurrentGroupKeys.push(independentKey);
       }
-      evalOption.concurrencyKey = groupKey;
-
-      if (!conversationGroups.has(groupKey)) {
-        conversationGroups.set(groupKey, []);
-        concurrentGroupKeys.push(groupKey);
-      }
-      conversationGroups.get(groupKey)!.push(evalOption);
     }
 
     // Print info messages before starting progress bar
@@ -1748,9 +1732,9 @@ class Evaluator {
       if (serialRunEvalOptions.length > 0) {
         logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
       }
-      if (concurrentRunEvalOptions.length > 0) {
+      if (concurrentGroupKeys.length > 0) {
         logger.info(
-          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+          `Running ${concurrentGroupKeys.length} test groups cases (up to ${concurrency} at a time)...`,
         );
       }
     }
@@ -1781,7 +1765,7 @@ class Evaluator {
 
       // Then run concurrent evaluations
       await async.forEachOfLimit(concurrentGroupKeys, concurrency, async (groupKey) => {
-        const groupSteps = conversationGroups.get(groupKey) || [];
+        const groupSteps = concurrencyGroups.get(groupKey) || [];
         for (const evalStep of groupSteps) {
           checkAbort();
           const idx = runEvalOptions.indexOf(evalStep);

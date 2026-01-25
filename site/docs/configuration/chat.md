@@ -229,7 +229,7 @@ Try it yourself by using the [full example config](https://github.com/promptfoo/
 When the `_conversation` variable is present, evals are serialized per conversation key. Steps that
 share the same conversation history run sequentially, while different `conversationId`s can run in
 parallel (up to max concurrency). The conversation key is derived from provider + prompt id, plus
-`conversationId` when present.
+`conversationId` when present. Repeat iterations add a unique suffix so runs stay isolated.
 :::
 
 ## Separating Chat Conversations

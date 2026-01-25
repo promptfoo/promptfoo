@@ -161,13 +161,6 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 
-  /**
-   * Grouping key for per-conversation serialization.
-   * Typically `${provider}:${promptId}` plus `:${conversationId}` when set.
-   * The scheduler may override this to a unique key for fully independent steps.
-   */
-  concurrencyKey?: string;
-
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
@@ -176,7 +169,11 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  concurrency?: number;
+  /**
+   * Grouping key for per-conversation serialization. Used by the scheduler to group converstation steps
+   * to the same working so they run sequentially.
+   */
+  concurrencyKey: string;
 
   /**
    * Evaluation ID for tracking blob references in the database.
