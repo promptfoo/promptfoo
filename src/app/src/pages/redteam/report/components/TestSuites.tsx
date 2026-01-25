@@ -35,14 +35,19 @@ import { type TestResultStats } from './FrameworkComplianceUtils';
 import { getStrategyIdFromTest } from './shared';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import type { ColumnDef, SortingState } from '@tantml:function_calls>';
+
+interface TestWithMetadata {
+  metadata?: { strategyId?: string };
+  result?: { testCase?: { metadata?: { strategyId?: string } } };
+}
 
 interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
-  failuresByPlugin?: Record<string, unknown[]>;
-  passesByPlugin?: Record<string, unknown[]>;
+  failuresByPlugin?: Record<string, TestWithMetadata[]>;
+  passesByPlugin?: Record<string, TestWithMetadata[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
