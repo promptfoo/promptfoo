@@ -101,7 +101,6 @@ export function buildConversationKey(
   const conversationId = test.metadata?.conversationId;
   const repeatSuffix = repeatIndex > 0 ? `:repeat:${repeatIndex}` : '';
   // Note: prompt.id may be undefined, which becomes 'undefined' in the string
-  // This maintains backward compatibility with existing conversation key format
   return `${providerKey}:${prompt.id}${conversationId ? `:${conversationId}` : ''}${repeatSuffix}`;
 }
 
@@ -345,7 +344,6 @@ export async function runEval({
     !test.options?.disableConversationVar &&
     usesConversation
   ) {
-    //
     vars._conversation = conversations?.[conversationKey] || [];
   }
 
@@ -1290,7 +1288,6 @@ class Evaluator {
                 test: resolvedTest,
                 nunjucksFilters: testSuite.nunjucksFilters,
                 // Base grouping key derived from provider/prompt/conversationId/repeatIndex.
-                // The scheduler may override this for independent steps.
                 concurrencyKey: buildConversationKey(
                   provider,
                   resolvedPrompt,
@@ -1353,11 +1350,9 @@ class Evaluator {
 
     // Determine run parameters
 
-    // Check feature usage for concurrency adjustments
     const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
 
     if (concurrency > 1 && usesStoreOutputAs) {
-      // storeOutputAs requires global serialization because later tests depend on earlier outputs
       logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
       concurrency = 1;
     }
@@ -1695,7 +1690,7 @@ class Evaluator {
       }
     };
 
-    // Separate serial and concurrent eval options, and precompute concurrent groups
+    // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const conversationVarDisabled = getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR');
     // group eval options with the same concurrency key together (running them sequentially)
@@ -1709,7 +1704,6 @@ class Evaluator {
         continue;
       }
 
-      // this step uses the conversation var
       const stepUsesConversationVar =
         evalOption.prompt.raw.includes('_conversation') &&
         !evalOption.test.options?.disableConversationVar;
