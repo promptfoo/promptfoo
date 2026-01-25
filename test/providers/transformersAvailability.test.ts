@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isTransformersAvailable,
   resetTransformersAvailabilityCache,
@@ -9,6 +8,10 @@ import {
 describe('transformersAvailability', () => {
   beforeEach(() => {
     resetTransformersAvailabilityCache();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('isTransformersAvailable', () => {
