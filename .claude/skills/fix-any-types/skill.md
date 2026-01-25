@@ -116,6 +116,7 @@ function processStrategyConfig(config: StrategyConfig): void {
 ```
 
 **Common existing types to check for:**
+
 - Plugin configurations: `PluginConfig`
 - Strategy configurations: `StrategyConfig`
 - Provider configurations: `ProviderOptions`
