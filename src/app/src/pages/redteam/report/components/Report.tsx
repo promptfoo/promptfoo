@@ -520,8 +520,8 @@ const App = () => {
   const actionButtons = useMemo(
     () => (
       <div className="flex items-center gap-1">
-        <Tooltip>
-          {evalId && (
+        {evalId && (
+          <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
@@ -540,9 +540,9 @@ const App = () => {
                 <ListOrdered className="size-5" />
               </Button>
             </TooltipTrigger>
-          )}
-          <TooltipContent>View all logs</TooltipContent>
-        </Tooltip>
+            <TooltipContent>View all logs</TooltipContent>
+          </Tooltip>
+        )}
         {evalId && evalData && (
           <ReportDownloadButton
             evalDescription={evalData?.config.description || evalId}
