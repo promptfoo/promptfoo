@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EvalResultsFilterMode } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -76,6 +77,27 @@ export type CopyEvalParams = z.infer<typeof CopyEvalParamsSchema>;
 export type CopyEvalRequest = z.infer<typeof CopyEvalRequestSchema>;
 export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
+// GET /api/evals/:id/table
+
+/** Query parameters for eval table endpoint. */
+export const EvalTableQuerySchema = z.object({
+  format: z.string().optional(),
+  limit: z.coerce.number().positive().prefault(50),
+  offset: z.coerce.number().nonnegative().prefault(0),
+  filterMode: EvalResultsFilterMode.prefault('all'),
+  search: z.string().prefault(''),
+  filter: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .prefault([]),
+  comparisonEvalIds: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .prefault([]),
+});
+
+export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
+
 /** Grouped schemas for server-side validation. */
 export const EvalSchemas = {
   UpdateAuthor: {
@@ -97,5 +119,8 @@ export const EvalSchemas = {
     Params: CopyEvalParamsSchema,
     Request: CopyEvalRequestSchema,
     Response: CopyEvalResponseSchema,
+  },
+  Table: {
+    Query: EvalTableQuerySchema,
   },
 } as const;

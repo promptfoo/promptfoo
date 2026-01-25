@@ -10,6 +10,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -83,27 +84,11 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
   }
 });
 
-// Validation schemas
-const TestRequestTransformSchema = z.object({
-  transformCode: z.string().optional(),
-  prompt: z.string(),
-});
-
-const TestResponseTransformSchema = z.object({
-  transformCode: z.string().optional(),
-  response: z.string(),
-});
-
-const TestPayloadSchema = z.object({
-  prompt: z.string().optional(),
-  providerOptions: ProviderOptionsSchema,
-});
-
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  let payload: z.infer<typeof TestPayloadSchema>;
+  let payload: z.infer<typeof ProviderSchemas.Test.Request>;
 
   try {
-    payload = TestPayloadSchema.parse(req.body);
+    payload = ProviderSchemas.Test.Request.parse(req.body);
   } catch (e) {
     res.status(400).json({ error: z.prettifyError(e as z.ZodError) });
     return;
@@ -251,7 +236,9 @@ providersRouter.post(
   '/test-request-transform',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { transformCode, prompt } = TestRequestTransformSchema.parse(req.body);
+      const { transformCode, prompt } = ProviderSchemas.TestRequestTransform.Request.parse(
+        req.body,
+      );
 
       // Treat empty string as undefined to show base behavior
       const normalizedTransformCode =
@@ -306,7 +293,8 @@ providersRouter.post(
   '/test-response-transform',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { transformCode, response: responseText } = TestResponseTransformSchema.parse(req.body);
+      const { transformCode, response: responseText } =
+        ProviderSchemas.TestResponseTransform.Request.parse(req.body);
 
       // Treat empty string as undefined to show base behavior
       const normalizedTransformCode =

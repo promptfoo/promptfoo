@@ -7,8 +7,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalSchemas } from '../../types/api/eval';
-import { EvalResultsFilterMode } from '../../types/index';
+import { EvalSchemas, EvalTableQuerySchema } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
@@ -172,29 +171,13 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// Query parameter schemas
-const evalTableQuerySchema = z.object({
-  format: z.string().optional(),
-  limit: z.coerce.number().positive().prefault(50),
-  offset: z.coerce.number().nonnegative().prefault(0),
-  filterMode: EvalResultsFilterMode.prefault('all'),
-  search: z.string().prefault(''),
-  filter: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-  comparisonEvalIds: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-});
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id as string;
 
   // Parse and validate query parameters
-  const queryResult = evalTableQuerySchema.safeParse(req.query);
+  const queryResult = EvalTableQuerySchema.safeParse(req.query);
 
   if (!queryResult.success) {
     res.status(400).json({ error: z.prettifyError(queryResult.error) });
