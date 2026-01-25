@@ -23,6 +23,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { getSessionId } from './redteam/util';
+import { createRateLimitRegistry, type RateLimitRegistry } from './scheduler';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -292,6 +293,7 @@ export async function runEval({
   isRedteam,
   abortSignal,
   evalId,
+  rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -415,11 +417,52 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Wrap provider call with rate limit registry if available
+      if (rateLimitRegistry) {
+        response = await rateLimitRegistry.execute(
+          activeProvider,
+          () =>
+            activeProvider.callApi(
+              renderedPrompt,
+              callApiContext,
+              abortSignal ? { abortSignal } : undefined,
+            ),
+          {
+            // Extract rate limit headers from response metadata
+            getHeaders: (result: ProviderResponse | undefined) =>
+              result?.metadata?.headers as Record<string, string> | undefined,
+            // Detect rate limit from error message
+            isRateLimited: (_result: ProviderResponse | undefined, error: Error | undefined) =>
+              Boolean(
+                error?.message?.includes('429') ||
+                  error?.message?.toLowerCase().includes('rate limit') ||
+                  error?.message?.toLowerCase().includes('too many requests'),
+              ),
+            // Extract retry-after from headers or error
+            getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+              const headers = result?.metadata?.headers as Record<string, string> | undefined;
+              if (headers?.['retry-after-ms']) {
+                return parseInt(headers['retry-after-ms'], 10);
+              }
+              if (headers?.['retry-after']) {
+                return parseInt(headers['retry-after'], 10) * 1000;
+              }
+              // Try to extract from error message (some providers include it)
+              const match = error?.message?.match(/retry after (\d+)/i);
+              if (match) {
+                return parseInt(match[1], 10) * 1000;
+              }
+              return undefined;
+            },
+          },
+        );
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -792,6 +835,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  rateLimitRegistry: RateLimitRegistry | null;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -813,6 +857,11 @@ class Evaluator {
         : [];
 
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+
+    // Create rate limit registry for adaptive concurrency control
+    this.rateLimitRegistry = createRateLimitRegistry({
+      maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+    });
   }
 
   /**
@@ -1270,6 +1319,7 @@ class Evaluator {
                 concurrency,
                 abortSignal: options.abortSignal,
                 evalId: this.evalRecord.id,
+                rateLimitRegistry: this.rateLimitRegistry ?? undefined,
               });
               promptIdx++;
             }
@@ -2241,6 +2291,9 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Clean up rate limit registry resources
+      this.rateLimitRegistry?.dispose();
 
       // Reset cliState.maxConcurrency to prevent stale state between evaluations
       cliState.maxConcurrency = undefined;

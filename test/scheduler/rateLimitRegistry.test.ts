@@ -1,5 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ApiProvider } from '../../src/types/providers';
 
 // Track constructor calls and instances
@@ -475,7 +477,7 @@ describe('RateLimitRegistry', () => {
     });
 
     it('should forward concurrency:decreased events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function(this: any) {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
         this.emit('concurrency:decreased', {
           rateLimitKey: 'test-provider',
           changed: true,
@@ -503,7 +505,7 @@ describe('RateLimitRegistry', () => {
     });
 
     it('should forward concurrency:increased events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function(this: any) {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
         this.emit('concurrency:increased', {
           rateLimitKey: 'test-provider',
           changed: true,
@@ -531,7 +533,7 @@ describe('RateLimitRegistry', () => {
     });
 
     it('should forward ratelimit:warning events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function(this: any) {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
         this.emit('ratelimit:warning', {
           rateLimitKey: 'test-provider',
           requestRatio: 0.05,
@@ -555,7 +557,7 @@ describe('RateLimitRegistry', () => {
     });
 
     it('should forward ratelimit:learned events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function(this: any) {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
         this.emit('ratelimit:learned', {
           rateLimitKey: 'test-provider',
           requestLimit: 100,
@@ -579,7 +581,7 @@ describe('RateLimitRegistry', () => {
     });
 
     it('should forward request:retrying events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function(this: any) {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
         this.emit('request:retrying', {
           rateLimitKey: 'test-provider',
           attempt: 1,
@@ -771,9 +773,7 @@ describe('RateLimitRegistry', () => {
       const provider1 = { id: () => 'provider-1', config: {} } as ApiProvider;
       const provider2 = { id: () => 'provider-2', config: {} } as ApiProvider;
 
-      mockGetRateLimitKey
-        .mockReturnValueOnce('provider-1')
-        .mockReturnValueOnce('provider-2');
+      mockGetRateLimitKey.mockReturnValueOnce('provider-1').mockReturnValueOnce('provider-2');
 
       const state1 = new EventEmitter() as any;
       state1.executeWithRetry = vi.fn().mockResolvedValue('result');

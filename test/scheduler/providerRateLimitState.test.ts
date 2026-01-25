@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
 
 // Fast retry policy for tests - minimal delays
@@ -41,7 +41,7 @@ describe('ProviderRateLimitState', () => {
           maxRetries: 5,
           baseDelayMs: 2000,
           maxDelayMs: 30000,
-          jitterMs: 500,
+          jitterFactor: 0.1,
         },
       });
 

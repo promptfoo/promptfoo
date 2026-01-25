@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  parseRateLimitHeaders,
-  parseRetryAfter,
-  type ParsedRateLimitHeaders,
-} from '../../src/scheduler/headerParser';
+import { parseRateLimitHeaders, parseRetryAfter } from '../../src/scheduler/headerParser';
 
 describe('parseRateLimitHeaders', () => {
   describe('OpenAI format (x-ratelimit-*)', () => {

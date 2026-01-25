@@ -75,14 +75,18 @@ export class SlotQueue {
       }
 
       const wrappedResolve = () => {
-        if (timeoutId) clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         this.activeCount++;
         this.onSlotAcquired?.(this.waiting.length);
         resolve();
       };
 
       const wrappedReject = (error: Error) => {
-        if (timeoutId) clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         reject(error);
       };
 
@@ -264,11 +268,7 @@ export class SlotQueue {
     let requestRatio: number | null = null;
     let tokenRatio: number | null = null;
 
-    if (
-      this.remainingRequests !== null &&
-      this.requestLimit !== null &&
-      this.requestLimit > 0
-    ) {
+    if (this.remainingRequests !== null && this.requestLimit !== null && this.requestLimit > 0) {
       requestRatio = this.remainingRequests / this.requestLimit;
     }
 

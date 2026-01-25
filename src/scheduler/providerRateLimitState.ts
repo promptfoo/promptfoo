@@ -1,13 +1,9 @@
 import { EventEmitter } from 'events';
-import { SlotQueue } from './slotQueue';
+
 import { AdaptiveConcurrency, WARNING_THRESHOLD } from './adaptiveConcurrency';
 import { parseRateLimitHeaders } from './headerParser';
-import {
-  type RetryPolicy,
-  DEFAULT_RETRY_POLICY,
-  getRetryDelay,
-  shouldRetry,
-} from './retryPolicy';
+import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
+import { SlotQueue } from './slotQueue';
 
 export interface ProviderStateOptions {
   rateLimitKey: string;
@@ -48,7 +44,9 @@ class CircularBuffer {
   push(value: number): void {
     this.buffer[this.head] = value;
     this.head = (this.head + 1) % this.capacity;
-    if (this.count < this.capacity) this.count++;
+    if (this.count < this.capacity) {
+      this.count++;
+    }
   }
 
   toSortedArray(): number[] {
@@ -351,8 +349,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
   getMetrics(): ProviderMetrics {
     const sorted = this.latencies.toSortedArray();
-    const avgLatency =
-      sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
+    const avgLatency = sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
 
     return {
       rateLimitKey: this.rateLimitKey,

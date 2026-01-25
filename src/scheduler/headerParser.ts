@@ -10,9 +10,7 @@ export interface ParsedRateLimitHeaders {
 /**
  * Parse rate limit headers from response.
  */
-export function parseRateLimitHeaders(
-  headers: Record<string, string>,
-): ParsedRateLimitHeaders {
+export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRateLimitHeaders {
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
@@ -181,12 +179,16 @@ function parseDuration(value: string): number | null {
   // Each component is optional, but at least one must be present
   const match = value.match(/^(?:(\d+)h)?(?:(\d+)m(?!s))?(?:(\d+(?:\.\d+)?)(ms|s))?$/);
 
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
 
   const [, hours, minutes, secondsValue, secondsUnit] = match;
 
   // At least one component must be present
-  if (!hours && !minutes && !secondsValue) return null;
+  if (!hours && !minutes && !secondsValue) {
+    return null;
+  }
 
   let ms = 0;
 

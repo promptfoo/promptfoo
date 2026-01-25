@@ -7,51 +7,45 @@
  * @module scheduler
  */
 
-// Core exports
-export { RateLimitRegistry, createRateLimitRegistry } from './rateLimitRegistry';
-export type { RateLimitRegistryOptions } from './rateLimitRegistry';
-
-// Rate limit key generation
-export { getRateLimitKey } from './rateLimitKey';
-
-// Header parsing
-export {
-  parseRateLimitHeaders,
-  parseRetryAfter,
-  type ParsedRateLimitHeaders,
-} from './headerParser';
-
-// Retry policy
-export {
-  getRetryDelay,
-  shouldRetry,
-  DEFAULT_RETRY_POLICY,
-  type RetryPolicy,
-} from './retryPolicy';
-
 // Adaptive concurrency
 export { AdaptiveConcurrency, WARNING_THRESHOLD } from './adaptiveConcurrency';
-export type { ConcurrencyChangeResult } from './adaptiveConcurrency';
-
-// Slot queue
-export { SlotQueue } from './slotQueue';
-export type { SlotQueueOptions } from './slotQueue';
-
+// Header parsing
+export {
+  type ParsedRateLimitHeaders,
+  parseRateLimitHeaders,
+  parseRetryAfter,
+} from './headerParser';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
-export type { ProviderMetrics } from './providerRateLimitState';
+// Rate limit key generation
+export { getRateLimitKey } from './rateLimitKey';
+// Core exports
+export { createRateLimitRegistry, RateLimitRegistry } from './rateLimitRegistry';
+// Retry policy
+export {
+  DEFAULT_RETRY_POLICY,
+  getRetryDelay,
+  type RetryPolicy,
+  shouldRetry,
+} from './retryPolicy';
+// Slot queue
+export { SlotQueue } from './slotQueue';
 
+export type { ConcurrencyChangeResult } from './adaptiveConcurrency';
 // Event types
 export type {
-  RateLimitHitEvent,
-  RateLimitWarningEvent,
-  RateLimitLearnedEvent,
-  ConcurrencyIncreasedEvent,
   ConcurrencyDecreasedEvent,
-  RequestRetryingEvent,
-  RequestStartedEvent,
+  ConcurrencyIncreasedEvent,
+  RateLimitHitEvent,
+  RateLimitLearnedEvent,
+  RateLimitWarningEvent,
   RequestCompletedEvent,
   RequestFailedEvent,
+  RequestRetryingEvent,
+  RequestStartedEvent,
   SlotAcquiredEvent,
   SlotReleasedEvent,
 } from './events';
+export type { ProviderMetrics } from './providerRateLimitState';
+export type { RateLimitRegistryOptions } from './rateLimitRegistry';
+export type { SlotQueueOptions } from './slotQueue';

@@ -1,7 +1,9 @@
 import { EventEmitter } from 'events';
-import { ProviderRateLimitState, type ProviderMetrics } from './providerRateLimitState';
+
+import { getEnvBool, getEnvInt } from '../envars';
+import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
-import { getEnvInt, getEnvBool } from '../envars';
+
 import type { ApiProvider } from '../types/providers';
 
 export interface RateLimitRegistryOptions {

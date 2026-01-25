@@ -182,6 +182,12 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Rate limit registry for adaptive concurrency control.
+   * When provided, provider calls are wrapped with rate limiting and retry logic.
+   */
+  rateLimitRegistry?: import('../scheduler').RateLimitRegistry;
 }
 
 export const EvaluateOptionsSchema = z.object({

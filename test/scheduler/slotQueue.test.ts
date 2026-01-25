@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
+
 import type { ParsedRateLimitHeaders } from '../../src/scheduler/headerParser';
 
 // Suppress "Queue disposed" unhandled rejections that occur during test cleanup
@@ -57,7 +58,7 @@ describe('SlotQueue', () => {
 
       // Default timeout is 5 minutes (300000ms), we'll verify this indirectly
       // by checking that a request doesn't timeout before 5 minutes
-      const promise = queue.acquire('test-1').catch(() => {}); // Handle rejection on dispose
+      const _promise = queue.acquire('test-1').catch(() => {}); // Handle rejection on dispose
       vi.advanceTimersByTime(4 * 60 * 1000); // 4 minutes
       expect(queue.getQueueDepth()).toBe(1); // Still waiting
     });
@@ -179,7 +180,7 @@ describe('SlotQueue', () => {
         minConcurrency: 1,
       });
 
-      const promises = Array.from({ length: 10 }, (_, i) => queue.acquire(`test-${i}`));
+      const _promises = Array.from({ length: 10 }, (_, i) => queue.acquire(`test-${i}`));
 
       expect(queue.getActiveCount()).toBe(3);
       expect(queue.getQueueDepth()).toBe(7);
@@ -225,7 +226,7 @@ describe('SlotQueue', () => {
       });
 
       // Launch 100 concurrent requests
-      const promises = Array.from({ length: 100 }, (_, i) => queue.acquire(`test-${i}`));
+      const _promises = Array.from({ length: 100 }, (_, i) => queue.acquire(`test-${i}`));
 
       // Should have exactly max concurrency active, rest queued
       expect(queue.getActiveCount()).toBe(5);
@@ -250,7 +251,7 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(3);
 
       // Queue many requests
-      const promises = Array.from({ length: 20 }, (_, i) => queue.acquire(`queued-${i}`));
+      const _promises = Array.from({ length: 20 }, (_, i) => queue.acquire(`queued-${i}`));
       expect(queue.getQueueDepth()).toBe(20);
 
       // Rapid release/verify cycle
@@ -334,7 +335,7 @@ describe('SlotQueue', () => {
     it('should set remaining requests and tokens to 0', () => {
       queue.markRateLimited(60000);
 
-      const ratio = queue.getRemainingRatio();
+      const _ratio = queue.getRemainingRatio();
       // ratios will be null since we don't have limits set
       // but we can verify through behavior - requests should be blocked
       expect(queue.getResetAt()).toBe(Date.now() + 60000);
