@@ -24,6 +24,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
+import type { DefaultProviderSelectionInfo } from '@promptfoo/types/providers';
 import type { VisibilityState } from '@tanstack/table-core';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
@@ -298,6 +299,12 @@ interface TableState {
    * Set automatically by fetchEvalData from API response.
    */
   stats: EvaluateStats | null;
+
+  /**
+   * Information about which default provider was selected and why.
+   * Only populated when no explicit grading provider was configured.
+   */
+  defaultProviderInfo: DefaultProviderSelectionInfo | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -587,6 +594,7 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    defaultProviderInfo: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -697,6 +705,8 @@ export const useTableStore = create<TableState>()(
             filteredMetrics: data.filteredMetrics || null,
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
+            // Store default provider selection info (null when explicit grading provider configured)
+            defaultProviderInfo: data.defaultProviderInfo || null,
             filters: {
               ...prevState.filters,
               options: {

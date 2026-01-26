@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
+  getDefaultProvidersWithInfo,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
@@ -317,5 +318,131 @@ describe('Provider override tests', () => {
       expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
       expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
     });
+  });
+});
+
+describe('getDefaultProvidersWithInfo', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    setDefaultCompletionProviders(undefined as any);
+    setDefaultEmbeddingProviders(undefined as any);
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.PALM_API_KEY;
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.clearAllMocks();
+  });
+
+  it('should return selection info with Anthropic when ANTHROPIC_API_KEY is set', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Anthropic');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+    expect(result.selectionInfo.reason).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should return selection info with OpenAI when OPENAI_API_KEY is set', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('OpenAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('OPENAI_API_KEY');
+    expect(result.selectionInfo.reason).toContain('OPENAI_API_KEY');
+  });
+
+  it('should prefer OpenAI over Anthropic when both are set', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('OpenAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('OPENAI_API_KEY');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should include skipped providers in selection info', async () => {
+    // Set both OpenAI and Anthropic credentials - OpenAI should be selected, Anthropic should be skipped
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    // Anthropic should be in skipped providers since OpenAI was selected
+    const skippedAnthropic = result.selectionInfo.skippedProviders.find(
+      (p) => p.name === 'Anthropic',
+    );
+    expect(skippedAnthropic).toBeDefined();
+    expect(skippedAnthropic?.reason).toContain('higher priority');
+  });
+
+  it('should populate provider slots', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.providerSlots.grading).toBeDefined();
+    expect(result.selectionInfo.providerSlots.grading?.id).toContain('anthropic');
+  });
+
+  it('should return GitHub Models as fallback when no other credentials', async () => {
+    process.env.GITHUB_TOKEN = 'test-token';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('GitHub Models');
+    expect(result.selectionInfo.detectedCredentials).toContain('GITHUB_TOKEN');
+  });
+
+  it('should return Google AI Studio when GEMINI_API_KEY is set', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Google AI Studio');
+    expect(result.selectionInfo.detectedCredentials).toContain('GEMINI_API_KEY');
+  });
+
+  it('should return Mistral when MISTRAL_API_KEY is set', async () => {
+    process.env.MISTRAL_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Mistral');
+    expect(result.selectionInfo.detectedCredentials).toContain('MISTRAL_API_KEY');
+  });
+
+  it('should work with env overrides', async () => {
+    const envOverrides = {
+      ANTHROPIC_API_KEY: 'override-key',
+    };
+
+    const result = await getDefaultProvidersWithInfo(envOverrides as any);
+
+    expect(result.selectionInfo.selectedProvider).toBe('Anthropic');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should return both providers and selectionInfo', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.providers).toBeDefined();
+    expect(result.selectionInfo).toBeDefined();
+    expect(result.providers.gradingProvider).toBeDefined();
+    expect(result.providers.embeddingProvider).toBeDefined();
   });
 });

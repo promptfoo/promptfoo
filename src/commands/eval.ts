@@ -16,6 +16,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { getDefaultProvidersWithInfo } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -42,12 +43,43 @@ import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
+  DefaultProviderSelectionInfo,
   EvaluateOptions,
   Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
+
+/**
+ * Formats and displays information about which default providers are being used.
+ * This helps users understand which providers are being used for grading, embeddings, etc.
+ */
+function displayDefaultProviderInfo(selectionInfo: DefaultProviderSelectionInfo): void {
+  const { selectedProvider, reason, detectedCredentials, skippedProviders } = selectionInfo;
+
+  logger.info('');
+  logger.info(chalk.bold('Default Providers: ') + chalk.cyan(selectedProvider));
+  logger.info(chalk.gray(`  Reason: ${reason}`));
+
+  if (getLogLevel() === 'debug') {
+    // Show full details in verbose mode
+    if (detectedCredentials.length > 0) {
+      logger.debug(`  Detected credentials: ${detectedCredentials.join(', ')}`);
+    }
+    if (skippedProviders.length > 0) {
+      logger.debug('  Skipped providers:');
+      for (const skipped of skippedProviders) {
+        logger.debug(`    - ${skipped.name}: ${skipped.reason}`);
+      }
+    }
+  }
+
+  logger.info(
+    chalk.gray(`  Override: Set ${chalk.white('defaultTest.options.provider')} in your config`),
+  );
+  logger.info('');
+}
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -543,6 +575,21 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
+    // Display default provider info if using default providers (no explicit grading provider)
+    const hasExplicitGradingProvider = Boolean(
+      typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest !== null &&
+        testSuite.defaultTest.options?.provider,
+    );
+
+    let defaultProviderSelectionInfo: DefaultProviderSelectionInfo | undefined;
+    if (!hasExplicitGradingProvider && !resumeEval) {
+      // Get the default provider selection info to display and store
+      const { selectionInfo } = await getDefaultProvidersWithInfo(config.env);
+      defaultProviderSelectionInfo = selectionInfo;
+      displayDefaultProviderInfo(selectionInfo);
+    }
+
     // Run the evaluation!!!!!!
     let ret;
     try {
@@ -690,6 +737,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      defaultProviderInfo: defaultProviderSelectionInfo,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't

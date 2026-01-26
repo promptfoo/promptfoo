@@ -51,6 +51,7 @@ import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
+import { DefaultProvidersDisplay } from './DefaultProvidersDisplay';
 import { DownloadDialog, DownloadMenuItem } from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
@@ -95,6 +96,7 @@ export default function ResultsView({
     filters,
     removeFilter,
     stats,
+    defaultProviderInfo,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -583,6 +585,7 @@ export default function ResultsView({
               currentUserEmail={currentUserEmail}
               editable
             />
+            {defaultProviderInfo && <DefaultProvidersDisplay info={defaultProviderInfo} />}
             {Object.keys(config?.tags || {}).map((tag) => (
               <Badge key={tag} variant="secondary" className="opacity-70">
                 {`${tag}: ${config?.tags?.[tag]}`}

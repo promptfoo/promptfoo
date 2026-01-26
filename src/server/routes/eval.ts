@@ -7,6 +7,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
+import { getDefaultProvidersWithInfo } from '../../providers/defaults';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -21,6 +22,7 @@ import {
 import type { Request, Response } from 'express';
 
 import type {
+  DefaultProviderSelectionInfo,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -341,6 +343,27 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
+  // Get default provider info if using default providers (no explicit grading provider set)
+  // NOTE: This shows the CURRENT environment's provider selection, not what was used at eval time.
+  // If the user's environment changes after running an eval (e.g., adds/removes API keys),
+  // the displayed provider info may differ from what was actually used during the evaluation.
+  // To fix this, we would need to persist selection info in the database at eval time.
+  let defaultProviderInfo: DefaultProviderSelectionInfo | undefined;
+  const hasExplicitGradingProvider = Boolean(
+    eval_.config?.defaultTest &&
+      typeof eval_.config.defaultTest === 'object' &&
+      eval_.config.defaultTest.options?.provider,
+  );
+  if (!hasExplicitGradingProvider) {
+    try {
+      const { selectionInfo } = await getDefaultProvidersWithInfo(eval_.config?.env);
+      defaultProviderInfo = selectionInfo;
+    } catch (error) {
+      logger.debug('[GET /:id/table] Failed to get default provider info', { error, evalId: id });
+      // Don't fail the request, just don't include defaultProviderInfo
+    }
+  }
+
   // Default response for table view
   res.json({
     table: returnTable,
@@ -352,6 +375,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
+    defaultProviderInfo,
   } as EvalTableDTO);
 });
 
