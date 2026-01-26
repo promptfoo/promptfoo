@@ -381,6 +381,7 @@ export abstract class RedteamGraderBase {
       ...test.metadata,
       goal: test.metadata?.goal || prompt,
       prompt,
+      output: llmOutput,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools
         ? await maybeLoadToolsFromExternalFile(provider.config.tools)
