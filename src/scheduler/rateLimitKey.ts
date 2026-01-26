@@ -15,9 +15,9 @@ export function getRateLimitKey(provider: ApiProvider): string {
   const config = provider.config || {};
   const relevantConfig: Record<string, string> = {};
 
-  // Hash API key with crypto (full key, not partial)
+  // Create identifier from API key (for rate limit grouping, not auth)
   if (config.apiKey) {
-    relevantConfig.apiKey = hashSecret(config.apiKey);
+    relevantConfig.apiKey = createKeyIdentifier(config.apiKey);
   }
   if (config.apiBaseUrl) {
     relevantConfig.apiBaseUrl = config.apiBaseUrl;
@@ -44,10 +44,12 @@ export function getRateLimitKey(provider: ApiProvider): string {
 }
 
 /**
- * Hash a secret value using SHA-256.
- * Returns first 16 chars of hex digest (64 bits of entropy).
+ * Create an identifier from a secret value for rate limit grouping.
+ * Uses SHA-256 to create a non-reversible fingerprint (NOT for authentication).
+ * Returns first 16 chars of hex digest (64 bits) for collision resistance.
  */
-function hashSecret(value: string): string {
+function createKeyIdentifier(value: string): string {
+  // lgtm[js/insufficient-password-hash] - This is for grouping rate limits, NOT password storage
   return createHash('sha256').update(value).digest('hex').slice(0, 16);
 }
 
