@@ -448,8 +448,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache, headers: responseHeaders } =
         await fetchWithCache<OpenAIChatCompletionResponse>(
           `${this.getApiUrl()}/chat/completions`,
           {
@@ -482,11 +483,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               flagged: true,
               flaggedInput: true, // This error specifically indicates input was rejected
             },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
 
         return {
           error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
@@ -494,6 +509,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
@@ -513,6 +535,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -527,6 +556,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           finishReason: FINISH_REASON_MAP.content_filter,
           guardrails: {
             flagged: true,
+          },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
           },
         };
       }
@@ -675,6 +711,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_completion_tokens,
             ),
             guardrails: { flagged: contentFiltered },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
       }
@@ -712,6 +755,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_completion_tokens,
           ),
           guardrails: { flagged: contentFiltered },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -731,11 +781,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_completion_tokens,
         ),
         guardrails: { flagged: contentFiltered },
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     } catch (err) {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
   }
