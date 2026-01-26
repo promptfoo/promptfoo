@@ -201,7 +201,93 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         {/* Target Type Selection */}
         {showTargetTypeSection && (
           <section className="space-y-4">
-            <Label className="text-sm font-semibold">Select Target Type</Label>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Select Target Type</Label>
+              <p className="text-sm text-muted-foreground">
+                Select the type that best matches your target. Don't see what you need? Try{' '}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-sm font-normal"
+                  onClick={() => {
+                    const customOption = { id: '', label: selectedTarget.label, config: {} };
+                    handleProviderChange(customOption, 'custom');
+                    recordEvent('feature_used', {
+                      feature: 'redteam_custom_target_quick_select',
+                    });
+                  }}
+                >
+                  Custom Provider
+                </Button>{' '}
+                to access{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:text-primary/80"
+                >
+                  more providers
+                </a>
+                . You can also create your own using{' '}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-sm font-normal"
+                  onClick={() => {
+                    const pythonOption = {
+                      id: 'file:///path/to/custom_provider.py',
+                      label: selectedTarget.label,
+                      config: {},
+                    };
+                    handleProviderChange(pythonOption, 'python');
+                    recordEvent('feature_used', {
+                      feature: 'redteam_python_quick_select',
+                    });
+                  }}
+                >
+                  Python
+                </Button>
+                ,{' '}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-sm font-normal"
+                  onClick={() => {
+                    const jsOption = {
+                      id: 'file:///path/to/custom_provider.js',
+                      label: selectedTarget.label,
+                      config: {},
+                    };
+                    handleProviderChange(jsOption, 'javascript');
+                    recordEvent('feature_used', {
+                      feature: 'redteam_javascript_quick_select',
+                    });
+                  }}
+                >
+                  JavaScript
+                </Button>
+                , or{' '}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-sm font-normal"
+                  onClick={() => {
+                    const shellOption = {
+                      id: 'exec:/path/to/script.sh',
+                      label: selectedTarget.label,
+                      config: {},
+                    };
+                    handleProviderChange(shellOption, 'exec');
+                    recordEvent('feature_used', {
+                      feature: 'redteam_shell_quick_select',
+                    });
+                  }}
+                >
+                  shell scripts
+                </Button>
+                .
+              </p>
+            </div>
 
             <ProviderTypeSelector
               provider={selectedTarget}
