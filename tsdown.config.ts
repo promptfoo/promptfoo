@@ -74,6 +74,7 @@ export default defineConfig([
       // Externalize all bare module imports so Node resolves CJS deps natively
       /^[a-z@][^:]*/,
       // Ensure critical native deps remain external
+      '@huggingface/transformers',
       'better-sqlite3',
       'playwright',
       'sharp',

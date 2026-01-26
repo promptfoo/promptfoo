@@ -178,6 +178,7 @@
     "@azure/msal-node": "^5.0.2",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "~1.7.2",
+    "@huggingface/transformers": "^3.8.1",
     "@ibm-cloud/watsonx-ai": "^1.7.7",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@openai/codex-sdk": "^0.88.0",
@@ -209,7 +210,6 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@apidevtools/json-schema-ref-parser": "^15.2.1",
     "@googleapis/sheets": "^13.0.1",
-    "@huggingface/transformers": "^3.8.1",
     "@inquirer/checkbox": "^5.0.4",
     "@inquirer/confirm": "^6.0.4",
     "@inquirer/core": "^11.1.1",
@@ -304,6 +304,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@huggingface/transformers",
       "@playwright/browser-chromium",
       "@swc/core",
       "better-sqlite3",
