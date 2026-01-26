@@ -1,6 +1,9 @@
 **/site-packages/**
 .aider*
 .coverage
+coverage
+src/app/coverage
+site/coverage
 dist
 drizzle
 examples/multiple-turn-conversation/prompt.json

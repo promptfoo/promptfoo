@@ -78,9 +78,10 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library\" --ignore-dirs=\"dist,site,examples\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -140,6 +141,7 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^4.0.17",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.8",
