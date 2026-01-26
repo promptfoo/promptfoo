@@ -840,7 +840,7 @@ export async function extractGuidanceForPluginsWithOpenAIAgent(
     let result;
     try {
       result = await run(agent, 'Extract grading guidance for all plugins listed in your instructions. You MUST use the grep_file tool to search the document before returning results.', {
-        maxTurns: options?.maxTurns || 30,
+        maxTurns: options?.maxTurns || 100,
       });
     } catch (runError) {
       logger.error(`[GuidanceExtraction:OpenAIAgent] Agent run failed: ${runError instanceof Error ? runError.message : String(runError)}`);
