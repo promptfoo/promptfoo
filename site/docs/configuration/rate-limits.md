@@ -1,4 +1,6 @@
 ---
+title: Rate Limits
+description: Configure automatic rate limit handling with exponential backoff, header-aware delays, and adaptive concurrency for LLM provider APIs.
 sidebar_label: Rate Limits
 sidebar_position: 15
 ---

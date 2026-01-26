@@ -7,6 +7,7 @@ The adaptive rate limit scheduler automatically handles provider rate limits dur
 ## Design Goals
 
 The scheduler addresses common challenges when running evaluations against rate-limited APIs:
+
 - **No manual tuning**: Users shouldn't need to guess the right `-j` (concurrency) value
 - **Automatic recovery**: Rate limit errors (429) should be retried, not fail permanently
 - **Prevent cascading failures**: High concurrency shouldn't cause mass failures
@@ -14,7 +15,7 @@ The scheduler addresses common challenges when running evaluations against rate-
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              Evaluator                                       │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
@@ -42,9 +43,11 @@ The scheduler addresses common challenges when running evaluations against rate-
 ## Component Responsibilities
 
 ### RateLimitRegistry
+
 **File**: `src/scheduler/rateLimitRegistry.ts`
 
 Central coordinator that:
+
 - Creates/retrieves per-provider state based on rate limit keys
 - Routes provider calls to the appropriate state
 - Aggregates metrics across all providers
@@ -60,9 +63,11 @@ const result = await registry.execute(provider, () => provider.callApi(...), {
 ```
 
 ### ProviderRateLimitState
+
 **File**: `src/scheduler/providerRateLimitState.ts`
 
 Per-provider state manager that:
+
 - Manages the slot queue for concurrency control
 - Tracks rate limit headers from responses
 - Implements retry logic with exponential backoff
@@ -70,9 +75,11 @@ Per-provider state manager that:
 - Collects latency metrics
 
 ### SlotQueue
+
 **File**: `src/scheduler/slotQueue.ts`
 
 FIFO queue with concurrency limiting:
+
 - Acquires/releases "slots" for concurrent requests
 - Blocks when at max concurrency or quota exhausted
 - Tracks remaining requests/tokens from headers
@@ -81,9 +88,11 @@ FIFO queue with concurrency limiting:
 Key insight: **Race-condition-free** slot allocation. All requests queue, then slots are allocated in FIFO order.
 
 ### AdaptiveConcurrency
+
 **File**: `src/scheduler/adaptiveConcurrency.ts`
 
 Dynamic concurrency adjustment:
+
 - **On rate limit**: Reduce concurrency by 50% (multiplicative decrease)
 - **On sustained success**: Increase by 1 (additive increase)
 - **Proactive throttling**: Reduce when approaching limits (via headers)
@@ -91,17 +100,21 @@ Dynamic concurrency adjustment:
 This implements AIMD (Additive Increase, Multiplicative Decrease) - the same algorithm TCP uses for congestion control.
 
 ### HeaderParser
+
 **File**: `src/scheduler/headerParser.ts`
 
 Parses rate limit headers from multiple providers:
+
 - **OpenAI**: `x-ratelimit-remaining-requests`, `x-ratelimit-limit-requests`
 - **Anthropic**: `anthropic-ratelimit-requests-remaining`
 - **Generic**: `retry-after`, `retry-after-ms`, `ratelimit-reset`
 
 ### RetryPolicy
+
 **File**: `src/scheduler/retryPolicy.ts`
 
 Determines retry behavior:
+
 - Exponential backoff with jitter
 - Respects server `retry-after` headers
 - Configurable max retries (default: 3)
@@ -109,7 +122,7 @@ Determines retry behavior:
 
 ## Data Flow
 
-```
+```text
 1. Evaluator calls registry.execute(provider, callFn)
        │
        ▼
@@ -142,11 +155,13 @@ Determines retry behavior:
 ## Rate Limit Key Generation
 
 Each provider gets a unique "rate limit key" based on:
+
 - Provider ID (e.g., "openai:chat:gpt-4o")
 - API key hash (different keys = different rate limits)
 - Organization ID (if applicable)
 
 This ensures:
+
 - Same provider + same key = shared rate limit state
 - Same provider + different keys = separate rate limits
 - Different providers = completely isolated
@@ -154,25 +169,31 @@ This ensures:
 ## Key Design Decisions
 
 ### 1. Zero Configuration
+
 Users shouldn't need to tune rate limit settings. The scheduler learns from response headers and adapts automatically.
 
 ### 2. Fail-Safe Defaults
+
 - Default max concurrency: 4 (conservative)
 - Default retry delay: 60 seconds (when no header)
 - Max retries: 3 (prevents infinite loops)
 
 ### 3. Proactive Throttling
+
 Don't wait for 429 errors. When headers show <10% remaining quota, proactively reduce concurrency.
 
 ### 4. Per-Provider Isolation
+
 Different providers have different rate limits. Don't let OpenAI rate limits affect Anthropic calls.
 
 ### 5. Transparent Integration
+
 The scheduler wraps `provider.callApi()` without changing the interface. Existing code works unchanged.
 
 ## Metrics
 
 The scheduler tracks:
+
 - `totalRequests` - All requests attempted
 - `completedRequests` - Successful completions
 - `failedRequests` - Permanent failures (after retries)
@@ -183,6 +204,7 @@ The scheduler tracks:
 ## Events
 
 For monitoring/debugging, the scheduler emits:
+
 - `slot:acquired` / `slot:released` - Concurrency tracking
 - `ratelimit:hit` - Rate limit encountered
 - `ratelimit:learned` - First time seeing provider's limits
@@ -193,6 +215,7 @@ For monitoring/debugging, the scheduler emits:
 ## Testing
 
 222 tests covering:
+
 - Unit tests for each component
 - Edge cases (negative values, zero values, overflow)
 - Race condition prevention

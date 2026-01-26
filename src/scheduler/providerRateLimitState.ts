@@ -5,6 +5,17 @@ import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
+/**
+ * Sentinel error for rate limit exhaustion.
+ * Used to short-circuit the catch block and prevent double-release/double-count.
+ */
+class RateLimitExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitExhaustedError';
+  }
+}
+
 export interface ProviderStateOptions {
   rateLimitKey: string;
   maxConcurrency: number;
@@ -178,9 +189,10 @@ export class ProviderRateLimitState extends EventEmitter {
             continue;
           }
 
-          // Rate limited and no more retries - count as FAILED, throw error
+          // Rate limited and no more retries - count as FAILED, throw sentinel error
+          // Using sentinel error to prevent catch block from double-releasing/double-counting
           this.failedRequests++;
-          throw new Error(
+          throw new RateLimitExhaustedError(
             `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
           );
         }
@@ -190,6 +202,11 @@ export class ProviderRateLimitState extends EventEmitter {
         this.completedRequests++;
         return result;
       } catch (error) {
+        // Re-throw sentinel error immediately to prevent double-release/double-count
+        if (error instanceof RateLimitExhaustedError) {
+          throw error;
+        }
+
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 
