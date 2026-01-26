@@ -285,15 +285,20 @@ export class SlotQueue {
 
   /**
    * Cleanup resources.
+   *
+   * Rejects any pending acquire() promises with 'Queue disposed' error.
+   * Callers should handle these rejections (e.g., via .catch() on acquire promises).
    */
   dispose(): void {
     if (this.resetTimer) {
       clearTimeout(this.resetTimer);
+      this.resetTimer = null;
     }
     // Reject any waiting requests
-    for (const request of this.waiting) {
+    const waiting = this.waiting;
+    this.waiting = [];
+    for (const request of waiting) {
       request.reject(new Error('Queue disposed'));
     }
-    this.waiting = [];
   }
 }

@@ -158,10 +158,12 @@ describe('RateLimitRegistry', () => {
       registry.execute(mockProvider, callFn);
 
       // Check ProviderRateLimitState was created with correct minConcurrency
+      // queueTimeoutMs is 1 because mockGetEnvInt returns 1 for all calls
       expect(mockProviderRateLimitStateConstructor).toHaveBeenCalledWith({
         rateLimitKey: 'test-provider',
         maxConcurrency: 10,
         minConcurrency: 3,
+        queueTimeoutMs: 1,
       });
     });
 
@@ -178,6 +180,7 @@ describe('RateLimitRegistry', () => {
         rateLimitKey: 'test-provider',
         maxConcurrency: 10,
         minConcurrency: 2,
+        queueTimeoutMs: 2,
       });
     });
 
@@ -307,6 +310,7 @@ describe('RateLimitRegistry', () => {
         rateLimitKey: 'test-provider',
         maxConcurrency: 10,
         minConcurrency: 1,
+        queueTimeoutMs: 1,
       });
     });
 
@@ -389,11 +393,13 @@ describe('RateLimitRegistry', () => {
         rateLimitKey: 'provider-1[abc123]',
         maxConcurrency: 10,
         minConcurrency: 1,
+        queueTimeoutMs: 1,
       });
       expect(mockProviderRateLimitStateConstructor).toHaveBeenNthCalledWith(2, {
         rateLimitKey: 'provider-2[def456]',
         maxConcurrency: 10,
         minConcurrency: 1,
+        queueTimeoutMs: 1,
       });
     });
   });

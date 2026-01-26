@@ -20,12 +20,12 @@ Rate limit handling is built into the evaluator and requires no configuration:
 
 Promptfoo parses rate limit headers from major providers:
 
-| Provider | Headers |
-|----------|---------|
-| OpenAI | `x-ratelimit-remaining-requests`, `x-ratelimit-limit-requests`, `x-ratelimit-remaining-tokens`, `retry-after-ms` |
-| Anthropic | `anthropic-ratelimit-requests-remaining`, `anthropic-ratelimit-tokens-remaining`, `retry-after` |
-| Azure OpenAI | `x-ratelimit-remaining-requests`, `retry-after-ms`, `retry-after` |
-| Generic | `retry-after`, `ratelimit-remaining`, `ratelimit-reset` |
+| Provider     | Headers                                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| OpenAI       | `x-ratelimit-remaining-requests`, `x-ratelimit-limit-requests`, `x-ratelimit-remaining-tokens`, `retry-after-ms` |
+| Anthropic    | `anthropic-ratelimit-requests-remaining`, `anthropic-ratelimit-tokens-remaining`, `retry-after`                  |
+| Azure OpenAI | `x-ratelimit-remaining-requests`, `retry-after-ms`, `retry-after`                                                |
+| Generic      | `retry-after`, `ratelimit-remaining`, `ratelimit-reset`                                                          |
 
 ### How Adaptive Concurrency Works
 
@@ -62,7 +62,7 @@ Add a fixed delay between requests (in addition to any rate limit backoff):
 
 ```yaml
 evaluateOptions:
-  delay: 1000  # milliseconds
+  delay: 1000 # milliseconds
 ```
 
 Or via CLI:
@@ -84,12 +84,20 @@ Promptfoo has two retry layers:
 1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times
 2. **HTTP-level retry**: Retries failed HTTP requests with configurable backoff
 
+Environment variables for the scheduler:
+
+| Environment Variable                   | Description                                | Default  |
+| -------------------------------------- | ------------------------------------------ | -------- |
+| `PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER` | Disable adaptive concurrency (use fixed)   | false    |
+| `PROMPTFOO_MIN_CONCURRENCY`            | Minimum concurrency (floor for adaptive)   | 1        |
+| `PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS` | Timeout for queued requests (0 to disable) | 300000ms |
+
 Environment variables for HTTP-level retry:
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base delay for HTTP retry backoff | 5000ms |
-| `PROMPTFOO_RETRY_5XX` | Retry on HTTP 500 errors | false |
+| Environment Variable           | Description                       | Default |
+| ------------------------------ | --------------------------------- | ------- |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base delay for HTTP retry backoff | 5000ms  |
+| `PROMPTFOO_RETRY_5XX`          | Retry on HTTP 500 errors          | false   |
 
 Example:
 
@@ -107,7 +115,7 @@ OpenAI has separate rate limits for requests and tokens. The scheduler tracks bo
 
 ```yaml
 evaluateOptions:
-  maxConcurrency: 20  # Scheduler will adapt down if needed
+  maxConcurrency: 20 # Scheduler will adapt down if needed
 ```
 
 See [OpenAI troubleshooting](/docs/providers/openai#troubleshooting) for additional options.
@@ -119,6 +127,7 @@ Anthropic rate limits are typically per-minute. The scheduler respects `retry-af
 ### Custom Providers
 
 Custom providers trigger automatic retry when errors contain:
+
 - "429"
 - "rate limit"
 - "too many requests"
@@ -127,12 +136,12 @@ To provide retry timing, include headers in your response metadata:
 
 ```javascript
 return {
-  output: "response",
+  output: 'response',
   metadata: {
     headers: {
-      'retry-after': '60'  // seconds
-    }
-  }
+      'retry-after': '60', // seconds
+    },
+  },
 };
 ```
 
@@ -145,6 +154,7 @@ LOG_LEVEL=debug promptfoo eval -c config.yaml
 ```
 
 Events logged:
+
 - `ratelimit:hit` - Rate limit encountered
 - `ratelimit:learned` - Provider limits discovered from headers
 - `ratelimit:warning` - Approaching rate limit threshold

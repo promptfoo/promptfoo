@@ -429,18 +429,30 @@ export async function runEval({
             ),
           {
             // Extract rate limit headers from response metadata
+            // Headers are stored at metadata.http.headers per ProviderResponse type
             getHeaders: (result: ProviderResponse | undefined) =>
-              result?.metadata?.headers as Record<string, string> | undefined,
-            // Detect rate limit from error message
-            isRateLimited: (_result: ProviderResponse | undefined, error: Error | undefined) =>
+              (result?.metadata?.http?.headers || result?.metadata?.headers) as
+                | Record<string, string>
+                | undefined,
+            // Detect rate limit from error message, status code, or error field
+            isRateLimited: (result: ProviderResponse | undefined, error: Error | undefined) =>
               Boolean(
-                error?.message?.includes('429') ||
+                // Check HTTP status code (most reliable)
+                result?.metadata?.http?.status === 429 ||
+                  // Check error field in response
+                  result?.error?.includes?.('429') ||
+                  result?.error?.toLowerCase?.().includes?.('rate limit') ||
+                  // Check thrown error message
+                  error?.message?.includes('429') ||
                   error?.message?.toLowerCase().includes('rate limit') ||
                   error?.message?.toLowerCase().includes('too many requests'),
               ),
             // Extract retry-after from headers or error
             getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
-              const rawHeaders = result?.metadata?.headers as Record<string, string> | undefined;
+              // Headers are stored at metadata.http.headers per ProviderResponse type
+              const rawHeaders = (result?.metadata?.http?.headers || result?.metadata?.headers) as
+                | Record<string, string>
+                | undefined;
               if (rawHeaders) {
                 // Normalize header keys to lowercase for consistent access
                 const headers: Record<string, string> = {};

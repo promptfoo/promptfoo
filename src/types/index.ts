@@ -30,6 +30,7 @@ import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
 export type { VarValue } from './shared';
 
+import type { RateLimitRegistry } from '../scheduler';
 import type { TraceData } from './tracing';
 
 export * from '../redteam/types';
@@ -187,7 +188,7 @@ export interface RunEvalOptions {
    * Rate limit registry for adaptive concurrency control.
    * When provided, provider calls are wrapped with rate limiting and retry logic.
    */
-  rateLimitRegistry?: import('../scheduler').RateLimitRegistry;
+  rateLimitRegistry?: RateLimitRegistry;
 }
 
 export const EvaluateOptionsSchema = z.object({

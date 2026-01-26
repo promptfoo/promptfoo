@@ -9,6 +9,7 @@ import type { ApiProvider } from '../types/providers';
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
   minConcurrency?: number;
+  queueTimeoutMs?: number; // Timeout for queued requests (default: 5 minutes)
 }
 
 /**
@@ -19,12 +20,16 @@ export class RateLimitRegistry extends EventEmitter {
   private states: Map<string, ProviderRateLimitState> = new Map();
   private maxConcurrency: number;
   private minConcurrency: number;
+  private queueTimeoutMs: number;
   private enabled: boolean;
 
   constructor(options: RateLimitRegistryOptions) {
     super();
     this.maxConcurrency = options.maxConcurrency;
     this.minConcurrency = options.minConcurrency ?? getEnvInt('PROMPTFOO_MIN_CONCURRENCY', 1);
+    // Queue timeout: 0 means disabled, default is 5 minutes
+    this.queueTimeoutMs =
+      options.queueTimeoutMs ?? getEnvInt('PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS', 5 * 60 * 1000);
     this.enabled = !getEnvBool('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', false);
   }
 
@@ -92,6 +97,7 @@ export class RateLimitRegistry extends EventEmitter {
         rateLimitKey,
         maxConcurrency: this.maxConcurrency,
         minConcurrency: this.minConcurrency,
+        queueTimeoutMs: this.queueTimeoutMs,
       });
 
       // Forward events
