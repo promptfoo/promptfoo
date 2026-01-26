@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom provider using Vercel AI SDK with structured output
+
+prompts:
+  - '[{"role": "system", "content": "You are a helpful assistant that provides structured responses."}, {"role": "user", "content": "{{question}}"}]'
+
+providers:
+  - id: file://vercelAiProvider.js
+    label: 'Vercel AI SDK Provider'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+  - vars:
+      question: 'Explain photosynthesis briefly.'

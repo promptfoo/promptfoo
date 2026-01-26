@@ -1,9 +1,7 @@
-// Example from @Codeshark-NET https://github.com/promptfoo/promptfoo/issues/922
-// @ts-check
 import { anthropic } from '@ai-sdk/anthropic';
-import { generateObject } from 'ai';
+import { generateText, Output } from 'ai';
 import promptfoo from 'promptfoo';
-import { promptSchema } from './schemaValidation.mjs';
+import { promptSchema } from './schemaValidation.js';
 
 class CustomProvider {
   constructor(options) {
@@ -19,7 +17,7 @@ class CustomProvider {
   }
 
   async callApi(prompt, context) {
-    const cache = await promptfoo.default.cache.getCache();
+    const cache = await promptfoo.cache.getCache();
 
     // Create a unique cache key based on the prompt and context
     const cacheKey = `api:${this.providerId}:${prompt}}`; // :${JSON.stringify(context)
@@ -42,22 +40,25 @@ class CustomProvider {
       };
     }
 
-    // If not cached, make the function call
-    const model = anthropic('claude-3-5-haiku-20241022');
-    const { object, usage } = await generateObject({
+    // If not cached, make the function call using modern Vercel AI SDK approach
+    // Note: generateObject is deprecated, use generateText with Output.object() instead
+    const model = anthropic('claude-haiku-4-5-20251001');
+    const result = await generateText({
       model,
       messages: JSON.parse(prompt),
       maxTokens: 4096,
       temperature: 0.4,
       maxRetries: 0,
-      schema: promptSchema,
-      mode: 'tool',
+      output: Output.object({ schema: promptSchema }),
     });
 
-    const inputCost = 0.00025 / 1000; //config.cost ?? model.cost.input;
-    const outputCost = 0.00125 / 1000; // config.cost ?? model.cost.output;
-    const totalCost =
-      inputCost * usage.promptTokens + outputCost * usage.completionTokens || undefined;
+    // With generateText + Output.object(), the structured data is in result.output
+    const { output: object, usage } = result;
+
+    // Vercel AI SDK uses inputTokens/outputTokens instead of promptTokens/completionTokens
+    const inputCost = 1.0 / 1_000_000; // Claude Haiku 4.5: $1 per million input tokens
+    const outputCost = 5.0 / 1_000_000; // Claude Haiku 4.5: $5 per million output tokens
+    const totalCost = inputCost * usage.inputTokens + outputCost * usage.outputTokens || undefined;
 
     // Store the response in the cache
     try {
@@ -73,8 +74,8 @@ class CustomProvider {
       // Optional
       tokenUsage: {
         total: usage.totalTokens,
-        prompt: usage.promptTokens,
-        completion: usage.completionTokens,
+        prompt: usage.inputTokens,
+        completion: usage.outputTokens,
       },
 
       cost: totalCost,
