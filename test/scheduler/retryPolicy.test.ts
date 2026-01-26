@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_RETRY_POLICY,
-  getRetryDelay,
-  shouldRetry,
-} from '../../src/scheduler/retryPolicy';
+import { DEFAULT_RETRY_POLICY, getRetryDelay, shouldRetry } from '../../src/scheduler/retryPolicy';
 
 describe('getRetryDelay', () => {
   const policy = { ...DEFAULT_RETRY_POLICY, jitterFactor: 0 }; // No jitter for predictable tests
@@ -47,7 +43,12 @@ describe('shouldRetry', () => {
   });
 
   it('should not retry after max retries exceeded', () => {
-    const result = shouldRetry(DEFAULT_RETRY_POLICY.maxRetries, undefined, true, DEFAULT_RETRY_POLICY);
+    const result = shouldRetry(
+      DEFAULT_RETRY_POLICY.maxRetries,
+      undefined,
+      true,
+      DEFAULT_RETRY_POLICY,
+    );
     expect(result).toBe(false);
   });
 
