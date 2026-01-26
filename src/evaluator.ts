@@ -421,6 +421,14 @@ export async function runEval({
         abortSignal ? { abortSignal } : undefined,
       );
 
+      // Sanitize response metadata to remove circular references (e.g., leaked Timeout objects)
+      // This prevents "Converting circular structure to JSON" errors downstream
+      // See: https://github.com/promptfoo/promptfoo/issues/7266
+      if (response.metadata) {
+        const sanitizedMetadata = safeJsonStringify(response.metadata);
+        response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+      }
+
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
@@ -443,7 +451,9 @@ export async function runEval({
       });
     }
 
-    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug(
+      `Evaluator response = ${(safeJsonStringify(response) ?? '').substring(0, 100)}...`,
+    );
     logger.debug(
       `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
     );
@@ -1550,6 +1560,9 @@ class Evaluator {
         if (!didTimeout) {
           throw error;
         }
+        const sanitizedTestCase = { ...evalStep.test };
+        delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1571,7 +1584,7 @@ class Evaluator {
           latencyMs: timeoutMs,
           promptIdx: evalStep.promptIdx,
           testIdx: evalStep.testIdx,
-          testCase: evalStep.test,
+          testCase: sanitizedTestCase,
           promptId: evalStep.prompt.id || '',
         };
 

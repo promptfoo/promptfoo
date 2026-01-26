@@ -1,0 +1,16 @@
+# Test config for GitHub issue #7266
+# Provider returns data with circular references (simulating leaked Timeout objects)
+# This should fail on main but pass with the fix
+description: 'Regression test for #7266 - circular reference in provider response'
+
+providers:
+  - file://../providers/circular-ref-provider.js
+
+prompts:
+  - 'Test prompt'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'Processed'
