@@ -14,7 +14,11 @@ export interface HelperTextProps extends React.HTMLAttributes<HTMLParagraphEleme
 function HelperText({ className, error, children, ...props }: HelperTextProps) {
   return (
     <p
-      className={cn('mt-1 text-xs', error ? 'text-destructive' : 'text-muted-foreground', className)}
+      className={cn(
+        'mt-1 text-xs',
+        error ? 'text-destructive' : 'text-muted-foreground',
+        className,
+      )}
       {...props}
     >
       {children}

@@ -42,9 +42,7 @@ export const Error: Story = {
 export const WithInput: Story = {
   render: () => (
     <div className="flex flex-col w-full max-w-sm">
-      <Label htmlFor="email" >
-        Email
-      </Label>
+      <Label htmlFor="email">Email</Label>
       <Input type="email" id="email" placeholder="email@example.com" />
       <HelperText>We'll never share your email with anyone.</HelperText>
     </div>
@@ -73,9 +71,7 @@ export const WithInputError: Story = {
 export const WithTextarea: Story = {
   render: () => (
     <div className="flex flex-col w-full max-w-sm">
-      <Label htmlFor="bio" >
-        Bio
-      </Label>
+      <Label htmlFor="bio">Bio</Label>
       <Textarea id="bio" placeholder="Tell us about yourself" />
       <HelperText>You can @mention other users and organizations.</HelperText>
     </div>
@@ -87,16 +83,12 @@ export const FormExample: Story = {
   render: () => (
     <div className="space-y-4 w-full max-w-sm">
       <div className="flex flex-col">
-        <Label htmlFor="username" >
-          Username
-        </Label>
+        <Label htmlFor="username">Username</Label>
         <Input type="text" id="username" placeholder="johndoe" />
         <HelperText>This will be your public display name.</HelperText>
       </div>
       <div className="flex flex-col">
-        <Label htmlFor="password" >
-          Password
-        </Label>
+        <Label htmlFor="password">Password</Label>
         <Input type="password" id="password" placeholder="Enter password" />
         <HelperText>Must be at least 8 characters long.</HelperText>
       </div>
