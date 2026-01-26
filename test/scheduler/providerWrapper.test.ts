@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   isRateLimitWrapped,
-  wrapProviderWithRateLimiting,
   wrapProvidersWithRateLimiting,
+  wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';

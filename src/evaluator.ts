@@ -22,6 +22,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { redteamProviderManager } from './redteam/providers/shared';
 import { getSessionId } from './redteam/util';
 import { createRateLimitRegistry, parseRetryAfter, type RateLimitRegistry } from './scheduler';
 import { generatePrompts } from './suggestions';
@@ -889,6 +890,10 @@ class Evaluator {
     this.rateLimitRegistry = createRateLimitRegistry({
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
+
+    // Share rate limit registry with redteam provider manager
+    // This ensures redteam internal providers also benefit from rate limiting
+    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -2321,6 +2326,9 @@ class Evaluator {
 
       // Clean up rate limit registry resources
       this.rateLimitRegistry?.dispose();
+
+      // Clear registry from redteam provider manager
+      redteamProviderManager.setRateLimitRegistry(undefined);
 
       // Reset cliState.maxConcurrency to prevent stale state between evaluations
       cliState.maxConcurrency = undefined;
