@@ -150,6 +150,24 @@ export default defineConfig({
 
     // Fail fast on first error in CI
     bail: process.env.CI ? 1 : 0,
+
+    // Coverage configuration
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/*.test.ts',
+        'src/**/*.test.tsx',
+        'src/setupTests.ts',
+        'src/**/*.stories.tsx',
+      ],
+      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
+      all: true,
+    },
+
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
       if (type === 'stderr') {
