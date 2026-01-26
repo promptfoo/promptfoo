@@ -178,6 +178,7 @@
     "@azure/msal-node": "^5.0.2",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "~1.7.2",
+    "@huggingface/transformers": "^3.8.1",
     "@ibm-cloud/watsonx-ai": "^1.7.6",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@openai/codex-sdk": "^0.88.0",
@@ -203,8 +204,7 @@
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^6.0.1",
-    "sharp": "^0.34.5",
-    "@huggingface/transformers": "^3.8.1"
+    "sharp": "^0.34.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
