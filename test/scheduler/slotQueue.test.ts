@@ -193,7 +193,9 @@ describe('SlotQueue', () => {
         minConcurrency: 1,
       });
 
-      const _promises = Array.from({ length: 10 }, (_, i) => queue.acquire(`test-${i}`));
+      const _promises = Array.from({ length: 10 }, (_, i) =>
+        trackAcquire(queue.acquire(`test-${i}`)),
+      );
 
       expect(queue.getActiveCount()).toBe(3);
       expect(queue.getQueueDepth()).toBe(7);
@@ -239,7 +241,9 @@ describe('SlotQueue', () => {
       });
 
       // Launch 100 concurrent requests
-      const _promises = Array.from({ length: 100 }, (_, i) => queue.acquire(`test-${i}`));
+      const _promises = Array.from({ length: 100 }, (_, i) =>
+        trackAcquire(queue.acquire(`test-${i}`)),
+      );
 
       // Should have exactly max concurrency active, rest queued
       expect(queue.getActiveCount()).toBe(5);
@@ -264,7 +268,9 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(3);
 
       // Queue many requests
-      const _promises = Array.from({ length: 20 }, (_, i) => queue.acquire(`queued-${i}`));
+      const _promises = Array.from({ length: 20 }, (_, i) =>
+        trackAcquire(queue.acquire(`queued-${i}`)),
+      );
       expect(queue.getQueueDepth()).toBe(20);
 
       // Rapid release/verify cycle
