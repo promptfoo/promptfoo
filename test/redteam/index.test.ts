@@ -3248,19 +3248,21 @@ describe('Language configuration', () => {
         // Mock the provider loading to return a mock provider for test generation
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi.spyOn(
-          await import('../../src/redteam/providers/shared'),
-          'redteamProviderManager',
-          'get',
-        ).mockReturnValue({
-          getProvider: vi.fn().mockResolvedValue(mockProvider),
-          getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-          getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-          setProvider: vi.fn(),
-          setGradingProvider: vi.fn(),
-          setMultilingualProvider: vi.fn(),
-          clearProvider: vi.fn(),
-        } as any);
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
 
         try {
           await synthesize({
@@ -3369,19 +3371,21 @@ describe('Language configuration', () => {
 
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi.spyOn(
-          await import('../../src/redteam/providers/shared'),
-          'redteamProviderManager',
-          'get',
-        ).mockReturnValue({
-          getProvider: vi.fn().mockResolvedValue(mockProvider),
-          getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-          getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-          setProvider: vi.fn(),
-          setGradingProvider: vi.fn(),
-          setMultilingualProvider: vi.fn(),
-          clearProvider: vi.fn(),
-        } as any);
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
 
         try {
           await synthesize({
