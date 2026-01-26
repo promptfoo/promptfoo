@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
+import telemetry from '../telemetry';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -142,6 +143,68 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
+
+  // Record completion telemetry with full results
+  if (evalResult) {
+    const results = evalResult.results || [];
+    const numPasses = results.filter((r) => r.success).length;
+    const numFails = results.filter((r) => !r.success && !r.error).length;
+    const numErrors = results.filter((r) => r.error).length;
+
+    // Get config info from liveRedteamConfig or try to extract from results
+    const config = options.liveRedteamConfig;
+    const plugins =
+      (config?.plugins as Array<string | { id: string }>)?.map((p: string | { id: string }) =>
+        typeof p === 'string' ? p : p.id,
+      ) || [];
+    const strategies =
+      (config?.strategies as Array<string | { id: string }>)?.map((s: string | { id: string }) =>
+        typeof s === 'string' ? s : s.id,
+      ) || [];
+
+    // Check if using sample target (promptfoo: prefix or promptfoo.app URL)
+    // Note: targets can be a single string, function, or array per ProvidersSchema
+    const checkIsSampleTarget = (t: unknown): boolean => {
+      if (typeof t === 'string') {
+        return t.includes('promptfoo:') || t.includes('promptfoo.app');
+      }
+      if (typeof t === 'object' && t !== null) {
+        const obj = t as { id?: string; config?: { url?: string } };
+        const id = obj.id || '';
+        const url = obj.config?.url || '';
+        return (
+          id.includes('promptfoo:') ||
+          url.includes('promptfoo.app') ||
+          url.includes('promptfoo.dev')
+        );
+      }
+      return false;
+    };
+
+    const targets = config?.targets;
+    const isSampleTarget =
+      typeof targets === 'string'
+        ? checkIsSampleTarget(targets)
+        : Array.isArray(targets)
+          ? targets.some(checkIsSampleTarget)
+          : false;
+
+    telemetry.record('redteam run', {
+      phase: 'completed',
+      numPlugins: plugins.length,
+      numStrategies: strategies.length,
+      plugins: plugins.slice(0, 50),
+      strategies: strategies.slice(0, 20),
+      numTests: results.length,
+      numPasses,
+      numFails,
+      numErrors,
+      passRate: results.length > 0 ? numPasses / results.length : 0,
+      isPromptfooSampleTarget: Boolean(isSampleTarget),
+      loadedFromCloud: Boolean(options.loadedFromCloud),
+    });
+  }
+
   if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(

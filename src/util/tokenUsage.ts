@@ -6,6 +6,12 @@ import type { TokenUsage } from '../types/shared';
 /**
  * A utility class for tracking token usage across an evaluation.
  *
+ * Key format: Uses bare provider IDs (e.g., "openai:gpt-4") as map keys.
+ * This aligns with how results are aggregated in runStats/providers.ts.
+ *
+ * Lifecycle: The tracker should be reset via resetAllUsage() at the start
+ * of each evaluation run to prevent cross-run token count leakage.
+ *
  * @deprecated Use OpenTelemetry tracing instead for per-call token tracking.
  * This class provides only cumulative totals and will be removed in a future version.
  *

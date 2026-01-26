@@ -57,7 +57,16 @@ export function redteamRunCommand(program: Command) {
     .option('-d, --description <text>', 'Custom description/name for this scan run')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
-      telemetry.record('redteam run', {});
+      telemetry.record('command_used', {
+        name: 'redteam run',
+      });
+      // Record initial redteam run event with available info
+      // Full config details recorded in shared.ts after config is loaded
+      telemetry.record('redteam run', {
+        phase: 'started',
+        fromCloud: opts.config ? UUID_REGEX.test(opts.config) : false,
+        hasTarget: Boolean(opts.target),
+      });
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {

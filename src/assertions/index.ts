@@ -101,18 +101,6 @@ import type {
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
-export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'search-rubric',
-]);
-
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
   (params: AssertionParams) => GradingResult | Promise<GradingResult>

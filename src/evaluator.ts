@@ -2,12 +2,8 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import {
-  MODEL_GRADED_ASSERTION_TYPES,
-  renderMetricName,
-  runAssertions,
-  runCompareAssertion,
-} from './assertions/index';
+import { MODEL_GRADED_ASSERTION_TYPES } from './assertions/constants';
+import { renderMetricName, runAssertions, runCompareAssertion } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -23,6 +19,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { getSessionId } from './redteam/util';
+import { computeRunStats } from './runStats/index';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -483,13 +480,10 @@ export async function runEval({
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-    // Track token usage at the provider level
+    // Track token usage at the provider level using bare provider ID
+    // This aligns with how runStats/providers.ts aggregates per-provider stats
     if (response.tokenUsage) {
-      const providerId = provider.id();
-      const trackingId = provider.constructor?.name
-        ? `${providerId} (${provider.constructor.name})`
-        : providerId;
-      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+      TokenUsageTracker.getInstance().trackUsage(provider.id(), response.tokenUsage);
     }
 
     if (response.error) {
@@ -885,6 +879,9 @@ class Evaluator {
     if (!options.silent) {
       logger.info(`Starting evaluation ${this.evalRecord.id}`);
     }
+
+    // Reset token usage tracker to prevent cross-run leakage
+    TokenUsageTracker.getInstance().resetAllUsage();
 
     // Add abort checks at key points
     checkAbort();
@@ -2092,13 +2089,14 @@ class Evaluator {
     const totalTokens = this.stats.tokenUsage.total;
     const cachedTokens = this.stats.tokenUsage.cached;
 
-    // Calculate correct average latency by summing individual request latencies
-    const totalLatencyMs = this.evalRecord.results.reduce(
-      (sum, result) => sum + (result.latencyMs || 0),
-      0,
-    );
-    const avgLatencyMs =
-      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
+    // Compute comprehensive run statistics using the runStats module
+    // These stats are stored on evalRecord for user access and used for telemetry
+    const runStats = computeRunStats({
+      results: this.evalRecord.results,
+      stats: this.stats,
+      providers: testSuite.providers,
+    });
+    this.evalRecord.runStats = runStats;
 
     // Detect key feature usage patterns
     const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
@@ -2115,19 +2113,7 @@ class Evaluator {
       return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
     });
 
-    // Calculate assertion metrics
-    const totalAssertions = prompts.reduce(
-      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
-      0,
-    );
-    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
-
-    // Count model-graded vs other assertion types
-    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
-      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
-    ).length;
-
-    // Calculate provider distribution (maintain exact compatibility)
+    // Calculate provider distribution (maintain exact compatibility for telemetry)
     const providerPrefixes = Array.from(
       new Set(
         testSuite.providers.map((p) => {
@@ -2154,6 +2140,9 @@ class Evaluator {
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: providerPrefixes.sort(),
+      models: runStats.models.ids,
+      isModelComparison: runStats.models.isComparison,
+      hasCustomProvider: runStats.models.hasCustom,
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
@@ -2164,11 +2153,19 @@ class Evaluator {
       numFails: this.stats.failures,
       numErrors: this.stats.errors,
 
-      // Performance metrics
+      // Performance stats (from runStats module)
       totalEvalTimeMs,
-      avgLatencyMs: Math.round(avgLatencyMs),
+      avgLatencyMs: runStats.latency.avgMs,
+      latencyP50Ms: runStats.latency.p50Ms,
+      latencyP95Ms: runStats.latency.p95Ms,
+      latencyP99Ms: runStats.latency.p99Ms,
       concurrencyUsed: concurrency,
       timeoutOccurred,
+
+      // Cache stats (from runStats module)
+      cacheHits: runStats.cache.hits,
+      cacheMisses: runStats.cache.misses,
+      cacheHitRate: runStats.cache.hitRate ?? -1, // -1 indicates no requests
 
       // Token and cost metrics
       totalTokens,
@@ -2178,11 +2175,24 @@ class Evaluator {
       totalCost,
       totalRequests,
 
-      // Assertion metrics
-      numAssertions: totalAssertions,
-      passedAssertions,
-      modelGradedAssertions: modelGradedCount,
-      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
+      // Assertion stats (from runStats module)
+      numAssertions: runStats.assertions.total,
+      passedAssertions: runStats.assertions.passed,
+      modelGradedAssertions: runStats.assertions.modelGraded,
+      assertionPassRate: runStats.assertions.passRate,
+
+      // Assertion token usage (from runStats module, serialized for telemetry)
+      assertionTokenUsage: JSON.stringify(runStats.assertions.tokenUsage),
+
+      // Per-assertion-type breakdown (from runStats module, serialized for telemetry)
+      assertionBreakdown: JSON.stringify(runStats.assertions.breakdown),
+
+      // Per-provider performance (from runStats module, serialized for telemetry)
+      providerBreakdown: JSON.stringify(runStats.providers),
+
+      // Error categorization (from runStats module)
+      errorTypes: runStats.errors.types,
+      errorBreakdown: JSON.stringify(runStats.errors.breakdown),
 
       // Feature usage
       usesConversationVar,

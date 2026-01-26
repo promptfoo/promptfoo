@@ -48,6 +48,7 @@ import {
 } from './evalPerformance';
 import EvalResult from './evalResult';
 
+import type { EvalRunStats } from '../runStats/index';
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
@@ -337,6 +338,13 @@ export default class Eval {
    * Set by the evaluate() function when sharing is enabled.
    */
   shareableUrl?: string;
+
+  /**
+   * Evaluation run statistics.
+   * Computed once after evaluation completes, available for user inspection.
+   * Not persisted to database (yet).
+   */
+  runStats?: EvalRunStats;
 
   static async latest() {
     const db = getDb();

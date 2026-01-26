@@ -10,6 +10,13 @@ import * as fetchModule from '../../../src/util/fetch/index';
 
 const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
+/**
+ * Helper to flush all pending setImmediate callbacks.
+ * This prevents async operations from leaking between tests.
+ */
+const flushSetImmediate = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
 global.setTimeout = vi.fn((callback: any, delay?: number) => {
@@ -106,6 +113,10 @@ describe('GoogleLiveProvider', () => {
   let provider: GoogleLiveProvider;
 
   beforeEach(async () => {
+    // Flush any pending setImmediate callbacks from previous tests
+    // to prevent async operations from leaking between tests
+    await flushSetImmediate();
+
     // Reset fetchWithProxy mock to prevent test pollution from async callbacks
     mockFetchWithProxy.mockReset();
 
@@ -140,8 +151,10 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks();
+    // Flush pending async operations to prevent leaking to next test
+    await flushSetImmediate();
   });
 
   it('should initialize with correct config', () => {
