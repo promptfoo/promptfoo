@@ -6,6 +6,11 @@
  */
 
 import { parseRetryAfter } from './headerParser';
+import {
+  getProviderResponseHeaders,
+  isProviderResponseRateLimited,
+  type RateLimitExecuteOptions,
+} from './types';
 
 import type {
   ApiProvider,
@@ -23,14 +28,56 @@ const WRAPPED_SYMBOL = Symbol.for('promptfoo.rateLimitWrapped');
 
 /**
  * Type to represent a provider with the rate limit wrapper symbol.
+ * Uses the specific WRAPPED_SYMBOL for type safety.
  */
-type WrappedApiProvider = ApiProvider & { [key: symbol]: boolean };
+type WrappedApiProvider = ApiProvider & { [WRAPPED_SYMBOL]: boolean };
 
 /**
  * Check if a provider is already wrapped with rate limiting.
  */
 export function isRateLimitWrapped(provider: ApiProvider): boolean {
   return (provider as WrappedApiProvider)[WRAPPED_SYMBOL] === true;
+}
+
+/**
+ * Create rate limit detection options for ProviderResponse.
+ * Shared between providerWrapper and evaluator for consistency.
+ */
+export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+  return {
+    getHeaders: getProviderResponseHeaders,
+    isRateLimited: isProviderResponseRateLimited,
+    getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      const rawHeaders = getProviderResponseHeaders(result);
+      if (rawHeaders) {
+        // Normalize header keys to lowercase for consistent access
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(rawHeaders)) {
+          headers[key.toLowerCase()] = value;
+        }
+        // Check retry-after-ms first (milliseconds)
+        if (headers['retry-after-ms']) {
+          const ms = parseInt(headers['retry-after-ms'], 10);
+          if (!isNaN(ms) && ms >= 0) {
+            return ms;
+          }
+        }
+        // Check retry-after (uses robust parsing for seconds/HTTP-date)
+        if (headers['retry-after']) {
+          const parsed = parseRetryAfter(headers['retry-after']);
+          if (parsed !== null) {
+            return parsed;
+          }
+        }
+      }
+      // Try to extract from error message (some providers include it)
+      const match = error?.message?.match(/\bretry after (\d+)\b/i);
+      if (match) {
+        return parseInt(match[1], 10) * 1000;
+      }
+      return undefined;
+    },
+  };
 }
 
 /**
@@ -61,61 +108,11 @@ export function wrapProviderWithRateLimiting(
       context?: CallApiContextParams,
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
-      return registry.execute(provider, () => originalCallApi(prompt, context, options), {
-        // Extract rate limit headers from response metadata
-        // Headers are stored at metadata.http.headers per ProviderResponse type
-        getHeaders: (result: ProviderResponse | undefined) =>
-          (result?.metadata?.http?.headers || result?.metadata?.headers) as
-            | Record<string, string>
-            | undefined,
-        // Detect rate limit from error message, status code, or error field
-        isRateLimited: (result: ProviderResponse | undefined, error: Error | undefined) =>
-          Boolean(
-            // Check HTTP status code (most reliable)
-            result?.metadata?.http?.status === 429 ||
-              // Check error field in response
-              result?.error?.includes?.('429') ||
-              result?.error?.toLowerCase?.().includes?.('rate limit') ||
-              // Check thrown error message
-              error?.message?.includes('429') ||
-              error?.message?.toLowerCase().includes('rate limit') ||
-              error?.message?.toLowerCase().includes('too many requests'),
-          ),
-        // Extract retry-after from headers or error
-        getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
-          // Headers are stored at metadata.http.headers per ProviderResponse type
-          const rawHeaders = (result?.metadata?.http?.headers || result?.metadata?.headers) as
-            | Record<string, string>
-            | undefined;
-          if (rawHeaders) {
-            // Normalize header keys to lowercase for consistent access
-            const headers: Record<string, string> = {};
-            for (const [key, value] of Object.entries(rawHeaders)) {
-              headers[key.toLowerCase()] = value;
-            }
-            // Check retry-after-ms first (milliseconds)
-            if (headers['retry-after-ms']) {
-              const ms = parseInt(headers['retry-after-ms'], 10);
-              if (!isNaN(ms) && ms >= 0) {
-                return ms;
-              }
-            }
-            // Check retry-after (uses robust parsing for seconds/HTTP-date)
-            if (headers['retry-after']) {
-              const parsed = parseRetryAfter(headers['retry-after']);
-              if (parsed !== null) {
-                return parsed;
-              }
-            }
-          }
-          // Try to extract from error message (some providers include it)
-          const match = error?.message?.match(/\bretry after (\d+)\b/i);
-          if (match) {
-            return parseInt(match[1], 10) * 1000;
-          }
-          return undefined;
-        },
-      });
+      return registry.execute(
+        provider,
+        () => originalCallApi(prompt, context, options),
+        createProviderRateLimitOptions(),
+      );
     },
   };
 

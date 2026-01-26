@@ -7,6 +7,40 @@ export interface ParsedRateLimitHeaders {
   retryAfterMs?: number; // Relative duration in milliseconds
 }
 
+// ============================================================================
+// Header names by provider
+// ============================================================================
+
+// OpenAI-style headers (also used by Azure, many OpenAI-compatible APIs)
+const OPENAI_HEADERS = {
+  remainingRequests: 'x-ratelimit-remaining-requests',
+  remainingTokens: 'x-ratelimit-remaining-tokens',
+  limitRequests: 'x-ratelimit-limit-requests',
+  limitTokens: 'x-ratelimit-limit-tokens',
+  resetRequests: 'x-ratelimit-reset-requests',
+  resetTokens: 'x-ratelimit-reset-tokens',
+} as const;
+
+// Anthropic-style headers
+const ANTHROPIC_HEADERS = {
+  remainingRequests: 'anthropic-ratelimit-requests-remaining',
+  remainingTokens: 'anthropic-ratelimit-tokens-remaining',
+  limitRequests: 'anthropic-ratelimit-requests-limit',
+  limitTokens: 'anthropic-ratelimit-tokens-limit',
+  reset: 'anthropic-ratelimit-requests-reset',
+} as const;
+
+// Standard/generic headers (RFC 6585 style)
+const STANDARD_HEADERS = {
+  remaining: 'ratelimit-remaining',
+  limit: 'ratelimit-limit',
+  reset: 'ratelimit-reset',
+  // Fallback variants
+  remainingAlt: 'x-ratelimit-remaining',
+  limitAlt: 'x-ratelimit-limit',
+  resetAlt: 'x-ratelimit-reset',
+} as const;
+
 /**
  * Parse rate limit headers from response.
  */
@@ -14,39 +48,39 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
-  // --- Remaining counts ---
+  // --- Remaining counts (ordered: OpenAI, Anthropic, Standard) ---
   result.remainingRequests = parseFirstMatch(h, [
-    'x-ratelimit-remaining-requests',
-    'anthropic-ratelimit-requests-remaining',
-    'x-ratelimit-remaining',
-    'ratelimit-remaining',
+    OPENAI_HEADERS.remainingRequests,
+    ANTHROPIC_HEADERS.remainingRequests,
+    STANDARD_HEADERS.remainingAlt,
+    STANDARD_HEADERS.remaining,
   ]);
 
   result.remainingTokens = parseFirstMatch(h, [
-    'x-ratelimit-remaining-tokens',
-    'anthropic-ratelimit-tokens-remaining',
+    OPENAI_HEADERS.remainingTokens,
+    ANTHROPIC_HEADERS.remainingTokens,
   ]);
 
-  // --- Limits ---
+  // --- Limits (ordered: OpenAI, Anthropic, Standard) ---
   result.limitRequests = parseFirstMatch(h, [
-    'x-ratelimit-limit-requests',
-    'anthropic-ratelimit-requests-limit',
-    'x-ratelimit-limit',
-    'ratelimit-limit',
+    OPENAI_HEADERS.limitRequests,
+    ANTHROPIC_HEADERS.limitRequests,
+    STANDARD_HEADERS.limitAlt,
+    STANDARD_HEADERS.limit,
   ]);
 
   result.limitTokens = parseFirstMatch(h, [
-    'x-ratelimit-limit-tokens',
-    'anthropic-ratelimit-tokens-limit',
+    OPENAI_HEADERS.limitTokens,
+    ANTHROPIC_HEADERS.limitTokens,
   ]);
 
-  // --- Reset time ---
+  // --- Reset time (ordered: OpenAI, Anthropic, Standard) ---
   for (const name of [
-    'x-ratelimit-reset-requests',
-    'x-ratelimit-reset-tokens',
-    'anthropic-ratelimit-requests-reset',
-    'x-ratelimit-reset',
-    'ratelimit-reset',
+    OPENAI_HEADERS.resetRequests,
+    OPENAI_HEADERS.resetTokens,
+    ANTHROPIC_HEADERS.reset,
+    STANDARD_HEADERS.resetAlt,
+    STANDARD_HEADERS.reset,
   ]) {
     if (h[name] !== undefined) {
       const parsed = parseResetTime(h[name]);

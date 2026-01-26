@@ -19,6 +19,7 @@ export {
 export { ProviderRateLimitState } from './providerRateLimitState';
 // Provider wrapper
 export {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -55,3 +56,5 @@ export type {
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';
+// Shared types
+export type { RateLimitExecuteOptions } from './types';
