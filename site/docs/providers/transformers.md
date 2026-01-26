@@ -9,11 +9,13 @@ The Transformers.js provider enables fully local inference using [Transformers.j
 
 ## Installation
 
-Transformers.js is an optional dependency. Install it with:
+Transformers.js is an **optional dependency** that must be installed separately. This keeps the main promptfoo package smaller for users who don't need local inference (~200MB+ for ONNX runtime).
 
 ```bash
 npm install @huggingface/transformers
 ```
+
+If you try to use a Transformers.js provider without installing the dependency, you'll see a clear error message with installation instructions.
 
 ## Provider Types
 
@@ -261,6 +263,23 @@ promptfoo eval -j 1
 ```
 
 ## Troubleshooting
+
+### Dependency Not Installed
+
+If you see this error:
+
+```
+@huggingface/transformers is required for local embedding and text generation providers.
+Install it with: npm install @huggingface/transformers
+```
+
+Install the optional dependency:
+
+```bash
+npm install @huggingface/transformers
+```
+
+This package is ~200MB+ due to the ONNX runtime, which is why it's optional.
 
 ### Model Not Found
 

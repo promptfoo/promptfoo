@@ -40,10 +40,3 @@ export async function validateTransformersDependency(
     );
   }
 }
-
-/**
- * Resets the availability cache. Primarily for testing.
- */
-export function resetTransformersAvailabilityCache(): void {
-  transformersAvailableCache = null;
-}
