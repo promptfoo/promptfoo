@@ -33,6 +33,7 @@ import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/polic
 import invariant from '@promptfoo/util/invariant';
 import {
   BarChart,
+  CheckSquare,
   ChevronDown,
   Clock,
   Copy,
@@ -47,6 +48,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
+import { BulkRatingDialog } from './BulkRatingDialog';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
@@ -95,6 +97,7 @@ export default function ResultsView({
     filters,
     removeFilter,
     stats,
+    fetchEvalData,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -285,6 +288,7 @@ export default function ResultsView({
   const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [bulkRatingDialogOpen, setBulkRatingDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -630,6 +634,21 @@ export default function ResultsView({
 
             <FiltersForm />
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkRatingDialogOpen(true)}
+                  disabled={!evalId}
+                >
+                  <CheckSquare className="size-4 mr-2" />
+                  Bulk Rate
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Rate multiple results at once</TooltipContent>
+            </Tooltip>
+
             <div className="flex-1" />
             <div className="flex justify-end">
               <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row">
@@ -950,6 +969,24 @@ export default function ResultsView({
         showSizeWarning={totalResultsCount > 10000}
         itemCount={totalResultsCount}
         itemLabel="results"
+      />
+      <BulkRatingDialog
+        open={bulkRatingDialogOpen}
+        onClose={() => setBulkRatingDialogOpen(false)}
+        evalId={evalId}
+        filterMode={filterMode}
+        filters={
+          filters.appliedCount > 0
+            ? Object.values(filters.values).map((f) => JSON.stringify(f))
+            : undefined
+        }
+        searchQuery={debouncedSearchText || undefined}
+        onSuccess={() => {
+          // Refresh the eval data after bulk rating
+          if (evalId) {
+            fetchEvalData(evalId, { filterMode, searchText: debouncedSearchText });
+          }
+        }}
       />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
 

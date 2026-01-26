@@ -1,6 +1,22 @@
 import { z } from 'zod';
+import { BULK_RATING_CONSTANTS } from '../services/bulkGrade/types';
+import { EvalResultsFilterMode } from '../types/index';
 
 const EmailSchema = z.email();
+
+/**
+ * Schema for bulk rating request.
+ */
+export const BulkRatingRequestSchema = z.object({
+  pass: z.boolean(),
+  reason: z.string().max(BULK_RATING_CONSTANTS.MAX_REASON_LENGTH),
+  filterMode: EvalResultsFilterMode,
+  filters: z.array(z.string()).optional(),
+  searchQuery: z.string().optional(),
+  confirmBulk: z.boolean().optional(),
+});
+
+export type BulkRatingRequestInput = z.infer<typeof BulkRatingRequestSchema>;
 
 export const ApiSchemas = {
   User: {

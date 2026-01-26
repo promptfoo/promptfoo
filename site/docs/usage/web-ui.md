@@ -32,6 +32,7 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 - **Display mode** - Filter: All, Failures, Passes, Errors, Different, Highlights
 - **Search** - Text or regex
 - **Filters** - By metrics, metadata, pass/fail. Operators: `=`, `contains`, `>`, `<`
+- **Bulk Rate** - Apply pass/fail rating to multiple results at once (respects current filters)
 
 ![Display mode dropdown](/img/docs/web-ui-display-mode.png)
 
@@ -61,6 +62,22 @@ Hover to reveal actions. Hold `Shift` for more:
 | 🔗  | Share     | Link to this output (`Shift`)                   |
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
+
+## Bulk Rating
+
+Rate multiple results at once using the **Bulk Rate** button in the toolbar.
+
+1. Filter results using display mode, search, or advanced filters
+2. Click **Bulk Rate**
+3. Select **Pass** or **Fail**
+4. Enter a reason (applied to all matching results)
+5. Confirm the operation
+
+The dialog previews how many results will be affected. Operations on 50+ results require explicit confirmation.
+
+:::note
+Bulk rating uses the same filter criteria as your current view. Filter first to target specific subsets of results.
+:::
 
 ## Eval Actions
 

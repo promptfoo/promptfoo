@@ -7,10 +7,11 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
+import { bulkGradeService, evalLockManager } from '../../services/bulkGrade';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
+import { ApiSchemas, BulkRatingRequestSchema } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
   ComparisonEvalNotFoundError,
@@ -546,6 +547,16 @@ evalRouter.post(
     const eval_ = await Eval.findById(result.evalId);
     invariant(eval_, 'Eval not found');
 
+    // Check if a bulk operation is in progress for this eval
+    // Single rating operations should not run concurrently with bulk operations
+    // to avoid metric inconsistencies
+    if (evalLockManager.isLocked(eval_.id)) {
+      res.status(409).json({
+        error: 'A bulk rating operation is in progress for this eval. Please wait and try again.',
+      });
+      return;
+    }
+
     // Capture the current state before we change it
     const hasExistingManualOverride = Boolean(
       result.gradingResult?.componentResults?.some(
@@ -606,6 +617,105 @@ evalRouter.post(
     await result.save();
 
     res.json(result);
+  },
+);
+
+/**
+ * Bulk rate multiple results at once.
+ * Applies a pass/fail override to all results matching the given filter.
+ */
+evalRouter.post(
+  '/:evalId/results/bulk-rating',
+  async (req: Request, res: Response): Promise<void> => {
+    const evalId = req.params.evalId as string;
+
+    // Validate request body
+    const parseResult = BulkRatingRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        matched: 0,
+        updated: 0,
+        skipped: 0,
+        error: `Invalid request: ${parseResult.error.message}`,
+      });
+      return;
+    }
+
+    const request = parseResult.data;
+
+    // Perform the bulk rating
+    const result = await bulkGradeService.bulkManualRating(evalId, request);
+
+    if (!result.success) {
+      // Check if it's a "not found" error
+      if (result.error === 'Eval not found') {
+        res.status(404).json(result);
+        return;
+      }
+      // Check if it's a confirmation required error
+      if (result.error?.includes('Set confirmBulk')) {
+        res.status(400).json(result);
+        return;
+      }
+      // Check if it's a concurrent operation error
+      if (result.error?.includes('in progress')) {
+        res.status(409).json(result);
+        return;
+      }
+      res.status(500).json(result);
+      return;
+    }
+
+    res.json(result);
+  },
+);
+
+/**
+ * Get the count of results matching a filter (for bulk rating preview).
+ */
+evalRouter.get(
+  '/:evalId/results/bulk-rating/preview',
+  async (req: Request, res: Response): Promise<void> => {
+    const evalId = req.params.evalId as string;
+    const filterModeParam = (req.query.filterMode as string) || 'all';
+    const searchQuery = req.query.searchQuery as string | undefined;
+
+    // Validate filter mode
+    const filterModeResult = EvalResultsFilterMode.safeParse(filterModeParam);
+    if (!filterModeResult.success) {
+      res.status(400).json({ error: 'Invalid filterMode parameter' });
+      return;
+    }
+    const filterMode = filterModeResult.data;
+
+    // Parse and validate filters from query param (JSON encoded array of filter strings)
+    let filters: string[] | undefined;
+    if (req.query.filters) {
+      try {
+        const parsed = JSON.parse(req.query.filters as string);
+        // Validate that the parsed value is an array of strings
+        const filtersSchema = z.array(z.string());
+        const validationResult = filtersSchema.safeParse(parsed);
+        if (!validationResult.success) {
+          res.status(400).json({ error: 'Invalid filters parameter: must be an array of strings' });
+          return;
+        }
+        filters = validationResult.data;
+      } catch {
+        res.status(400).json({ error: 'Invalid filters parameter: malformed JSON' });
+        return;
+      }
+    }
+
+    const count = await bulkGradeService.getFilteredResultsCount(
+      evalId,
+      filterMode,
+      filters,
+      searchQuery,
+    );
+
+    res.json({ count });
   },
 );
 
