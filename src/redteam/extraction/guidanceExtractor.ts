@@ -1,9 +1,11 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import dedent from 'dedent';
 import logger from '../../logger';
+import { getConfigDirectoryPath } from '../../util/config/manage';
 import { subCategoryDescriptions, pluginDescriptions } from '../constants/metadata';
 import { getGraderById } from '../graders';
 import { callExtraction } from './util';
@@ -12,6 +14,83 @@ import type { ApiProvider } from '../../types/index';
 
 export interface GuidanceExtractionResult {
   [pluginId: string]: string | null; // null = no relevant guidance
+}
+
+// In-memory cache for current session
+const sessionCache = new Map<string, GuidanceExtractionResult>();
+
+/**
+ * Generates a cache key based on document content and plugin list.
+ */
+function generateCacheKey(document: string, pluginIds: string[], mode: string): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(document);
+  hash.update(pluginIds.sort().join(','));
+  hash.update(mode);
+  return hash.digest('hex').slice(0, 16);
+}
+
+/**
+ * Gets cache directory for extraction results.
+ */
+function getCacheDir(): string {
+  const configDir = getConfigDirectoryPath();
+  const cacheDir = path.join(configDir, 'cache', 'guidance-extraction');
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+  return cacheDir;
+}
+
+/**
+ * Tries to get cached extraction result.
+ */
+function getCachedResult(cacheKey: string): GuidanceExtractionResult | null {
+  // Check in-memory cache first
+  if (sessionCache.has(cacheKey)) {
+    logger.debug(`[GuidanceExtraction] Using session cache for ${cacheKey}`);
+    return sessionCache.get(cacheKey)!;
+  }
+
+  // Check file cache
+  try {
+    const cachePath = path.join(getCacheDir(), `${cacheKey}.json`);
+    if (fs.existsSync(cachePath)) {
+      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+      // Check if cache is still valid (24 hour TTL)
+      if (cached.timestamp && Date.now() - cached.timestamp < 24 * 60 * 60 * 1000) {
+        logger.info(`[GuidanceExtraction] Using cached extraction result (key: ${cacheKey})`);
+        sessionCache.set(cacheKey, cached.result);
+        return cached.result;
+      }
+    }
+  } catch {
+    // Cache miss or invalid cache
+  }
+  return null;
+}
+
+/**
+ * Saves extraction result to cache.
+ */
+function cacheResult(cacheKey: string, result: GuidanceExtractionResult): void {
+  // Save to in-memory cache
+  sessionCache.set(cacheKey, result);
+
+  // Save to file cache
+  try {
+    const cachePath = path.join(getCacheDir(), `${cacheKey}.json`);
+    fs.writeFileSync(
+      cachePath,
+      JSON.stringify({ timestamp: Date.now(), result }, null, 2),
+      'utf-8',
+    );
+    logger.debug(`[GuidanceExtraction] Cached result to ${cachePath}`);
+  } catch (error) {
+    logger.debug(
+      `[GuidanceExtraction] Failed to write cache: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 // Maximum characters per chunk (leaving room for prompt overhead)
@@ -226,6 +305,13 @@ export async function extractGuidanceForPlugins(
     return {};
   }
 
+  // Check cache first
+  const cacheKey = generateCacheKey(fullDocument, pluginIds, 'llm');
+  const cached = getCachedResult(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // Build plugin context for the prompt
   const pluginContexts = pluginIds
     .map((id, i) => {
@@ -244,7 +330,9 @@ export async function extractGuidanceForPlugins(
   if (chunks.length === 1) {
     // Single chunk - process directly
     logger.debug(`[GuidanceExtraction] Processing document (${fullDocument.length} chars)`);
-    return extractFromChunk(chunks[0], pluginContexts, pluginIds, provider, 0, 1);
+    const result = await extractFromChunk(chunks[0], pluginContexts, pluginIds, provider, 0, 1);
+    cacheResult(cacheKey, result);
+    return result;
   }
 
   // Multiple chunks - process in parallel and merge
@@ -263,6 +351,9 @@ export async function extractGuidanceForPlugins(
   logger.info(
     `[GuidanceExtraction] Merged results: ${matchedCount}/${pluginIds.length} plugins have relevant guidance`,
   );
+
+  // Cache the result
+  cacheResult(cacheKey, merged);
 
   return merged;
 }
@@ -487,6 +578,13 @@ export async function extractGuidanceForPluginsWithAgent(
     return {};
   }
 
+  // Check cache first
+  const cacheKey = generateCacheKey(fullDocument, pluginIds, 'agent');
+  const cached = getCachedResult(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // Create a temporary directory for the document
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-guidance-'));
   const guidanceFilePath = path.join(tempDir, 'guidance.md');
@@ -610,6 +708,9 @@ export async function extractGuidanceForPluginsWithAgent(
     logger.info(
       `[GuidanceExtraction:Agent] Extraction complete: ${matchedCount}/${pluginIds.length} plugins have relevant guidance`,
     );
+
+    // Cache the result
+    cacheResult(cacheKey, normalizedResult);
 
     return normalizedResult;
   } finally {
@@ -761,6 +862,13 @@ export async function extractGuidanceForPluginsWithOpenAIAgent(
   if (pluginIds.length === 0) {
     logger.debug('[GuidanceExtraction:OpenAIAgent] No plugins provided, returning empty result');
     return {};
+  }
+
+  // Check cache first
+  const cacheKey = generateCacheKey(fullDocument, pluginIds, 'openai-agent');
+  const cached = getCachedResult(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   // Create a temporary directory for the document
@@ -928,6 +1036,9 @@ export async function extractGuidanceForPluginsWithOpenAIAgent(
     logger.info(
       `[GuidanceExtraction:OpenAIAgent] Extraction complete: ${matchedCount}/${pluginIds.length} plugins have relevant guidance`,
     );
+
+    // Cache the result
+    cacheResult(cacheKey, normalizedResult);
 
     return normalizedResult;
   } finally {
