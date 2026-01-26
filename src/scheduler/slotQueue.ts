@@ -107,6 +107,10 @@ export class SlotQueue {
    * Release a slot and process next queued request.
    */
   release(): void {
+    if (this.activeCount <= 0) {
+      // Prevent negative activeCount from unpaired release() calls
+      return;
+    }
     this.activeCount--;
     this.onSlotReleased?.(this.waiting.length);
     this.processQueue();

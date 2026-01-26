@@ -60,7 +60,8 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {
     const ms = parseInt(h['retry-after-ms'], 10);
-    if (!isNaN(ms) && ms > 0) {
+    // Accept 0 as valid (means "retry immediately")
+    if (!isNaN(ms) && ms >= 0) {
       result.retryAfterMs = ms;
       if (result.resetAt === undefined) {
         result.resetAt = Date.now() + ms;

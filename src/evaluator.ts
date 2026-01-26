@@ -23,7 +23,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { getSessionId } from './redteam/util';
-import { createRateLimitRegistry, type RateLimitRegistry } from './scheduler';
+import { createRateLimitRegistry, parseRetryAfter, type RateLimitRegistry } from './scheduler';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -440,15 +440,30 @@ export async function runEval({
               ),
             // Extract retry-after from headers or error
             getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
-              const headers = result?.metadata?.headers as Record<string, string> | undefined;
-              if (headers?.['retry-after-ms']) {
-                return parseInt(headers['retry-after-ms'], 10);
-              }
-              if (headers?.['retry-after']) {
-                return parseInt(headers['retry-after'], 10) * 1000;
+              const rawHeaders = result?.metadata?.headers as Record<string, string> | undefined;
+              if (rawHeaders) {
+                // Normalize header keys to lowercase for consistent access
+                const headers: Record<string, string> = {};
+                for (const [key, value] of Object.entries(rawHeaders)) {
+                  headers[key.toLowerCase()] = value;
+                }
+                // Check retry-after-ms first (milliseconds)
+                if (headers['retry-after-ms']) {
+                  const ms = parseInt(headers['retry-after-ms'], 10);
+                  if (!isNaN(ms) && ms >= 0) {
+                    return ms;
+                  }
+                }
+                // Check retry-after (uses robust parsing for seconds/HTTP-date)
+                if (headers['retry-after']) {
+                  const parsed = parseRetryAfter(headers['retry-after']);
+                  if (parsed !== null) {
+                    return parsed;
+                  }
+                }
               }
               // Try to extract from error message (some providers include it)
-              const match = error?.message?.match(/retry after (\d+)/i);
+              const match = error?.message?.match(/\bretry after (\d+)\b/i);
               if (match) {
                 return parseInt(match[1], 10) * 1000;
               }

@@ -429,9 +429,20 @@ describe('parseRateLimitHeaders', () => {
       expect(result.resetAt).toBeUndefined();
     });
 
-    it('should ignore zero or negative retry-after-ms', () => {
+    it('should accept zero retry-after-ms as immediate retry', () => {
       const headers = {
         'retry-after-ms': '0',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      // 0 means "retry immediately" - this is valid per HTTP spec
+      expect(result.retryAfterMs).toBe(0);
+    });
+
+    it('should ignore negative retry-after-ms', () => {
+      const headers = {
+        'retry-after-ms': '-5',
       };
 
       const result = parseRateLimitHeaders(headers);

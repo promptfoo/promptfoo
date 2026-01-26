@@ -22,7 +22,11 @@ export function getRetryDelay(
   serverRetryAfterMs?: number,
 ): number {
   // If server specified retry-after, use it (with jitter)
-  if (serverRetryAfterMs !== undefined && serverRetryAfterMs > 0) {
+  // Note: serverRetryAfterMs = 0 means "retry immediately"
+  if (serverRetryAfterMs !== undefined && serverRetryAfterMs >= 0) {
+    if (serverRetryAfterMs === 0) {
+      return 0; // Immediate retry
+    }
     const jitter = serverRetryAfterMs * policy.jitterFactor * Math.random();
     return Math.min(serverRetryAfterMs + jitter, policy.maxDelayMs);
   }

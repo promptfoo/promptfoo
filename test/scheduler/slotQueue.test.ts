@@ -863,4 +863,38 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(3);
     });
   });
+
+  describe('release - edge cases', () => {
+    beforeEach(() => {
+      queue = new SlotQueue({
+        maxConcurrency: 5,
+        minConcurrency: 1,
+      });
+    });
+
+    it('should not go negative when release() called without acquire()', () => {
+      // Call release without any acquire
+      queue.release();
+      queue.release();
+      queue.release();
+
+      // Should still be 0, not negative
+      expect(queue.getActiveCount()).toBe(0);
+
+      // Should still be able to acquire normally
+      queue.acquire('test-1');
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('should handle unbalanced release calls gracefully', async () => {
+      await queue.acquire('test-1');
+      expect(queue.getActiveCount()).toBe(1);
+
+      queue.release();
+      queue.release(); // Extra release
+      queue.release(); // Extra release
+
+      expect(queue.getActiveCount()).toBe(0);
+    });
+  });
 });
