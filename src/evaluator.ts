@@ -841,6 +841,33 @@ class Evaluator {
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
 
+    // Add debug logging for rate limit events
+    this.rateLimitRegistry.on('ratelimit:hit', (data) => {
+      logger.debug(`[Scheduler] Rate limit hit for ${data.rateLimitKey}`, {
+        retryAfterMs: data.retryAfterMs,
+        resetAt: data.resetAt,
+        concurrencyChange: data.concurrencyChange,
+      });
+    });
+    this.rateLimitRegistry.on('ratelimit:learned', (data) => {
+      logger.debug(`[Scheduler] Learned rate limits for ${data.rateLimitKey}`, {
+        requestLimit: data.requestLimit,
+        tokenLimit: data.tokenLimit,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:decreased', (data) => {
+      logger.debug(`[Scheduler] Concurrency decreased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:increased', (data) => {
+      logger.debug(`[Scheduler] Concurrency increased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+
     // Share rate limit registry with redteam provider manager
     // This ensures redteam internal providers also benefit from rate limiting
     redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
@@ -2273,6 +2300,25 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Log rate limit metrics for debugging before cleanup
+      if (this.rateLimitRegistry) {
+        const metrics = this.rateLimitRegistry.getMetrics();
+        for (const [key, m] of Object.entries(metrics)) {
+          if (m.totalRequests > 0) {
+            logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              totalRequests: m.totalRequests,
+              completedRequests: m.completedRequests,
+              failedRequests: m.failedRequests,
+              rateLimitHits: m.rateLimitHits,
+              retriedRequests: m.retriedRequests,
+              avgLatencyMs: Math.round(m.avgLatencyMs),
+              p50LatencyMs: Math.round(m.p50LatencyMs),
+              p99LatencyMs: Math.round(m.p99LatencyMs),
+            });
+          }
+        }
+      }
 
       // Clean up rate limit registry resources
       this.rateLimitRegistry?.dispose();
