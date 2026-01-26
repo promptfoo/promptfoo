@@ -17,6 +17,12 @@ export {
 } from './headerParser';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
+// Provider wrapper
+export {
+  isRateLimitWrapped,
+  wrapProvidersWithRateLimiting,
+  wrapProviderWithRateLimiting,
+} from './providerWrapper';
 // Rate limit key generation
 export { getRateLimitKey } from './rateLimitKey';
 // Core exports
