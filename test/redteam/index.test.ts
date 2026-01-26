@@ -3248,7 +3248,7 @@ describe('Language configuration', () => {
         // Mock the provider loading to return a mock provider for test generation
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        vi.spyOn(
+        const providerSpy = vi.spyOn(
           await import('../../src/redteam/providers/shared'),
           'redteamProviderManager',
           'get',
@@ -3262,18 +3262,22 @@ describe('Language configuration', () => {
           clearProvider: vi.fn(),
         } as any);
 
-        await synthesize({
-          numTests: 1,
-          plugins: [{ id: 'test-plugin', numTests: 1 }],
-          prompts: ['Test prompt'],
-          strategies: [{ id: 'jailbreak' }],
-          targetIds: ['test-provider'],
-        });
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
 
-        // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
-        expect(mockStrategyAction).toHaveBeenCalled();
-        expect(capturedConfig).toBeDefined();
-        expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+        } finally {
+          providerSpy.mockRestore();
+        }
       } finally {
         // Restore original cliState
         cliState.config = originalConfig;
@@ -3365,7 +3369,7 @@ describe('Language configuration', () => {
 
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        vi.spyOn(
+        const providerSpy = vi.spyOn(
           await import('../../src/redteam/providers/shared'),
           'redteamProviderManager',
           'get',
@@ -3379,18 +3383,22 @@ describe('Language configuration', () => {
           clearProvider: vi.fn(),
         } as any);
 
-        await synthesize({
-          numTests: 1,
-          plugins: [{ id: 'test-plugin', numTests: 1 }],
-          prompts: ['Test prompt'],
-          strategies: [{ id: 'jailbreak' }],
-          targetIds: ['test-provider'],
-        });
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
 
-        expect(mockStrategyAction).toHaveBeenCalled();
-        expect(capturedConfig).toBeDefined();
-        // Should pass the full provider options object
-        expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          // Should pass the full provider options object
+          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+        } finally {
+          providerSpy.mockRestore();
+        }
       } finally {
         cliState.config = originalConfig;
       }

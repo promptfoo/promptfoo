@@ -267,6 +267,10 @@ describe('shared redteam provider utilities', () => {
     });
 
     describe('getProvider with defaultTest fallback', () => {
+      afterEach(() => {
+        vi.resetAllMocks();
+      });
+
       it('uses defaultTest.options.provider when no redteam.provider is set', async () => {
         redteamProviderManager.clearProvider();
         const mockProvider: ApiProvider = {
