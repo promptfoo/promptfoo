@@ -35,7 +35,7 @@ export function getRateLimitKey(provider: ApiProvider): string {
 
   if (configParts) {
     // Use 12 hex chars (48 bits) for low collision probability
-    return `${providerId}[${hashString(configParts).slice(0, 12)}]`;
+    return `${providerId}[${hashString(configParts)}]`;
   }
 
   return providerId;

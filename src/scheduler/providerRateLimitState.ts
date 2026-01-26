@@ -1,6 +1,10 @@
 import { EventEmitter } from 'events';
 
-import { AdaptiveConcurrency, WARNING_THRESHOLD } from './adaptiveConcurrency';
+import {
+  AdaptiveConcurrency,
+  type ConcurrencyChangeResult,
+  WARNING_THRESHOLD,
+} from './adaptiveConcurrency';
 import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
@@ -287,14 +291,7 @@ export class ProviderRateLimitState extends EventEmitter {
       });
 
       // Proactive concurrency reduction
-      const change = this.adaptiveConcurrency.recordApproachingLimit(minRatio);
-      if (change.changed) {
-        this.slotQueue.setMaxConcurrency(change.current);
-        this.emit('concurrency:decreased', {
-          rateLimitKey: this.rateLimitKey,
-          ...change,
-        });
-      }
+      this.applyConcurrencyChange(this.adaptiveConcurrency.recordApproachingLimit(minRatio));
     }
   }
 
@@ -310,13 +307,7 @@ export class ProviderRateLimitState extends EventEmitter {
     this.slotQueue.markRateLimited(retryAfterMs);
 
     const change = this.adaptiveConcurrency.recordRateLimit();
-    if (change.changed) {
-      this.slotQueue.setMaxConcurrency(change.current);
-      this.emit('concurrency:decreased', {
-        rateLimitKey: this.rateLimitKey,
-        ...change,
-      });
-    }
+    this.applyConcurrencyChange(change);
 
     this.emit('ratelimit:hit', {
       rateLimitKey: this.rateLimitKey,
@@ -330,10 +321,18 @@ export class ProviderRateLimitState extends EventEmitter {
    * Handle successful request.
    */
   private handleSuccess(): void {
-    const change = this.adaptiveConcurrency.recordSuccess();
+    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+  }
+
+  /**
+   * Apply concurrency change and emit appropriate event.
+   */
+  private applyConcurrencyChange(change: ConcurrencyChangeResult): void {
     if (change.changed) {
       this.slotQueue.setMaxConcurrency(change.current);
-      this.emit('concurrency:increased', {
+      const eventName =
+        change.reason === 'recovery' ? 'concurrency:increased' : 'concurrency:decreased';
+      this.emit(eventName, {
         rateLimitKey: this.rateLimitKey,
         ...change,
       });
