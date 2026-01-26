@@ -71,4 +71,24 @@ describe('shouldRetry', () => {
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(false);
   });
+
+  it('should handle error with undefined message gracefully', () => {
+    // Test edge case where error.message could be undefined
+    const error = new Error('placeholder');
+    (error as { message: string | undefined }).message = undefined;
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(false);
+  });
+
+  it('should retry on timeout error', () => {
+    const error = new Error('Request timeout after 30000ms');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should retry on network error', () => {
+    const error = new Error('ECONNRESET');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
 });

@@ -57,7 +57,7 @@ export function shouldRetry(
 
   // Retry transient errors
   if (error) {
-    const message = error.message.toLowerCase();
+    const message = (error.message ?? '').toLowerCase();
     return (
       message.includes('timeout') ||
       message.includes('econnreset') ||
