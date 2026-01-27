@@ -561,24 +561,22 @@ function transformForStandaloneMode(
   const providerName = 'promptfoo:redteam:indirect-web-pwn';
   const metricSuffix = 'IndirectWebPwn';
   const strategyId = 'indirect-web-pwn';
-  const scanId = uuidv4();
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
     return {
       ...testCase,
       // Add display variables for the UI Variables column
-      // In standalone mode, fetchPrompt and webPageUrl are set by the provider during execution
+      // In standalone mode, __fetchPrompt is set by the provider during execution
       vars: {
         ...testCase.vars,
-        embeddedInjection: originalText, // The attack payload to embed in the web page
-        // fetchPrompt and webPageUrl will be set by provider during execution
+        __embeddedPrompt: originalText, // The attack payload to embed in the web page
+        // __fetchPrompt will be set by provider during execution
       },
       provider: {
         id: providerName,
         config: {
           injectVar,
-          scanId,
           ...config,
         },
       },
@@ -633,13 +631,34 @@ async function transformForPerTurnLayer(
     // with our trackable exfil endpoint
     const attackPrompt = replaceUrlsWithExfilPlaceholder(rawAttackPrompt);
 
-    // Generate a stable key for this test case
-    // In per-turn mode, we need to track state across calls for the same test
+    // Generate a stable key for tracking page state across turns.
+    // We need a consistent identifier to update the SAME page on each turn rather than
+    // creating a new page every time (which defeats the purpose of embedding rotation).
     const testCaseId =
       (testCase.metadata?.testCaseId as string) ||
-      (testCase.metadata?.originalTestCaseId as string) ||
-      'runtime-transform';
-    const stateKey = `${testCaseId}`;
+      (testCase.metadata?.originalTestCaseId as string);
+
+    // Use testCaseId if available, otherwise fall back to sessionEvalId.
+    //
+    // Why sessionEvalId works as a fallback:
+    // - In per-turn layer mode (e.g., layer: [jailbreak:meta, indirect-web-pwn]), the
+    //   runtime transform doesn't pass a testCaseId in the metadata.
+    // - However, sessionEvalId (from getSessionEvalId()) is a module-level ID generated
+    //   once when the scan starts and remains constant across ALL turns.
+    // - Since layer mode processes only ONE test case at a time (one attack prompt
+    //   across multiple turns), using sessionEvalId as the state key correctly
+    //   identifies all turns of that single test case.
+    // - This allows us to create the page on turn 1 and update it on subsequent turns,
+    //   rotating the embedding location (invisible_text → semantic_embed → html_comment)
+    //   to test different injection techniques.
+    const stateKey = testCaseId || getSessionEvalId();
+
+    if (!testCaseId) {
+      logger.debug('[IndirectWebPwn] Using sessionEvalId as state key for per-turn layer', {
+        stateKey,
+        pluginId: testCase.metadata?.pluginId,
+      });
+    }
 
     // Run periodic cleanup before accessing state
     cleanupPageState();
@@ -699,7 +718,7 @@ async function transformForPerTurnLayer(
 
         const response = await createWebPage(
           evalId,
-          testCaseId,
+          stateKey, // Use stateKey (testCaseId or sessionEvalId) for tracking
           attackPrompt,
           goal,
           purpose,
@@ -772,14 +791,14 @@ async function transformForPerTurnLayer(
     // Return transformed test case
     // Add both the fetch prompt (what's sent to the AI) and the embedded injection (what's in the page)
     // as display variables so they show up in the UI Variables column
+    // Using __ prefix to avoid conflicts with user-defined variables and group them together in the UI
     results.push({
       ...testCase,
       vars: {
         ...testCase.vars,
         [injectVar]: fetchPrompt,
-        fetchPrompt, // The prompt sent to AI asking it to visit the URL
-        embeddedInjection: attackPrompt, // The attack payload embedded in the web page
-        webPageUrl: pageState.fullUrl, // The URL of the malicious page
+        __fetchPrompt: fetchPrompt, // The prompt sent to AI asking it to visit the URL
+        __embeddedPrompt: attackPrompt, // The attack payload embedded in the web page
       },
       metadata: {
         ...testCase.metadata,
