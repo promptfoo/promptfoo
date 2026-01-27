@@ -459,12 +459,12 @@ If you open a pull request, you are responsible for what you submit. AI can help
 
 ### Prove the change works
 
-A pull request should include enough evidence that a reviewer can trust the change without recreating your entire process.
+A pull request should include clear instructions so that a reviewer can verify correctness by running the code locally. Don't make reviewers reverse-engineer how to test your change.
 
 **What to include:**
 
 - What changed and why (a few sentences is fine)
-- How you verified it works
+- Steps to reproduce or verify the change (commands, config files, expected output)
 - Any tradeoffs or edge cases you considered
 
 If the change is hard to demonstrate, include something concrete: a minimal repro, a log excerpt, a screenshot, or a short recording.
@@ -483,6 +483,10 @@ If you can't explain a non-trivial part of your PR, revise it until you can.
 ### No hypothetical platform support
 
 Don't submit changes for environments you cannot actually run or test. If you want to add support for a platform you don't have access to, open an issue or discussion describing what you need and what you can verify today.
+
+### Maintain agent guidance files
+
+This repository uses `AGENTS.md` files to provide context to AI coding assistants. If your changes affect how agents should work in a particular area (new patterns, conventions, or gotchas), update the relevant `AGENTS.md` file following existing patterns. See the root `AGENTS.md` for the directory structure and conventions.
 
 ### Disclosure
 
