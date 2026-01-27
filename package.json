@@ -88,15 +88,15 @@
     "chokidar": "5.0.0",
     "whatwg-url": "15.1.0",
     "esbuild": "0.27.2",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
     "*": {
       "whatwg-url": "15.1.0",
       "chokidar": "5.0.0",
       "esbuild": "0.27.2",
-      "react": "19.2.3",
-      "react-dom": "19.2.3"
+      "react": "^19.2.3",
+      "react-dom": "^19.2.3"
     },
     "gaxios": "^7.1.3",
     "https-proxy-agent": "^7.0.6",
@@ -280,7 +280,7 @@
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",
-    "react": "19.2.3",
+    "react": "^19.2.4",
     "rfdc": "^1.4.1",
     "rxjs": "^7.8.2",
     "semver": "^7.7.3",
