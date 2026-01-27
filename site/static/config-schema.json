@@ -2402,7 +2402,7 @@
                   "severity": {
                     "description": "Severity level for this plugin",
                     "type": "string",
-                    "enum": ["critical", "high", "medium", "low"]
+                    "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
                 "required": ["id", "numTests"],

@@ -131,6 +131,31 @@ describe('Risk Scoring', () => {
       expect(result.score).toBe(0);
     });
 
+    it('should always return score 0 and level informational for informational severity', () => {
+      // Even with 100% attack success rate, informational severity should return 0
+      const result = calculatePluginRiskScore('info-plugin', Severity.Informational, [
+        {
+          strategy: 'basic',
+          results: { total: 10, passed: 10, failed: 0 },
+        },
+      ]);
+
+      expect(result.score).toBe(0);
+      expect(result.level).toBe('informational');
+    });
+
+    it('should return informational level for informational severity with no test results', () => {
+      const result = calculatePluginRiskScore('info-plugin', Severity.Informational, [
+        {
+          strategy: 'basic',
+          results: { total: 0, passed: 0, failed: 0 },
+        },
+      ]);
+
+      expect(result.score).toBe(0);
+      expect(result.level).toBe('informational');
+    });
+
     it('should apply human factor correctly', () => {
       const humanExploitable = calculatePluginRiskScore('test1', Severity.High, [
         {
@@ -228,6 +253,26 @@ describe('Risk Scoring', () => {
 
       expect(multipleCritical.score).toBeGreaterThanOrEqual(singleCritical.score);
     });
+
+    it('should include informational in distribution count', () => {
+      const pluginScores = [
+        calculatePluginRiskScore('plugin1', Severity.Informational, [
+          { strategy: 'basic', results: { total: 10, passed: 5, failed: 5 } },
+        ]),
+        calculatePluginRiskScore('plugin2', Severity.Informational, [
+          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
+        ]),
+        calculatePluginRiskScore('plugin3', Severity.Low, [
+          { strategy: 'basic', results: { total: 10, passed: 3, failed: 7 } },
+        ]),
+      ];
+
+      const systemScore = calculateSystemRiskScore(pluginScores);
+
+      expect(systemScore.distribution.informational).toBe(2);
+      expect(systemScore.distribution.low).toBe(0);
+      expect(systemScore.distribution.medium).toBe(1);
+    });
   });
 
   describe('formatRiskScore', () => {
@@ -266,6 +311,7 @@ describe('Risk Scoring', () => {
       expect(getRiskColor('high')).toBe('#FF0000');
       expect(getRiskColor('medium')).toBe('#FFA500');
       expect(getRiskColor('low')).toBe('#32CD32');
+      expect(getRiskColor('informational')).toBe('#1976d2');
     });
   });
 });
