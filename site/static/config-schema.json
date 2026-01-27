@@ -2558,6 +2558,26 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "gradingGuidance": {
+          "description": "External grading guidance document - file path (.txt, .md) or inline text",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": ["plugins", "strategies"],

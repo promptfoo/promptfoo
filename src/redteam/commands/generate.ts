@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { extractTextFromPDF } from '../../evaluatorHelpers';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -424,6 +425,7 @@ export async function doGenerateRedteam(
       if (
         potentialPath.endsWith('.txt') ||
         potentialPath.endsWith('.md') ||
+        potentialPath.endsWith('.pdf') ||
         potentialPath.startsWith('file://')
       ) {
         // It looks like a file path
@@ -434,7 +436,11 @@ export async function doGenerateRedteam(
           ? filePath
           : path.resolve(configDir, filePath);
         try {
-          guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          if (absolutePath.endsWith('.pdf')) {
+            guidanceText = await extractTextFromPDF(absolutePath);
+          } else {
+            guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          }
           logger.info(`Loaded grading guidance from file: ${absolutePath}`);
         } catch (error) {
           logger.error(
@@ -457,7 +463,11 @@ export async function doGenerateRedteam(
           ? filePath
           : path.resolve(configDir, filePath);
         try {
-          guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          if (absolutePath.endsWith('.pdf')) {
+            guidanceText = await extractTextFromPDF(absolutePath);
+          } else {
+            guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          }
           logger.info(`Loaded grading guidance from file: ${absolutePath}`);
         } catch (error) {
           logger.error(

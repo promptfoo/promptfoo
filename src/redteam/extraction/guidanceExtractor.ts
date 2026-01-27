@@ -94,6 +94,29 @@ function cacheResult(cacheKey: string, result: GuidanceExtractionResult): void {
   }
 }
 
+/**
+ * Normalizes extraction results, handling null/empty values and object serialization.
+ * Agents may return structured objects instead of strings, so this handles both cases.
+ */
+function normalizeExtractionResult(
+  parsed: Record<string, unknown>,
+  pluginIds: string[],
+): GuidanceExtractionResult {
+  const result: GuidanceExtractionResult = {};
+  for (const pluginId of pluginIds) {
+    const value = parsed[pluginId];
+    if (value === null || value === 'null' || value === '' || value === undefined) {
+      result[pluginId] = null;
+    } else if (typeof value === 'object') {
+      // Agent returned structured object - convert to readable string
+      result[pluginId] = JSON.stringify(value, null, 2);
+    } else {
+      result[pluginId] = String(value);
+    }
+  }
+  return result;
+}
+
 // Maximum characters per chunk (leaving room for prompt overhead)
 // ~100K chars ≈ ~25K tokens, safe for most models
 const MAX_CHUNK_SIZE = 100000;
@@ -263,17 +286,7 @@ async function extractFromChunk(
       const jsonStr = jsonMatch[1]?.trim() || output.trim();
       const parsed = JSON.parse(jsonStr) as GuidanceExtractionResult;
 
-      // Normalize results
-      const result: GuidanceExtractionResult = {};
-      for (const pluginId of pluginIds) {
-        const value = parsed[pluginId];
-        if (value === null || value === 'null' || value === '' || value === undefined) {
-          result[pluginId] = null;
-        } else {
-          result[pluginId] = String(value);
-        }
-      }
-      return result;
+      return normalizeExtractionResult(parsed, pluginIds);
     });
   } catch (error) {
     logger.warn(
@@ -589,15 +602,7 @@ export async function extractGuidanceForPluginsWithAgent(
     }
 
     // Normalize results
-    const normalizedResult: GuidanceExtractionResult = {};
-    for (const pluginId of pluginIds) {
-      const value = result[pluginId];
-      if (value === null || value === 'null' || value === '' || value === undefined) {
-        normalizedResult[pluginId] = null;
-      } else {
-        normalizedResult[pluginId] = String(value);
-      }
-    }
+    const normalizedResult = normalizeExtractionResult(result, pluginIds);
 
     // Log summary
     const matchedCount = Object.values(normalizedResult).filter((v) => v !== null).length;
@@ -926,19 +931,8 @@ export async function extractGuidanceForPluginsWithOpenAIAgent(
       return emptyResult;
     }
 
-    // Normalize results - handle cases where agent returns objects instead of strings
-    const normalizedResult: GuidanceExtractionResult = {};
-    for (const pluginId of pluginIds) {
-      const value = parsed[pluginId];
-      if (value === null || value === 'null' || value === '' || value === undefined) {
-        normalizedResult[pluginId] = null;
-      } else if (typeof value === 'object') {
-        // Agent returned structured object - convert to readable string
-        normalizedResult[pluginId] = JSON.stringify(value, null, 2);
-      } else {
-        normalizedResult[pluginId] = String(value);
-      }
-    }
+    // Normalize results
+    const normalizedResult = normalizeExtractionResult(parsed, pluginIds);
 
     // Log summary
     const matchedCount = Object.values(normalizedResult).filter((v) => v !== null).length;
