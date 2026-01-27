@@ -224,7 +224,9 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
 
