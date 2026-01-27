@@ -300,6 +300,10 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  // Data exfiltration tracking (for data-exfil grader)
+  wasExfiltrated?: boolean;
+  exfilCount?: number;
+  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
 }
 
 export abstract class RedteamGraderBase {
