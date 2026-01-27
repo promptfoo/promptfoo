@@ -268,7 +268,9 @@ function ResultsTableHeader({
             <tr key={headerGroup.id} className="header">
               {headerGroup.headers.map((header) => {
                 const isMetadataCol =
-                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  header.column.id.startsWith('Variable') ||
+                  header.column.id.startsWith('TransformVar_') ||
+                  header.column.id === 'description';
                 const isFinalRow = headerGroup.depth === 1;
 
                 return (
@@ -1547,7 +1549,9 @@ function ResultsTable({
                 <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                   {row.getVisibleCells().map((cell) => {
                     const isMetadataCol =
-                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                      cell.column.id.startsWith('Variable') ||
+                      cell.column.id.startsWith('TransformVar_') ||
+                      cell.column.id === 'description';
                     const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                     if (shouldDrawColBorder) {
                       colBorderDrawn = true;

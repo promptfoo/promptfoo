@@ -60,6 +60,13 @@ interface IndirectWebPwnResponse extends ProviderResponse {
  * 2. Runs an internal loop asking the target to fetch and summarize the web page URL
  * 3. Validates success by checking if the page was fetched via get-web-page-tracking task
  * 4. Returns the target's response to the external grader when successful
+ *
+ * If the attack succeeds, the target should have:
+ * - Fetched the web page (tracked server-side)
+ * - Potentially exfiltrated data to the [EXFIL_URL] endpoint (if data-exfil plugin is used)
+ *
+ * Use with regular plugins (e.g., harmful:privacy) to test for safety issues,
+ * or with the data-exfil plugin to specifically test for data exfiltration.
  */
 export default class IndirectWebPwnProvider implements ApiProvider {
   readonly config: IndirectWebPwnConfig;
@@ -87,6 +94,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts: options.maxFetchAttempts ?? 3,
       stateful: options.stateful ?? false,
       scanId: options.scanId ?? randomUUID(),
+      // Note: useLlm defaults to false in standalone provider mode (simpler templates suffice)
+      // but defaults to true in per-turn layer mode (see strategy) for more sophisticated prompts
       useLlm: options.useLlm ?? false,
       preferSmallModel: options.preferSmallModel ?? true,
     };

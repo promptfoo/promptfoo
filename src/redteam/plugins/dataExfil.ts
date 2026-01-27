@@ -109,9 +109,10 @@ export class DataExfilGrader extends RedteamGraderBase {
     else {
       const webPageUuid = test.metadata?.webPageUuid as string | undefined;
       if (webPageUuid) {
-        logger.debug('[DataExfilGrader] Fetching tracking data for UUID:', { webPageUuid });
+        const evalId = test.metadata?.evaluationId as string | undefined;
+        logger.debug('[DataExfilGrader] Fetching tracking data for UUID:', { webPageUuid, evalId });
 
-        const tracking = await checkExfilTracking(webPageUuid);
+        const tracking = await checkExfilTracking(webPageUuid, evalId);
         if (tracking) {
           wasExfiltrated = tracking.wasExfiltrated;
           exfilCount = tracking.exfilCount;

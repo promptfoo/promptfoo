@@ -503,8 +503,15 @@ export async function runRedteamConversation({
             (test.metadata?.webPageUuid as string) ||
             (iterationTest.metadata?.webPageUuid as string);
           if (webPageUuid) {
-            logger.debug('[Iterative] Fetching exfil tracking from server API', { webPageUuid });
-            const exfilData = await checkExfilTracking(webPageUuid);
+            const evalId =
+              context?.evaluationId ??
+              (test.metadata?.evaluationId as string | undefined) ??
+              (iterationTest.metadata?.evaluationId as string | undefined);
+            logger.debug('[Iterative] Fetching exfil tracking from server API', {
+              webPageUuid,
+              evalId,
+            });
+            const exfilData = await checkExfilTracking(webPageUuid, evalId);
             if (exfilData) {
               gradingContext = {
                 ...(tracingOptions.includeInGrading

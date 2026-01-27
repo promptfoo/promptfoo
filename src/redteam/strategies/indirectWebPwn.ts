@@ -185,6 +185,9 @@ function replaceUrlsWithExfilPlaceholder(prompt: string): string {
 /**
  * Generate a prompt asking the target to fetch the URL.
  * Uses different phrasing on each turn.
+ *
+ * Note: These are fallback prompts used when useLlm is false or LLM generation fails.
+ * When useLlm is true, the server generates more sophisticated, context-aware fetch prompts.
  */
 function generateFetchPrompt(url: string, turnNumber: number): string {
   const prompts = [
@@ -251,7 +254,11 @@ async function createWebPage(
 
 /**
  * Update a web page via the task API.
- * This rotates the embedding location and updates the prompt.
+ * This rotates the embedding location (where the attack prompt is hidden in the page)
+ * and updates the prompt content. Embedding locations include:
+ * - invisible_text: Hidden via CSS (display:none, visibility:hidden)
+ * - semantic_embed: Embedded in legitimate-looking content
+ * - html_comment: Hidden in HTML comments
  */
 async function updateWebPage(
   uuid: string,
@@ -353,7 +360,7 @@ function transformForStandaloneMode(
   const scanId = randomUUID();
 
   return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
+    const originalText = String(testCase.vars?.[injectVar] ?? '');
     return {
       ...testCase,
       // Add display variables for the UI Variables column

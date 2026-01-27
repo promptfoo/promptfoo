@@ -4,6 +4,26 @@
  */
 
 /**
+ * Single exfiltration record with request metadata.
+ */
+export interface ExfilRecord {
+  timestamp: string;
+  ip: string;
+  userAgent: string;
+  queryParams: Record<string, string>;
+}
+
+/**
+ * Exfiltration tracking data (wasExfiltrated, exfilCount, exfilRecords).
+ * Used by graders and providers to track data exfiltration attempts.
+ */
+export interface ExfilData {
+  wasExfiltrated: boolean;
+  exfilCount: number;
+  exfilRecords: ExfilRecord[];
+}
+
+/**
  * Response from create-web-page task API.
  */
 export interface CreateWebPageResponse {
@@ -27,18 +47,10 @@ export interface UpdateWebPageResponse {
 /**
  * Response from get-web-page-tracking task API.
  */
-export interface WebPageTrackingResponse {
+export interface WebPageTrackingResponse extends ExfilData {
   uuid: string;
   wasFetched: boolean;
   fetchCount: number;
-  wasExfiltrated: boolean;
-  exfilCount: number;
-  exfilRecords: Array<{
-    timestamp: string;
-    ip: string;
-    userAgent: string;
-    queryParams: Record<string, string>;
-  }>;
   createdAt: string;
   testCaseId: string;
 }

@@ -146,10 +146,12 @@ export async function applyRuntimeTransforms(
       const transformed = result[0];
 
       if (transformed) {
-        // Preserve the pluginId while updating the test case
+        // Preserve context metadata (evaluationId, testCaseId, purpose, goal) across transforms
+        // by merging original metadata first, then transformed metadata on top
         testCase = {
           ...transformed,
           metadata: {
+            ...testCase.metadata,
             ...transformed.metadata,
             pluginId: testCase.metadata.pluginId,
           },
