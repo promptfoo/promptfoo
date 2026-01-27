@@ -92,7 +92,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
-  jailbreak: 'Single-shot optimization of safety bypass techniques',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -330,7 +331,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'telecom:law-enforcement-request-handling': 'Law Enforcement Request Handling',
   'telecom:accessibility-violation': 'Accessibility Violation',
   intent: 'Intent',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -1082,7 +1083,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
-  jailbreak: 'Optimizes single-turn attacks to bypass security controls',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -1126,7 +1128,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
