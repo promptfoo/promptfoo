@@ -1,10 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
-
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 /**
  * Response from create-web-page task API.
@@ -390,10 +390,48 @@ async function transformForPerTurnLayer(
     const stateKey = `${testCaseId}`;
 
     let pageState = pageStateMap.get(stateKey);
-    let fetchPrompt: string;
     let turnNumber: number;
 
-    if (!pageState) {
+    if (pageState) {
+      // Subsequent turn: Update the existing page
+      logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+        stateKey,
+        uuid: pageState.uuid,
+        previousTurn: pageState.turnCount,
+        previousEmbeddingLocation: pageState.embeddingLocation,
+        promptLength: attackPrompt.length,
+      });
+
+      try {
+        const response = await updateWebPage(
+          pageState.uuid,
+          attackPrompt,
+          useLlmUpdate,
+          preferSmallModel,
+        );
+
+        // Update state with new embedding location
+        const previousLocation = pageState.embeddingLocation;
+        pageState.turnCount++;
+        pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
+
+        logger.info('[IndirectWebPwn] Updated page with new embedding location', {
+          uuid: pageState.uuid,
+          previousEmbeddingLocation: previousLocation,
+          newEmbeddingLocation: pageState.embeddingLocation,
+          turnCount: pageState.turnCount,
+          updateCount: response.updateCount,
+        });
+      } catch (error) {
+        logger.error('[IndirectWebPwn] Failed to update page', {
+          error: error instanceof Error ? error.message : String(error),
+          uuid: pageState.uuid,
+        });
+        // On error, still use the existing URL
+      }
+
+      turnNumber = pageState.turnCount;
+    } else {
       // First turn: Create a new page
       logger.debug('[IndirectWebPwn] First turn - creating new page', {
         stateKey,
@@ -438,49 +476,10 @@ async function transformForPerTurnLayer(
       }
 
       turnNumber = 1;
-    } else {
-      // Subsequent turn: Update the existing page
-      logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
-        stateKey,
-        uuid: pageState.uuid,
-        previousTurn: pageState.turnCount,
-        previousEmbeddingLocation: pageState.embeddingLocation,
-        promptLength: attackPrompt.length,
-      });
-
-      try {
-        const response = await updateWebPage(
-          pageState.uuid,
-          attackPrompt,
-          useLlmUpdate,
-          preferSmallModel,
-        );
-
-        // Update state with new embedding location
-        const previousLocation = pageState.embeddingLocation;
-        pageState.turnCount++;
-        pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
-
-        logger.info('[IndirectWebPwn] Updated page with new embedding location', {
-          uuid: pageState.uuid,
-          previousEmbeddingLocation: previousLocation,
-          newEmbeddingLocation: pageState.embeddingLocation,
-          turnCount: pageState.turnCount,
-          updateCount: response.updateCount,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to update page', {
-          error: error instanceof Error ? error.message : String(error),
-          uuid: pageState.uuid,
-        });
-        // On error, still use the existing URL
-      }
-
-      turnNumber = pageState.turnCount;
     }
 
     // Generate the fetch prompt
-    fetchPrompt = generateFetchPrompt(pageState.fullUrl, turnNumber);
+    const fetchPrompt = generateFetchPrompt(pageState.fullUrl, turnNumber);
 
     logger.debug('[IndirectWebPwn] Transform complete', {
       turnNumber,
