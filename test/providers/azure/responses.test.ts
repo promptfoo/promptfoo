@@ -1,26 +1,23 @@
-import fs from 'fs';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
-import type { Mocked, MockedFunction } from 'vitest';
+import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import type { MockedFunction } from 'vitest';
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/file');
-vi.mock('fs');
 
 const mockFetchWithCache = fetchWithCache as MockedFunction<typeof fetchWithCache>;
-const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as MockedFunction<
-  typeof maybeLoadFromExternalFile
->;
-const _mockFs = fs as Mocked<typeof fs>;
+const mockMaybeLoadResponseFormatFromExternalFile =
+  maybeLoadResponseFormatFromExternalFile as MockedFunction<
+    typeof maybeLoadResponseFormatFromExternalFile
+  >;
 let authHeadersValue: Record<string, string>;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
 
     // Mock environment variables
     process.env.AZURE_API_KEY = 'test-key';
@@ -120,7 +117,7 @@ describe('AzureResponsesProvider', () => {
         },
       };
 
-      mockMaybeLoadFromExternalFile.mockReturnValue(mockSchema);
+      mockMaybeLoadResponseFormatFromExternalFile.mockReturnValue(mockSchema);
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
@@ -130,8 +127,11 @@ describe('AzureResponsesProvider', () => {
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://test-schema.json');
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
+        'file://test-schema.json',
+        undefined,
+      );
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
         name: 'test_schema',
@@ -141,8 +141,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should handle inline response_format', async () => {
-      // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
-      mockMaybeLoadFromExternalFile.mockImplementation(function (input: any) {
+      // For inline schemas, maybeLoadResponseFormatFromExternalFile should return the object unchanged
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function (input: any) {
         return input;
       });
 
@@ -275,12 +275,58 @@ describe('AzureResponsesProvider', () => {
       );
     });
 
+    it('should accept Entra ID authentication with Authorization header', async () => {
+      const mockResponse = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Hello from Entra ID auth!',
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 8,
+        },
+      };
+
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      // Mock ensureInitialized to set authHeaders with Authorization (Entra ID)
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { Authorization: 'Bearer test-entra-token' };
+      });
+
+      const result = await provider.callApi('Hello');
+
+      // Verify the call succeeded (no error about missing authentication)
+      expect(result).toMatchObject({
+        output: 'Hello from Entra ID auth!',
+        cached: false,
+      });
+
+      // Verify the API was called (auth check passed)
+      expect(mockFetchWithCache).toHaveBeenCalled();
+    });
+
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { response_format: 'file://missing.json' as any },
       });
 
-      mockMaybeLoadFromExternalFile.mockImplementation(function () {
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function () {
         throw new Error('File does not exist');
       });
 

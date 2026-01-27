@@ -52,6 +52,11 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  /**
+   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
+   * Requires stdout to be a TTY.
+   */
+  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -112,9 +117,11 @@ type EnvVars = {
   PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INLINE_MEDIA?: boolean;
   PROMPTFOO_INSECURE_SSL?: boolean | string;
   PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
   PROMPTFOO_LOG_DIR?: string;
+  PROMPTFOO_MEDIA_PATH?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
@@ -128,6 +135,7 @@ type EnvVars = {
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
+  PROMPTFOO_SHARE_INLINE_BLOBS?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
   PROMPTFOO_PFX_CERT_PATH?: string;
@@ -189,18 +197,8 @@ type EnvVars = {
   //=========================================================================
   // UI configuration
   //=========================================================================
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   VITE_PUBLIC_BASENAME?: string;
-  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
   VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
 
   //=========================================================================
   // Continuous Integration
@@ -408,6 +406,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

@@ -10,20 +10,18 @@
 
 import logger from '../../logger';
 
+import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
+
+// Re-export MediaData for backward compatibility
+export type { MediaData };
 
 /**
  * Layer configuration - can be a simple string ID or an object with config.
  */
 export type LayerConfig = string | { id: string; config?: Record<string, unknown> };
-
-/** Media data (audio or image) */
-export interface MediaData {
-  data: string;
-  format: string;
-}
 
 /**
  * Result of runtime transform, including original prompt and any media data.
@@ -169,41 +167,54 @@ export async function applyRuntimeTransforms(
     ...(Object.keys(displayVars).length > 0 && { displayVars }),
   };
 
+  // Check for storage keys in metadata (set by strategies that store to file system)
+  const audioStorageKey = testCase.metadata?.audioStorageKey as string | undefined;
+  const imageStorageKey = testCase.metadata?.imageStorageKey as string | undefined;
+
   // If audio layer was applied, extract audio data
+  // IMPORTANT: Keep base64 in result.audio.data for API calls
+  // The sanitizer will replace base64 with storageRef before saving to DB
   if (audioApplied && transformedPrompt !== originalPrompt) {
-    // Check if it's a data URL or raw base64
     const dataUrlMatch = transformedPrompt.match(/^data:audio\/([^;]+);base64,(.+)$/);
     if (dataUrlMatch) {
-      // Already a data URL - extract format and raw data
       result.audio = {
-        data: dataUrlMatch[2], // Just the base64 part
+        data: dataUrlMatch[2], // Raw base64 for API
         format: dataUrlMatch[1],
       };
     } else {
-      // Raw base64 - assume MP3 format (Google Cloud TTS default)
       result.audio = {
-        data: transformedPrompt,
+        data: transformedPrompt, // Raw base64 for API
         format: 'mp3',
       };
+    }
+    // Log if storage key exists (will be used by sanitizer later)
+    if (audioStorageKey) {
+      logger.debug(
+        `[RuntimeTransform] Audio stored to: ${audioStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 
   // If image layer was applied, extract image data
+  // IMPORTANT: Keep base64 in result.image.data for API calls
   if (imageApplied && transformedPrompt !== originalPrompt) {
-    // Check if it's a data URL or raw base64
     const dataUrlMatch = transformedPrompt.match(/^data:image\/([^;]+);base64,(.+)$/);
     if (dataUrlMatch) {
-      // Already a data URL - extract format and raw data
       result.image = {
-        data: dataUrlMatch[2], // Just the base64 part
+        data: dataUrlMatch[2], // Raw base64 for API
         format: dataUrlMatch[1],
       };
     } else {
-      // Raw base64 - assume PNG format
       result.image = {
-        data: transformedPrompt,
+        data: transformedPrompt, // Raw base64 for API
         format: 'png',
       };
+    }
+    // Log if storage key exists (will be used by sanitizer later)
+    if (imageStorageKey) {
+      logger.debug(
+        `[RuntimeTransform] Image stored to: ${imageStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 

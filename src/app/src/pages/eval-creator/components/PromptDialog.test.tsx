@@ -1,6 +1,3 @@
-import React from 'react';
-
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
@@ -18,13 +15,8 @@ describe('PromptDialog', () => {
     vi.clearAllMocks();
   });
 
-  const renderWithTheme = (component: React.ReactNode) => {
-    const theme = createTheme();
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-  };
-
   it("should render the dialog with the correct title, text, and buttons when 'open' is true", () => {
-    renderWithTheme(<PromptDialog {...mockProps} />);
+    render(<PromptDialog {...mockProps} />);
 
     expect(screen.getByText(`Edit Prompt ${mockProps.index + 1}`)).toBeInTheDocument();
 
@@ -38,7 +30,7 @@ describe('PromptDialog', () => {
   });
 
   it('should update the text field value and internal state when the user types in the TextField', () => {
-    renderWithTheme(<PromptDialog {...mockProps} />);
+    render(<PromptDialog {...mockProps} />);
     const textField = screen.getByRole('textbox');
     const newValue = 'This is a new test prompt.';
 
@@ -48,7 +40,7 @@ describe('PromptDialog', () => {
   });
 
   it('should call onAdd with the current editingPrompt, clear the text field, and call onCancel when the Add button is clicked', () => {
-    renderWithTheme(<PromptDialog {...mockProps} />);
+    render(<PromptDialog {...mockProps} />);
     const addButton = screen.getByRole('button', { name: 'Add' });
     fireEvent.click(addButton);
 
@@ -57,7 +49,7 @@ describe('PromptDialog', () => {
   });
 
   it('should call onAdd, clear the text field, and focus the text field when the Add Another button is clicked', () => {
-    renderWithTheme(<PromptDialog {...mockProps} />);
+    render(<PromptDialog {...mockProps} />);
 
     const textField = screen.getByRole('textbox');
     fireEvent.change(textField, { target: { value: 'New prompt text' } });
@@ -71,14 +63,14 @@ describe('PromptDialog', () => {
   });
 
   it('should call onCancel when the "Cancel" button is clicked', () => {
-    renderWithTheme(<PromptDialog {...mockProps} />);
+    render(<PromptDialog {...mockProps} />);
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
     fireEvent.click(cancelButton);
     expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("should disable the 'Add' and 'Add Another' buttons when the text field is empty", () => {
-    renderWithTheme(<PromptDialog {...mockProps} prompt="" />);
+    render(<PromptDialog {...mockProps} prompt="" />);
 
     const addButton = screen.getByRole('button', { name: 'Add' });
     const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
@@ -88,7 +80,7 @@ describe('PromptDialog', () => {
   });
 
   it('should update the text field value when the prompt prop changes', () => {
-    const { rerender } = renderWithTheme(<PromptDialog {...mockProps} />);
+    const { rerender } = render(<PromptDialog {...mockProps} />);
     const newPrompt = 'This is a new test prompt.';
     rerender(<PromptDialog {...mockProps} prompt={newPrompt} />);
 
@@ -98,7 +90,7 @@ describe('PromptDialog', () => {
 
   it('should initialize editingPrompt state with the current prompt when transitioning from closed to open', () => {
     const initialPrompt = 'Initial prompt';
-    const { rerender } = renderWithTheme(
+    const { rerender } = render(
       <PromptDialog
         open={false}
         prompt={initialPrompt}

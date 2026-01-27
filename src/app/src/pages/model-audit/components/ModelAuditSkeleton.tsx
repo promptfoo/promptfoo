@@ -1,4 +1,5 @@
-import { Box, Paper, Skeleton, Stack } from '@mui/material';
+import { Card } from '@app/components/ui/card';
+import { Skeleton } from '@app/components/ui/skeleton';
 
 /**
  * Skeleton loader for the Model Audit result page.
@@ -6,72 +7,66 @@ import { Box, Paper, Skeleton, Stack } from '@mui/material';
  */
 export function ResultPageSkeleton() {
   return (
-    <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
+    <Card className="p-6 md:p-10 mb-4">
       {/* Breadcrumbs skeleton */}
-      <Stack direction="row" spacing={1} mb={3}>
-        <Skeleton variant="text" width={80} />
-        <Skeleton variant="text" width={20} />
-        <Skeleton variant="text" width={60} />
-        <Skeleton variant="text" width={20} />
-        <Skeleton variant="text" width={100} />
-      </Stack>
+      <div className="flex gap-2 mb-6">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-5" />
+        <Skeleton className="h-4 w-16" />
+        <Skeleton className="h-4 w-5" />
+        <Skeleton className="h-4 w-24" />
+      </div>
 
       {/* Header skeleton */}
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={2}
-        mb={4}
-      >
-        <Box>
-          <Skeleton variant="text" width={300} height={40} />
-          <Stack direction="row" spacing={2}>
-            <Skeleton variant="text" width={150} />
-            <Skeleton variant="text" width={100} />
-          </Stack>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Skeleton variant="rounded" width={100} height={36} />
-          <Skeleton variant="rounded" width={80} height={36} />
-          <Skeleton variant="rounded" width={70} height={36} />
-        </Stack>
-      </Stack>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div>
+          <Skeleton className="h-10 w-72 mb-2" />
+          <div className="flex gap-4">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-9 w-20" />
+          <Skeleton className="h-9 w-18" />
+        </div>
+      </div>
 
       {/* Scan Details skeleton */}
-      <Paper variant="outlined" sx={{ p: 2, mb: 4 }}>
-        <Skeleton variant="text" width={100} sx={{ mb: 1 }} />
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={4}>
-          <Box>
-            <Skeleton variant="text" width={80} />
-            <Skeleton variant="text" width={200} />
-          </Box>
-          <Box>
-            <Skeleton variant="text" width={60} />
-            <Skeleton variant="text" width={120} />
-          </Box>
-          <Box>
-            <Skeleton variant="text" width={50} />
-            <Skeleton variant="text" width={80} />
-          </Box>
-        </Stack>
-      </Paper>
+      <Card className="p-4 mb-8 border border-border">
+        <Skeleton className="h-4 w-24 mb-2" />
+        <div className="flex flex-col md:flex-row gap-8">
+          <div>
+            <Skeleton className="h-4 w-20 mb-1" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div>
+            <Skeleton className="h-4 w-16 mb-1" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <div>
+            <Skeleton className="h-4 w-14 mb-1" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+      </Card>
 
       {/* Results skeleton */}
-      <Box>
-        <Skeleton variant="text" width={150} height={32} sx={{ mb: 2 }} />
+      <div>
+        <Skeleton className="h-8 w-36 mb-4" />
         {/* Summary cards skeleton */}
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} variant="rounded" width="100%" height={80} />
+            <Skeleton key={i} className="h-20 w-full" />
           ))}
-        </Stack>
+        </div>
         {/* Issues list skeleton */}
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" width="100%" height={60} sx={{ mb: 1 }} />
+          <Skeleton key={i} className="h-16 w-full mb-2" />
         ))}
-      </Box>
-    </Paper>
+      </div>
+    </Card>
   );
 }
 
@@ -80,43 +75,37 @@ export function ResultPageSkeleton() {
  */
 export function HistoryTableSkeleton() {
   return (
-    <Box>
+    <div>
       {/* Toolbar skeleton */}
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        p={1}
-        borderBottom={1}
-        borderColor="divider"
-      >
-        <Stack direction="row" spacing={1}>
-          <Skeleton variant="rounded" width={100} height={32} />
-          <Skeleton variant="rounded" width={80} height={32} />
-          <Skeleton variant="rounded" width={60} height={32} />
-        </Stack>
-        <Skeleton variant="rounded" width={200} height={32} />
-      </Stack>
+      <div className="flex justify-between p-2 border-b border-border">
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+        <Skeleton className="h-8 w-48" />
+      </div>
 
       {/* Table header skeleton */}
-      <Stack direction="row" spacing={2} p={2} borderBottom={1} borderColor="divider">
-        <Skeleton variant="text" width="25%" />
-        <Skeleton variant="text" width="30%" />
-        <Skeleton variant="text" width="15%" />
-        <Skeleton variant="text" width="15%" />
-        <Skeleton variant="text" width="10%" />
-      </Stack>
+      <div className="flex gap-4 p-4 border-b border-border">
+        <Skeleton className="h-4 w-1/4" />
+        <Skeleton className="h-4 w-3/10" />
+        <Skeleton className="h-4 w-1/6" />
+        <Skeleton className="h-4 w-1/6" />
+        <Skeleton className="h-4 w-1/10" />
+      </div>
 
       {/* Table rows skeleton */}
       {[1, 2, 3, 4, 5].map((i) => (
-        <Stack key={i} direction="row" spacing={2} p={2} borderBottom={1} borderColor="divider">
-          <Skeleton variant="text" width="25%" />
-          <Skeleton variant="text" width="30%" />
-          <Skeleton variant="rounded" width={60} height={24} />
-          <Skeleton variant="text" width="15%" />
-          <Skeleton variant="circular" width={32} height={32} />
-        </Stack>
+        <div key={i} className="flex gap-4 p-4 border-b border-border">
+          <Skeleton className="h-4 w-1/4" />
+          <Skeleton className="h-4 w-3/10" />
+          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-4 w-1/6" />
+          <Skeleton className="size-8 rounded-full" />
+        </div>
       ))}
-    </Box>
+    </div>
   );
 }
 
@@ -125,34 +114,28 @@ export function HistoryTableSkeleton() {
  */
 export function LatestScanSkeleton() {
   return (
-    <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
+    <Card className="p-6 md:p-10 mb-4">
       {/* Header skeleton */}
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={2}
-        mb={4}
-      >
-        <Box>
-          <Skeleton variant="text" width={250} height={40} />
-          <Skeleton variant="text" width={350} />
-        </Box>
-        <Stack direction="row" spacing={2}>
-          <Skeleton variant="rounded" width={100} height={36} />
-          <Skeleton variant="rounded" width={120} height={36} />
-        </Stack>
-      </Stack>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div>
+          <Skeleton className="h-10 w-60 mb-2" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <div className="flex gap-4">
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-9 w-28" />
+        </div>
+      </div>
 
       {/* Summary cards skeleton */}
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} variant="rounded" width="100%" height={100} />
+          <Skeleton key={i} className="h-24 w-full" />
         ))}
-      </Stack>
+      </div>
 
       {/* Content skeleton */}
-      <Skeleton variant="rounded" width="100%" height={200} />
-    </Paper>
+      <Skeleton className="h-48 w-full" />
+    </Card>
   );
 }

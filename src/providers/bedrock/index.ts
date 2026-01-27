@@ -17,7 +17,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
-import type { TokenUsage } from '../../types/shared';
+import type { TokenUsage, VarValue } from '../../types/shared';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -413,13 +413,189 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
       };
 }
 
+// =============================================================================
+// Video Generation Types (Nova Reel)
+// =============================================================================
+
+/**
+ * Nova Reel task types
+ */
+export type NovaReelTaskType = 'TEXT_VIDEO' | 'MULTI_SHOT_AUTOMATED' | 'MULTI_SHOT_MANUAL';
+
+/**
+ * Nova Reel video dimension (only 1280x720 supported)
+ */
+export type NovaReelDimension = '1280x720';
+
+/**
+ * Nova Reel video FPS (only 24 supported)
+ */
+export type NovaReelFPS = 24;
+
+/**
+ * Image source for Nova Reel image-to-video
+ */
+export interface NovaReelImageSource {
+  format: 'png' | 'jpeg';
+  source: {
+    bytes: string; // base64 encoded
+  };
+}
+
+/**
+ * Shot definition for multi-shot manual mode
+ */
+export interface NovaReelShot {
+  text: string;
+  image?: NovaReelImageSource;
+}
+
+/**
+ * Video generation configuration
+ */
+export interface NovaReelVideoGenerationConfig {
+  durationSeconds: number; // 6 for single shot, 12-120 (multiples of 6) for multi-shot
+  fps: NovaReelFPS;
+  dimension: NovaReelDimension;
+  seed?: number; // 0-2,147,483,646
+}
+
+/**
+ * Configuration options for Nova Reel video generation
+ */
+export interface NovaReelVideoOptions extends BedrockOptions {
+  // Task type selection
+  taskType?: NovaReelTaskType;
+
+  // S3 output configuration (required)
+  s3OutputUri: string; // e.g., "s3://my-bucket/videos"
+
+  // Video generation parameters
+  durationSeconds?: number; // Default: 6
+  seed?: number;
+
+  // For TEXT_VIDEO task type
+  image?: string; // file:// path or base64 for image-to-video
+
+  // For MULTI_SHOT_MANUAL task type
+  shots?: NovaReelShot[];
+
+  // Polling configuration
+  pollIntervalMs?: number; // Default: 10000 (10 seconds)
+  maxPollTimeMs?: number; // Default: 900000 (15 minutes for 2-min videos)
+
+  // Download configuration
+  downloadFromS3?: boolean; // Default: true - download and store to blob storage
+}
+
+/**
+ * Nova Reel async invoke response
+ */
+export interface NovaReelInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig: {
+      s3Uri: string;
+    };
+  };
+  failureMessage?: string;
+}
+
+/**
+ * Video generation status from S3
+ */
+export interface NovaReelGenerationStatus {
+  schemaVersion: string;
+  shots: Array<{
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  }>;
+  fullVideo: {
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  };
+}
+
+// =============================================================================
+// Luma Ray 2 Video Generation Types
+// =============================================================================
+
+export type LumaRayAspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '21:9' | '9:21';
+export type LumaRayDuration = '5s' | '9s';
+export type LumaRayResolution = '540p' | '720p';
+
+export interface LumaRayKeyframeSource {
+  type: 'base64';
+  media_type: 'image/jpeg' | 'image/png';
+  data: string;
+}
+
+export interface LumaRayKeyframe {
+  type: 'image';
+  source: LumaRayKeyframeSource;
+}
+
+export interface LumaRayKeyframes {
+  frame0?: LumaRayKeyframe;
+  frame1?: LumaRayKeyframe;
+}
+
+export interface LumaRayVideoOptions extends BedrockOptions {
+  /** Required: S3 bucket URI for video output */
+  s3OutputUri: string;
+
+  /** Aspect ratio of output video (default: "16:9") */
+  aspectRatio?: LumaRayAspectRatio;
+  /** Video duration: "5s" or "9s" (default: "5s") */
+  duration?: LumaRayDuration;
+  /** Output resolution: "540p" or "720p" (default: "720p") */
+  resolution?: LumaRayResolution;
+  /** Whether to loop the video (default: false) */
+  loop?: boolean;
+
+  /** Keyframes for image-to-video generation */
+  keyframes?: LumaRayKeyframes;
+  /** Convenience: Start frame image (file:// path or base64) */
+  startImage?: string;
+  /** Convenience: End frame image (file:// path or base64) */
+  endImage?: string;
+
+  /** Polling interval in milliseconds (default: 10000) */
+  pollIntervalMs?: number;
+  /** Maximum polling time in milliseconds (default: 600000 = 10 min) */
+  maxPollTimeMs?: number;
+
+  /** Whether to download video from S3 to blob storage (default: true) */
+  downloadFromS3?: boolean;
+}
+
+export interface LumaRayInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  failureMessage?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig?: {
+      s3Uri: string;
+    };
+  };
+}
+
 export interface IBedrockModel {
   params: (
     config: BedrockOptions,
     prompt: string,
     stop: string[],
     modelName?: string,
-    vars?: Record<string, string | object>,
+    vars?: Record<string, VarValue>,
   ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
@@ -1244,7 +1420,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       _stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       let messages;
       let systemPrompt;
@@ -1495,7 +1671,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
@@ -1868,7 +2044,7 @@ ${prompt}
       prompt: string,
       stop?: string[],
       _modelName?: string,
-      vars?: Record<string, string | object>,
+      vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -2265,6 +2441,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         return {
           output: model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }

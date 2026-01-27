@@ -1,10 +1,9 @@
 import OpenAI from 'openai';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage } from '../../types/index';
+import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
@@ -580,7 +579,8 @@ export function failApiCall(err: any) {
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
+      // Cached responses don't count as a new request
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
       return {
         total: data.usage.total_tokens,
@@ -620,7 +620,7 @@ export interface OpenAiTool {
 export function validateFunctionCall(
   output: string | object,
   functions?: OpenAiFunction[],
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ) {
   if (typeof output === 'object' && 'function_call' in output) {
     output = (output as { function_call: any }).function_call;
@@ -637,8 +637,9 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFile(
-    renderVarsInObject(functions, vars),
+  const interpolatedFunctions = maybeLoadFromExternalFileWithVars(
+    functions,
+    vars,
   ) as OpenAiFunction[];
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;

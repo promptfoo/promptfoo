@@ -12,6 +12,7 @@ import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
@@ -77,19 +78,35 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   logger.info('Generating test cases...');
   const { maxConcurrency, ...passThroughOptions } = options;
 
-  const redteamConfig = await doGenerateRedteam({
-    ...passThroughOptions,
-    ...(options.liveRedteamConfig?.commandLineOptions || {}),
-    ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    verbose: options.verbose,
-    delay: options.delay,
-    inRedteamRun: true,
-    abortSignal: options.abortSignal,
-    progressBar: options.progressBar,
-  });
+  let redteamConfig;
+  try {
+    redteamConfig = await doGenerateRedteam({
+      ...passThroughOptions,
+      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    });
+  } catch (error) {
+    if (error instanceof PartialGenerationError) {
+      // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
+      logger.error(chalk.red('\n' + error.message));
+      setLogCallback(null);
+      if (verboseToggleCleanup) {
+        verboseToggleCleanup();
+      }
+      // Re-throw so CLI exits with non-zero code and callers can handle appropriately
+      throw error;
+    }
+    // Re-throw other errors
+    throw error;
+  }
 
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
@@ -103,9 +120,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
+  // Exclude 'description' from options to avoid conflict with Commander's description method
+  const { description: _description, ...evalOptions } = options;
   const evalResult = await doEval(
     {
-      ...options,
+      ...evalOptions,
       config: [redteamPath],
       output: options.output ? [options.output] : undefined,
       cache: true,

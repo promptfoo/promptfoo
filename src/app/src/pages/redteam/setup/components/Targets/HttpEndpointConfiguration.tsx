@@ -4,37 +4,44 @@ import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Switch } from '@app/components/ui/switch';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import AddIcon from '@mui/icons-material/Add';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import CheckIcon from '@mui/icons-material/Check';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DeleteIcon from '@mui/icons-material/Delete';
-import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
-import HttpIcon from '@mui/icons-material/Http';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import InputLabel from '@mui/material/InputLabel';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import Switch from '@mui/material/Switch';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
+import {
+  AlignLeft,
+  Check,
+  ChevronDown,
+  Copy,
+  Globe,
+  Play,
+  Plus,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -47,7 +54,7 @@ import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   bodyError: string | React.ReactNode | null;
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
@@ -62,7 +69,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
@@ -92,9 +99,6 @@ const HttpEndpointConfiguration = ({
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -136,13 +140,13 @@ Content-Type: application/json
   const [error, setError] = useState('');
 
   // Import menu state
-  const [importMenuAnchor, setImportMenuAnchor] = useState<null | HTMLElement>(null);
   const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
@@ -161,10 +165,9 @@ Content-Type: application/json
           message:
             'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
         });
+        setTestDetailsExpanded(true);
         setIsTestRunning(false);
-        if (onTargetTested) {
-          onTargetTested(false);
-        }
+        onTargetTested?.(false);
         return;
       }
     }
@@ -194,14 +197,11 @@ Content-Type: application/json
           message: message,
           providerResponse: data.providerResponse || {},
           transformedRequest: data.transformedRequest,
-          // Include the suggestions if available
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
         });
-
-        if (onTargetTested) {
-          onTargetTested(isSuccess);
-        }
+        setTestDetailsExpanded(!isSuccess || hasConfigIssues);
+        onTargetTested?.(isSuccess);
       } else {
         const errorData = await response.json();
         setTestResult({
@@ -210,16 +210,13 @@ Content-Type: application/json
           providerResponse: errorData.providerResponse || {},
           transformedRequest: errorData.transformedRequest,
         });
-
-        if (onTargetTested) {
-          onTargetTested(false);
-        }
+        setTestDetailsExpanded(true);
+        onTargetTested?.(false);
       }
     } catch (error) {
       console.error('Error testing target:', error);
       let errorMessage = 'Failed to test target configuration';
       if (error instanceof Error) {
-        // Improve URL-related error messages
         if (
           error.message.includes('Failed to parse URL') ||
           error.message.includes('Invalid URL')
@@ -234,10 +231,8 @@ Content-Type: application/json
         success: false,
         message: errorMessage,
       });
-
-      if (onTargetTested) {
-        onTargetTested(false);
-      }
+      setTestDetailsExpanded(true);
+      onTargetTested?.(false);
     } finally {
       setIsTestRunning(false);
     }
@@ -518,227 +513,144 @@ ${exampleRequest}`;
   };
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={Boolean(selectedTarget.config.request)}
-              onChange={(e) => {
-                resetState(e.target.checked);
-                if (e.target.checked) {
-                  updateCustomTarget('request', exampleRequest);
-                }
-              }}
-            />
-          }
-          label="Use Raw HTTP Request"
-        />
-        <Button
-          variant="outlined"
-          endIcon={<ArrowDropDownIcon />}
-          onClick={(e) => setImportMenuAnchor(e.currentTarget)}
-        >
-          Import
-        </Button>
-        <Menu
-          anchorEl={importMenuAnchor}
-          open={Boolean(importMenuAnchor)}
-          onClose={() => setImportMenuAnchor(null)}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'right',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'right',
-          }}
-          slotProps={{
-            paper: {
-              sx: {
-                mt: 0.5,
-                minWidth: 200,
-              },
-            },
-          }}
-        >
-          <MenuItem
-            onClick={() => {
-              setImportMenuAnchor(null);
-              setConfigDialogOpen(true);
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="use-raw-request"
+            checked={Boolean(selectedTarget.config.request)}
+            onCheckedChange={(checked) => {
+              resetState(checked);
+              if (checked) {
+                updateCustomTarget('request', exampleRequest);
+              }
             }}
-          >
-            <ListItemIcon>
-              <AutoFixHighIcon fontSize="small" />
-            </ListItemIcon>
-            Auto-fill from Example
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setImportMenuAnchor(null);
-              setPostmanDialogOpen(true);
-            }}
-          >
-            <ListItemIcon>
-              <HttpIcon fontSize="small" />
-            </ListItemIcon>
-            Postman
-          </MenuItem>
-        </Menu>
-      </Box>
+          />
+          <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              Import
+              <ChevronDown className="ml-2 size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+              <Sparkles className="mr-2 size-4" />
+              Auto-fill from Example
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
+              <Globe className="mr-2 size-4" />
+              Postman
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       {/* Main configuration box containing everything */}
-      <Box
-        mt={2}
-        p={2}
-        sx={{
-          border: 1,
-          borderColor: theme.palette.divider,
-          borderRadius: 1,
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
-          '& .token': {
-            background: 'transparent !important',
-          },
-        }}
-      >
+      <div className="mt-4 rounded-lg border border-border bg-card p-4">
         {selectedTarget.config.request ? (
           <>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={selectedTarget.config.useHttps}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    updateCustomTarget('useHttps', enabled);
-                  }}
-                />
-              }
-              label="Use HTTPS"
-              sx={{ mb: 2, display: 'block' }}
-            />
+            <div className="mb-4 flex items-center gap-2">
+              <Switch
+                id="use-https"
+                checked={selectedTarget.config.useHttps}
+                onCheckedChange={(checked) => {
+                  updateCustomTarget('useHttps', checked);
+                }}
+              />
+              <Label htmlFor="use-https">Use HTTPS</Label>
+            </div>
             <textarea
               value={selectedTarget.config.request || ''}
               onChange={(e) => handleRawRequestChange(e.target.value)}
               placeholder={placeholderText}
+              className="w-full resize-y overflow-auto whitespace-pre rounded-md border border-border bg-transparent p-2.5 font-mono text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
               style={{
-                width: '100%',
                 height: computeRawTextareaHeight(selectedTarget.config.request || ''),
                 minHeight: '10rem',
                 maxHeight: '40rem',
-                maxWidth: '100%',
-                padding: '10px',
-                border: '1px solid',
-                borderColor: theme.palette.divider,
-                outline: 'none',
-                resize: 'vertical',
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                backgroundColor: 'transparent',
-                color: theme.palette.text.primary,
-                whiteSpace: 'pre',
-                overflowX: 'auto',
-                overflowY: 'auto',
               }}
             />
-            {bodyError && (
-              <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-                {bodyError}
-              </Typography>
-            )}
+            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
           </>
         ) : (
           <>
-            <TextField
-              fullWidth
-              label="URL"
-              value={selectedTarget.config.url}
-              onChange={(e) => updateCustomTarget('url', e.target.value)}
-              margin="normal"
-              error={!!urlError}
-              helperText={urlError}
-              placeholder="https://example.com/api/chat"
-              required
-            />
-            <FormControl fullWidth margin="normal">
-              <InputLabel id="method-label">Method</InputLabel>
-              <Select
-                labelId="method-label"
-                value={selectedTarget.config.method}
-                onChange={(e) => updateCustomTarget('method', e.target.value)}
-                label="Method"
-              >
-                {['GET', 'POST'].map((method) => (
-                  <MenuItem key={method} value={method}>
-                    {method}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <div className="space-y-2">
+              <Label htmlFor="url">
+                URL <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex gap-2">
+                <Select
+                  value={selectedTarget.config.method}
+                  onValueChange={(value) => updateCustomTarget('method', value)}
+                >
+                  <SelectTrigger id="method" className="w-24 shrink-0">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['GET', 'POST'].map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {method}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="url"
+                  value={selectedTarget.config.url}
+                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  className={cn('flex-1', urlError && 'border-destructive')}
+                  placeholder="https://example.com/api/chat"
+                />
+              </div>
+              {urlError && <p className="text-sm text-destructive">{urlError}</p>}
+            </div>
 
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-              Headers
-            </Typography>
+            <p className="mb-2 mt-6 font-medium">Headers</p>
             {headers.map(({ key, value }, index) => (
-              <Box key={index} display="flex" alignItems="center" mb={1}>
-                <TextField
-                  label="Name"
+              <div key={index} className="mb-2 flex items-center gap-2">
+                <Input
                   value={key}
                   onChange={(e) => updateHeaderKey(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
+                  placeholder="Name"
+                  className="flex-1"
                 />
-                <TextField
-                  label="Value"
+                <Input
                   value={value}
                   onChange={(e) => updateHeaderValue(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
+                  placeholder="Value"
+                  className="flex-1"
                 />
-                <IconButton onClick={() => removeHeader(index)}>
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
+                <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             ))}
 
-            <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
+            <Button variant="outline" onClick={addHeader} className="mt-2">
+              <Plus className="mr-1 size-4" />
               Add Header
             </Button>
 
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-              Request Body
-            </Typography>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: bodyError ? 'error.main' : theme.palette.divider,
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
-              }}
+            <p className="mb-2 mt-6 font-medium">Request Body</p>
+            <div
+              className={cn(
+                'relative mt-2 rounded-md border bg-white dark:bg-zinc-900',
+                bodyError ? 'border-destructive' : 'border-border',
+              )}
             >
-              <IconButton
-                size="small"
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={handleFormatJson}
                 disabled={!requestBody.trim() || !!bodyError}
                 title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                sx={{
-                  position: 'absolute',
-                  top: 4,
-                  right: 4,
-                  zIndex: 1,
-                  backgroundColor:
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.05)'
-                      : 'rgba(0, 0, 0, 0.03)',
-                  '&:hover': {
-                    backgroundColor:
-                      theme.palette.mode === 'dark'
-                        ? 'rgba(255, 255, 255, 0.1)'
-                        : 'rgba(0, 0, 0, 0.06)',
-                  },
-                }}
+                className="absolute right-1 top-1 z-10 size-8 bg-muted/50 hover:bg-muted"
               >
-                <FormatAlignLeftIcon fontSize="small" />
-              </IconButton>
+                <AlignLeft className="size-4" />
+              </Button>
               <Editor
                 value={
                   typeof requestBody === 'object'
@@ -755,59 +667,45 @@ ${exampleRequest}`;
                   paddingRight: '40px', // Add space for the format button
                 }}
               />
-            </Box>
-            {bodyError && (
-              <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
-                {bodyError}
-              </Typography>
-            )}
+            </div>
+            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
           </>
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
-          Response Parser
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
-          with the actual response nested inside - this parser helps find the right part. Leave
-          empty if your API returns plain text. See{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            docs
-          </a>{' '}
-          for examples.
-          <Box sx={{ mt: 1 }}>
-            <details>
-              <summary>Examples</summary>
-              <ul style={{ listStyleType: 'decimal' }}>
-                <li>
-                  A JavaScript object path: <code>json.choices[0].message.content</code>
-                </li>{' '}
-                <li>
-                  A function:{' '}
-                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>{' '}
-                </li>
-                <li>
-                  With guardrails:{' '}
-                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
-                </li>
-              </ul>
-            </details>
-          </Box>
-        </Typography>
-        <Box
-          sx={{
-            border: 1,
-            borderColor: theme.palette.divider,
-            borderRadius: 1,
-            position: 'relative',
-            backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
-          }}
-        >
+        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <div className="mb-4 text-sm text-muted-foreground">
+          <p>
+            This tells promptfoo how to extract the AI's response from your API. Most APIs return
+            JSON with the actual response nested inside - this parser helps find the right part.
+            Leave empty if your API returns plain text. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              docs
+            </a>{' '}
+            for examples.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Examples</summary>
+            <ol className="ml-4 mt-2 list-decimal space-y-1">
+              <li>
+                A JavaScript object path: <code>json.choices[0].message.content</code>
+              </li>
+              <li>
+                A function: <code>{`(json, text) => json.choices[0].message.content || text`}</code>
+              </li>
+              <li>
+                With guardrails:{' '}
+                <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+              </li>
+            </ol>
+          </details>
+        </div>
+        <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
             value={selectedTarget.config.transformResponse || ''}
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
@@ -821,20 +719,15 @@ ${exampleRequest}`;
             }}
           />
           <Button
-            variant="outlined"
-            size="small"
-            startIcon={<PlayArrowIcon />}
+            variant="outline"
+            size="sm"
             onClick={() => setResponseTestOpen(true)}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              zIndex: 1,
-            }}
+            className="absolute right-2 top-2 z-10"
           >
+            <Play className="mr-1 size-4" />
             Test
           </Button>
-        </Box>
+        </div>
 
         {/* Test Target Section - Common for both modes */}
         <TestSection
@@ -847,27 +740,26 @@ ${exampleRequest}`;
               ? !selectedTarget.config.request
               : !selectedTarget.config.url
           }
+          detailsExpanded={testDetailsExpanded}
+          onDetailsExpandedChange={setTestDetailsExpanded}
         />
-      </Box>
+      </div>
 
-      <Dialog
-        open={configDialogOpen}
-        onClose={() => setConfigDialogOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>AI Auto-fill HTTP Configuration</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Paste an example HTTP request and optionally a response. AI will automatically generate
-            the configuration for you.
-          </Typography>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography variant="h6" gutterBottom>
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Generate HTTP Configuration</DialogTitle>
+          </DialogHeader>
+          <p className="mb-2 text-sm text-muted-foreground">
+            Paste an example HTTP request and optionally a response. Promptfoo will automatically
+            generate the configuration for you.
+          </p>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-lg font-semibold">
                 Example Request (paste your HTTP request here)
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+              </p>
+              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={request}
                   onValueChange={(val) => setRequest(val)}
@@ -876,17 +768,16 @@ ${exampleRequest}`;
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                     minHeight: '100%',
                   }}
                 />
-              </Paper>
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography variant="h6" gutterBottom>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-lg font-semibold">
                 Example Response (optional, improves accuracy)
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+              </p>
+              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={response}
                   onValueChange={(val) => setResponse(val)}
@@ -895,33 +786,34 @@ ${exampleRequest}`;
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                     minHeight: '100%',
                   }}
                 />
-              </Paper>
-            </Grid>
+              </div>
+            </div>
             {error && (
-              <Grid size={12}>
-                <Typography color="error">Error: {error}</Typography>
-              </Grid>
+              <div className="col-span-2">
+                <p className="text-destructive">Error: {error}</p>
+              </div>
             )}
             {generatedConfig && (
-              <Grid size={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
-                  <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                    Generated Configuration
-                  </Typography>
-                  <IconButton
+              <div className="col-span-2">
+                <div className="mb-2 mt-4 flex items-center">
+                  <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={handleCopy}
-                    size="small"
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
-                    color={copied ? 'success' : 'default'}
                   >
-                    {copied ? <CheckIcon /> : <ContentCopyIcon />}
-                  </IconButton>
-                </Box>
-                <Paper elevation={3} sx={{ height: '20rem', overflow: 'auto' }}>
+                    {copied ? (
+                      <Check className="size-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
                     value={yaml.dump(generatedConfig.config)}
                     onValueChange={() => {}} // Read-only
@@ -930,27 +822,28 @@ ${exampleRequest}`;
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,
-                      backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                       minHeight: '100%',
                     }}
                     readOnly
                   />
-                </Paper>
-              </Grid>
+                </div>
+              </div>
             )}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleGenerateConfig} disabled={generating} variant="outlined">
-            {generating ? 'Generating...' : 'Generate'}
-          </Button>
-          {generatedConfig && (
-            <Button onClick={handleApply} variant="contained" color="primary">
-              Apply Configuration
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
+              Cancel
             </Button>
-          )}
-        </DialogActions>
+            <Button
+              variant={generatedConfig ? 'outline' : 'default'}
+              onClick={handleGenerateConfig}
+              disabled={generating}
+            >
+              {generating ? 'Generating...' : 'Generate'}
+            </Button>
+            {generatedConfig && <Button onClick={handleApply}>Apply Configuration</Button>}
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       {/* Postman Import Dialog */}
@@ -974,7 +867,7 @@ ${exampleRequest}`;
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
       />
-    </Box>
+    </div>
   );
 };
 

@@ -1,22 +1,15 @@
 import React from 'react';
 
-import CloseIcon from '@mui/icons-material/Close';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Card, CardContent } from '@app/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { CopyButton } from '@app/components/ui/copy-button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { cn } from '@app/lib/utils';
+import { ChevronDown } from 'lucide-react';
 import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
 
 interface SuggestionsDialogProps {
@@ -53,15 +46,10 @@ export default function SuggestionsDialog({
   gradingResult,
 }: SuggestionsDialogProps) {
   const suggestions = extractSuggestions(gradingResult);
-  const theme = useTheme();
+  const [expandedItems, setExpandedItems] = React.useState<Record<number, boolean>>({});
 
-  const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
-
-  const handleCopy = (text: string, index: number) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedIndex(index);
-      setTimeout(() => setCopiedIndex(null), 2000);
-    });
+  const toggleExpanded = (index: number) => {
+    setExpandedItems((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const getActionTitle = (action: string) => {
@@ -78,239 +66,211 @@ export default function SuggestionsDialog({
   const getExplanation = (type: string) => {
     if (type === 'datamark') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion uses a technique known as "spotlighting" or "datamarking" for
           user-generated text, as described in the paper{' '}
-          <a href="https://arxiv.org/abs/2403.14720" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2403.14720"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Defending Against Indirect Prompt Injection Attacks With Spotlighting"
           </a>
           . Spotlighting helps improve LLMs' ability to distinguish between multiple sources of
           input.
-        </Typography>
+        </p>
       );
     }
     if (type === 'encoding') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion uses a base64 encoding technique for user-generated text, as described in
           the paper{' '}
-          <a href="https://arxiv.org/abs/2403.14720" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2403.14720"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Defending Against Indirect Prompt Injection Attacks With Spotlighting"
           </a>
           . Encoding helps improve LLMs' ability to distinguish between multiple sources of input.
-        </Typography>
+        </p>
       );
     }
     if (type === 'constitutional-politics') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion adds a policy statement to the system prompt instructing the assistant to
           avoid expressing political opinions or making political statements. This approach is based
           on strategies from research on{' '}
-          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2212.08073"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Constitutional AI"
           </a>
           , which involves embedding policies directly into prompts to guide assistant behavior.
-        </Typography>
+        </p>
       );
     }
     if (type === 'access-control') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This issue requires enforcing proper access control at the API or application logic layer.
           Prompt modifications alone cannot mitigate Broken Function Level Authorization (BFLA)
           vulnerabilities.
-        </Typography>
+        </p>
       );
     }
     if (type === 'constitutional-imitation') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion adds a policy statement to the system prompt instructing the assistant to
           avoid imitating or impersonating entities while still allowing factual information. This
           approach is based on strategies from research on{' '}
-          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2212.08073"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Constitutional AI"
           </a>
           , which involves embedding policies directly into prompts to guide assistant behavior.
-        </Typography>
+        </p>
       );
     }
     if (type === 'constitutional-competition') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion adds a policy statement to the system prompt providing guidelines for
           discussing competitors based on Constitutional AI principles. The policy enforces either
           neutral, factual discussion or complete avoidance of competitor mentions, depending on
           configuration. This approach is based on research on{' '}
-          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2212.08073"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Constitutional AI"
           </a>
           , which involves embedding policies directly into prompts to guide assistant behavior.
-        </Typography>
+        </p>
       );
     }
     if (type === 'constitutional-delegation') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion adds clear role boundaries and delegation requirements to prevent the
-          assistant from making unauthorized commitments or agreements. This approach combines
-          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+          assistant from making unauthorized commitments or agreements. This approach combines{' '}
+          <a
+            href="https://arxiv.org/abs/2212.08073"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Constitutional AI"
           </a>{' '}
           principles with explicit delegation rules.
-        </Typography>
+        </p>
       );
     }
     if (type === 'structured-validation') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion implements a structured validation framework based on the
           Chain-of-Verification approach described in{' '}
-          <a href="https://arxiv.org/abs/2306.00024" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2306.00024"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Self-Verification Improves Few-Shot Clinical Reasoning"
           </a>
           . This methodology helps prevent overreliance on incorrect assumptions while maintaining
           helpful interactions through systematic verification steps.
-        </Typography>
+        </p>
       );
     }
     if (type === 'constitutional-religion') {
       return (
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <p className="mb-4 text-sm text-muted-foreground">
           This suggestion adds guidelines for maintaining strict neutrality based on the Principle
           of Neutrality described in{' '}
-          <a href="https://arxiv.org/abs/2310.07521" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://arxiv.org/abs/2310.07521"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             "Constitutional AI: A Survey on Constitutional AI"
           </a>
           . It ensures factual, balanced information while avoiding theological interpretations
           through academically-grounded principles.
-        </Typography>
+        </p>
       );
     }
     return null;
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      aria-labelledby="suggestion-dialog-title"
-      maxWidth="md"
-      fullWidth
-    >
-      <DialogTitle id="suggestion-dialog-title">
-        <Typography variant="h5" component="span">
-          Suggestions
-        </Typography>
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
-          sx={{
-            position: 'absolute',
-            right: 16,
-            top: 16,
-            color: theme.palette.grey[500],
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Suggestions</DialogTitle>
+        </DialogHeader>
+
+        <div className="max-h-[60vh] space-y-4 overflow-y-auto p-1">
           {suggestions.map((suggestion, index) => (
-            <Card key={index} elevation={2}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
+            <Card key={index}>
+              <CardContent className="pt-6">
+                <h3 className="mb-2 text-lg font-semibold">
                   {getActionTitle(suggestion.action || '')}
-                </Typography>
+                </h3>
                 {getExplanation(suggestion.type)}
                 {suggestion.action === 'note' ? (
-                  <Typography variant="body1">{suggestion.value}</Typography>
+                  <p>{suggestion.value}</p>
                 ) : (
                   suggestion.action === 'replace-prompt' && (
-                    <Accordion
-                      sx={{
-                        boxShadow: 'none',
-                      }}
+                    <Collapsible
+                      open={expandedItems[index]}
+                      onOpenChange={() => toggleExpanded(index)}
                     >
-                      <AccordionSummary
-                        expandIcon={<ExpandMoreIcon />}
-                        sx={{
-                          px: 1,
-                          py: 0,
-                        }}
-                      >
-                        <Typography variant="body2">View suggested prompt</Typography>
-                      </AccordionSummary>
-                      <AccordionDetails
-                        sx={{
-                          px: 1,
-                          py: 0,
-                          position: 'relative',
-                          '&:hover .copy-icon': {
-                            display: 'block',
-                          },
-                        }}
-                      >
-                        <Box
-                          component="pre"
-                          sx={{
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            p: 0,
-                            pr: 6,
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          {suggestion.value}
-                        </Box>
-                        <IconButton
-                          onClick={() => handleCopy(suggestion.value, index)}
-                          className="copy-icon"
-                          sx={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                            backgroundColor: theme.palette.background.paper,
-                            display: 'none', // Initially hide the button
-                            '&:hover': {
-                              backgroundColor: theme.palette.action.hover,
-                            },
-                          }}
-                        >
-                          <ContentCopyIcon fontSize="small" />
-                        </IconButton>
-                        {copiedIndex === index && (
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              position: 'absolute',
-                              top: 14,
-                              right: 48,
-                              backgroundColor: theme.palette.background.paper,
-                              padding: '2px 4px',
-                              borderRadius: 1,
-                            }}
-                          >
-                            Copied!
-                          </Typography>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
+                      <CollapsibleTrigger asChild>
+                        <button className="flex w-full items-center justify-between px-1 py-2 text-sm hover:bg-muted/50">
+                          <span>View suggested prompt</span>
+                          <ChevronDown
+                            className={cn(
+                              'size-4 transition-transform',
+                              expandedItems[index] && 'rotate-180',
+                            )}
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="group relative mt-2">
+                          <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word rounded bg-muted/50 p-4 pr-12 font-mono text-sm">
+                            {suggestion.value}
+                          </pre>
+                          <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                            <CopyButton value={suggestion.value} />
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   )
                 )}
               </CardContent>
             </Card>
           ))}
-        </Box>
+        </div>
       </DialogContent>
-      <DialogActions sx={{ p: 3, pt: 0 }}>
-        <Button onClick={onClose} variant="contained" color="primary">
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

@@ -1,26 +1,24 @@
 import React from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { callApi } from '@app/utils/api';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
+import { Play } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import TransformTestDialog from '../TransformTestDialog';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface RequestTransformTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
 }
 
 const highlightJS = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.javascript;
+    const grammar = Prism?.languages?.javascript;
     if (!grammar) {
       return code;
     }
@@ -35,9 +33,6 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   updateCustomTarget,
   defaultRequestTransform,
 }) => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
   // Test dialog states
   const [testOpen, setTestOpen] = React.useState(false);
   const [testInput, setTestInput] = React.useState('What is the capital of France?');
@@ -49,7 +44,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   React.useEffect(() => {
     if (testOpen) {
       setEditableTransform(
-        selectedTarget.config?.transformRequest || defaultRequestTransform || '',
+        (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || '',
       );
     }
   }, [testOpen, selectedTarget.config?.transformRequest, defaultRequestTransform]);
@@ -98,31 +93,31 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   return (
     <>
-      <Typography variant="body1" sx={{ mb: 2 }}>
+      <p className="mb-4">
         Transform the prompt into a specific structure required by your API before sending. See{' '}
-        <a href="https://www.promptfoo.dev/docs/providers/http/#request-transform" target="_blank">
+        <a
+          href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
           docs
         </a>{' '}
         for more information.
-      </Typography>
-      <Box sx={{ position: 'relative' }}>
-        <Box
-          sx={{
-            border: 1,
-            borderColor: 'grey.300',
-            borderRadius: 1,
-            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-          }}
-        >
+      </p>
+      <div className="relative">
+        <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
-            value={selectedTarget.config?.transformRequest || defaultRequestTransform || ''}
+            value={
+              (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || ''
+            }
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
             highlight={highlightJS}
             padding={10}
             placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API.
 
                       Example: { messages: [{ role: 'user', content: prompt }] }
-                      
+
                       Leave empty to send the prompt as-is.
                     `}
             style={{
@@ -131,22 +126,17 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
               minHeight: '100px',
             }}
           />
-        </Box>
+        </div>
         <Button
-          variant="outlined"
-          size="small"
-          startIcon={<PlayArrowIcon />}
+          variant="outline"
+          size="sm"
           onClick={() => setTestOpen(true)}
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            zIndex: 1,
-          }}
+          className="absolute right-2 top-2 z-10"
         >
+          <Play className="mr-1 size-4" />
           Test
         </Button>
-      </Box>
+      </div>
 
       <TransformTestDialog
         open={testOpen}

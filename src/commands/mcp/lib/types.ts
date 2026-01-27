@@ -115,6 +115,15 @@ export interface EvaluationMetrics {
   };
 }
 
+export interface EvaluationDetailsSummary {
+  id: string;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  providers: unknown[];
+  prompts: number;
+}
+
 // Configuration types
 export interface ConfigValidationOptions {
   configPaths?: string[];

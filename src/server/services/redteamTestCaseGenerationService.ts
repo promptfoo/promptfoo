@@ -116,7 +116,6 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
-  simba: handleCrescendoLikeStrategy,
   'jailbreak:hydra': handleHydraStrategy,
 };
 

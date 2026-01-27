@@ -430,4 +430,143 @@ describe('EvalResult', () => {
       expect(result.pluginId).toBe('eval-result-plugin');
     });
   });
+
+  describe('getCompletedIndexPairs', () => {
+    it('should return all completed pairs by default', async () => {
+      const evalId = 'test-completed-pairs-all';
+
+      // Create results with different failure reasons
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ERROR,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 2,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+
+      const pairs = await EvalResult.getCompletedIndexPairs(evalId);
+
+      expect(pairs.size).toBe(3);
+      expect(pairs.has('0:0')).toBe(true);
+      expect(pairs.has('1:0')).toBe(true);
+      expect(pairs.has('2:0')).toBe(true);
+    });
+
+    it('should exclude ERROR results when excludeErrors is true', async () => {
+      const evalId = 'test-completed-pairs-exclude';
+
+      // Create results with different failure reasons
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ERROR,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 2,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 3,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ERROR,
+      });
+
+      const pairs = await EvalResult.getCompletedIndexPairs(evalId, { excludeErrors: true });
+
+      // Should only include non-ERROR results
+      expect(pairs.size).toBe(2);
+      expect(pairs.has('0:0')).toBe(true);
+      expect(pairs.has('1:0')).toBe(false); // ERROR - excluded
+      expect(pairs.has('2:0')).toBe(true);
+      expect(pairs.has('3:0')).toBe(false); // ERROR - excluded
+    });
+
+    it('should include ERROR results when excludeErrors is false', async () => {
+      const evalId = 'test-completed-pairs-include';
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.ERROR,
+      });
+
+      const pairsExclude = await EvalResult.getCompletedIndexPairs(evalId, {
+        excludeErrors: false,
+      });
+      expect(pairsExclude.size).toBe(1);
+      expect(pairsExclude.has('0:0')).toBe(true);
+    });
+
+    it('should return empty set for non-existent eval', async () => {
+      const pairs = await EvalResult.getCompletedIndexPairs('non-existent-eval-id');
+      expect(pairs.size).toBe(0);
+    });
+
+    it('should handle multiple prompts correctly', async () => {
+      const evalId = 'test-completed-pairs-multi-prompt';
+
+      // Create results with different promptIdx
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 1,
+        failureReason: ResultFailureReason.ERROR,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      const pairsAll = await EvalResult.getCompletedIndexPairs(evalId);
+      expect(pairsAll.size).toBe(3);
+      expect(pairsAll.has('0:0')).toBe(true);
+      expect(pairsAll.has('0:1')).toBe(true);
+      expect(pairsAll.has('1:0')).toBe(true);
+
+      const pairsExcludeErrors = await EvalResult.getCompletedIndexPairs(evalId, {
+        excludeErrors: true,
+      });
+      expect(pairsExcludeErrors.size).toBe(2);
+      expect(pairsExcludeErrors.has('0:0')).toBe(true);
+      expect(pairsExcludeErrors.has('0:1')).toBe(false); // ERROR - excluded
+      expect(pairsExcludeErrors.has('1:0')).toBe(true);
+    });
+  });
 });

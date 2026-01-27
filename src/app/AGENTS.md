@@ -1,6 +1,6 @@
 # Frontend Application
 
-React-based web UI using Vite + TypeScript + MUI. Separate workspace from main codebase.
+React-based web UI using Vite + TypeScript. Separate workspace from main codebase.
 
 ## CRITICAL: Use callApi()
 
@@ -15,8 +15,12 @@ This handles API base URL differences between dev and production.
 
 ## Tech Stack
 
-- **React 19** + TypeScript + Vite
-- **MUI v7** (Material-UI) for components
+**Target Stack:**
+
+- React 19 + TypeScript + Vite
+- Promptfoo's Design system + Radix UI primitives
+- Tailwind CSS for styling
+- Lucide React for icons
 - **Vitest** for testing
 - Zustand for state management
 - React Router v7
@@ -33,22 +37,41 @@ Use modern React 19 patterns throughout:
 
 Avoid legacy patterns like class components, legacy context, or string refs.
 
-## MUI v7 Guidelines
+## Component Guidelines
 
-- Use the latest MUI v7 component APIs and styling patterns
-- Prefer `sx` prop for one-off styles, `styled()` for reusable styled components
-- Use theme tokens (`theme.palette`, `theme.spacing`) over hardcoded values
-- Check `src/app/src/components/` for existing patterns before creating new ones
+### Use Radix
+
+```typescript
+// New components - use Promptfoo's Design system from components/ui/
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader } from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+
+// Icons - use Lucide
+import { Check, X, ChevronDown } from 'lucide-react';
+
+// Styling - use Tailwind + cn()
+import { cn } from '@app/lib/utils';
+<Button className={cn('w-full', isActive && 'bg-primary')}>Click</Button>
+```
 
 ## Directory Structure
 
 ```plaintext
 src/app/src/
-├── components/    # Reusable UI components
-├── pages/         # Route pages
-├── hooks/         # Custom React hooks
-├── store/         # Zustand stores
-└── utils/         # Including api.ts
+├── components/
+│   ├── ui/
+│   │   ├── button.tsx
+│   │   ├── dialog.tsx
+│   │   ├── input.tsx
+│   │   └── ...
+│   └── ...            # Feature components
+├── pages/             # Route pages
+├── hooks/             # Custom React hooks
+├── store/             # Zustand stores
+├── lib/               # Utilities (cn, etc.)
+├── styles/            # Global styles, tokens
+└── utils/             # Including api.ts
 ```
 
 ## Development
@@ -68,48 +91,30 @@ See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mock
 
 ## Key Patterns
 
-- **Zustand stores**: See `src/app/src/store/` for patterns
+- **Zustand stores**: See `src/app/src/store/` for implementation patterns; see `test/AGENTS.md` "Zustand Store Testing" section for testing patterns
 - **Custom hooks**: See `src/app/src/hooks/` for patterns
-- **MUI styling**: Use `styled()` from `@mui/material/styles`
-- **Icons**: Use `@mui/icons-material`
+- **New components**: Use `components/ui/` primitives, compose with Tailwind
+- **Icons**: Use Lucide React
+- **Route constants**: Use `EVAL_ROUTES`, `REDTEAM_ROUTES`, `ROUTES` from `@app/constants/routes`
 
-## Design Principles
+```tsx
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 
-- Small, composable components with single responsibility
-- Reuse existing components before creating new ones
-- Prefer composition over prop drilling
-- Check `components/`, `hooks/`, `utils/` for existing patterns
-
-## React Hooks: useMemo vs useCallback
-
-- **`useMemo`**: Use when computing a value (non-callable result)
-- **`useCallback`**: Use when creating a stable function reference
-
-```typescript
-// Good - useMemo for computed values
-const tooltipMessage = useMemo(() => {
-  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
-}, [apiStatus]);
-
-// Good - useCallback for functions with arguments
-const handleClick = useCallback((id: string) => {
-  console.log('Clicked:', id);
-}, []);
-
-// Bad - useCallback for computed values
-const getTooltipMessage = useCallback(() => {
-  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
-}, [apiStatus]);
+// Navigation
+<Link to={EVAL_ROUTES.DETAIL(evalId)}>View Eval</Link>
+<Link to={ROUTES.PROMPT_DETAIL(promptId)}>View Prompt</Link>
 ```
 
-## Anti-Patterns
+## UI Guidelines
 
-- Using `fetch()` instead of `callApi()`
-- Legacy React patterns (class components, legacy lifecycle methods)
-- Over-memoization of simple values
-- Hardcoded colors/spacing instead of theme tokens
-- Using `useCallback` for computed values (use `useMemo` instead)
+See `UI_GUIDELINES.md` for the 9 rules on writing React components:
 
-## Path Alias
-
-`@app/*` maps to `src/*` (configured in vite.config.ts).
+1. Typography with semantic HTML
+2. Small, composable components
+3. Purposeful iconography
+4. Data fetching separation
+5. React 19 patterns (`use`, `useActionState`, `useOptimistic`, `useTransition`)
+6. Subtle borders
+7. Dark mode opacity
+8. Semantic severity colors
+9. Consistent page layouts

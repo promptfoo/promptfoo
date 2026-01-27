@@ -39,7 +39,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
         tests: [{ vars: { test: 'value' } }],
       };
 
@@ -63,7 +63,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -89,7 +89,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -116,7 +116,7 @@ describe('Validate Command Exit Codes', () => {
       const mockInvalidTestSuite = {
         // Invalid test suite structure to trigger validation error
         prompts: 'invalid prompts format', // Should be an array
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({

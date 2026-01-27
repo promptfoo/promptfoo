@@ -1,30 +1,25 @@
 import { useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import CloseIcon from '@mui/icons-material/Close';
-import CodeIcon from '@mui/icons-material/Code';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DownloadIcon from '@mui/icons-material/Download';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { AlertTriangle, Code, Copy, Download, Info } from 'lucide-react';
 import { AGENT_TEMPLATE } from './consts';
 
 import type { ProviderOptions } from '../../types';
 
 interface AgentFrameworkConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   agentType: string;
 }
 
@@ -143,147 +138,121 @@ export default function AgentFrameworkConfiguration({
   const templateFilename = 'agent_template.py';
 
   return (
-    <Box>
-      <Alert severity="info" icon={<InfoOutlinedIcon />} sx={{ mb: 3 }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-          {frameworkDetails.name} Agent Configuration
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          {frameworkDetails.description}
-        </Typography>
-        {agentType === 'generic-agent' ? (
-          <Typography variant="body2" sx={{ mb: 1, fontStyle: 'italic' }}>
-            💡 <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
-            implement the call_api function in your Python file to connect your agent.
-          </Typography>
-        ) : (
-          <Typography variant="caption" sx={{ fontFamily: 'monospace', display: 'block', mb: 1 }}>
-            Install with: <strong>pip install {frameworkDetails.pip}</strong>
-          </Typography>
-        )}
+    <div>
+      <Alert variant="info" className="mb-6">
+        <Info className="size-4" />
+        <AlertContent>
+          <AlertDescription>
+            <p className="mb-2 font-semibold">{frameworkDetails.name} Agent Configuration</p>
+            <p className="mb-3">{frameworkDetails.description}</p>
+            {agentType === 'generic-agent' ? (
+              <p className="italic">
+                <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
+                implement the call_api function in your Python file to connect your agent.
+              </p>
+            ) : (
+              <p className="font-mono text-xs">
+                Install with: <strong>pip install {frameworkDetails.pip}</strong>
+              </p>
+            )}
+          </AlertDescription>
+        </AlertContent>
       </Alert>
 
-      <Stack spacing={3}>
-        <TextField
-          fullWidth
-          label="Provider ID (Python file path)"
-          value={selectedTarget.id || ''}
-          onChange={(e) => updateCustomTarget('id', e.target.value)}
-          placeholder={`file:///path/to/${agentType}_agent.py`}
-          helperText="Path to your Python agent implementation file"
-          required
-        />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="provider-id">
+            Provider ID (Python file path) <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="provider-id"
+            value={selectedTarget.id || ''}
+            onChange={(e) => updateCustomTarget('id', e.target.value)}
+            placeholder={`file:///path/to/${agentType}_agent.py`}
+          />
+          <p className="text-sm text-muted-foreground">
+            Path to your Python agent implementation file
+          </p>
+        </div>
 
-        <Box>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Quickstart Template
-          </Typography>
-          <Typography variant="body1" sx={{ maxWidth: '1000px', mb: 2, color: 'text.secondary' }}>
+        <div>
+          <h3 className="mb-2 text-lg font-semibold">Quickstart Template</h3>
+          <p className="mb-4 max-w-[1000px] text-muted-foreground">
             Want to see how it works? Promptfoo can generate a starter template for{' '}
             {frameworkDetails.name} that shows you how to connect your agent to the red team
             evaluation system. You can use this as a starting point and customize it to fit your
             needs.
-          </Typography>
-          <Button variant="contained" startIcon={<CodeIcon />} onClick={handleOpenTemplateModal}>
+          </p>
+          <Button onClick={handleOpenTemplateModal}>
+            <Code className="mr-2 size-4" />
             Generate Template File
           </Button>
-        </Box>
-      </Stack>
+        </div>
+      </div>
 
       {/* Template Modal */}
-      <Dialog
-        open={templateModalOpen}
-        onClose={handleCloseTemplateModal}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{
-          sx: {
-            minHeight: '80vh',
-          },
-        }}
-      >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6">
+      <Dialog open={templateModalOpen} onOpenChange={(open) => !open && handleCloseTemplateModal()}>
+        <DialogContent className="min-h-[80vh] sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
               {frameworkDetails.name} Template - {templateFilename}
-            </Typography>
-            <IconButton
-              aria-label="close"
-              onClick={handleCloseTemplateModal}
-              sx={{ color: (theme) => theme.palette.grey[500] }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              <strong>Next Steps:</strong>
-            </Typography>
-            <ol style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-              <li>Save the template to a Python file</li>
-              {agentType === 'generic-agent' ? (
-                <>
-                  <li>Install your agent framework's dependencies</li>
-                  <li>
-                    Replace the TODOs in the <code>call_api</code> function with your agent
-                    implementation
-                  </li>
-                </>
-              ) : (
-                <>
-                  <li>
-                    Install required dependencies: <code>pip install {frameworkDetails.pip}</code>
-                  </li>
-                  <li>
-                    Customize the agent logic in the <code>call_api</code> function
-                  </li>
-                </>
-              )}
-              <li>Update the Provider ID field above with the file path</li>
-            </ol>
-          </Alert>
+            </DialogTitle>
+          </DialogHeader>
 
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              backgroundColor: (theme) => (theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5'),
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: (theme) =>
-                theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
-            }}
-          >
-            <Box
-              component="pre"
-              sx={{
-                margin: 0,
-                fontSize: '0.875rem',
-                lineHeight: 1.5,
-                overflowX: 'auto',
-                fontFamily: 'Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace',
-              }}
-            >
-              <code>{AGENT_TEMPLATE}</code>
-            </Box>
-          </Paper>
+          <div className="space-y-4">
+            <Alert variant="warning">
+              <AlertTriangle className="size-4" />
+              <AlertContent>
+                <AlertDescription>
+                  <p className="font-semibold">Next Steps:</p>
+                  <ol className="ml-5 mt-2 list-decimal">
+                    <li>Save the template to a Python file</li>
+                    {agentType === 'generic-agent' ? (
+                      <>
+                        <li>Install your agent framework's dependencies</li>
+                        <li>
+                          Replace the TODOs in the <code>call_api</code> function with your agent
+                          implementation
+                        </li>
+                      </>
+                    ) : (
+                      <>
+                        <li>
+                          Install required dependencies:{' '}
+                          <code className="rounded bg-muted px-1">
+                            pip install {frameworkDetails.pip}
+                          </code>
+                        </li>
+                        <li>
+                          Customize the agent logic in the <code>call_api</code> function
+                        </li>
+                      </>
+                    )}
+                    <li>Update the Provider ID field above with the file path</li>
+                  </ol>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+
+            <div className="rounded-lg border border-border bg-muted/50 p-4 dark:bg-zinc-900">
+              <pre className="overflow-x-auto font-mono text-sm leading-relaxed">
+                <code>{AGENT_TEMPLATE}</code>
+              </pre>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={handleCopyTemplate} disabled={copied}>
+              <Copy className="mr-2 size-4" />
+              {copied ? 'Copied!' : 'Copy Template'}
+            </Button>
+            <Button onClick={handleDownloadTemplate}>
+              <Download className="mr-2 size-4" />
+              Download {templateFilename}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<ContentCopyIcon />}
-            onClick={handleCopyTemplate}
-            disabled={copied}
-          >
-            {copied ? 'Copied!' : 'Copy Template'}
-          </Button>
-          <Button variant="contained" startIcon={<DownloadIcon />} onClick={handleDownloadTemplate}>
-            Download {templateFilename}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
   );
 }

@@ -61,7 +61,6 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
-  simba: 10,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
@@ -83,6 +82,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,
   'jailbreak:tree': 150,
+  'jailbreak-templates': 1,
   layer: 1,
   leetspeak: 1,
   'math-prompt': 1,
