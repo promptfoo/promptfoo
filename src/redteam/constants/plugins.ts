@@ -313,7 +313,6 @@ export const ADDITIONAL_PLUGINS = [
   'coppa',
   'cross-session-leak',
   'cyberseceval',
-  'data-exfil',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
