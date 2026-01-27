@@ -340,7 +340,11 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
-      - name: Install Dependencies
+      # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install Code Scan Action Dependencies
         working-directory: code-scan-action
         run: npm install
 
