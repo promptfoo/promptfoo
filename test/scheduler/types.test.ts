@@ -11,7 +11,7 @@ describe('isProviderResponseRateLimited', () => {
     it('should detect 429 status in metadata.http.status', () => {
       const result: ProviderResponse = {
         output: 'error',
-        metadata: { http: { status: 429 } },
+        metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
@@ -19,7 +19,7 @@ describe('isProviderResponseRateLimited', () => {
     it('should not flag other status codes', () => {
       const result: ProviderResponse = {
         output: 'success',
-        metadata: { http: { status: 200 } },
+        metadata: { http: { status: 200, statusText: 'OK', headers: {} } },
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
@@ -129,6 +129,8 @@ describe('getProviderResponseHeaders', () => {
       output: 'success',
       metadata: {
         http: {
+          status: 200,
+          statusText: 'OK',
           headers: {
             'x-ratelimit-remaining': '10',
             'x-ratelimit-limit': '100',
@@ -163,6 +165,8 @@ describe('getProviderResponseHeaders', () => {
       output: 'success',
       metadata: {
         http: {
+          status: 200,
+          statusText: 'OK',
           headers: { 'x-from-http': 'true' },
         },
         headers: { 'x-from-meta': 'true' },
