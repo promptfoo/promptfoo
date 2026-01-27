@@ -390,6 +390,10 @@ type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
+// Grader-only plugin IDs (these are graders that don't generate test cases,
+// they only grade responses from other plugins)
+export const GRADER_PLUGIN_IDS = ['data-exfil'] as const;
+
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
