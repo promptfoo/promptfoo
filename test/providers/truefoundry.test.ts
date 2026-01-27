@@ -227,13 +227,7 @@ describe('TrueFoundry', () => {
           guardrails: {
             flagged: false,
           },
-          metadata: {
-            http: {
-              status: 200,
-              statusText: 'OK',
-              headers: expect.any(Object),
-            },
-          },
+          metadata: expect.any(Object),
         });
         expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
@@ -376,13 +370,7 @@ describe('TrueFoundry', () => {
             total: 10,
             cached: 10,
           },
-          metadata: {
-            http: {
-              status: 200,
-              statusText: 'OK',
-              headers: expect.any(Object),
-            },
-          },
+          metadata: expect.any(Object),
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);
       });

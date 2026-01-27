@@ -356,8 +356,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, deleteFromCache } =
+      ({ data, cached, status, statusText, deleteFromCache, headers: responseHeaders } =
         await fetchWithCache<OpenAIResponsesResponse>(
           `${this.getApiUrl()}/responses`,
           {
@@ -387,11 +388,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             output: errorMessage,
             tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
             isRefusal: true,
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
 
         return {
           error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
@@ -399,6 +414,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
@@ -406,10 +428,30 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
     // Use shared processor for consistent behavior with Azure
-    return this.processor.processResponseOutput(data, config, cached);
+    const result = await this.processor.processResponseOutput(data, config, cached);
+
+    // Merge HTTP metadata with any existing metadata from the processor
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        http: {
+          status,
+          statusText,
+          headers: responseHeaders ?? {},
+        },
+      },
+    };
   }
 }

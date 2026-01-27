@@ -86,6 +86,57 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
+    it('should include HTTP metadata in response', async () => {
+      const mockHeaders = {
+        'content-type': 'application/json',
+        'x-request-id': 'test-request-123',
+        'x-litellm-model-group': 'gpt-4o-mini',
+      };
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: mockHeaders,
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata?.http).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(200);
+      expect(result.metadata?.http?.statusText).toBe('OK');
+      expect(result.metadata?.http?.headers).toEqual(mockHeaders);
+    });
+
+    it('should include HTTP metadata in error response', async () => {
+      const mockResponse = {
+        data: { error: { message: 'Rate limit exceeded' } },
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '60' },
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(429);
+      expect(result.metadata?.http?.statusText).toBe('Too Many Requests');
+      expect(result.metadata?.http?.headers).toEqual({ 'retry-after': '60' });
+    });
+
     it('should handle caching correctly', async () => {
       const mockResponse = {
         data: {
