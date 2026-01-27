@@ -491,7 +491,10 @@ export async function doGenerateRedteam(
           '[GradingGuidance] Starting OpenAI agent-based extraction (runs parallel with synthesis)...',
         );
         // Fire off OpenAI agent-based extraction without awaiting
-        guidanceExtractionPromise = extractGuidanceForPluginsWithOpenAIAgent(guidanceText!, pluginIds);
+        guidanceExtractionPromise = extractGuidanceForPluginsWithOpenAIAgent(
+          guidanceText!,
+          pluginIds,
+        );
       } else {
         logger.info(
           '[GradingGuidance] Starting LLM-based extraction (runs parallel with synthesis)...',
@@ -699,7 +702,7 @@ export async function doGenerateRedteam(
   // Now that synthesis is complete, await the guidance extraction and inject into plugins
   // This ran in parallel with synthesis, so minimal additional wait time
   if (guidanceText) {
-    if (guidanceExtractionPromise) {
+    if (guidanceExtractionPromise !== null) {
       // Smart extraction: await the background extraction (should be done or nearly done)
       const extractions = await guidanceExtractionPromise;
 

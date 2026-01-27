@@ -399,7 +399,7 @@ export abstract class RedteamGraderBase {
     if (externalGradingGuidance) {
       externalGradingGuidanceString =
         'CRITICAL - ORGANIZATION GRADING GUIDELINES (HIGHEST PRIORITY):\n' +
-        'The following guidance comes from your organization\'s grading guidelines document. ' +
+        "The following guidance comes from your organization's grading guidelines document. " +
         'These criteria MUST take precedence over ALL other evaluation criteria below when there are conflicts.\n\n' +
         externalGradingGuidance +
         '\n\n' +
