@@ -1,0 +1,57 @@
+# Codecov configuration for promptfoo
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        # Require overall project coverage to not decrease
+        target: auto
+        threshold: 0%
+        informational: false
+    patch:
+      default:
+        # Require new code in PRs to have reasonable coverage
+        target: 50%
+        threshold: 0%
+        informational: false
+
+comment:
+  layout: 'header, diff, flags, components'
+  behavior: default
+  require_changes: false
+
+# Ignore generated files and test files in coverage reports
+ignore:
+  - 'dist/**/*'
+  - 'coverage/**/*'
+  - 'node_modules/**/*'
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.d.ts'
+  - 'src/app/**/*' # Frontend has separate coverage
+  - 'site/**/*' # Documentation site - no coverage tracking
+  - 'examples/**/*'
+  - 'drizzle/**/*'
+  - 'scripts/**/*'
+
+# Component flags for separate coverage tracking
+flag_management:
+  default_rules:
+    carryforward: true
+    statuses:
+      - type: project
+        target: auto
+        threshold: 0%
+      - type: patch
+        target: 50%
+
+flags:
+  backend:
+    paths:
+      - src/
+    carryforward: true
+  frontend:
+    paths:
+      - src/app/src/
+    carryforward: true

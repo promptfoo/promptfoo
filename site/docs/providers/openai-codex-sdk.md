@@ -134,6 +134,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `network_access_enabled` | boolean  | Allow network requests                         | false                 |
 | `web_search_enabled`     | boolean  | Allow web search                               | false                 |
 | `approval_policy`        | string   | When to require approval (see below)           | SDK default           |
+| `collaboration_mode`     | string   | Multi-agent mode: `coding` or `plan` (beta)    | None                  |
 | `skip_git_repo_check`    | boolean  | Skip Git repository validation                 | false                 |
 | `codex_path_override`    | string   | Custom path to codex binary                    | None                  |
 | `thread_id`              | string   | Resume existing thread from ~/.codex/sessions  | None (creates new)    |
@@ -342,6 +343,31 @@ providers:
 :::warning
 
 Enabling network access allows the agent to make arbitrary HTTP requests. Use with caution and only in trusted environments.
+
+:::
+
+## Collaboration Mode (Beta)
+
+Enable multi-agent coordination where Codex can spawn and communicate with other agent threads:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      collaboration_mode: plan # or 'coding'
+      enable_streaming: true # Recommended to see collaboration events
+```
+
+Available modes:
+
+- `coding` - Focus on implementation and code execution
+- `plan` - Focus on planning and reasoning before execution
+
+When collaboration mode is enabled, the agent can use tools like `spawn_agent`, `send_input`, and `wait` to coordinate work across multiple threads.
+
+:::note
+
+Collaboration mode is a beta feature. Some user-configured settings like `model` and `model_reasoning_effort` may be overridden by collaboration presets.
 
 :::
 
