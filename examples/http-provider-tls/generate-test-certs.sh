@@ -96,19 +96,25 @@ openssl pkcs12 -export -out client.pfx \
   -inkey client-key.pem -in client-cert.pem \
   -certfile ca-cert.pem -password pass:testpassword
 
+# Generate encrypted client private key (for testing passphrase with PEM)
+echo -e "${GREEN}10. Creating encrypted client private key...${NC}"
+openssl rsa -aes256 -in client-key.pem -out client-key-encrypted.pem \
+  -passout pass:testpassword
+
 # Clean up temporary files
 rm -f *.csr *.cnf *.srl
 
 # Display certificate information
 echo -e "\n${GREEN}✅ Certificates generated successfully!${NC}"
 echo -e "\nGenerated files:"
-echo "  📄 ca-cert.pem       - Certificate Authority certificate"
-echo "  🔑 ca-key.pem        - CA private key (keep secure!)"
-echo "  📄 server-cert.pem   - Server certificate"
-echo "  🔑 server-key.pem    - Server private key"
-echo "  📄 client-cert.pem   - Client certificate"
-echo "  🔑 client-key.pem    - Client private key"
-echo "  📦 client.pfx        - Client certificate bundle (password: testpassword)"
+echo "  📄 ca-cert.pem              - Certificate Authority certificate"
+echo "  🔑 ca-key.pem               - CA private key (keep secure!)"
+echo "  📄 server-cert.pem          - Server certificate"
+echo "  🔑 server-key.pem           - Server private key"
+echo "  📄 client-cert.pem          - Client certificate"
+echo "  🔑 client-key.pem           - Client private key (unencrypted)"
+echo "  🔑 client-key-encrypted.pem - Client private key (encrypted, password: testpassword)"
+echo "  📦 client.pfx               - Client certificate bundle (password: testpassword)"
 
 echo -e "\n${YELLOW}Certificate Details:${NC}"
 echo "CA Certificate:"
