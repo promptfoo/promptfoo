@@ -76,7 +76,7 @@ This month we shipped **adaptive rate limiting**, **Transformers.js for local in
 #### New Plugins
 
 - **[Telecom](/docs/red-team/plugins/telecom/)** - Industry-specific red team plugins for telecommunications AI systems
-- **[RAG Source Attribution](/docs/red-team/plugins/)** - Test whether RAG systems properly attribute sources in their responses
+- **[RAG Source Attribution](/docs/red-team/plugins/rag-source-attribution/)** - Test whether RAG systems properly attribute sources in their responses
 
 #### Multi-Input Testing
 
@@ -260,7 +260,7 @@ This month we shipped **Hydra multi-turn strategy**, **code scanning**, **Claude
 
 #### Hydra Strategy
 
-**[Hydra](/docs/red-team/strategies/hydra/)** is a new advanced multi-turn red team strategy that adapts dynamically based on target responses, using sophisticated conversation techniques to probe for vulnerabilities.
+**[Hydra](/docs/red-team/strategies/hydra/)** is a new advanced multi-turn red team strategy that adapts dynamically based on target responses, using conversation techniques to probe for vulnerabilities.
 
 #### Code Scanning
 
