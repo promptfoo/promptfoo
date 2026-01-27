@@ -7,10 +7,9 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalResultsFilterMode } from '../../types/index';
+import { EvalSchemas, EvalTableQuerySchema } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
   ComparisonEvalNotFoundError,
@@ -136,8 +135,8 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
-    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+    const { id } = EvalSchemas.UpdateAuthor.Params.parse(req.params);
+    const { author } = EvalSchemas.UpdateAuthor.Request.parse(req.body);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -158,7 +157,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     res.json(
-      ApiSchemas.Eval.UpdateAuthor.Response.parse({
+      EvalSchemas.UpdateAuthor.Response.parse({
         message: 'Author updated successfully',
       }),
     );
@@ -172,29 +171,13 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// Query parameter schemas
-const evalTableQuerySchema = z.object({
-  format: z.string().optional(),
-  limit: z.coerce.number().positive().prefault(50),
-  offset: z.coerce.number().nonnegative().prefault(0),
-  filterMode: EvalResultsFilterMode.prefault('all'),
-  search: z.string().prefault(''),
-  filter: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-  comparisonEvalIds: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-});
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id as string;
 
   // Parse and validate query parameters
-  const queryResult = evalTableQuerySchema.safeParse(req.query);
+  const queryResult = EvalTableQuerySchema.safeParse(req.query);
 
   if (!queryResult.success) {
     res.status(400).json({ error: z.prettifyError(queryResult.error) });
@@ -357,8 +340,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
-    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
+    const { id } = EvalSchemas.MetadataKeys.Params.parse(req.params);
+    const { comparisonEvalIds = [] } = EvalSchemas.MetadataKeys.Query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -382,7 +365,7 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
 
-    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    const response = EvalSchemas.MetadataKeys.Response.parse({ keys });
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -400,8 +383,8 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
 evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataValues.Params.parse(req.params);
-    const { key } = ApiSchemas.Eval.MetadataValues.Query.parse(req.query);
+    const { id } = EvalSchemas.MetadataValues.Params.parse(req.params);
+    const { key } = EvalSchemas.MetadataValues.Query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -410,7 +393,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
     }
 
     const values = EvalQueries.getMetadataValuesFromEval(id, key);
-    const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
+    const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -686,8 +669,8 @@ evalRouter.delete('/', (req: Request, res: Response) => {
  */
 evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.Copy.Params.parse(req.params);
-    const { description } = ApiSchemas.Eval.Copy.Request.parse(req.body);
+    const { id } = EvalSchemas.Copy.Params.parse(req.params);
+    const { description } = EvalSchemas.Copy.Request.parse(req.body);
 
     const sourceEval = await Eval.findById(id);
     if (!sourceEval) {
@@ -707,7 +690,7 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
       distinctTestCount,
     });
 
-    const response = ApiSchemas.Eval.Copy.Response.parse({
+    const response = EvalSchemas.Copy.Response.parse({
       id: newEval.id,
       distinctTestCount,
     });
