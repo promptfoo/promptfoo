@@ -94,9 +94,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts: options.maxFetchAttempts ?? 3,
       stateful: options.stateful ?? false,
       scanId: options.scanId ?? randomUUID(),
-      // Note: useLlm defaults to false in standalone provider mode (simpler templates suffice)
-      // but defaults to true in per-turn layer mode (see strategy) for more sophisticated prompts
-      useLlm: options.useLlm ?? false,
+      useLlm: options.useLlm ?? true,
       preferSmallModel: options.preferSmallModel ?? true,
     };
 
