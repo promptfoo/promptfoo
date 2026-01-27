@@ -86,7 +86,7 @@ We particularly welcome contributions in the following areas:
 
    :::
 
-If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
+If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=state%3Aopen%20label%3Agood-first-issue%20is%3Aissue) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
 
 ## Development Workflow
 
