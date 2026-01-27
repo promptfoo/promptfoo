@@ -735,6 +735,39 @@ export async function doGenerateRedteam(
       }));
       logger.info(`Injected grading guidance into ${plugins.length} plugins`);
     }
+
+    // CRITICAL: Update test cases' pluginConfig to include externalGradingGuidance
+    // The test metadata was captured before guidance was extracted, so we need to
+    // propagate the extracted guidance to each test case's pluginConfig
+    const guidanceByPlugin = new Map<string, string>();
+    plugins.forEach((p) => {
+      if (p.config?.externalGradingGuidance) {
+        guidanceByPlugin.set(p.id, p.config.externalGradingGuidance as string);
+      }
+    });
+
+    if (guidanceByPlugin.size > 0) {
+      redteamTests = redteamTests.map((test) => {
+        const pluginId = test.metadata?.pluginId;
+        const guidance = pluginId ? guidanceByPlugin.get(pluginId) : undefined;
+        if (guidance) {
+          return {
+            ...test,
+            metadata: {
+              ...test.metadata,
+              pluginConfig: {
+                ...(test.metadata?.pluginConfig || {}),
+                externalGradingGuidance: guidance,
+              },
+            },
+          };
+        }
+        return test;
+      });
+      logger.debug(
+        `[GradingGuidance] Updated ${guidanceByPlugin.size} test cases with extracted guidance`,
+      );
+    }
   }
 
   const updatedRedteamConfig = {
