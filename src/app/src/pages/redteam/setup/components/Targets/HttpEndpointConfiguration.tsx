@@ -650,6 +650,7 @@ ${exampleRequest}`;
                   onClick={handleFormatJson}
                   disabled={!requestBody.trim() || !!bodyError}
                   title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                  aria-label="Format JSON"
                   className="size-8"
                 >
                   <AlignLeft className="size-4" />
@@ -659,6 +660,7 @@ ${exampleRequest}`;
                   size="icon"
                   onClick={() => setRequestBodyExpanded(true)}
                   title="Expand editor"
+                  aria-label="Expand editor"
                   className="size-8"
                 >
                   <Maximize2 className="size-4" />
