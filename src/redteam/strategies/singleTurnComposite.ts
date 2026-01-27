@@ -10,7 +10,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 import type { TestCase } from '../../types/index';
 import type { StrategyConfig } from '../types';
 
-interface CompositeConfig extends StrategyConfig {
+export interface CompositeConfig extends StrategyConfig {
   n?: number;
   modelFamily?: string;
 }
