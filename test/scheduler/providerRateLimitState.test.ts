@@ -184,6 +184,28 @@ describe('ProviderRateLimitState', () => {
 
       expect(events.length).toBeGreaterThan(0);
     });
+
+    it('should handle error with undefined message gracefully', async () => {
+      // Test that isRateLimitError doesn't crash when error.message is undefined
+      const error = new Error('placeholder');
+      (error as { message: string | undefined }).message = undefined;
+
+      // Should not throw - just not detect it as a rate limit
+      await expect(
+        noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw error;
+          },
+          {},
+        ),
+      ).rejects.toBeDefined();
+
+      // The error should be counted as failed, not as a rate limit
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.failedRequests).toBe(1);
+      expect(metrics.rateLimitHits).toBe(0);
+    });
   });
 
   describe('executeWithRetry - retry behavior', () => {
