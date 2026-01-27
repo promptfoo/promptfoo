@@ -655,7 +655,10 @@ export default class GoatProvider implements ApiProvider {
               if (exfilData) {
                 gradingContext = {
                   ...(tracingOptions.includeInGrading
-                    ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                    ? {
+                        traceContext: targetResponse.traceContext,
+                        traceSummary: gradingTraceSummary,
+                      }
                     : {}),
                   wasExfiltrated: exfilData.wasExfiltrated,
                   exfilCount: exfilData.exfilCount,
@@ -667,7 +670,10 @@ export default class GoatProvider implements ApiProvider {
 
           // Fallback to just tracing context if no exfil data found
           if (!gradingContext && tracingOptions.includeInGrading) {
-            gradingContext = { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary };
+            gradingContext = {
+              traceContext: targetResponse.traceContext,
+              traceSummary: gradingTraceSummary,
+            };
           }
 
           const { grade, rubric } = await grader.getResult(

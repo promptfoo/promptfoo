@@ -580,7 +580,10 @@ export class CrescendoProvider implements ApiProvider {
 
             // Fallback to just tracing context if no exfil data found
             if (!gradingContext && tracingOptions.includeInGrading) {
-              gradingContext = { traceContext: response.traceContext, traceSummary: gradingTraceSummary };
+              gradingContext = {
+                traceContext: response.traceContext,
+                traceSummary: gradingTraceSummary,
+              };
             }
 
             const { grade, rubric } = await grader.getResult(
