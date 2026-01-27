@@ -443,7 +443,8 @@ export async function runEval({
       }
 
       // Sanitize response metadata to remove circular references (e.g., leaked Timeout objects)
-      // This prevents "Converting circular structure to JSON" errors downstream
+      // This MUST happen here - circular refs cause heap overflow during downstream processing
+      // (logging, deep cloning, etc.) before reaching sanitizeForDb in evalResult.ts
       // See: https://github.com/promptfoo/promptfoo/issues/7266
       if (response.metadata) {
         const sanitizedMetadata = safeJsonStringify(response.metadata);
