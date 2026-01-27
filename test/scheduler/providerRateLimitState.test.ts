@@ -222,8 +222,9 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          // Provide fast retry-after to avoid 60-second default
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
 
@@ -269,7 +270,9 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
 
@@ -335,7 +338,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1, // Fast retry to avoid 60s default
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
@@ -363,7 +367,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1,
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
