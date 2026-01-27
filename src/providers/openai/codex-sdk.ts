@@ -6,7 +6,7 @@ import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule, resolvePackageEntryPoint } from '../../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -184,12 +184,41 @@ export interface OpenAICodexSDKConfig {
 /**
  * Helper to load the OpenAI Codex SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
+ *
+ * Tries multiple base paths in order:
+ * 1. cliState.basePath (config directory)
+ * 2. process.cwd() (current working directory)
+ * 3. promptfoo package directory (where this file is located)
  */
 async function loadCodexSDK(): Promise<any> {
-  const basePath =
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  // Try multiple base paths in order of preference
+  const candidatePaths: string[] = [];
 
-  const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+  if (cliState.basePath && path.isAbsolute(cliState.basePath)) {
+    candidatePaths.push(cliState.basePath);
+  }
+
+  const cwd = process.cwd();
+  if (!candidatePaths.includes(cwd)) {
+    candidatePaths.push(cwd);
+  }
+
+  // Also try the promptfoo package directory (where node_modules is typically located)
+  const promptfooDir = getDirectory();
+  // Go up from src/providers/openai to the package root
+  const packageRoot = path.resolve(promptfooDir, '..', '..', '..');
+  if (!candidatePaths.includes(packageRoot)) {
+    candidatePaths.push(packageRoot);
+  }
+
+  let codexPath: string | null = null;
+  for (const basePath of candidatePaths) {
+    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (codexPath) {
+      logger.debug(`Resolved @openai/codex-sdk from basePath: ${basePath}`);
+      break;
+    }
+  }
 
   if (!codexPath) {
     throw new Error(
@@ -199,6 +228,8 @@ async function loadCodexSDK(): Promise<any> {
         npm install @openai/codex-sdk
 
       Requires Node.js 18+.
+
+      Tried resolving from: ${candidatePaths.join(', ')}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );

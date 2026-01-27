@@ -5,7 +5,7 @@ import path from 'node:path';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import { importModule, resolvePackageEntryPoint } from '../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
@@ -67,12 +67,41 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 /**
  * Helper to load the Claude Agent SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
+ *
+ * Tries multiple base paths in order:
+ * 1. cliState.basePath (config directory)
+ * 2. process.cwd() (current working directory)
+ * 3. promptfoo package directory (where this file is located)
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
-  const basePath =
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  // Try multiple base paths in order of preference
+  const candidatePaths: string[] = [];
 
-  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+  if (cliState.basePath && path.isAbsolute(cliState.basePath)) {
+    candidatePaths.push(cliState.basePath);
+  }
+
+  const cwd = process.cwd();
+  if (!candidatePaths.includes(cwd)) {
+    candidatePaths.push(cwd);
+  }
+
+  // Also try the promptfoo package directory (where node_modules is typically located)
+  const promptfooDir = getDirectory();
+  // Go up from src/providers to the package root
+  const packageRoot = path.resolve(promptfooDir, '..', '..');
+  if (!candidatePaths.includes(packageRoot)) {
+    candidatePaths.push(packageRoot);
+  }
+
+  let claudeCodePath: string | null = null;
+  for (const basePath of candidatePaths) {
+    claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+    if (claudeCodePath) {
+      logger.debug(`Resolved @anthropic-ai/claude-agent-sdk from basePath: ${basePath}`);
+      break;
+    }
+  }
 
   if (!claudeCodePath) {
     throw new Error(
@@ -80,6 +109,8 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
       To use the Claude Agent SDK provider, install it with:
         npm install @anthropic-ai/claude-agent-sdk
+
+      Tried resolving from: ${candidatePaths.join(', ')}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );
