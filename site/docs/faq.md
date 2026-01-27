@@ -59,7 +59,7 @@ No, Promptfoo operates locally, and all data remains on your machine. The only e
 
 No, we do not collect any personally identifiable information (PII).
 
-### How do I use a proxy with Promptfoo?
+### How do I configure Promptfoo for corporate networks or proxies?
 
 Promptfoo proxy settings are configured through environment variables:
 
