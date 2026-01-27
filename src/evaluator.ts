@@ -442,6 +442,15 @@ export async function runEval({
         );
       }
 
+      // Sanitize response metadata to remove circular references (e.g., leaked Timeout objects)
+      // This MUST happen here - circular refs cause heap overflow during downstream processing
+      // (logging, deep cloning, etc.) before reaching sanitizeForDb in evalResult.ts
+      // See: https://github.com/promptfoo/promptfoo/issues/7266
+      if (response.metadata) {
+        const sanitizedMetadata = safeJsonStringify(response.metadata);
+        response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+      }
+
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
@@ -464,7 +473,9 @@ export async function runEval({
       });
     }
 
-    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug('Evaluator response', {
+      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+    });
     logger.debug(
       `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
     );
@@ -1609,6 +1620,9 @@ class Evaluator {
         if (!didTimeout) {
           throw error;
         }
+        const sanitizedTestCase = { ...evalStep.test };
+        delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1630,7 +1644,7 @@ class Evaluator {
           latencyMs: timeoutMs,
           promptIdx: evalStep.promptIdx,
           testIdx: evalStep.testIdx,
-          testCase: evalStep.test,
+          testCase: sanitizedTestCase,
           promptId: evalStep.prompt.id || '',
         };
 
