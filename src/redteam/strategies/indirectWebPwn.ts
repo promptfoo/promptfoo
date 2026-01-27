@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -6,73 +6,103 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type {
+  CreateWebPageResponse,
+  UpdateWebPageResponse,
+  WebPageTrackingResponse,
+} from '../types/webPage';
 
 /**
- * Response from create-web-page task API.
+ * Generate a short hash from a string for use in state keys.
+ * Used to create a stable identifier from the goal when testCaseId is unavailable.
  */
-interface CreateWebPageResponse {
-  uuid: string;
-  path: string;
-  fullUrl: string;
-  embeddingLocation?: string;
-}
-
-/**
- * Response from update-web-page task API.
- */
-interface UpdateWebPageResponse {
-  uuid: string;
-  updated: boolean;
-  updatedAt: string;
-  embeddingLocation?: string;
-  updateCount?: number;
+function hashString(str: string): string {
+  return createHash('sha256').update(str).digest('hex').substring(0, 12);
 }
 
 /**
  * State tracking for per-turn layer mode.
- * Maps testCaseId (or fallback key) to page state.
+ * Maps evalId:testCaseId to page state.
  */
 interface PageState {
   uuid: string;
   fullUrl: string;
   turnCount: number;
   embeddingLocation: string;
+  createdAt: number; // Timestamp for TTL-based cleanup
 }
 
 // Module-level state for tracking pages across per-turn calls
+// Key format: `${evalId}:${testCaseId}` to prevent cross-evaluation state corruption
 const pageStateMap = new Map<string, PageState>();
 
+// TTL for page state entries (1 hour in milliseconds)
+const PAGE_STATE_TTL_MS = 60 * 60 * 1000;
+
+// Maximum entries before forced cleanup
+const MAX_PAGE_STATE_ENTRIES = 1000;
+
 /**
- * Response from get-web-page-tracking task API.
+ * Clean up expired page state entries.
+ * Called before adding new entries to prevent unbounded growth.
  */
-interface WebPageTrackingResponse {
-  uuid: string;
-  wasFetched: boolean;
-  fetchCount: number;
-  wasExfiltrated: boolean;
-  exfilCount: number;
-  exfilRecords: Array<{
-    timestamp: string;
-    ip: string;
-    userAgent: string;
-    queryParams: Record<string, string>;
-  }>;
-  createdAt: string;
-  testCaseId: string;
+function cleanupExpiredPageState(): void {
+  const now = Date.now();
+  const expiredKeys: string[] = [];
+
+  for (const [key, state] of pageStateMap.entries()) {
+    if (now - state.createdAt > PAGE_STATE_TTL_MS) {
+      expiredKeys.push(key);
+    }
+  }
+
+  for (const key of expiredKeys) {
+    pageStateMap.delete(key);
+  }
+
+  // If still over limit after TTL cleanup, remove oldest entries
+  if (pageStateMap.size > MAX_PAGE_STATE_ENTRIES) {
+    const entries = Array.from(pageStateMap.entries()).sort(
+      ([, a], [, b]) => a.createdAt - b.createdAt,
+    );
+    const toRemove = entries.slice(0, pageStateMap.size - MAX_PAGE_STATE_ENTRIES);
+    for (const [key] of toRemove) {
+      pageStateMap.delete(key);
+    }
+  }
+
+  if (expiredKeys.length > 0) {
+    logger.debug('[IndirectWebPwn] Cleaned up expired page state entries', {
+      removedCount: expiredKeys.length,
+      remainingCount: pageStateMap.size,
+    });
+  }
 }
 
 /**
  * Get the page state for a test case (for use by grader).
+ * @param testCaseId - The test case ID
+ * @param evalId - The evaluation ID (optional, for namespacing)
  */
-export function getPageStateForTestCase(testCaseId: string): PageState | undefined {
-  return pageStateMap.get(testCaseId);
+export function getPageStateForTestCase(
+  testCaseId: string,
+  evalId?: string,
+): PageState | undefined {
+  const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
+  return pageStateMap.get(stateKey);
 }
 
 /**
  * Check exfil tracking for a page UUID.
  * Returns tracking data that can be used for deterministic grading.
+ *
+ * @param uuid - The page UUID
+ * @param evalId - The evaluation ID (required by server)
  */
-export async function checkExfilTracking(uuid: string): Promise<{
+export async function checkExfilTracking(
+  uuid: string,
+  evalId?: string,
+): Promise<{
   wasExfiltrated: boolean;
   exfilCount: number;
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
@@ -87,6 +117,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
+          evalId,
         }),
       },
       10000,
@@ -95,6 +126,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
     if (!response.ok) {
       logger.debug('[IndirectWebPwn] Failed to check exfil tracking', {
         uuid,
+        evalId,
         status: response.status,
       });
       return null;
@@ -109,6 +141,7 @@ export async function checkExfilTracking(uuid: string): Promise<{
   } catch (error) {
     logger.debug('[IndirectWebPwn] Error checking exfil tracking', {
       uuid,
+      evalId,
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
@@ -390,14 +423,18 @@ async function transformForPerTurnLayer(
 
     // Generate a stable key for this test case
     // In per-turn mode, we need to track state across calls for the same test
+    // Priority: explicit testCaseId > originalTestCaseId > hash of goal (unique per test case)
+    const goal = testCase.metadata?.goal;
     const testCaseId =
       (testCase.metadata?.testCaseId as string) ||
       (testCase.metadata?.originalTestCaseId as string) ||
-      'runtime-transform';
-    const stateKey = `${testCaseId}`;
+      (typeof goal === 'string' ? `goal-${hashString(goal)}` : 'unknown');
 
     // Extract context metadata passed from runtime transform (needed for both create and update)
     const evalId = testCase.metadata?.evaluationId as string | undefined;
+
+    // Namespace state key with evalId to prevent cross-evaluation state corruption
+    const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
@@ -465,11 +502,15 @@ async function transformForPerTurnLayer(
           preferSmallModel,
         );
 
+        // Clean up expired entries before adding new ones
+        cleanupExpiredPageState();
+
         pageState = {
           uuid: response.uuid,
           fullUrl: response.fullUrl,
           turnCount: 1,
           embeddingLocation: response.embeddingLocation || 'main_content',
+          createdAt: Date.now(),
         };
         pageStateMap.set(stateKey, pageState);
 

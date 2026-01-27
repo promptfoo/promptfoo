@@ -16,27 +16,8 @@ import type {
   TokenUsage,
 } from '../../types/providers';
 import type { BaseRedteamMetadata } from '../types';
+import type { CreateWebPageResponse, WebPageTrackingResponse } from '../types/webPage';
 import type { Message } from './shared';
-
-/**
- * Response from create-web-page task API.
- */
-interface CreateWebPageResponse {
-  uuid: string;
-  path: string;
-  fullUrl: string;
-}
-
-/**
- * Response from get-web-page-tracking task API.
- */
-interface WebPageTrackingResponse {
-  uuid: string;
-  wasFetched: boolean;
-  fetchCount: number;
-  createdAt: string;
-  testCaseId: string;
-}
 
 /**
  * Configuration for the Indirect Web Pwn provider.
