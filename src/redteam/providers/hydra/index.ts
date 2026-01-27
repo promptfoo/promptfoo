@@ -286,6 +286,9 @@ export class HydraProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
     // Find the grader
     const { getGraderById } = await import('../../graders');
     let assertToUse = test?.assert?.find(
@@ -538,6 +541,11 @@ export class HydraProvider implements ApiProvider {
           hasAudio: !!lastTransformResult.audio,
           hasImage: !!lastTransformResult.image,
         });
+
+        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+        if (lastTransformResult.displayVars) {
+          lastTransformDisplayVars = lastTransformResult.displayVars;
+        }
       }
 
       // Get target response
@@ -880,6 +888,7 @@ export class HydraProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

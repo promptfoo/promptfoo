@@ -197,6 +197,9 @@ export default class GoatProvider implements ApiProvider {
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
 
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
@@ -499,6 +502,11 @@ export default class GoatProvider implements ApiProvider {
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
+
+          // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+          if (lastTransformResult.displayVars) {
+            lastTransformDisplayVars = lastTransformResult.displayVars;
+          }
         }
 
         const iterationStart = Date.now();
@@ -734,6 +742,7 @@ export default class GoatProvider implements ApiProvider {
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

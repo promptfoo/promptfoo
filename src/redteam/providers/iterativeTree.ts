@@ -525,6 +525,9 @@ async function runRedteamConversation({
   const treeOutputs: TreeSearchOutput[] = [];
   let lastResponse: TargetResponse | undefined = undefined;
 
+  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+  let lastTransformDisplayVars: Record<string, string> | undefined;
+
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
       `[Depth ${depth}] Starting exploration. Nodes to explore: ${currentBestNodes.length}. Max score so far: ${maxScore}`,
@@ -609,6 +612,11 @@ async function runRedteamConversation({
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
+
+          // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+          if (lastTransformResult.displayVars) {
+            lastTransformDisplayVars = lastTransformResult.displayVars;
+          }
         }
 
         // Build updated vars - handle multi-input mode
@@ -843,6 +851,7 @@ async function runRedteamConversation({
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -883,6 +892,7 @@ async function runRedteamConversation({
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -924,6 +934,7 @@ async function runRedteamConversation({
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -1044,6 +1055,7 @@ async function runRedteamConversation({
       stopReason: stoppingReason,
       storedGraderResult,
       sessionIds: extractSessionIds(treeOutputs),
+      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,

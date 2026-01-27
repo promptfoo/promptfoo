@@ -304,6 +304,9 @@ export class CrescendoProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
     const tracingOptions = resolveTracingOptions({
       strategyId: 'crescendo',
       test,
@@ -413,6 +416,12 @@ export class CrescendoProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+
+        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+        if (transformResult?.displayVars) {
+          lastTransformDisplayVars = transformResult.displayVars;
+        }
+
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
@@ -704,6 +713,7 @@ export class CrescendoProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
