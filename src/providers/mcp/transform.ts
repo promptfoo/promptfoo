@@ -42,7 +42,7 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
         const addlProps = schema.additionalProperties;
         if (
           typeof addlProps === 'boolean' ||
-          (typeof addlProps === 'object' && addlProps !== null)
+          (typeof addlProps === 'object' && addlProps !== null && !Array.isArray(addlProps))
         ) {
           additionalProperties = addlProps as boolean | Record<string, unknown>;
         }

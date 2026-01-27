@@ -32,15 +32,10 @@ import { Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from '../utils/color';
 import { type TestResultStats } from './FrameworkComplianceUtils';
-import { getStrategyIdFromTest } from './shared';
+import { getStrategyIdFromTest, type TestWithMetadata } from './shared';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { ColumnDef, SortingState } from '@tantml:function_calls>';
-
-interface TestWithMetadata {
-  metadata?: { strategyId?: string };
-  result?: { testCase?: { metadata?: { strategyId?: string } } };
-}
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
 
 interface TestSuitesProps {
   evalId: string;

@@ -299,7 +299,7 @@ function extractData(row: TestCaseRow): string | null {
 
 When you encounter `any`, follow this decision tree:
 
-```
+```text
 Step 1: Does a proper type already exist in the codebase?
 ├─ YES → Use the existing type (PluginConfig, StrategyConfig, ProviderOptions, etc.)
 │         Example: Use PluginConfig instead of Record<string, unknown>

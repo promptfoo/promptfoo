@@ -135,10 +135,10 @@ function getPluginDisplayId(plugin: { id: string; config?: PluginConfig }): stri
     const policyText = typeof policyObject.text === 'string' ? policyObject.text : undefined;
 
     if (policyId) {
-      if (policyName) {
-        return policyName;
-      }
       const shortId = policyId.replace(/-/g, '').slice(0, 12);
+      if (policyName) {
+        return `${policyName} [${shortId}]`;
+      }
       const preview = policyText ? truncateForPreview(policyText) : '';
       return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
     }

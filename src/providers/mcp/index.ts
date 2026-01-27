@@ -76,7 +76,11 @@ export class MCPProvider implements ApiProvider {
       }
 
       // Type guard: ensure toolCallData is an object
-      if (typeof toolCallData !== 'object' || toolCallData === null) {
+      if (
+        typeof toolCallData !== 'object' ||
+        toolCallData === null ||
+        Array.isArray(toolCallData)
+      ) {
         return {
           error: 'Invalid JSON payload. Expected an object with tool call information.',
         };

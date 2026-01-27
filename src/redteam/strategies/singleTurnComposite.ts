@@ -131,7 +131,7 @@ async function generateCompositePrompts(
 export async function addCompositeTestCases(
   testCases: TestCase[],
   injectVar: string,
-  config: StrategyConfig,
+  config: CompositeConfig,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error('Composite jailbreak strategy requires remote generation to be enabled');

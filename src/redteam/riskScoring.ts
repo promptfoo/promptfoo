@@ -365,41 +365,51 @@ export function calculateSystemRiskScore(pluginScores: PluginRiskScore[]): Syste
   };
 }
 
-interface TestWithMetadata {
-  metadata?: {
-    strategyId?: string;
-  };
-  result?: {
-    testCase?: {
-      metadata?: {
-        strategyId?: string;
-      };
-    };
-  };
-}
-
 /**
  * Helper function to prepare test results from component data
  */
-export function prepareTestResultsFromStats(
-  failuresByPlugin: Record<string, TestWithMetadata[]> | undefined,
-  passesByPlugin: Record<string, TestWithMetadata[]> | undefined,
+export function prepareTestResultsFromStats<T>(
+  failuresByPlugin: Record<string, T[]> | undefined,
+  passesByPlugin: Record<string, T[]> | undefined,
   subCategory: string,
   categoryStats: Record<string, { pass: number; total: number }>,
-  getStrategyId?: (test: TestWithMetadata) => string,
+  getStrategyId?: (test: T) => string,
 ): Array<{ strategy: string; results: TestResults }> {
-  // Default strategy extraction function
+  // Default strategy extraction function with type guards
   const extractStrategyId =
     getStrategyId ||
-    ((test: TestWithMetadata) => {
-      // Check metadata directly on test
-      if (test.metadata?.strategyId) {
-        return test.metadata.strategyId as string;
+    ((test: T) => {
+      // Use type guards to safely check for properties
+      if (
+        typeof test === 'object' &&
+        test !== null &&
+        'metadata' in test &&
+        typeof test.metadata === 'object' &&
+        test.metadata !== null &&
+        'strategyId' in test.metadata &&
+        typeof test.metadata.strategyId === 'string'
+      ) {
+        return test.metadata.strategyId;
       }
-      // Check metadata from test.result.testCase
-      if (test.result?.testCase?.metadata?.strategyId) {
-        return test.result.testCase.metadata.strategyId as string;
+
+      if (
+        typeof test === 'object' &&
+        test !== null &&
+        'result' in test &&
+        typeof test.result === 'object' &&
+        test.result !== null &&
+        'testCase' in test.result &&
+        typeof test.result.testCase === 'object' &&
+        test.result.testCase !== null &&
+        'metadata' in test.result.testCase &&
+        typeof test.result.testCase.metadata === 'object' &&
+        test.result.testCase.metadata !== null &&
+        'strategyId' in test.result.testCase.metadata &&
+        typeof test.result.testCase.metadata.strategyId === 'string'
+      ) {
+        return test.result.testCase.metadata.strategyId;
       }
+
       return 'basic';
     });
 
@@ -412,7 +422,7 @@ export function prepareTestResultsFromStats(
     const strategyResults: Record<string, { passed: number; failed: number }> = {};
 
     // Count failures by strategy (note: "failure" means the attack succeeded)
-    failures.forEach((test: TestWithMetadata) => {
+    failures.forEach((test: T) => {
       const strategyId = extractStrategyId(test);
       if (!strategyResults[strategyId]) {
         strategyResults[strategyId] = { passed: 0, failed: 0 };
@@ -421,7 +431,7 @@ export function prepareTestResultsFromStats(
     });
 
     // Count passes by strategy
-    passes.forEach((test: TestWithMetadata) => {
+    passes.forEach((test: T) => {
       const strategyId = extractStrategyId(test);
       if (!strategyResults[strategyId]) {
         strategyResults[strategyId] = { passed: 0, failed: 0 };

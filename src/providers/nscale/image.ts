@@ -124,9 +124,14 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     env?: EnvOverrides;
   }): string | undefined {
     const config = options.config || {};
+    const customEnvar = config.apiKeyEnvar;
+    const customValue = customEnvar
+      ? (options.env?.[customEnvar as keyof EnvOverrides] ?? getEnvString(customEnvar))
+      : undefined;
     // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
     return (
       config.apiKey ||
+      customValue ||
       options.env?.NSCALE_SERVICE_TOKEN ||
       getEnvString('NSCALE_SERVICE_TOKEN') ||
       options.env?.NSCALE_API_KEY ||
@@ -140,8 +145,12 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    * @returns The API key or service token, or undefined if not found
    */
   getApiKey(): string | undefined {
+    const customEnvar = this.nscaleConfig?.apiKeyEnvar;
+    const customValue = customEnvar ? getEnvString(customEnvar) : undefined;
     return (
-      this.nscaleConfig?.apiKey || NscaleImageProvider.getApiKey({ config: this.nscaleConfig })
+      this.nscaleConfig?.apiKey ||
+      customValue ||
+      NscaleImageProvider.getApiKey({ config: this.nscaleConfig })
     );
   }
 
