@@ -450,24 +450,31 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache, headers: responseHeaders } =
-        await fetchWithCache<OpenAIChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        latencyMs,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIChatCompletionResponse>(
+        `${this.getApiUrl()}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          REQUEST_TIMEOUT_MS,
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        ));
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
