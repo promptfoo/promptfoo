@@ -269,7 +269,7 @@ export class XAIResponsesProvider implements ApiProvider {
     const body: Record<string, any> = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
