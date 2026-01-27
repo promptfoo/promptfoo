@@ -42,6 +42,21 @@ export interface TransformResult {
 }
 
 /**
+ * Context metadata to pass to runtime transforms.
+ * This allows multi-turn providers to pass evaluation context to layer strategies.
+ */
+export interface RuntimeTransformContext {
+  /** The evaluation ID (for server-side tracking) */
+  evaluationId?: string;
+  /** The test case ID */
+  testCaseId?: string;
+  /** The purpose/objective of the test */
+  purpose?: string;
+  /** The goal/target of the attack */
+  goal?: string;
+}
+
+/**
  * Applies strategy transforms to a prompt at runtime (per-turn).
  * This is used by multi-turn attack providers to transform each turn's
  * output before sending to the target.
@@ -50,6 +65,7 @@ export interface TransformResult {
  * @param injectVar - The variable name used for injection (e.g., 'query')
  * @param layerConfigs - Array of layer configurations to apply in order
  * @param strategies - The loaded strategies array (to avoid circular imports)
+ * @param context - Optional context metadata to pass to layer strategies
  * @returns TransformResult with transformed prompt and audio metadata
  *
  * @example
@@ -59,7 +75,8 @@ export interface TransformResult {
  *   attackPrompt,
  *   'query',
  *   ['audio', 'base64'],
- *   Strategies
+ *   Strategies,
+ *   { evaluationId: context?.evaluationId, purpose: context?.test?.metadata?.purpose }
  * );
  * // result.prompt = transformed, result.audio = { data, format } if audio
  * ```
@@ -69,6 +86,7 @@ export async function applyRuntimeTransforms(
   injectVar: string,
   layerConfigs: LayerConfig[],
   strategies: Strategy[],
+  context?: RuntimeTransformContext,
 ): Promise<TransformResult> {
   const originalPrompt = prompt;
 
@@ -76,14 +94,26 @@ export async function applyRuntimeTransforms(
     return { prompt, originalPrompt };
   }
 
-  logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`);
+  logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`, {
+    hasContext: !!context,
+    hasEvaluationId: !!context?.evaluationId,
+    hasPurpose: !!context?.purpose,
+  });
 
   // Create a pseudo test case to run through existing strategy actions
   // This reuses the exact same code path as pre-eval transforms
+  // Include context metadata so layer strategies (like indirect-web-pwn) can access evalId, purpose, etc.
   let testCase: TestCaseWithPlugin = {
     vars: { [injectVar]: prompt },
     assert: [],
-    metadata: { pluginId: 'runtime-transform' },
+    metadata: {
+      pluginId: 'runtime-transform',
+      // Pass through context for server-side tracking
+      evaluationId: context?.evaluationId,
+      testCaseId: context?.testCaseId,
+      purpose: context?.purpose,
+      goal: context?.goal,
+    },
   };
 
   let audioApplied = false;

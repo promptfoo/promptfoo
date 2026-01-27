@@ -15,6 +15,7 @@ import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
+  type RuntimeTransformContext,
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
@@ -271,11 +272,21 @@ export async function runMetaAgentRedteam({
         iteration: i + 1,
         layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
       });
+
+      // Build context for runtime transforms (needed by indirect-web-pwn for server-side tracking)
+      const transformContext: RuntimeTransformContext = {
+        evaluationId: context?.evaluationId,
+        testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+        purpose: test?.metadata?.purpose as string | undefined,
+        goal: test?.metadata?.goal as string | undefined,
+      };
+
       lastTransformResult = await applyRuntimeTransforms(
         attackPrompt,
         injectVar,
         perTurnLayers,
         Strategies,
+        transformContext,
       );
 
       if (lastTransformResult.error) {

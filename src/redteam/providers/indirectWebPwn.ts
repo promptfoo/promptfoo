@@ -127,6 +127,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
   private async createWebPage(
     testCaseId: string,
     prompt: string,
+    evalId?: string,
     goal?: string,
     purpose?: string,
   ): Promise<CreateWebPageResponse> {
@@ -134,6 +135,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     logger.debug('[IndirectWebPwn] Creating web page via task API', {
       url,
       testCaseId,
+      evalId,
       promptLength: prompt.length,
       goal,
       purpose,
@@ -149,6 +151,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         body: JSON.stringify({
           task: 'create-web-page',
           testCaseId,
+          evalId,
           prompt,
           goal,
           purpose,
@@ -228,6 +231,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const purpose = context?.test?.metadata?.purpose as string | undefined;
     const testCaseId =
       (context?.test?.metadata?.testCaseId as string) || `scan-${this.config.scanId}`;
+    const evalId = context?.evaluationId;
 
     // Log everything at the start
     logger.debug('[IndirectWebPwn] Starting attack', {
@@ -257,7 +261,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     try {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
-      const webPage = await this.createWebPage(testCaseId, prompt, goal, purpose);
+      const webPage = await this.createWebPage(testCaseId, prompt, evalId, goal, purpose);
       webPageUuid = webPage.uuid;
       webPageUrl = webPage.fullUrl;
 

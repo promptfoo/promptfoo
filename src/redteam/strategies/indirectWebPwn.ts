@@ -170,6 +170,7 @@ function generateFetchPrompt(url: string, turnNumber: number): string {
 async function createWebPage(
   testCaseId: string,
   prompt: string,
+  evalId?: string,
   goal?: string,
   purpose?: string,
   useLlm?: boolean,
@@ -179,6 +180,7 @@ async function createWebPage(
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
     url,
     testCaseId,
+    evalId,
     promptLength: prompt.length,
     goal,
     purpose,
@@ -194,6 +196,7 @@ async function createWebPage(
       body: JSON.stringify({
         task: 'create-web-page',
         testCaseId,
+        evalId,
         prompt,
         goal,
         purpose,
@@ -220,6 +223,7 @@ async function createWebPage(
 async function updateWebPage(
   uuid: string,
   prompt: string,
+  evalId?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
 ): Promise<UpdateWebPageResponse> {
@@ -227,6 +231,7 @@ async function updateWebPage(
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
     url,
     uuid,
+    evalId,
     promptLength: prompt.length,
     useLlm,
     preferSmallModel,
@@ -240,6 +245,7 @@ async function updateWebPage(
       body: JSON.stringify({
         task: 'update-web-page',
         uuid,
+        evalId,
         prompt,
         updateTemplate: true, // Always regenerate HTML with new embedding location
         email: getUserEmail(),
@@ -390,6 +396,9 @@ async function transformForPerTurnLayer(
       'runtime-transform';
     const stateKey = `${testCaseId}`;
 
+    // Extract context metadata passed from runtime transform (needed for both create and update)
+    const evalId = testCase.metadata?.evaluationId as string | undefined;
+
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
 
@@ -398,6 +407,7 @@ async function transformForPerTurnLayer(
       logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
         stateKey,
         uuid: pageState.uuid,
+        evalId,
         previousTurn: pageState.turnCount,
         previousEmbeddingLocation: pageState.embeddingLocation,
         promptLength: attackPrompt.length,
@@ -407,6 +417,7 @@ async function transformForPerTurnLayer(
         const response = await updateWebPage(
           pageState.uuid,
           attackPrompt,
+          evalId,
           useLlmUpdate,
           preferSmallModel,
         );
@@ -440,12 +451,14 @@ async function transformForPerTurnLayer(
       });
 
       try {
+        // Extract goal and purpose from metadata (evalId already extracted above)
         const goal = testCase.metadata?.goal as string | undefined;
         const purpose = testCase.metadata?.purpose as string | undefined;
 
         const response = await createWebPage(
           testCaseId,
           attackPrompt,
+          evalId,
           goal,
           purpose,
           useLlmCreate,
@@ -499,7 +512,6 @@ async function transformForPerTurnLayer(
         [injectVar]: fetchPrompt,
         fetchPrompt, // The prompt sent to AI asking it to visit the URL
         embeddedInjection: attackPrompt, // The attack payload embedded in the web page
-        webPageUrl: pageState.fullUrl, // The URL of the malicious page
       },
       metadata: {
         ...testCase.metadata,
