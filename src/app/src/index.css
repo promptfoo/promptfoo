@@ -299,6 +299,9 @@
   --input: 217.2 15% 22%;
   --ring: 217.2 91.2% 59.8%;
 
+  /* Severity colors - Dark mode */
+  --severity-informational: 217 91% 60%;
+
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
