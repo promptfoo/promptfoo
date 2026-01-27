@@ -214,7 +214,7 @@ For monitoring/debugging, the scheduler emits:
 
 ## Testing
 
-222 tests covering:
+256 tests covering:
 
 - Unit tests for each component
 - Edge cases (negative values, zero values, overflow)
