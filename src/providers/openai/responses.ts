@@ -358,24 +358,30 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, deleteFromCache, headers: responseHeaders } =
-        await fetchWithCache<OpenAIResponsesResponse>(
-          `${this.getApiUrl()}/responses`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIResponsesResponse>(
+        `${this.getApiUrl()}/responses`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          timeout,
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        ));
+          body: JSON.stringify(body),
+        },
+        timeout,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
