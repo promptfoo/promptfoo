@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
@@ -104,7 +104,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxTurns: options.maxTurns ?? 5,
       maxFetchAttempts: options.maxFetchAttempts ?? 3,
       stateful: options.stateful ?? false,
-      scanId: options.scanId ?? uuidv4(),
+      scanId: options.scanId ?? randomUUID(),
       useLlm: options.useLlm ?? false,
       preferSmallModel: options.preferSmallModel ?? true,
     };

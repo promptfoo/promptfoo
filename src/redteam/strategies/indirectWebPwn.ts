@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
@@ -310,7 +310,7 @@ function transformForStandaloneMode(
   const providerName = 'promptfoo:redteam:indirect-web-pwn';
   const metricSuffix = 'IndirectWebPwn';
   const strategyId = 'indirect-web-pwn';
-  const scanId = uuidv4();
+  const scanId = randomUUID();
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
