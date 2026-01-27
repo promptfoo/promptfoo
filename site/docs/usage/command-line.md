@@ -134,12 +134,13 @@ promptfoo eval --resume <evalId>   # resumes a specific evaluation
 ### Retry Errors
 
 ```sh
-promptfoo eval --retry-errors      # retries all ERROR results from the latest evaluation
+promptfoo eval --retry-errors      # retries all ERROR results from the latest eval
 ```
 
-- The retry errors feature automatically finds ERROR results from the latest evaluation, removes them from the database, and re-runs only those test cases. This is useful when evaluations fail due to temporary network issues, rate limits, or API errors.
+- The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
+- **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
-- Uses the original evaluation's configuration and runtime options to ensure consistency.
+- Uses the original eval's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`
 
@@ -327,19 +328,20 @@ Deletes a specific resource.
 
 ## `promptfoo retry <evalId>`
 
-Retry all ERROR results from a specific evaluation. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures), removes them from the database, and re-runs only those test cases. The results are updated in place in the original evaluation.
+Retry all ERROR results from a specific eval. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures) and re-runs only those test cases. The results are updated in place in the original eval.
 
-| Option                       | Description                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided) |
-| `-v, --verbose`              | Verbose output                                                                   |
-| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                         |
-| `--delay <number>`           | Delay between evaluations in milliseconds                                        |
+| Option                       | Description                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided)       |
+| `-v, --verbose`              | Verbose output                                                                         |
+| `--max-concurrency <number>` | Maximum number of concurrent evals                                                     |
+| `--delay <number>`           | Delay between evals in milliseconds                                                    |
+| `--share/--no-share`         | Share results to cloud (auto-shares when cloud is configured, disable with --no-share) |
 
 Examples:
 
 ```sh
-# Retry errors from a specific evaluation
+# Retry errors from a specific eval
 promptfoo retry eval-abc123
 
 # Retry with a different config file
@@ -347,7 +349,14 @@ promptfoo retry eval-abc123 -c updated-config.yaml
 
 # Retry with verbose output and limited concurrency
 promptfoo retry eval-abc123 -v --max-concurrency 2
+
+# Retry and share results to cloud
+promptfoo retry eval-abc123 --share
 ```
+
+:::tip Data Safety
+If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds.
+:::
 
 :::tip
 Unlike `--filter-errors-only` which creates a new evaluation, `promptfoo retry` updates the original evaluation in place. Use `retry` when you want to fix errors in an existing eval without creating duplicates.

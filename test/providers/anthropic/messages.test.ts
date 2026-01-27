@@ -699,16 +699,6 @@ describe('AnthropicMessagesProvider', () => {
       it('should handle cached responses with finishReason', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
 
-        const cacheKey = expect.stringContaining('anthropic:');
-        await getCache().set(
-          cacheKey,
-          JSON.stringify({
-            content: [{ type: 'text', text: 'Cached response' }],
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
-          }),
-        );
-
         // Set up specific cache key for our test
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({} as any);
 

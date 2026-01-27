@@ -380,18 +380,6 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     } catch (err) {
       const error = err as Error;
 
-      // Check for missing dependency
-      if (
-        error.message?.includes('Cannot find module') ||
-        error.message?.includes('@huggingface/transformers') ||
-        error.message?.includes('Transformers.js is not installed')
-      ) {
-        return {
-          error:
-            'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
-        };
-      }
-
       // Check for model not found
       if (error.message?.includes('Could not locate file')) {
         return {
@@ -522,17 +510,6 @@ export class TransformersTextGenerationProvider implements ApiProvider {
       };
     } catch (err) {
       const error = err as Error;
-
-      if (
-        error.message?.includes('Cannot find module') ||
-        error.message?.includes('@huggingface/transformers') ||
-        error.message?.includes('Transformers.js is not installed')
-      ) {
-        return {
-          error:
-            'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
-        };
-      }
 
       if (error.message?.includes('Could not locate file')) {
         return {

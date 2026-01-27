@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -139,9 +140,7 @@ export default function InputsEditor({
                       onChange={(e) => updateVariableName(variable.name, e.target.value)}
                       className={cn('font-mono', isDuplicate && 'border-destructive')}
                     />
-                    {isDuplicate && (
-                      <p className="mt-1 text-xs text-destructive">Duplicate variable name</p>
-                    )}
+                    {isDuplicate && <HelperText error>Duplicate variable name</HelperText>}
                   </div>
                   <div className="flex-1">
                     <Label htmlFor={`${inputId}-desc`} className="mb-1.5 block text-sm">

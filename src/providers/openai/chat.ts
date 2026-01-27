@@ -180,12 +180,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName.startsWith('gpt-5')
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
+      this.isGPT5Model()
     );
   }
 
@@ -209,7 +217,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
-    const isGPT5Model = this.modelName.startsWith('gpt-5');
+    const isGPT5Model = this.isGPT5Model();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -282,20 +290,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         : {}),
       // GPT-5 only: attach verbosity if provided
-      ...(this.modelName.startsWith('gpt-5') && config.verbosity
-        ? { verbosity: config.verbosity }
-        : {}),
+      ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (
-      config.reasoning_effort &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5') ||
-        this.modelName.startsWith('gpt-oss'))
-    ) {
+    if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
       body.reasoning_effort = config.reasoning_effort;
     }
 
@@ -303,7 +302,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.includes('/o1') ||
+        this.modelName.includes('/o3') ||
+        this.modelName.includes('/o4'))
     ) {
       body.reasoning = config.reasoning;
     }
@@ -448,25 +450,33 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
-        await fetchWithCache<OpenAIChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        latencyMs,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIChatCompletionResponse>(
+        `${this.getApiUrl()}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          REQUEST_TIMEOUT_MS,
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        ));
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
@@ -482,11 +492,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               flagged: true,
               flaggedInput: true, // This error specifically indicates input was rejected
             },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
 
         return {
           error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
@@ -494,6 +518,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
@@ -513,6 +544,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -527,6 +565,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           finishReason: FINISH_REASON_MAP.content_filter,
           guardrails: {
             flagged: true,
+          },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
           },
         };
       }
@@ -675,6 +720,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_completion_tokens,
             ),
             guardrails: { flagged: contentFiltered },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
       }
@@ -712,6 +764,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_completion_tokens,
           ),
           guardrails: { flagged: contentFiltered },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -731,11 +790,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_completion_tokens,
         ),
         guardrails: { flagged: contentFiltered },
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     } catch (err) {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
   }
