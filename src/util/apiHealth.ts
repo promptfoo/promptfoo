@@ -93,7 +93,9 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     }
 
     // If it's a timeout error, return a softer message
-    if (error.name === 'TimeoutError') {
+    // fetchWithTimeout throws a plain Error with "timed out" in the message,
+    // not a native TimeoutError, so we check the message string.
+    if (error.name === 'TimeoutError' || error.message.includes('timed out')) {
       return {
         status: 'OK',
         message: 'API health check timed out, proceeding anyway',
