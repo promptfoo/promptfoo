@@ -749,6 +749,65 @@ function ResultsTable({
     return [];
   }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
 
+  // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
+  const transformDisplayVarsColumns = React.useMemo(() => {
+    // Collect unique transformDisplayVars keys from all outputs
+    const transformVarKeys = new Set<string>();
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    const varKeyArray = Array.from(transformVarKeys);
+    return [
+      columnHelper.group({
+        id: 'transformDisplayVars',
+        header: () => <span className="font-bold">Variables</span>,
+        columns: varKeyArray.map((varName) =>
+          columnHelper.accessor(
+            (row: EvaluateTableRow) => {
+              // Get the value from the first output's transformDisplayVars
+              const output = row.outputs?.[0];
+              const transformVars = output?.metadata?.transformDisplayVars as
+                | Record<string, string>
+                | undefined;
+              return transformVars?.[varName] || '';
+            },
+            {
+              id: `TransformVar_${varName}`,
+              header: () => (
+                <TableHeader
+                  text={varName.replace(/^__/, '')} // Remove __ prefix for display
+                  maxLength={maxTextLength}
+                  className="font-bold"
+                />
+              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return (
+                  <div className="cell">
+                    <TruncatedText text={value} maxLength={maxTextLength} />
+                  </div>
+                );
+              },
+              size: VARIABLE_COLUMN_SIZE_PX,
+            },
+          ),
+        ),
+      }),
+    ];
+  }, [columnHelper, tableBody, maxTextLength]);
+
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
       return tableBody[rowIndex].outputs[promptIndex];
@@ -1126,9 +1185,9 @@ function ResultsTable({
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
-    cols.push(...variableColumns, ...promptColumns);
+    cols.push(...variableColumns, ...transformDisplayVarsColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, variableColumns, transformDisplayVarsColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
