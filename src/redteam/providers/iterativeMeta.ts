@@ -471,7 +471,9 @@ export async function runMetaAgentRedteam({
             (test.metadata?.webPageUuid as string) ||
             (iterationTest.metadata?.webPageUuid as string);
           if (webPageUuid) {
-            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', { webPageUuid });
+            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
+              webPageUuid,
+            });
             const exfilData = await checkExfilTracking(webPageUuid);
             if (exfilData) {
               gradingContext = {

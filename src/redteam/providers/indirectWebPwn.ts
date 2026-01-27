@@ -1,7 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
-
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithRetries } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -10,10 +14,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import { fetchWithRetries } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
