@@ -50,7 +50,11 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     }
   }, []);
 
-  const handleProviderChange = (provider: ProviderOptions, providerType: string) => {
+  const handleProviderChange = (
+    provider: ProviderOptions,
+    providerType: string,
+    source?: 'quick-select',
+  ) => {
     // Preserve the user's entered label when switching providers
     const updatedProvider = {
       ...provider,
@@ -62,7 +66,26 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
+      source,
     });
+  };
+
+  // Quick-select handler for inline description buttons
+  // Provider IDs must match those in ProviderTypeSelector.handleProviderTypeSelect
+  const handleQuickSelect = (type: 'custom' | 'python' | 'javascript' | 'exec') => {
+    const providerConfigs: Record<typeof type, { id: string; providerType: string }> = {
+      custom: { id: '', providerType: 'custom' },
+      python: { id: 'file:///path/to/custom_provider.py', providerType: 'python' },
+      javascript: { id: 'file:///path/to/custom_provider.js', providerType: 'javascript' },
+      exec: { id: 'exec:/path/to/script.sh', providerType: 'exec' },
+    };
+
+    const config = providerConfigs[type];
+    handleProviderChange(
+      { id: config.id, label: selectedTarget.label, config: {} },
+      config.providerType,
+      'quick-select',
+    );
   };
 
   const handleNext = () => {
@@ -209,13 +232,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() => {
-                    const customOption = { id: '', label: selectedTarget.label, config: {} };
-                    handleProviderChange(customOption, 'custom');
-                    recordEvent('feature_used', {
-                      feature: 'redteam_custom_target_quick_select',
-                    });
-                  }}
+                  aria-label="Select Custom Provider type"
+                  onClick={() => handleQuickSelect('custom')}
                 >
                   Custom Provider
                 </Button>{' '}
@@ -233,17 +251,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() => {
-                    const pythonOption = {
-                      id: 'file:///path/to/custom_provider.py',
-                      label: selectedTarget.label,
-                      config: {},
-                    };
-                    handleProviderChange(pythonOption, 'python');
-                    recordEvent('feature_used', {
-                      feature: 'redteam_python_quick_select',
-                    });
-                  }}
+                  aria-label="Select Python provider type"
+                  onClick={() => handleQuickSelect('python')}
                 >
                   Python
                 </Button>
@@ -252,17 +261,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() => {
-                    const jsOption = {
-                      id: 'file:///path/to/custom_provider.js',
-                      label: selectedTarget.label,
-                      config: {},
-                    };
-                    handleProviderChange(jsOption, 'javascript');
-                    recordEvent('feature_used', {
-                      feature: 'redteam_javascript_quick_select',
-                    });
-                  }}
+                  aria-label="Select JavaScript provider type"
+                  onClick={() => handleQuickSelect('javascript')}
                 >
                   JavaScript
                 </Button>
@@ -271,19 +271,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() => {
-                    const shellOption = {
-                      id: 'exec:/path/to/script.sh',
-                      label: selectedTarget.label,
-                      config: {},
-                    };
-                    handleProviderChange(shellOption, 'exec');
-                    recordEvent('feature_used', {
-                      feature: 'redteam_shell_quick_select',
-                    });
-                  }}
+                  aria-label="Select Shell Script provider type"
+                  onClick={() => handleQuickSelect('exec')}
                 >
-                  shell scripts
+                  Shell Scripts
                 </Button>
                 .
               </p>
