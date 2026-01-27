@@ -242,7 +242,7 @@
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
     "compression": "^1.8.1",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "csv-parse": "^6.1.0",
     "csv-stringify": "^6.6.0",
     "debounce": "^3.0.0",
