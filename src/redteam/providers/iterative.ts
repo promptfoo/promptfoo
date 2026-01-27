@@ -327,6 +327,12 @@ export async function runRedteamConversation({
         injectVar,
         perTurnLayers,
         Strategies,
+        {
+          evaluationId: context?.evaluationId,
+          testCaseId: test?.metadata?.testCaseId as string | undefined,
+          purpose: test?.metadata?.purpose as string | undefined,
+          goal: test?.metadata?.goal as string | undefined,
+        },
       );
 
       if (lastTransformResult.error) {

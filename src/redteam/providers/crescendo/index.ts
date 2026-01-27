@@ -21,6 +21,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
@@ -516,6 +517,63 @@ export class CrescendoProvider implements ApiProvider {
               ? (response.traceSummary ??
                 (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
               : undefined;
+
+            // Build grading context with tracing and exfil tracking data
+            let gradingContext:
+              | {
+                  traceContext?: TraceContextData | null;
+                  traceSummary?: string;
+                  wasExfiltrated?: boolean;
+                  exfilCount?: number;
+                  exfilRecords?: Array<{
+                    timestamp: string;
+                    ip: string;
+                    userAgent: string;
+                    queryParams: Record<string, string>;
+                  }>;
+                }
+              | undefined;
+
+            // First try to get exfil data from provider response metadata (Playwright provider)
+            if (lastResponse.metadata?.wasExfiltrated !== undefined) {
+              logger.debug('[Crescendo] Using exfil data from provider response metadata');
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
+            } else {
+              // Try to fetch exfil tracking from server API via webPageUuid
+              const webPageUuid = test.metadata?.webPageUuid as string | undefined;
+              if (webPageUuid) {
+                const evalId =
+                  context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+                logger.debug('[Crescendo] Fetching exfil tracking from server API', {
+                  webPageUuid,
+                  evalId,
+                });
+                const exfilData = await checkExfilTracking(webPageUuid, evalId);
+                if (exfilData) {
+                  gradingContext = {
+                    ...(tracingOptions.includeInGrading
+                      ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                      : {}),
+                    wasExfiltrated: exfilData.wasExfiltrated,
+                    exfilCount: exfilData.exfilCount,
+                    exfilRecords: exfilData.exfilRecords,
+                  };
+                }
+              }
+            }
+
+            // Fallback to just tracing context if no exfil data found
+            if (!gradingContext && tracingOptions.includeInGrading) {
+              gradingContext = { traceContext: response.traceContext, traceSummary: gradingTraceSummary };
+            }
+
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -524,12 +582,7 @@ export class CrescendoProvider implements ApiProvider {
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
               undefined,
-              tracingOptions.includeInGrading
-                ? {
-                    traceContext: response.traceContext,
-                    traceSummary: gradingTraceSummary,
-                  }
-                : undefined,
+              gradingContext,
             );
 
             graderPassed = grade.pass;
@@ -908,6 +961,12 @@ export class CrescendoProvider implements ApiProvider {
         this.config.injectVar,
         this.perTurnLayers,
         Strategies,
+        {
+          evaluationId: context?.evaluationId,
+          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          purpose: context?.test?.metadata?.purpose as string | undefined,
+          goal: context?.test?.metadata?.goal as string | undefined,
+        },
       );
 
       // Skip turn if transform failed

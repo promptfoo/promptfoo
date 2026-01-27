@@ -417,7 +417,7 @@ async function transformForPerTurnLayer(
     const rawAttackPrompt = String(testCase.vars?.[injectVar] ?? '');
 
     // Log what prompt we're receiving (helps debug layer integration)
-    logger.info('[IndirectWebPwn] Received prompt for transformation', {
+    logger.debug('[IndirectWebPwn] Received prompt for transformation', {
       promptPreview: rawAttackPrompt.substring(0, 150),
       promptLength: rawAttackPrompt.length,
       hasUrls: /https?:\/\//.test(rawAttackPrompt),
@@ -471,7 +471,7 @@ async function transformForPerTurnLayer(
         pageState.turnCount++;
         pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
 
-        logger.info('[IndirectWebPwn] Updated page with new embedding location', {
+        logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
           uuid: pageState.uuid,
           previousEmbeddingLocation: previousLocation,
           newEmbeddingLocation: pageState.embeddingLocation,
@@ -521,7 +521,7 @@ async function transformForPerTurnLayer(
         };
         pageStateMap.set(stateKey, pageState);
 
-        logger.info('[IndirectWebPwn] Created new page for per-turn layer', {
+        logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
           uuid: pageState.uuid,
           fullUrl: pageState.fullUrl,
           embeddingLocation: pageState.embeddingLocation,

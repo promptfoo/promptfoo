@@ -20,6 +20,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
@@ -478,6 +479,12 @@ export class HydraProvider implements ApiProvider {
           this.injectVar,
           this.perTurnLayers,
           Strategies,
+          {
+            evaluationId: context?.evaluationId,
+            testCaseId: test?.metadata?.testCaseId as string | undefined,
+            purpose: test?.metadata?.purpose as string | undefined,
+            goal: test?.metadata?.goal as string | undefined,
+          },
         );
 
         // Skip turn if transform failed
@@ -702,6 +709,62 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
+          // Build grading context with tracing and exfil tracking data
+          let gradingContext:
+            | {
+                traceContext?: TraceContextData | null;
+                traceSummary?: string;
+                wasExfiltrated?: boolean;
+                exfilCount?: number;
+                exfilRecords?: Array<{
+                  timestamp: string;
+                  ip: string;
+                  userAgent: string;
+                  queryParams: Record<string, string>;
+                }>;
+              }
+            | undefined;
+
+          // First try to get exfil data from provider response metadata (Playwright provider)
+          if (targetResponse.metadata?.wasExfiltrated !== undefined) {
+            logger.debug('[Hydra] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
+          } else {
+            // Try to fetch exfil tracking from server API via webPageUuid
+            const webPageUuid = test.metadata?.webPageUuid as string | undefined;
+            if (webPageUuid) {
+              const evalId =
+                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+              logger.debug('[Hydra] Fetching exfil tracking from server API', {
+                webPageUuid,
+                evalId,
+              });
+              const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              if (exfilData) {
+                gradingContext = {
+                  ...(tracingOptions.includeInGrading
+                    ? { traceContext, traceSummary: gradingTraceSummary }
+                    : {}),
+                  wasExfiltrated: exfilData.wasExfiltrated,
+                  exfilCount: exfilData.exfilCount,
+                  exfilRecords: exfilData.exfilRecords,
+                };
+              }
+            }
+          }
+
+          // Fallback to just tracing context if no exfil data found
+          if (!gradingContext && tracingOptions.includeInGrading) {
+            gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+          }
+
           const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,
@@ -710,12 +773,7 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
-            tracingOptions.includeInGrading
-              ? {
-                  traceContext,
-                  traceSummary: gradingTraceSummary,
-                }
-              : undefined,
+            gradingContext,
           );
           graderResult = grade;
           storedGraderResult = {

@@ -31,6 +31,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -582,6 +583,12 @@ async function runRedteamConversation({
             injectVar,
             perTurnLayers,
             Strategies,
+            {
+              evaluationId: context?.evaluationId,
+              testCaseId: test?.metadata?.testCaseId as string | undefined,
+              purpose: test?.metadata?.purpose as string | undefined,
+              goal: test?.metadata?.goal as string | undefined,
+            },
           );
 
           if (lastTransformResult.error) {
@@ -734,6 +741,53 @@ async function runRedteamConversation({
                 }
               : { vars: iterationVars };
 
+            // Build grading context with exfil tracking data
+            let gradingContext:
+              | {
+                  wasExfiltrated?: boolean;
+                  exfilCount?: number;
+                  exfilRecords?: Array<{
+                    timestamp: string;
+                    ip: string;
+                    userAgent: string;
+                    queryParams: Record<string, string>;
+                  }>;
+                }
+              | undefined;
+
+            // First try to get exfil data from provider response metadata (Playwright provider)
+            if (targetResponse.metadata?.wasExfiltrated !== undefined) {
+              logger.debug('[IterativeTree] Using exfil data from provider response metadata');
+              gradingContext = {
+                wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+                exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
+            } else {
+              // Try to fetch exfil tracking from server API via webPageUuid
+              const webPageUuid =
+                (test.metadata?.webPageUuid as string) ||
+                (iterationTest.metadata?.webPageUuid as string);
+              if (webPageUuid) {
+                const evalId =
+                  context?.evaluationId ??
+                  (test.metadata?.evaluationId as string | undefined) ??
+                  (iterationTest.metadata?.evaluationId as string | undefined);
+                logger.debug('[IterativeTree] Fetching exfil tracking from server API', {
+                  webPageUuid,
+                  evalId,
+                });
+                const exfilData = await checkExfilTracking(webPageUuid, evalId);
+                if (exfilData) {
+                  gradingContext = {
+                    wasExfiltrated: exfilData.wasExfiltrated,
+                    exfilCount: exfilData.exfilCount,
+                    exfilRecords: exfilData.exfilRecords,
+                  };
+                }
+              }
+            }
+
             const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
@@ -741,6 +795,8 @@ async function runRedteamConversation({
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined, // skipRefusalCheck
+              gradingContext,
             );
             storedGraderResult = {
               ...grade,
