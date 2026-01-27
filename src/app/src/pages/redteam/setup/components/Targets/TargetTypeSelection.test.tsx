@@ -459,4 +459,249 @@ describe('TargetTypeSelection', () => {
       expect(footerNextButton).toBeInTheDocument();
     });
   });
+
+  describe('Quick-select buttons (Issue #6730)', () => {
+    beforeEach(() => {
+      // Start with a target name entered and target type section visible
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'My Test API',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: vi.fn(),
+      });
+    });
+
+    it('should render quick-select buttons in the description text', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // All quick-select buttons should be visible
+      expect(
+        screen.getByRole('button', { name: /Select Custom Provider type/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Select Python provider type/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Select JavaScript provider type/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Select Shell Script provider type/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('should select Custom Provider when clicking the Custom Provider quick-select button', async () => {
+      const user = userEvent.setup();
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'My Test API',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      const customButton = screen.getByRole('button', { name: /Select Custom Provider type/i });
+      await user.click(customButton);
+
+      expect(mockSetProviderType).toHaveBeenCalledWith('custom');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          id: '',
+          label: 'My Test API',
+        }),
+      );
+      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+        feature: 'redteam_config_target_type_changed',
+        target: '',
+        source: 'quick-select',
+      });
+    });
+
+    it('should select Python provider when clicking the Python quick-select button', async () => {
+      const user = userEvent.setup();
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'My Test API',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      const pythonButton = screen.getByRole('button', { name: /Select Python provider type/i });
+      await user.click(pythonButton);
+
+      expect(mockSetProviderType).toHaveBeenCalledWith('python');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          id: 'file:///path/to/custom_provider.py',
+          label: 'My Test API',
+        }),
+      );
+      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+        feature: 'redteam_config_target_type_changed',
+        target: 'file:///path/to/custom_provider.py',
+        source: 'quick-select',
+      });
+    });
+
+    it('should select JavaScript provider when clicking the JavaScript quick-select button', async () => {
+      const user = userEvent.setup();
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'My Test API',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      const jsButton = screen.getByRole('button', { name: /Select JavaScript provider type/i });
+      await user.click(jsButton);
+
+      expect(mockSetProviderType).toHaveBeenCalledWith('javascript');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          id: 'file:///path/to/custom_provider.js',
+          label: 'My Test API',
+        }),
+      );
+      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+        feature: 'redteam_config_target_type_changed',
+        target: 'file:///path/to/custom_provider.js',
+        source: 'quick-select',
+      });
+    });
+
+    it('should select Shell Script provider when clicking the Shell Scripts quick-select button', async () => {
+      const user = userEvent.setup();
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'openai:gpt-4.1',
+            label: 'My Test API',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      const shellButton = screen.getByRole('button', {
+        name: /Select Shell Script provider type/i,
+      });
+      await user.click(shellButton);
+
+      expect(mockSetProviderType).toHaveBeenCalledWith('exec');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          id: 'exec:/path/to/script.sh',
+          label: 'My Test API',
+        }),
+      );
+      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+        feature: 'redteam_config_target_type_changed',
+        target: 'exec:/path/to/script.sh',
+        source: 'quick-select',
+      });
+    });
+
+    it('should preserve user-entered label when using quick-select buttons', async () => {
+      const user = userEvent.setup();
+      const mockSetProviderType = vi.fn();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: '',
+            label: '',
+            config: {},
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: undefined,
+        setProviderType: mockSetProviderType,
+      });
+
+      renderComponent();
+
+      // Enter a target name
+      const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
+      await user.type(nameInput, 'My Custom Agent');
+
+      // Click Continue to reveal the target type section
+      const continueButton = await screen.findByRole('button', { name: 'Continue' });
+      await user.click(continueButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      });
+
+      // Use quick-select for Python
+      const pythonButton = screen.getByRole('button', { name: /Select Python provider type/i });
+      await user.click(pythonButton);
+
+      // The label should be preserved
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          label: 'My Custom Agent',
+        }),
+      );
+    });
+  });
 });
