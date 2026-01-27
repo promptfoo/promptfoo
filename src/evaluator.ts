@@ -472,9 +472,9 @@ export async function runEval({
       });
     }
 
-    logger.debug(
-      `Evaluator response = ${(safeJsonStringify(response) ?? '').substring(0, 100)}...`,
-    );
+    logger.debug('Evaluator response', {
+      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+    });
     logger.debug(
       `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
     );

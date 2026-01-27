@@ -340,6 +340,12 @@ tests:
   });
 
   describe('Circular Reference Handling', () => {
+    // NOTE: This test uses a custom provider instead of the 'echo' provider.
+    // This is an intentional exception to smoke test guidelines because:
+    // - The echo provider cannot generate circular references in response metadata
+    // - We need to verify that circular reference objects are properly sanitized
+    // - The custom provider (circular-ref-provider.js) creates controlled circular
+    //   structures that reproduce the exact bug scenario from GitHub issue #7266
     describe('#7266 - Converting circular structure to JSON error', () => {
       it('handles provider responses with circular references without crashing', () => {
         // Bug #7266: When providers return data with circular references

@@ -79,15 +79,19 @@ function sanitizeForDb<T>(obj: T): T {
     const serialized = safeJsonStringify(obj);
     if (serialized === undefined) {
       // safeJsonStringify returns undefined for non-serializable objects (e.g., BigInt)
-      // This is a rare edge case - log for debugging and return safe fallback
-      logger.debug('sanitizeForDb: Failed to serialize object, using empty fallback');
-      return {} as T;
+      // This is a rare edge case - log for debugging and return type-appropriate fallback
+      logger.debug('sanitizeForDb: Failed to serialize object, using fallback', {
+        valueType: typeof obj,
+        isArray: Array.isArray(obj),
+      });
+      // Preserve JSON shape: arrays return [], objects/primitives return null
+      return (Array.isArray(obj) ? [] : null) as T;
     }
     return JSON.parse(serialized);
   } catch (error) {
-    // If parsing fails, return empty object as fallback
-    logger.debug(`sanitizeForDb: Parse error, using empty fallback: ${error}`);
-    return {} as T;
+    // If parsing fails, return type-appropriate fallback
+    logger.debug('sanitizeForDb: Parse error, using fallback', { error });
+    return (Array.isArray(obj) ? [] : null) as T;
   }
 }
 

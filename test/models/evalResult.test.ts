@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -14,6 +14,10 @@ import {
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   const mockProvider: ProviderOptions = {
