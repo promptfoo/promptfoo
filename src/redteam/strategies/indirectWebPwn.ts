@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
