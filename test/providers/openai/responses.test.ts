@@ -142,6 +142,70 @@ describe('OpenAiResponsesProvider', () => {
     expect(result.tokenUsage?.total).toBe(30);
   });
 
+  it('should include HTTP metadata in response', async () => {
+    const mockHeaders = {
+      'content-type': 'application/json',
+      'x-request-id': 'test-request-123',
+      'x-litellm-model-group': 'gpt-4o',
+    };
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          id: 'msg_abc123',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Test response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: mockHeaders,
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.http).toBeDefined();
+    expect(result.metadata?.http?.status).toBe(200);
+    expect(result.metadata?.http?.statusText).toBe('OK');
+    expect(result.metadata?.http?.headers).toEqual(mockHeaders);
+  });
+
+  it('should include HTTP metadata in error response', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'Rate limit exceeded' } },
+      cached: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { 'retry-after': '60' },
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toBeDefined();
+    expect(result.metadata?.http?.status).toBe(429);
+    expect(result.metadata?.http?.statusText).toBe('Too Many Requests');
+    expect(result.metadata?.http?.headers).toEqual({ 'retry-after': '60' });
+  });
+
   it('should handle system prompts correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

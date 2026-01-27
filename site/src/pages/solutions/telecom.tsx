@@ -10,7 +10,6 @@ import LockIcon from '@mui/icons-material/Lock';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import SecurityIcon from '@mui/icons-material/Security';
-import ShieldIcon from '@mui/icons-material/Shield';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
@@ -75,7 +74,7 @@ export default function Telecom() {
           <div className={styles.heroContent}>
             <p className={styles.heroEyebrow}>Telecommunications</p>
             <h1 className={styles.heroTitle}>
-              Red team your AI agents—voice and text—at carrier scale
+              Red team your AI agents, voice and text, at carrier scale
             </h1>
             <p className={styles.heroSubtitle}>
               Purpose-built security testing for IVR systems, voice assistants, and customer service
@@ -173,7 +172,7 @@ export default function Telecom() {
               <div className={styles.showcaseText}>
                 <h3>Audio-to-audio model testing</h3>
                 <p>
-                  Test voice AI models with actual audio input and evaluate audio output—no
+                  Test voice AI models with actual audio input and evaluate audio output. No
                   transcription proxy required. Catch vulnerabilities that text-only tools miss,
                   including voice-specific attack vectors and audio hallucinations.
                 </p>
@@ -190,6 +189,7 @@ export default function Telecom() {
                   src="/img/solutions/telecom.png"
                   alt="Voice AI testing interface showing audio-to-audio model evaluation"
                   loading="lazy"
+                  style={{ boxShadow: 'none', borderRadius: 0 }}
                 />
               </div>
             </div>
@@ -239,7 +239,7 @@ export default function Telecom() {
                   Customer Service Chatbots
                 </div>
                 <p>
-                  Test text-based AI for the same attack scenarios—account security, CPNI
+                  Test text-based AI for the same attack scenarios: account security, CPNI
                   protection, and compliance.
                 </p>
               </div>
@@ -304,8 +304,8 @@ export default function Telecom() {
             <p className={styles.sectionEyebrow}>Regulatory Alignment</p>
             <h2 className={styles.sectionTitle}>Tests mapped to the audits you face</h2>
             <p className={styles.sectionSubtitle}>
-              Every attack scenario maps to specific regulatory requirements—generate audit-ready
-              reports that speak your compliance team&apos;s language
+              Every attack scenario maps to specific regulatory requirements. Generate audit-ready
+              reports that speak your compliance team&apos;s language.
             </p>
 
             <div className={styles.complianceGridTwo}>
@@ -389,7 +389,7 @@ export default function Telecom() {
                 <div className={styles.benefitContent}>
                   <h3>Your data never leaves</h3>
                   <p>
-                    Deploy entirely on-premises. No customer data—voice or text—sent to external
+                    Deploy entirely on-premises. No customer data, voice or text, sent to external
                     systems. Meet the strictest CPNI requirements and data residency policies.
                   </p>
                 </div>
@@ -419,8 +419,8 @@ export default function Telecom() {
                     The only AI security platform with telecom-specific voice testing
                   </h4>
                   <p className={styles.proofBannerText}>
-                    12 purpose-built plugins covering CPNI, account security, E911, TCPA, and
-                    more—with full audio-to-audio model support for voice AI.
+                    12 purpose-built plugins covering CPNI, account security, E911, TCPA, and more,
+                    with full audio-to-audio model support for voice AI.
                   </p>
                 </div>
                 <Link className="button button--primary" to="/contact/">
@@ -436,8 +436,8 @@ export default function Telecom() {
           <div className="container">
             <h2 className={styles.finalCTATitle}>Secure every AI touchpoint</h2>
             <p className={styles.finalCTASubtitle}>
-              From IVR to chatbot, voice assistant to self-service portal—test your AI agents before
-              attackers do
+              From IVR to chatbot, voice assistant to self-service portal. Test your AI agents
+              before attackers do.
             </p>
             <div className={styles.finalCTAButtons}>
               <Link className="button button--primary button--lg" to="/contact/">

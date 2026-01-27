@@ -339,6 +339,58 @@ tests:
     });
   });
 
+  describe('Circular Reference Handling', () => {
+    // NOTE: This test uses a custom provider instead of the 'echo' provider.
+    // This is an intentional exception to smoke test guidelines because:
+    // - The echo provider cannot generate circular references in response metadata
+    // - We need to verify that circular reference objects are properly sanitized
+    // - The custom provider (circular-ref-provider.js) creates controlled circular
+    //   structures that reproduce the exact bug scenario from GitHub issue #7266
+    describe('#7266 - Converting circular structure to JSON error', () => {
+      it('handles provider responses with circular references without crashing', () => {
+        // Bug #7266: When providers return data with circular references
+        // (e.g., leaked Timeout objects with _idlePrev/_idleNext),
+        // saving results to DB would fail with:
+        // "TypeError: Converting circular structure to JSON"
+        //
+        // The fix adds sanitizeForDb() to strip circular references before DB insert.
+        const configPath = path.join(FIXTURES_DIR, 'configs/circular-ref-7266.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'circular-ref-7266-output.json');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+          { cwd: FIXTURES_DIR },
+        );
+
+        // On main (before fix): exitCode would be non-zero or stderr would contain
+        // "Converting circular structure to JSON" or "Error saving result"
+        //
+        // With fix: exitCode should be 0 and results should be saved successfully
+        if (exitCode !== 0) {
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
+        }
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Converting circular structure to JSON');
+        expect(stderr).not.toContain('Error saving result');
+
+        // Verify the output file was created and contains valid results
+        expect(fs.existsSync(outputPath)).toBe(true);
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The test should have run successfully
+        expect(parsed.results.results[0].success).toBe(true);
+        expect(parsed.results.results[0].response.output).toContain('Processed');
+
+        // The metadata should exist (circular refs stripped, but normal data preserved)
+        expect(parsed.results.results[0].response.metadata).toBeDefined();
+        expect(parsed.results.results[0].response.metadata.normalData).toBe('this is fine');
+      });
+    });
+  });
+
   describe('JSON Schema Validation', () => {
     describe('#7096 - TestCase options and metadata schema validation', () => {
       it('validates config with combined options from merged schemas', () => {
