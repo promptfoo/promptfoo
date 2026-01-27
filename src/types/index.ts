@@ -89,7 +89,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFailing: z.string().optional(),
   filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
-  filterMetadata: z.string().optional(),
+  filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
