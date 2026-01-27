@@ -32,6 +32,7 @@ import {
   type Prompt,
   ResultFailureReason,
   type ResultsFile,
+  type SchedulerMetrics,
   type UnifiedConfig,
 } from '../types/index';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
@@ -332,6 +333,7 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
   concurrencyUsed?: number;
+  schedulerMetrics?: SchedulerMetrics;
 
   /**
    * The shareable URL for this evaluation, if it has been shared.
@@ -396,6 +398,11 @@ export default class Eval {
         ? rawConcurrencyUsed
         : undefined;
 
+    const schedulerMetrics =
+      resultsObj && 'schedulerMetrics' in resultsObj
+        ? (resultsObj.schedulerMetrics as SchedulerMetrics | undefined)
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -411,6 +418,9 @@ export default class Eval {
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+    if (schedulerMetrics) {
+      evalInstance.setSchedulerMetrics(schedulerMetrics);
     }
 
     // backfill vars
@@ -668,11 +678,16 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
-    } else if (this.durationMs !== undefined || this.concurrencyUsed !== undefined) {
-      // For V4 evals, store durationMs and concurrencyUsed in the results column
+    } else if (
+      this.durationMs !== undefined ||
+      this.concurrencyUsed !== undefined ||
+      this.schedulerMetrics
+    ) {
+      // For V4 evals, store durationMs, concurrencyUsed, and schedulerMetrics in the results column
       updateObj.results = {
         ...(this.durationMs !== undefined && { durationMs: this.durationMs }),
         ...(this.concurrencyUsed !== undefined && { concurrencyUsed: this.concurrencyUsed }),
+        ...(this.schedulerMetrics && { schedulerMetrics: this.schedulerMetrics }),
       };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
@@ -696,6 +711,10 @@ export default class Eval {
     if (typeof concurrency === 'number' && Number.isFinite(concurrency) && concurrency > 0) {
       this.concurrencyUsed = concurrency;
     }
+  }
+
+  setSchedulerMetrics(metrics: SchedulerMetrics) {
+    this.schedulerMetrics = metrics;
   }
 
   getPrompts() {
@@ -1203,6 +1222,7 @@ export default class Eval {
       durationMs: this.durationMs,
       maxConcurrency,
       concurrencyUsed: this.concurrencyUsed,
+      schedulerMetrics: this.schedulerMetrics,
     };
 
     for (const prompt of this.prompts) {

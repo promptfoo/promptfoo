@@ -32,6 +32,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import {
+  AlertTriangle,
   BarChart,
   ChevronDown,
   Clock,
@@ -908,6 +909,9 @@ export default function ResultsView({
                       {stats?.maxConcurrency != null && stats.maxConcurrency > 0
                         ? stats.maxConcurrency
                         : stats?.concurrencyUsed}
+                      {stats?.schedulerMetrics?.concurrencyReduced && (
+                        <AlertTriangle className="size-3 text-amber-500 ml-1" />
+                      )}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -921,9 +925,22 @@ export default function ResultsView({
                         {stats?.maxConcurrency ?? stats?.concurrencyUsed ?? 'N/A'} (from CLI -j,
                         config, or env)
                       </div>
+                      {stats?.schedulerMetrics?.concurrencyReduced && (
+                        <>
+                          <div className="mt-1 border-t border-border/50 pt-1">
+                            <strong className="text-amber-600 dark:text-amber-400">
+                              Rate limits detected
+                            </strong>
+                          </div>
+                          <div>Min concurrency: {stats.schedulerMetrics.minConcurrency}</div>
+                          <div>Final concurrency: {stats.schedulerMetrics.finalConcurrency}</div>
+                          <div>Rate limit hits: {stats.schedulerMetrics.rateLimitHits}</div>
+                        </>
+                      )}
                       {stats?.maxConcurrency != null &&
                         stats?.concurrencyUsed != null &&
-                        stats.concurrencyUsed !== stats.maxConcurrency && (
+                        stats.concurrencyUsed !== stats.maxConcurrency &&
+                        !stats?.schedulerMetrics?.concurrencyReduced && (
                           <div className="mt-1 text-xs text-muted-foreground">
                             Reduced due to _conversation or storeOutputAs
                           </div>
