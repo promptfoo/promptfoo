@@ -58,6 +58,7 @@ import type { Command } from 'commander';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   FailedPluginInfo,
+  GradingGuidanceExtractionMode,
   PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -414,6 +415,7 @@ export async function doGenerateRedteam(
   // The extraction runs in the background while other setup continues
   let guidanceExtractionPromise: Promise<GuidanceExtractionResult> | null = null;
   let guidanceText: string | undefined;
+  let configExtractionMode: GradingGuidanceExtractionMode | undefined;
 
   if (redteamConfig?.gradingGuidance) {
     // Resolve relative paths from the config file's directory
@@ -470,8 +472,14 @@ export async function doGenerateRedteam(
         logger.info('Using inline grading guidance text');
       }
     } else {
-      // Object form: { text?: string, file?: string }
+      // Object form: { text?: string, file?: string, extractionMode?: string }
       const guidanceConfig = redteamConfig.gradingGuidance;
+
+      // Capture extraction mode from config if specified
+      if (guidanceConfig.extractionMode) {
+        configExtractionMode = guidanceConfig.extractionMode;
+      }
+
       if (guidanceConfig.file) {
         const filePath = guidanceConfig.file.startsWith('file://')
           ? guidanceConfig.file.slice(7)
@@ -503,14 +511,39 @@ export async function doGenerateRedteam(
       // Assign to const for TypeScript type narrowing (guidanceText is now definitely string)
       const loadedGuidanceText = guidanceText;
 
-      // Extraction modes:
-      // - "llm" (default): LLM chunking approach - exhaustive, comprehensive
-      // - "agent": Claude Agent SDK with Grep/Read tools - focused, concise
-      // - "openai-agent": OpenAI Agents SDK with custom tools - alternative agent approach
-      const extractionMode = process.env.GRADING_GUIDANCE_EXTRACTION_MODE || 'llm';
+      // Extraction modes (config takes precedence over env var):
+      // - "openai_chunking" (default): LLM chunking approach - exhaustive, comprehensive
+      // - "claude_agent": Claude Agent SDK with Grep/Read tools - focused, concise
+      // - "openai_agent": OpenAI Agents SDK with custom tools - alternative agent approach
+      //
+      // For backwards compatibility, also support legacy env var values:
+      // - "llm" → openai_chunking
+      // - "agent" → claude_agent
+      // - "openai-agent" → openai_agent
+      const envMode = process.env.GRADING_GUIDANCE_EXTRACTION_MODE;
+      let extractionMode: GradingGuidanceExtractionMode = 'openai_chunking';
+
+      if (configExtractionMode) {
+        // Config takes precedence
+        extractionMode = configExtractionMode;
+      } else if (envMode) {
+        // Map legacy env var values to new mode names
+        if (envMode === 'agent' || envMode === 'claude_agent') {
+          extractionMode = 'claude_agent';
+        } else if (envMode === 'openai-agent' || envMode === 'openai_agent') {
+          extractionMode = 'openai_agent';
+        } else if (envMode === 'llm' || envMode === 'openai_chunking') {
+          extractionMode = 'openai_chunking';
+        } else {
+          logger.warn(
+            `[GradingGuidance] Unknown extraction mode "${envMode}", using default "openai_chunking"`,
+          );
+        }
+      }
+
       const pluginIds = plugins.map((p) => p.id);
 
-      if (extractionMode === 'agent') {
+      if (extractionMode === 'claude_agent') {
         logger.info(
           '[GradingGuidance] Starting Claude agent-based extraction (runs parallel with synthesis)...',
         );
@@ -519,7 +552,7 @@ export async function doGenerateRedteam(
           loadedGuidanceText,
           pluginIds,
         );
-      } else if (extractionMode === 'openai-agent') {
+      } else if (extractionMode === 'openai_agent') {
         logger.info(
           '[GradingGuidance] Starting OpenAI agent-based extraction (runs parallel with synthesis)...',
         );
@@ -529,6 +562,7 @@ export async function doGenerateRedteam(
           pluginIds,
         );
       } else {
+        // Default: openai_chunking
         logger.info(
           '[GradingGuidance] Starting LLM-based extraction (runs parallel with synthesis)...',
         );

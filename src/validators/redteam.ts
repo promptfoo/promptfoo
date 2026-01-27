@@ -320,10 +320,16 @@ export const RedteamConfigSchema = z
         z.object({
           text: z.string().optional(),
           file: z.string().optional(),
+          extractionMode: z
+            .enum(['openai_chunking', 'openai_agent', 'claude_agent'])
+            .optional()
+            .describe(
+              'Extraction mode: openai_chunking (default, LLM-based), openai_agent (requires @openai/agents), claude_agent (requires @anthropic-ai/claude-agent-sdk)',
+            ),
         }),
       ])
       .optional()
-      .describe('External grading guidance document - file path (.txt, .md) or inline text'),
+      .describe('External grading guidance document - file path (.txt, .md, .pdf) or inline text'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

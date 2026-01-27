@@ -216,12 +216,22 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   strict?: boolean;
 }
 
+/**
+ * Extraction mode for grading guidance
+ * - openai_chunking: Split document into chunks, use OpenAI LLM to extract (default, no extra dependencies)
+ * - openai_agent: Use OpenAI Agents SDK with custom file tools (requires @openai/agents)
+ * - claude_agent: Use Claude Agent SDK with read-only tools (requires @anthropic-ai/claude-agent-sdk)
+ */
+export type GradingGuidanceExtractionMode = 'openai_chunking' | 'openai_agent' | 'claude_agent';
+
 // Grading guidance configuration - can be inline text or a file path
 export interface GradingGuidanceConfig {
   // Inline guidance text
   text?: string;
-  // Path to a text/markdown file containing guidance (supports .txt, .md)
+  // Path to a text/markdown file containing guidance (supports .txt, .md, .pdf)
   file?: string;
+  // Extraction mode for processing the guidance document
+  extractionMode?: GradingGuidanceExtractionMode;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
