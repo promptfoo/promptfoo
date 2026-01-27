@@ -32,6 +32,23 @@ export type { VarValue } from './shared';
 
 import type { TraceData } from './tracing';
 
+/**
+ * Minimal interface for RateLimitRegistry to avoid circular dependency.
+ * The actual implementation is in scheduler/rateLimitRegistry.ts.
+ */
+export interface RateLimitRegistryRef {
+  execute: <T>(
+    provider: ApiProvider,
+    callFn: () => Promise<T>,
+    options?: {
+      getHeaders?: (result: T) => Record<string, string> | undefined;
+      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
+      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+    },
+  ) => Promise<T>;
+  dispose: () => void;
+}
+
 export * from '../redteam/types';
 export * from './prompts';
 export * from './providers';
@@ -182,6 +199,12 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Rate limit registry for adaptive concurrency control.
+   * When provided, provider calls are wrapped with rate limiting and retry logic.
+   */
+  rateLimitRegistry?: RateLimitRegistryRef;
 }
 
 export const EvaluateOptionsSchema = z.object({

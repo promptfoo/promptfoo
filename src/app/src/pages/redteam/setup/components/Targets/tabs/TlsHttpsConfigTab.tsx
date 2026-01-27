@@ -110,7 +110,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   pfx: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfx,
                   pfxPath: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfxPath,
                   passphrase:
-                    certType !== 'pfx' && certType !== 'jks'
+                    certType !== 'pfx' && certType !== 'jks' && certType !== 'pem'
                       ? undefined
                       : selectedTarget.config?.tls?.passphrase,
                   jksPath: certType !== 'jks' ? undefined : selectedTarget.config?.tls?.jksPath,
@@ -381,6 +381,23 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     }
                   />
                 )}
+              </div>
+
+              {/* Private Key Password (Optional) */}
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <h4 className="font-medium">Private Key Password (Optional)</h4>
+                <SensitiveTextField
+                  label="Password"
+                  placeholder="Enter password for encrypted private key"
+                  value={selectedTarget.config?.tls?.passphrase || ''}
+                  onChange={(e) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      passphrase: e.target.value,
+                    })
+                  }
+                  helperText="Required only if your private key file is encrypted (e.g., starts with 'BEGIN ENCRYPTED PRIVATE KEY')"
+                />
               </div>
             </div>
           )}

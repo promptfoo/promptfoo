@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
@@ -805,7 +806,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="e.g., Data Privacy Policy"
               />
               {policyDialog.errors.name && (
-                <p className="text-sm text-destructive">{policyDialog.errors.name}</p>
+                <HelperText error>{policyDialog.errors.name}</HelperText>
               )}
             </div>
             <div className="space-y-2">
@@ -824,7 +825,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="Enter the policy text that describes what should be checked..."
               />
               {policyDialog.errors.policyText && (
-                <p className="text-sm text-destructive">{policyDialog.errors.policyText}</p>
+                <HelperText error>{policyDialog.errors.policyText}</HelperText>
               )}
             </div>
           </div>

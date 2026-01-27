@@ -22,7 +22,13 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { redteamProviderManager } from './redteam/providers/shared';
 import { getSessionId } from './redteam/util';
+import {
+  createProviderRateLimitOptions,
+  createRateLimitRegistry,
+  type RateLimitRegistry,
+} from './scheduler';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -292,6 +298,7 @@ export async function runEval({
   isRedteam,
   abortSignal,
   evalId,
+  rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -415,11 +422,34 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Wrap provider call with rate limit registry if available
+      if (rateLimitRegistry) {
+        response = await rateLimitRegistry.execute(
+          activeProvider,
+          () =>
+            activeProvider.callApi(
+              renderedPrompt,
+              callApiContext,
+              abortSignal ? { abortSignal } : undefined,
+            ),
+          createProviderRateLimitOptions(),
+        );
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
+
+      // Sanitize response metadata to remove circular references (e.g., leaked Timeout objects)
+      // This MUST happen here - circular refs cause heap overflow during downstream processing
+      // (logging, deep cloning, etc.) before reaching sanitizeForDb in evalResult.ts
+      // See: https://github.com/promptfoo/promptfoo/issues/7266
+      if (response.metadata) {
+        const sanitizedMetadata = safeJsonStringify(response.metadata);
+        response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -443,7 +473,9 @@ export async function runEval({
       });
     }
 
-    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug('Evaluator response', {
+      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+    });
     logger.debug(
       `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
     );
@@ -792,6 +824,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  rateLimitRegistry: RateLimitRegistry | undefined;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -813,6 +846,42 @@ class Evaluator {
         : [];
 
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+
+    // Create rate limit registry for adaptive concurrency control
+    this.rateLimitRegistry = createRateLimitRegistry({
+      maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+    });
+
+    // Add debug logging for rate limit events
+    this.rateLimitRegistry.on('ratelimit:hit', (data) => {
+      logger.debug(`[Scheduler] Rate limit hit for ${data.rateLimitKey}`, {
+        retryAfterMs: data.retryAfterMs,
+        resetAt: data.resetAt,
+        concurrencyChange: data.concurrencyChange,
+      });
+    });
+    this.rateLimitRegistry.on('ratelimit:learned', (data) => {
+      logger.debug(`[Scheduler] Learned rate limits for ${data.rateLimitKey}`, {
+        requestLimit: data.requestLimit,
+        tokenLimit: data.tokenLimit,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:decreased', (data) => {
+      logger.debug(`[Scheduler] Concurrency decreased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:increased', (data) => {
+      logger.debug(`[Scheduler] Concurrency increased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+
+    // Share rate limit registry with redteam provider manager
+    // This ensures redteam internal providers also benefit from rate limiting
+    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -1270,6 +1339,7 @@ class Evaluator {
                 concurrency,
                 abortSignal: options.abortSignal,
                 evalId: this.evalRecord.id,
+                rateLimitRegistry: this.rateLimitRegistry,
               });
               promptIdx++;
             }
@@ -1553,6 +1623,9 @@ class Evaluator {
         if (!didTimeout) {
           throw error;
         }
+        const sanitizedTestCase = { ...evalStep.test };
+        delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1574,7 +1647,7 @@ class Evaluator {
           latencyMs: timeoutMs,
           promptIdx: evalStep.promptIdx,
           testIdx: evalStep.testIdx,
-          testCase: evalStep.test,
+          testCase: sanitizedTestCase,
           promptId: evalStep.prompt.id || '',
         };
 
@@ -2244,6 +2317,31 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Log rate limit metrics for debugging before cleanup
+      if (this.rateLimitRegistry) {
+        const metrics = this.rateLimitRegistry.getMetrics();
+        for (const [key, m] of Object.entries(metrics)) {
+          if (m.totalRequests > 0) {
+            logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              totalRequests: m.totalRequests,
+              completedRequests: m.completedRequests,
+              failedRequests: m.failedRequests,
+              rateLimitHits: m.rateLimitHits,
+              retriedRequests: m.retriedRequests,
+              avgLatencyMs: Math.round(m.avgLatencyMs),
+              p50LatencyMs: Math.round(m.p50LatencyMs),
+              p99LatencyMs: Math.round(m.p99LatencyMs),
+            });
+          }
+        }
+      }
+
+      // Clean up rate limit registry resources
+      this.rateLimitRegistry?.dispose();
+
+      // Clear registry from redteam provider manager
+      redteamProviderManager.setRateLimitRegistry(undefined);
 
       // Reset cliState.maxConcurrency to prevent stale state between evaluations
       cliState.maxConcurrency = undefined;
