@@ -128,13 +128,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
       this.modelName === 'codex-mini-latest' ||
-      this.modelName.startsWith('gpt-5')
+      this.isGPT5Model()
     );
   }
 
@@ -219,8 +227,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
-    // Add verbosity for GPT-5.1 models if configured
-    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+    // Add verbosity for GPT-5 models if configured
+    if (this.isGPT5Model() && config.verbosity) {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
@@ -258,15 +266,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    // Handle reasoning parameters for o-series models
+    // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5'))
-    ) {
+    if (config.reasoning && this.isReasoningModel()) {
       body.reasoning = config.reasoning;
     }
 
