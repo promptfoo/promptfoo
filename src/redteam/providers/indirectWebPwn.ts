@@ -162,9 +162,12 @@ export default class IndirectWebPwnProvider implements ApiProvider {
   /**
    * Check if the web page was fetched via the task API.
    */
-  private async checkPageFetched(uuid: string): Promise<WebPageTrackingResponse> {
+  private async checkPageFetched(
+    uuid: string,
+    evalId?: string,
+  ): Promise<WebPageTrackingResponse> {
     const url = getRemoteGenerationUrl();
-    logger.debug('[IndirectWebPwn] Checking page fetch status', { url, uuid });
+    logger.debug('[IndirectWebPwn] Checking page fetch status', { url, uuid, evalId });
 
     const response = await fetchWithRetries(
       url,
@@ -174,6 +177,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
+          evalId,
           email: getUserEmail(),
         }),
       },
@@ -315,7 +319,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         }
 
         // 3. Check if page was fetched
-        const tracking = await this.checkPageFetched(webPage.uuid);
+        const tracking = await this.checkPageFetched(webPage.uuid, evalId);
 
         logger.debug('[IndirectWebPwn] Tracking check', {
           uuid: webPage.uuid,
