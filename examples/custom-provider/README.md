@@ -42,6 +42,8 @@ This directory contains two progressively advanced examples:
 | `customProvider.js`   | Beginner     | OpenAI (direct)        | Plain text      | Learn provider basics |
 | `vercelAiProvider.js` | Intermediate | Anthropic (via AI SDK) | Structured JSON | Production patterns   |
 
+**Note**: `customProvider.js` includes both ESM and CommonJS import/export patterns as comments.
+
 ---
 
 ## Example 1: Basic Custom Provider
@@ -266,18 +268,20 @@ Example structured response:
 
 ```
 examples/custom-provider/
-├── customProvider.js              # Basic provider example
+├── customProvider.js              # Basic provider example (ESM with CommonJS alternatives commented)
 ├── vercelAiProvider.js            # Vercel AI SDK provider
 ├── schemaValidation.js            # Zod schema for structured output
 ├── promptfooconfig.yaml           # Config for basic provider
 ├── promptfooconfig-vercel-ai.yaml # Config for Vercel AI provider
+├── prompts/
+│   └── chat.json                  # Chat messages for Vercel AI example
 ├── prompts.txt                    # Prompt templates (basic example)
 ├── vars.csv                       # Test variables (basic example)
 ├── package.json                   # Dependencies
 └── README.md                      # This file
 ```
 
-All files use **ES modules** (ESM) with `"type": "module"` in `package.json`.
+All files use **ES modules** (ESM) with `"type": "module"` in `package.json`. The basic provider includes commented examples of CommonJS syntax for reference.
 
 ---
 

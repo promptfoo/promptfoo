@@ -2,7 +2,7 @@
 description: Custom provider using Vercel AI SDK with structured output
 
 prompts:
-  - '[{"role": "system", "content": "You are a helpful assistant that provides structured responses."}, {"role": "user", "content": "{{question}}"}]'
+  - file://prompts/chat.json
 
 providers:
   - id: file://vercelAiProvider.js
