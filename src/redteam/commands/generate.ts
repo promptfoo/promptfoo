@@ -422,16 +422,33 @@ export async function doGenerateRedteam(
     if (typeof redteamConfig.gradingGuidance === 'string') {
       // If it's a string, check if it's a file path or inline text
       const potentialPath = redteamConfig.gradingGuidance;
-      if (
+
+      // Determine if this looks like a file path and if the file exists
+      // Use explicit file:// prefix or check if file exists to avoid false positives
+      // (e.g., "This guidance is for test.txt files" should not be treated as a file path)
+      let isFilePath = false;
+      let filePath = potentialPath;
+
+      if (potentialPath.startsWith('file://')) {
+        // Explicit file:// prefix - always treat as file path
+        isFilePath = true;
+        filePath = potentialPath.slice(7);
+      } else if (
         potentialPath.endsWith('.txt') ||
         potentialPath.endsWith('.md') ||
-        potentialPath.endsWith('.pdf') ||
-        potentialPath.startsWith('file://')
+        potentialPath.endsWith('.pdf')
       ) {
-        // It looks like a file path
-        const filePath = potentialPath.startsWith('file://')
-          ? potentialPath.slice(7)
-          : potentialPath;
+        // Looks like a file extension - check if file actually exists
+        const testPath = path.isAbsolute(potentialPath)
+          ? potentialPath
+          : path.resolve(configDir, potentialPath);
+        if (fs.existsSync(testPath)) {
+          isFilePath = true;
+          filePath = potentialPath;
+        }
+      }
+
+      if (isFilePath) {
         const absolutePath = path.isAbsolute(filePath)
           ? filePath
           : path.resolve(configDir, filePath);
@@ -483,6 +500,9 @@ export async function doGenerateRedteam(
     // Start extraction early (non-blocking) - runs in PARALLEL with synthesis
     // Extraction is only needed for the output config, not for test generation
     if (guidanceText && process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false') {
+      // Assign to const for TypeScript type narrowing (guidanceText is now definitely string)
+      const loadedGuidanceText = guidanceText;
+
       // Extraction modes:
       // - "llm" (default): LLM chunking approach - exhaustive, comprehensive
       // - "agent": Claude Agent SDK with Grep/Read tools - focused, concise
@@ -495,14 +515,17 @@ export async function doGenerateRedteam(
           '[GradingGuidance] Starting Claude agent-based extraction (runs parallel with synthesis)...',
         );
         // Fire off Claude agent-based extraction without awaiting
-        guidanceExtractionPromise = extractGuidanceForPluginsWithAgent(guidanceText!, pluginIds);
+        guidanceExtractionPromise = extractGuidanceForPluginsWithAgent(
+          loadedGuidanceText,
+          pluginIds,
+        );
       } else if (extractionMode === 'openai-agent') {
         logger.info(
           '[GradingGuidance] Starting OpenAI agent-based extraction (runs parallel with synthesis)...',
         );
         // Fire off OpenAI agent-based extraction without awaiting
         guidanceExtractionPromise = extractGuidanceForPluginsWithOpenAIAgent(
-          guidanceText!,
+          loadedGuidanceText,
           pluginIds,
         );
       } else {
@@ -512,7 +535,7 @@ export async function doGenerateRedteam(
         // Fire off LLM-based extraction without awaiting - will be awaited after synthesis completes
         guidanceExtractionPromise = (async () => {
           const redteamProvider = await redteamProviderManager.getProvider({});
-          return extractGuidanceForPlugins(guidanceText!, pluginIds, redteamProvider);
+          return extractGuidanceForPlugins(loadedGuidanceText, pluginIds, redteamProvider);
         })();
       }
     }

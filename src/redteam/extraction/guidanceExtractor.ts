@@ -542,9 +542,12 @@ export async function extractGuidanceForPluginsWithAgent(
         max_turns: options?.maxTurns || 100,
         // Allow read-only file tools for searching the document
         custom_allowed_tools: ['Read', 'Grep', 'Glob', 'LS'],
-        // Bypass permissions since we're only using read-only tools in a temp directory
-        permission_mode: 'bypassPermissions',
-        allow_dangerously_skip_permissions: true,
+        // SECURITY: Using 'dontAsk' permission mode is safe here because:
+        // 1. Only read-only tools are allowed (Read, Grep, Glob, LS) - no write/execute
+        // 2. Agent operates in an isolated temp directory created just for this extraction
+        // 3. Temp directory is cleaned up in a finally block after extraction completes
+        // 4. No user interaction is needed for read-only operations on ephemeral files
+        permission_mode: 'dontAsk',
         // Don't persist the session - this is an ephemeral extraction
         persist_session: false,
       },
