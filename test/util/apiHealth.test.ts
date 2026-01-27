@@ -151,9 +151,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle timeout error from fetchWithTimeout gracefully', async () => {
-      mockedFetchWithTimeout.mockRejectedValueOnce(
-        new Error('Request timed out after 5000 ms'),
-      );
+      mockedFetchWithTimeout.mockRejectedValueOnce(new Error('Request timed out after 5000 ms'));
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('OK');
