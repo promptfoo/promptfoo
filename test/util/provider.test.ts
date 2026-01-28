@@ -232,14 +232,24 @@ describe('isOpenAiProvider', () => {
   });
 
   it('detects Azure OpenAI providers', () => {
-    expect(isOpenAiProvider('azure:chat:my-deployment')).toBe(true);
-    expect(isOpenAiProvider('azure:completion:my-deployment')).toBe(true);
+    // azureopenai: is always OpenAI
     expect(isOpenAiProvider('azureopenai:chat:my-deployment')).toBe(true);
+    // azure: with OpenAI model indicators
+    expect(isOpenAiProvider('azure:chat:gpt-4-deployment')).toBe(true);
+    expect(isOpenAiProvider('azure:chat:my-gpt-35-turbo')).toBe(true);
+    expect(isOpenAiProvider('azure:completion:davinci-002')).toBe(true);
+    expect(isOpenAiProvider('azure:embedding:text-embedding-ada-002')).toBe(true);
+  });
+
+  it('does not match Azure without OpenAI model indicators', () => {
+    expect(isOpenAiProvider('azure:chat:my-custom-deployment')).toBe(false);
+    expect(isOpenAiProvider('azure:foundry-agent:my-agent')).toBe(false);
   });
 
   it('is case insensitive', () => {
     expect(isOpenAiProvider('OpenAI:chat:gpt-4')).toBe(true);
-    expect(isOpenAiProvider('AZURE:chat:my-deployment')).toBe(true);
+    expect(isOpenAiProvider('AZUREOPENAI:chat:my-deployment')).toBe(true);
+    expect(isOpenAiProvider('AZURE:chat:GPT-4-deployment')).toBe(true);
   });
 
   it('does not match non-OpenAI providers', () => {

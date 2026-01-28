@@ -164,9 +164,28 @@ export function isOpenAiProvider(providerId: string): boolean {
     return true;
   }
 
-  // Azure OpenAI (Azure always uses OpenAI models like GPT)
-  if (lowerProviderId.startsWith('azure:') || lowerProviderId.startsWith('azureopenai:')) {
+  // Azure OpenAI (azureopenai: is always OpenAI)
+  if (lowerProviderId.startsWith('azureopenai:')) {
     return true;
+  }
+
+  // Azure with OpenAI model name indicators
+  if (lowerProviderId.startsWith('azure:')) {
+    const openAiModelIndicators = [
+      'gpt',
+      'openai',
+      'davinci',
+      'curie',
+      'babbage',
+      'ada',
+      'text-embedding',
+      'whisper',
+      'dall-e',
+      'tts',
+    ];
+    if (openAiModelIndicators.some((indicator) => lowerProviderId.includes(indicator))) {
+      return true;
+    }
   }
 
   return false;
