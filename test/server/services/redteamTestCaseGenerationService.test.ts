@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Helper to create mock Response
 function createMockResponse(data: unknown, ok = true, status = 200): Response {
@@ -25,9 +25,7 @@ describe('redteamTestCaseGenerationService', () => {
         fetchWithRetries: mockFetchWithRetries,
       }));
       vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi
-          .fn()
-          .mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
         neverGenerateRemote: vi.fn().mockReturnValue(false),
       }));
       vi.doMock('../../../src/providers/shared', () => ({
@@ -76,9 +74,7 @@ describe('redteamTestCaseGenerationService', () => {
         fetchWithRetries: mockFetchWithRetries,
       }));
       vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi
-          .fn()
-          .mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
         neverGenerateRemote: vi.fn().mockReturnValue(false),
       }));
       vi.doMock('../../../src/providers/shared', () => ({
@@ -130,9 +126,7 @@ describe('redteamTestCaseGenerationService', () => {
         fetchWithRetries: mockFetchWithRetries,
       }));
       vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi
-          .fn()
-          .mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
         neverGenerateRemote: vi.fn().mockReturnValue(false),
       }));
       vi.doMock('../../../src/providers/shared', () => ({
@@ -180,9 +174,7 @@ describe('redteamTestCaseGenerationService', () => {
         fetchWithRetries: mockFetchWithRetries,
       }));
       vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi
-          .fn()
-          .mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
         neverGenerateRemote: vi.fn().mockReturnValue(false),
       }));
       vi.doMock('../../../src/providers/shared', () => ({
