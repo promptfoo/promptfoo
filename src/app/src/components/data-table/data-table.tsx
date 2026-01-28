@@ -397,12 +397,16 @@ export function DataTable<TData, TValue = unknown>({
                           onMouseDown={header.getResizeHandler()}
                           onTouchStart={header.getResizeHandler()}
                           onClick={(e) => e.stopPropagation()}
-                          className={cn(
-                            'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
-                            'hover:bg-primary/50',
-                            header.column.getIsResizing() && 'bg-primary',
-                          )}
-                        />
+                          className="group/resize absolute -right-[5px] top-0 z-[1] h-full w-[10px] cursor-col-resize select-none touch-none flex items-center justify-center"
+                        >
+                          <div
+                            className={cn(
+                              'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-muted-foreground/50 transition-all duration-200',
+                              'group-hover/resize:w-[3px] group-hover/resize:bg-primary group-hover/resize:rounded',
+                              header.column.getIsResizing() && 'w-[3px] bg-primary/70 rounded',
+                            )}
+                          />
+                        </div>
                       )}
                     </th>
                   );
