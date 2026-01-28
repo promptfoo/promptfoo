@@ -1084,7 +1084,10 @@ export default function Review({
                     verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
-                  updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                  updateRunOption={(
+                    key: keyof RedteamRunOptions,
+                    value: RedteamRunOptions[keyof RedteamRunOptions],
+                  ) => {
                     if (key === 'delay') {
                       updateConfig('target', {
                         ...config.target,

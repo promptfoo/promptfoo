@@ -765,6 +765,65 @@ describe('EvalOutputCell', () => {
     expect(latencyElement).toBeInTheDocument();
   });
 
+  it('handles searchText containing complex regex special characters', () => {
+    const complexRegex = '(?=.*[A-Z])(?=.*\\d)(?=.*[$@$!%*?&])[A-Za-z\\d$@$!%*?&]{8,}';
+    renderWithProviders(<EvalOutputCell {...defaultProps} searchText={complexRegex} />);
+
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('updates activeRating when output prop changes with different human rating values', () => {
+    const initialOutput = {
+      ...defaultProps.output,
+      gradingResult: {
+        componentResults: [
+          {
+            assertion: {
+              type: 'human' as AssertionType,
+            },
+            pass: true,
+            score: 1.0,
+            reason: 'User rated as good',
+          },
+        ],
+        pass: true,
+        score: 1.0,
+        reason: 'User rated as good',
+      },
+    };
+
+    const { rerender } = renderWithProviders(
+      <EvalOutputCell {...defaultProps} output={initialOutput} />,
+    );
+
+    const thumbsUpButton = screen.getByRole('button', { name: 'Mark test passed' });
+    expect(thumbsUpButton).toHaveClass('active');
+
+    const updatedOutput = {
+      ...defaultProps.output,
+      gradingResult: {
+        componentResults: [
+          {
+            assertion: {
+              type: 'human' as AssertionType,
+            },
+            pass: false,
+            score: 0.0,
+            reason: 'User rated as bad',
+          },
+        ],
+        pass: false,
+        score: 0.0,
+        reason: 'User rated as bad',
+      },
+    };
+
+    rerender(<EvalOutputCell {...defaultProps} output={updatedOutput} />);
+
+    const thumbsDownButton = screen.getByRole('button', { name: 'Mark test failed' });
+    expect(thumbsDownButton).toHaveClass('active');
+  });
+
   it('renders video metadata with long text values', () => {
     // Test that video metadata fields are rendered correctly
     const propsWithVideoMetadata: MockEvalOutputCellProps = {

@@ -1,8 +1,12 @@
 {
   "extends": ["local>promptfoo/renovate-config"],
-  "rebaseStalePrs": true,
+  "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
-  "postUpdateOptions": ["npmDedupe"],
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
+  "constraints": {
+    "npm": ">= 11"
+  },
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -17,6 +21,12 @@
     "test/**/go.mod"
   ],
   "packageRules": [
+    {
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
     {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
@@ -185,7 +195,7 @@
     },
     {
       "description": "Group example directory updates to reduce noise",
-      "matchPaths": ["examples/**/package.json"],
+      "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
       "schedule": ["before 6am on the first day of the month"]
     },

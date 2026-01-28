@@ -284,7 +284,8 @@ export function isBasicRefusal(response: string): boolean {
 export function removePrefix(str: string, prefix: string) {
   // Remove asterisks from the prefix if if they exist. GPT loves to add them. eg: **Prompt:**
   str = str.replace(/^\*+(.+?)\*+:?\s*/i, '$1');
-  str = str.replace(new RegExp(prefix + ':', 'i'), '').trim();
+  // Allow optional space before colon (e.g., "Prompt :" in French typography)
+  str = str.replace(new RegExp(prefix + '\\s*:', 'i'), '').trim();
   return str;
 }
 

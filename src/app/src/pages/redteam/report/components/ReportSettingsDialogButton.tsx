@@ -75,7 +75,7 @@ const ReportSettingsDialogButton = () => {
                 checked={showPercentagesOnRiskCards}
                 onCheckedChange={(checked) => setShowPercentagesOnRiskCards(checked === true)}
               />
-              <Label htmlFor="show-percentages" className="cursor-pointer">
+              <Label htmlFor="show-percentages" inline className="cursor-pointer">
                 Show percentages on risk cards
               </Label>
             </div>

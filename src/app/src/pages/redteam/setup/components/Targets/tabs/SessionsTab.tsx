@@ -9,8 +9,16 @@ import {
 } from '@app/components/ui/collapsible';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
+import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
@@ -21,16 +29,258 @@ import {
   ChevronDown,
   Info,
   Play,
+  Plus,
   Send,
+  Trash2,
 } from 'lucide-react';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
+
+interface SessionEndpointConfigProps {
+  session?: {
+    url?: string;
+    method?: 'GET' | 'POST';
+    headers?: Record<string, string>;
+    body?: Record<string, unknown> | string;
+    responseParser?: string;
+  };
+  onUpdate: (session: SessionEndpointConfigProps['session']) => void;
+}
+
+const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, onUpdate }) => {
+  const [headers, setHeaders] = React.useState<Array<{ key: string; value: string }>>(
+    session?.headers
+      ? Object.entries(session.headers).map(([key, value]) => ({ key, value }))
+      : [{ key: '', value: '' }],
+  );
+
+  const updateSession = (field: string, value: unknown) => {
+    onUpdate({
+      ...session,
+      [field]: value,
+    });
+  };
+
+  const updateHeaders = (newHeaders: Array<{ key: string; value: string }>) => {
+    setHeaders(newHeaders);
+    const headersObj = newHeaders.reduce(
+      (acc, { key, value }) => {
+        if (key.trim()) {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+    updateSession('headers', Object.keys(headersObj).length > 0 ? headersObj : undefined);
+  };
+
+  const addHeader = () => {
+    updateHeaders([...headers, { key: '', value: '' }]);
+  };
+
+  const removeHeader = (index: number) => {
+    const newHeaders = headers.filter((_, i) => i !== index);
+    updateHeaders(newHeaders.length > 0 ? newHeaders : [{ key: '', value: '' }]);
+  };
+
+  const updateHeader = (index: number, field: 'key' | 'value', value: string) => {
+    const newHeaders = [...headers];
+    newHeaders[index] = { ...newHeaders[index], [field]: value };
+    updateHeaders(newHeaders);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Alert variant="info">
+        <Info className="size-4" />
+        <AlertContent>
+          <AlertDescription className="text-sm">
+            <p className="mb-2 font-medium">Session Endpoint Configuration</p>
+            <p>
+              Configure a separate endpoint that will be called to obtain session IDs before making
+              API requests. The session ID will be available as{' '}
+              <code className="rounded bg-muted px-1 font-mono text-xs">{'{{sessionId}}'}</code> in
+              your main request.
+            </p>
+          </AlertDescription>
+        </AlertContent>
+      </Alert>
+
+      {/* Session Endpoint URL */}
+      <div>
+        <Label htmlFor="session-url" className="text-sm font-medium">
+          Session Endpoint URL
+        </Label>
+        <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
+          The URL of the endpoint that returns session IDs
+        </p>
+        <Input
+          id="session-url"
+          value={session?.url || ''}
+          placeholder="https://api.example.com/auth/session"
+          onChange={(e) => updateSession('url', e.target.value)}
+          className="font-mono text-xs"
+        />
+      </div>
+
+      {/* Session Endpoint Method */}
+      <div>
+        <Label htmlFor="session-method" className="text-sm font-medium">
+          HTTP Method
+        </Label>
+        <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
+          The HTTP method to use when calling the session endpoint
+        </p>
+        <Select
+          value={session?.method || 'POST'}
+          onValueChange={(value) => updateSession('method', value)}
+        >
+          <SelectTrigger id="session-method" className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="GET">GET</SelectItem>
+            <SelectItem value="POST">POST</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Session Endpoint Headers */}
+      <div>
+        <Label className="text-sm font-medium">Headers</Label>
+        <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
+          Headers to send with the session endpoint request. Template variables like{' '}
+          <code className="font-mono text-xs">{'{{api_key}}'}</code> are supported.
+        </p>
+        <div className="space-y-2">
+          {headers.map((header, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={header.key}
+                onChange={(e) => updateHeader(index, 'key', e.target.value)}
+                placeholder="Header name"
+                className="flex-1 font-mono text-xs"
+              />
+              <Input
+                value={header.value}
+                onChange={(e) => updateHeader(index, 'value', e.target.value)}
+                placeholder="Header value"
+                className="flex-1 font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeHeader(index)}
+                className="shrink-0"
+              >
+                <Trash2 className="size-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+          <Button type="button" variant="outline" size="sm" onClick={addHeader} className="mt-1">
+            <Plus className="mr-1.5 size-3.5" />
+            Add Header
+          </Button>
+        </div>
+      </div>
+
+      {/* Session Endpoint Body (only for POST) */}
+      {(session?.method || 'POST') === 'POST' && (
+        <div>
+          <Label htmlFor="session-body" className="text-sm font-medium">
+            Request Body
+          </Label>
+          <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
+            JSON body to send with the session endpoint request. Template variables are supported.
+          </p>
+          <Textarea
+            id="session-body"
+            value={
+              typeof session?.body === 'string'
+                ? session.body
+                : session?.body
+                  ? JSON.stringify(session.body, null, 2)
+                  : ''
+            }
+            placeholder={'{\n  "client_id": "{{client_id}}"\n}'}
+            onChange={(e) => {
+              const value = e.target.value;
+              try {
+                const parsed = JSON.parse(value);
+                updateSession('body', parsed);
+              } catch {
+                updateSession('body', value);
+              }
+            }}
+            className="min-h-[100px] font-mono text-xs"
+          />
+        </div>
+      )}
+
+      {/* Response Parser */}
+      <div>
+        <Label htmlFor="session-response-parser" className="text-sm font-medium">
+          Session ID Extraction
+        </Label>
+        <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
+          Specify how to extract the session ID from the session endpoint response
+        </p>
+        <Input
+          id="session-response-parser"
+          value={session?.responseParser || ''}
+          placeholder="e.g., data.body.sessionId or data.headers['x-session-id']"
+          onChange={(e) => updateSession('responseParser', e.target.value)}
+          className="font-mono text-xs"
+        />
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Common patterns: <code className="rounded bg-muted px-1">data.body.sessionId</code>,{' '}
+          <code className="rounded bg-muted px-1">data.body.session.id</code>,{' '}
+          <code className="rounded bg-muted px-1">data.headers['x-session-token']</code>
+        </p>
+      </div>
+
+      {/* Usage hint */}
+      <Alert variant="info">
+        <Info className="size-4" />
+        <AlertContent>
+          <AlertDescription className="text-sm">
+            <p className="mb-1.5 font-medium">How to use the session ID:</p>
+            <p className="mb-2">
+              Once configured, the session ID will be automatically fetched and made available as{' '}
+              <code className="rounded bg-muted px-1 font-mono text-xs">{'{{sessionId}}'}</code> in
+              your main API request.
+            </p>
+            <div className="space-y-1 text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">Header:</span>{' '}
+                <code className="font-mono text-xs">X-Session: {'{{sessionId}}'}</code>
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Body:</span>{' '}
+                <code className="font-mono text-xs">
+                  {'{"session_id": "{{sessionId}}", "message": "{{prompt}}"}'}
+                </code>
+              </p>
+            </div>
+          </AlertDescription>
+        </AlertContent>
+      </Alert>
+    </div>
+  );
+};
 
 interface SessionsTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+}
+
+interface SessionRequest {
+  prompt?: string;
 }
 
 interface TestResult {
@@ -40,10 +290,10 @@ interface TestResult {
   error?: string;
   details?: {
     sessionId?: string;
-    request1?: any;
-    response1?: any;
-    request2?: any;
-    response2?: any;
+    request1?: SessionRequest;
+    response1?: unknown;
+    request2?: SessionRequest;
+    response2?: unknown;
     sessionSource?: string;
     hasSessionIdTemplate?: boolean;
     hasSessionParser?: boolean;
@@ -95,8 +345,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         body: JSON.stringify({
           provider: selectedTarget,
           sessionConfig: {
-            sessionSource: selectedTarget.config.sessionSource,
-            sessionParser: selectedTarget.config.sessionParser,
+            sessionSource: selectedTarget.config?.sessionSource,
+            sessionParser: selectedTarget.config?.sessionParser,
           },
           // Pass the main input variable for multi-input configurations
           mainInputVariable,
@@ -148,7 +398,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               type="radio"
               name="stateful"
               value="true"
-              checked={String(selectedTarget.config.stateful ?? false) === 'true'}
+              checked={String(selectedTarget.config?.stateful ?? false) === 'true'}
               onChange={(e) => {
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
@@ -167,7 +417,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               type="radio"
               name="stateful"
               value="false"
-              checked={String(selectedTarget.config.stateful ?? false) === 'false'}
+              checked={String(selectedTarget.config?.stateful ?? false) === 'false'}
               onChange={(e) => {
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
@@ -184,7 +434,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         </div>
 
         {/* Info alert when system is not stateful */}
-        {selectedTarget.config.stateful === false && (
+        {selectedTarget.config?.stateful === false && (
           <Alert variant="info" className="mt-3">
             <Info className="size-4" />
             <AlertContent>
@@ -199,7 +449,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       </div>
 
       {/* Only show session management options if the system is stateful */}
-      {selectedTarget.config.stateful !== false && (
+      {selectedTarget.config?.stateful !== false && (
         <>
           <Separator />
 
@@ -217,8 +467,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   name="sessionSource"
                   value="server"
                   checked={
-                    selectedTarget.config.sessionSource === 'server' ||
-                    !selectedTarget.config.sessionSource
+                    selectedTarget.config?.sessionSource === 'server' ||
+                    !selectedTarget.config?.sessionSource
                   }
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
@@ -242,11 +492,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="client"
-                  checked={selectedTarget.config.sessionSource === 'client'}
+                  checked={selectedTarget.config?.sessionSource === 'client'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     if (e.target.value === 'client') {
                       updateCustomTarget('sessionParser', undefined);
+                      updateCustomTarget('session', undefined);
                     }
                     setTestResult(null);
                   }}
@@ -259,11 +510,40 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   </p>
                 </div>
               </label>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
+                <input
+                  type="radio"
+                  name="sessionSource"
+                  value="endpoint"
+                  checked={selectedTarget.config?.sessionSource === 'endpoint'}
+                  onChange={(e) => {
+                    updateCustomTarget('sessionSource', e.target.value);
+                    updateCustomTarget('sessionParser', undefined);
+                    // Initialize session endpoint config if not present
+                    if (!selectedTarget.config?.session) {
+                      updateCustomTarget('session', {
+                        url: '',
+                        method: 'POST',
+                        responseParser: '',
+                      });
+                    }
+                    setTestResult(null);
+                  }}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm">Separate Session Endpoint</p>
+                  <p className="text-xs text-muted-foreground">
+                    Call a separate endpoint to get session IDs before making API requests
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 
-          {selectedTarget.config.sessionSource === 'server' ||
-          selectedTarget.config.sessionSource == null ? (
+          {/* Server-generated session ID configuration */}
+          {(selectedTarget.config?.sessionSource === 'server' ||
+            selectedTarget.config?.sessionSource == null) && (
             <>
               <div>
                 <Label htmlFor="session-parser" className="text-sm font-medium">
@@ -275,7 +555,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 </p>
                 <Input
                   id="session-parser"
-                  value={selectedTarget.config.sessionParser || ''}
+                  value={(selectedTarget.config?.sessionParser as string) || ''}
                   placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
                   onChange={(e) => {
                     updateCustomTarget('sessionParser', e.target.value);
@@ -310,7 +590,10 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 </AlertContent>
               </Alert>
             </>
-          ) : (
+          )}
+
+          {/* Client-generated session ID configuration */}
+          {selectedTarget.config?.sessionSource === 'client' && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -342,6 +625,17 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             </Alert>
           )}
 
+          {/* Session endpoint configuration */}
+          {selectedTarget.config?.sessionSource === 'endpoint' && (
+            <SessionEndpointConfig
+              session={selectedTarget.config?.session as SessionEndpointConfigProps['session']}
+              onUpdate={(session) => {
+                updateCustomTarget('session', session);
+                setTestResult(null);
+              }}
+            />
+          )}
+
           {/* Session Test Section */}
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             {/* Header */}
@@ -362,7 +656,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config.url}
+                disabled={isTestRunning || !selectedTarget.config?.url}
                 size="sm"
                 className="mb-3"
               >
@@ -374,7 +668,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config.url && (
+              {!selectedTarget.config?.url && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>

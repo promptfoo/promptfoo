@@ -76,12 +76,14 @@ providers:
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                                   |
 | [TrueFoundry](./truefoundry.md)                     | Unified LLM Gateway for 1000+ models                         | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5` |
+| [Vercel AI Gateway](./vercel.md)                    | Unified AI Gateway with 0% markup and built-in failover      | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4.5`               |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                               |
 | [vLLM](./vllm.md)                                   | Local                                                        | Compatible with OpenAI syntax                                                   |
 | [Ollama](./ollama.md)                               | Local                                                        | `ollama:chat:llama3.3`                                                          |
 | [LocalAI](./localai.md)                             | Local                                                        | `localai:gpt4all-j`                                                             |
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                           | Uses OpenAI provider with custom endpoint                                       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                        | `llama:7b`                                                                      |
+| [Transformers.js](./transformers.md)                | Local ONNX inference via Transformers.js                     | `transformers:text-generation:Xenova/gpt2`                                      |
 | [MCP (Model Context Protocol)](./mcp.md)            | Direct MCP server integration for testing agentic systems    | `mcp` with server configuration                                                 |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                                                 | Compatible with OpenAI syntax                                                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                                    | `ws://example.com/ws`                                                           |

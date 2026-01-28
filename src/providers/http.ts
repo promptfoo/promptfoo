@@ -799,6 +799,28 @@ const AuthSchema = z.union([
   ApiKeyAuthSchema,
 ]);
 
+/**
+ * Configuration for a separate session endpoint that must be called before the main API.
+ * The session endpoint returns a session ID that is then used in the main request.
+ */
+export const SessionEndpointConfigSchema = z.object({
+  /** URL of the session endpoint */
+  url: z.string(),
+  /** HTTP method for the session endpoint (default: POST) */
+  method: z.enum(['GET', 'POST']).optional().default('POST'),
+  /** Headers to send with the session endpoint request */
+  headers: z.record(z.string(), z.string()).optional(),
+  /** Request body for the session endpoint (for POST requests) */
+  body: z.union([z.record(z.string(), z.any()), z.string()]).optional(),
+  /**
+   * Path to extract sessionId from response.
+   * Can be a JavaScript expression like 'data.body.sessionId' or 'data.headers["x-session-id"]'
+   */
+  responseParser: z.union([z.string(), z.function()]),
+});
+
+export type SessionEndpointConfig = z.infer<typeof SessionEndpointConfigSchema>;
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string(), z.string()).optional(),
@@ -810,8 +832,14 @@ export const HttpProviderConfigSchema = z.object({
     .boolean()
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
+  /**
+   * Configuration for a separate session endpoint.
+   * When configured, the provider will call this endpoint to get a session ID
+   * before making the main API request.
+   */
+  session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server']).optional(),
+  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
   stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -1416,6 +1444,15 @@ export class HttpProvider implements ApiProvider {
   private tokenRefreshPromise?: Promise<void>;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
+  /**
+   * Tracks session IDs that were fetched from the session endpoint.
+   * Used to distinguish sessions we created from client-generated UUIDs.
+   */
+  private fetchedSessions: Set<string> = new Set();
+  /**
+   * Parser for extracting session ID from session endpoint response.
+   */
+  private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -1434,6 +1471,11 @@ export class HttpProvider implements ApiProvider {
       createTransformRequest,
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
+    // Initialize session endpoint parser if session config is provided
+    if (this.config.session) {
+      this.sessionEndpointParser = createSessionParser(this.config.session.responseParser);
+    }
 
     // Initialize HTTPS agent if TLS configuration is provided
     // Note: We can't use async in constructor, so we'll initialize on first use
@@ -1714,6 +1756,139 @@ export class HttpProvider implements ApiProvider {
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
   }
 
+  /**
+   * Resolves the session ID to use for the main API request.
+   *
+   * For session endpoint configurations, this method handles the logic of when to
+   * fetch a new session vs reuse an existing one:
+   *
+   * - Hydra/Crescendo (shared session): The strategy passes the sessionId we returned
+   *   in a previous response. We recognize it (it's in fetchedSessions) and reuse it.
+   *
+   * - Meta-agent (fresh session): The strategy may pass a client-generated UUID or
+   *   no sessionId. We don't recognize it, so we fetch a new session.
+   *
+   * @param vars - Variables including potential sessionId from context
+   * @returns The session ID to use, or undefined if no session endpoint is configured
+   */
+  private async resolveSessionId(vars: Record<string, any>): Promise<string | undefined> {
+    if (!this.config.session || !this.sessionEndpointParser) {
+      return undefined;
+    }
+
+    const contextSessionId = vars.sessionId as string | undefined;
+
+    // If we have a sessionId from context AND it's one we fetched, reuse it
+    if (contextSessionId && this.fetchedSessions.has(contextSessionId)) {
+      logger.debug(
+        `[HTTP Provider Session]: Reusing existing session from context: ${contextSessionId}`,
+      );
+      return contextSessionId;
+    }
+
+    // Otherwise, fetch a new session from the endpoint
+    logger.debug('[HTTP Provider Session]: Fetching new session from endpoint');
+    const newSessionId = await this.fetchSessionFromEndpoint(vars);
+    this.fetchedSessions.add(newSessionId);
+    logger.debug(`[HTTP Provider Session]: Fetched new session: ${newSessionId}`);
+    return newSessionId;
+  }
+
+  /**
+   * Fetches a session ID from the configured session endpoint.
+   */
+  private async fetchSessionFromEndpoint(vars: Record<string, any>): Promise<string> {
+    invariant(this.config.session, 'Session config should be defined');
+    invariant(this.sessionEndpointParser, 'Session endpoint parser should be defined');
+
+    const sessionConfig = this.config.session;
+    const nunjucks = getNunjucksEngine();
+
+    // Render URL with variables
+    const url = nunjucks.renderString(sessionConfig.url, vars);
+
+    // Render headers with variables
+    const headers: Record<string, string> = {};
+    if (sessionConfig.headers) {
+      for (const [key, value] of Object.entries(sessionConfig.headers)) {
+        headers[key.toLowerCase()] = nunjucks.renderString(value, vars);
+      }
+    }
+
+    // Prepare request body
+    let body: string | undefined;
+    if (sessionConfig.body && sessionConfig.method !== 'GET') {
+      if (typeof sessionConfig.body === 'string') {
+        body = nunjucks.renderString(sessionConfig.body, vars);
+      } else {
+        // It's an object, render each value and JSON stringify
+        const renderedBody = renderVarsInObject(sessionConfig.body, vars);
+        body = JSON.stringify(renderedBody);
+        if (!headers['content-type']) {
+          headers['content-type'] = 'application/json';
+        }
+      }
+    }
+
+    const method = sessionConfig.method || 'POST';
+
+    logger.debug(`[HTTP Provider Session]: Calling session endpoint ${method} ${sanitizeUrl(url)}`);
+
+    // Get HTTPS agent if configured
+    const httpsAgent = await this.getHttpsAgent();
+
+    const fetchOptions: any = {
+      method,
+      headers,
+    };
+
+    if (body) {
+      fetchOptions.body = body;
+    }
+
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
+    }
+
+    const response = await fetchWithCache(
+      url,
+      fetchOptions,
+      REQUEST_TIMEOUT_MS,
+      'text',
+      true, // Always bust cache for session requests
+      this.config.maxRetries,
+    );
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `Session endpoint request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      );
+    }
+
+    // Parse response
+    const rawText = response.data as string;
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
+    // Extract session ID using the parser
+    const sessionId = (await this.sessionEndpointParser)({
+      headers: response.headers,
+      body: parsedData ?? rawText,
+    });
+
+    if (!sessionId) {
+      throw new Error(
+        `Session endpoint did not return a session ID. Response: ${safeJsonStringify(sanitizeObject(parsedData ?? rawText, { context: 'session response' }))}`,
+      );
+    }
+
+    return sessionId;
+  }
+
   private async getHttpsAgent(): Promise<Agent | undefined> {
     if (!this.config.tls) {
       return undefined;
@@ -1895,6 +2070,14 @@ export class HttpProvider implements ApiProvider {
       vars.signatureTimestamp = this.lastSignatureTimestamp;
     }
 
+    // Resolve session ID from session endpoint if configured
+    if (this.config.session) {
+      const resolvedSessionId = await this.resolveSessionId(vars);
+      if (resolvedSessionId) {
+        vars.sessionId = resolvedSessionId;
+      }
+    }
+
     if (this.config.request) {
       return this.callApiWithRawRequest(vars, context, options);
     }
@@ -2061,6 +2244,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = JSON.parse(rawText);
     } catch {
       parsedData = null;
+    }
+
+    // If we used a session endpoint, set the sessionId we used
+    // This can be overridden by sessionParser if the server returns a different session
+    if (vars.sessionId && this.config.session) {
+      ret.sessionId = vars.sessionId;
     }
 
     try {
@@ -2265,6 +2454,28 @@ export class HttpProvider implements ApiProvider {
     const ret: ProviderResponse = {};
     ret.latencyMs = latencyMs;
     ret.cached = cached;
+
+    // If we used a session endpoint, set the sessionId we used
+    if (vars.sessionId && this.config.session) {
+      ret.sessionId = vars.sessionId;
+    }
+
+    // Also check sessionParser for raw request mode
+    try {
+      const sessionId =
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
+      if (sessionId) {
+        ret.sessionId = sessionId;
+      }
+    } catch (err) {
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
+      );
+      throw err;
+    }
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {

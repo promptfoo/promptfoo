@@ -664,7 +664,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
@@ -772,11 +772,12 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -788,7 +789,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -811,11 +812,12 @@ async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -827,7 +829,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -851,11 +853,12 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -867,7 +870,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -898,7 +901,7 @@ async function runRedteamConversation({
           promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
-          guardrails: targetResponse.guardrails,
+          guardrails: targetResponse?.guardrails,
           sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
@@ -970,11 +973,12 @@ async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
@@ -986,7 +990,7 @@ async function runRedteamConversation({
       sessionIds: extractSessionIds(treeOutputs),
     },
     tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
@@ -1067,7 +1071,9 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,
       });
-      gradingProvider = redteamProvider; // Default to using same provider
+      gradingProvider = await redteamProviderManager.getGradingProvider({
+        jsonOnly: true,
+      });
     }
 
     return runRedteamConversation({

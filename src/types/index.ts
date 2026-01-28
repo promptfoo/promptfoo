@@ -32,6 +32,23 @@ export type { VarValue } from './shared';
 
 import type { TraceData } from './tracing';
 
+/**
+ * Minimal interface for RateLimitRegistry to avoid circular dependency.
+ * The actual implementation is in scheduler/rateLimitRegistry.ts.
+ */
+export interface RateLimitRegistryRef {
+  execute: <T>(
+    provider: ApiProvider,
+    callFn: () => Promise<T>,
+    options?: {
+      getHeaders?: (result: T) => Record<string, string> | undefined;
+      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
+      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+    },
+  ) => Promise<T>;
+  dispose: () => void;
+}
+
 export * from '../redteam/types';
 export * from './prompts';
 export * from './providers';
@@ -72,7 +89,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFailing: z.string().optional(),
   filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
-  filterMetadata: z.string().optional(),
+  filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
@@ -98,7 +115,10 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
-const GradingConfigSchema = z.object({
+// Exported for:
+// 1. Testing key overlap in merged schemas (see test/types/index.test.ts)
+// 2. External consumers who need to validate grading config independently
+export const GradingConfigSchema = z.object({
   rubricPrompt: z
     .union([
       z.string(),
@@ -179,6 +199,12 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Rate limit registry for adaptive concurrency control.
+   * When provided, provider calls are wrapped with rate limiting and retry logic.
+   */
+  rateLimitRegistry?: RateLimitRegistryRef;
 }
 
 export const EvaluateOptionsSchema = z.object({
@@ -744,6 +770,12 @@ export const TestCaseSchema = z.object({
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
+  // Filter which providers this test runs against. Array of provider labels or IDs. Supports wildcards (e.g., 'openai:*').
+  providers: z.array(z.string()).optional(),
+
+  // Filter to specific prompts by label or ID. If not provided, test runs against all prompts.
+  prompts: z.array(z.string()).optional(),
+
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 
@@ -761,34 +793,38 @@ export const TestCaseSchema = z.object({
     .optional(),
 
   // Additional configuration settings for the prompt
+  // Use object spread instead of z.intersection() to generate a flat JSON Schema.
+  // z.intersection() generates allOf with additionalProperties:false in each sub-schema,
+  // causing validation errors for properties defined in other sub-schemas.
+  // See: https://github.com/colinhacks/zod/issues/4564
+  // Use catchall(z.any()) to allow provider-specific options (like response_format, temperature)
   options: z
-    .intersection(
-      z.intersection(PromptConfigSchema, OutputConfigSchema),
-      z.intersection(
-        GradingConfigSchema,
-        z.object({
-          // If true, do not expand arrays of variables into multiple eval cases.
-          disableVarExpansion: z.boolean().optional(),
-          // If true, do not include an implicit `_conversation` variable in the prompt.
-          disableConversationVar: z.boolean().optional(),
-          // If true, run this without concurrency no matter what
-          runSerially: z.boolean().optional(),
-        }),
-      ),
-    )
+    .object({
+      ...PromptConfigSchema.shape,
+      ...OutputConfigSchema.shape,
+      ...GradingConfigSchema.shape,
+      // If true, do not expand arrays of variables into multiple eval cases.
+      disableVarExpansion: z.boolean().optional(),
+      // If true, do not include an implicit `_conversation` variable in the prompt.
+      disableConversationVar: z.boolean().optional(),
+      // If true, run this without concurrency no matter what
+      runSerially: z.boolean().optional(),
+    })
+    .catchall(z.any())
     .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
 
+  // Use catchall(z.any()) to allow arbitrary metadata keys while still typing known internal properties.
+  // Don't use z.intersection() here as it generates allOf with additionalProperties:false
+  // which would reject custom metadata keys. See: https://github.com/colinhacks/zod/issues/4564
   metadata: z
-    .intersection(
-      MetadataSchema,
-      z.object({
-        pluginConfig: z.custom<PluginConfig>().optional(),
-        strategyConfig: z.custom<StrategyConfig>().optional(),
-      }),
-    )
+    .object({
+      pluginConfig: z.custom<PluginConfig>().optional(),
+      strategyConfig: z.custom<StrategyConfig>().optional(),
+    })
+    .catchall(z.any())
     .optional(),
 });
 
@@ -1306,6 +1342,7 @@ export const EvalResultsFilterMode = z.enum([
   'highlights',
   'errors',
   'passes',
+  'user-rated',
 ]);
 
 export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

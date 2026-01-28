@@ -128,13 +128,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
       this.modelName === 'codex-mini-latest' ||
-      this.modelName.startsWith('gpt-5')
+      this.isGPT5Model()
     );
   }
 
@@ -219,8 +227,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
-    // Add verbosity for GPT-5.1 models if configured
-    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+    // Add verbosity for GPT-5 models if configured
+    if (this.isGPT5Model() && config.verbosity) {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
@@ -233,9 +241,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature ? { temperature } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
@@ -258,15 +266,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    // Handle reasoning parameters for o-series models
+    // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5'))
-    ) {
+    if (config.reasoning && this.isReasoningModel()) {
       body.reasoning = config.reasoning;
     }
 
@@ -356,25 +358,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, deleteFromCache } =
-        await fetchWithCache<OpenAIResponsesResponse>(
-          `${this.getApiUrl()}/responses`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIResponsesResponse>(
+        `${this.getApiUrl()}/responses`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          timeout,
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        ));
+          body: JSON.stringify(body),
+        },
+        timeout,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -387,11 +396,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             output: errorMessage,
             tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
             isRefusal: true,
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
 
         return {
           error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
@@ -399,6 +422,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
@@ -406,10 +436,30 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
     // Use shared processor for consistent behavior with Azure
-    return this.processor.processResponseOutput(data, config, cached);
+    const result = await this.processor.processResponseOutput(data, config, cached);
+
+    // Merge HTTP metadata with any existing metadata from the processor
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        http: {
+          status,
+          statusText,
+          headers: responseHeaders ?? {},
+        },
+      },
+    };
   }
 }

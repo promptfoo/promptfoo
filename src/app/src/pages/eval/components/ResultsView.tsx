@@ -91,6 +91,7 @@ export default function ResultsView({
     setAuthor,
     totalResultsCount,
     highlightedResultsCount,
+    userRatedResultsCount,
     filters,
     removeFilter,
     stats,
@@ -733,6 +734,7 @@ export default function ResultsView({
             filterMode !== 'all' ||
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
+            userRatedResultsCount > 0 ||
             stats?.durationMs != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
@@ -861,6 +863,22 @@ export default function ResultsView({
                 <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
                   {highlightedResultsCount} highlighted
                 </Badge>
+              )}
+              {userRatedResultsCount > 0 && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge
+                      className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+                      onClick={() => setFilterMode('user-rated')}
+                    >
+                      {userRatedResultsCount} user-rated
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with user
+                    ratings. Click to filter.
+                  </TooltipContent>
+                </Tooltip>
               )}
               {stats?.durationMs != null && (
                 <Tooltip>

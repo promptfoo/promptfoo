@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
+# Vercel AI SDK Example
+#
+# Demonstrates dynamic prompt construction with the Vercel AI SDK.
+# The provider builds prompts based on persona, task type, and context,
+# then reports the actual prompt sent to the LLM.
+#
+# Setup:
+#   cd examples/vercel-ai-sdk
+#   npm install
+#   export OPENAI_API_KEY=sk-...
+#
+# Run:
+#   npx promptfoo@latest eval
+
+description: Vercel AI SDK with dynamic prompt construction
+
+providers:
+  - id: file://./aiSdkProvider.mjs
+    config:
+      model: gpt-4o-mini
+      temperature: 0.7
+
+prompts:
+  - '{{topic}}'
+
+tests:
+  # Expert persona with explain task
+  - description: Quantum computing for students
+    vars:
+      topic: quantum entanglement
+      persona: expert
+      task_type: explain
+      domain: quantum physics
+      audience: college students
+    assert:
+      - type: llm-rubric
+        value: explains quantum entanglement clearly with appropriate examples
+
+  # Coder persona with explain task
+  - description: Async/await for junior devs
+    vars:
+      topic: async/await patterns in JavaScript
+      persona: coder
+      task_type: explain
+      domain: JavaScript
+      audience: junior developers
+    assert:
+      - type: icontains
+        value: async
+      - type: icontains
+        value: await
+
+  # Analyst persona with comparison task
+  - description: Compare SQL vs NoSQL
+    vars:
+      topic: SQL databases vs NoSQL databases
+      persona: analyst
+      task_type: compare
+      domain: database systems
+      format: structured comparison with pros/cons
+    assert:
+      - type: icontains
+        value: SQL
+      - type: llm-rubric
+        value: provides balanced comparison of both database types
+
+  # Expert with troubleshooting task
+  - description: Debug memory leaks
+    vars:
+      topic: memory leaks in Node.js applications
+      persona: coder
+      task_type: troubleshoot
+      domain: Node.js performance
+      audience: senior engineers
+    assert:
+      - type: icontains
+        value: memory
+      - type: llm-rubric
+        value: provides actionable debugging steps
+
+  # With RAG-style context injection
+  - description: Explain with context (RAG simulation)
+    vars:
+      topic: transformer architecture
+      persona: expert
+      task_type: explain
+      domain: machine learning
+      audience: ML engineers
+      context: |
+        From "Attention Is All You Need" (2017):
+        The Transformer uses self-attention to compute representations
+        of its input and output without using sequence-aligned RNNs or
+        convolution.
+    assert:
+      - type: icontains
+        value: attention
+      - type: llm-rubric
+        value: references or builds upon the provided context

@@ -116,6 +116,7 @@ export async function runMetaAgentRedteam({
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
+  prompt?: string;
   metadata: IterativeMetaMetadata;
   tokenUsage: TokenUsage;
   error?: string;
@@ -500,6 +501,7 @@ export async function runMetaAgentRedteam({
 
   return {
     output: bestResponse || lastResponse?.output || '',
+    prompt: bestPrompt,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     metadata: {
       finalIteration,
@@ -591,7 +593,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
         provider: this.agentProvider,
         jsonOnly: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,
         jsonOnly: true,
       }),

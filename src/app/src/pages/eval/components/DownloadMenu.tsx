@@ -11,6 +11,7 @@ import { CheckCircle, Copy, Download } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 interface DownloadMenuItemProps {
   onClick: () => void;
@@ -90,7 +91,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
    * @param options Additional options (skipInvalid for yaml.dump)
    */
   const downloadYamlConfig = (
-    configToDownload: any,
+    configToDownload: Partial<UnifiedConfig>,
     fileName: string,
     successMessage: string,
     options: { skipInvalid?: boolean } = {},
@@ -118,8 +119,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   };
 
   const downloadConfig = () => {
-    if (!evalId) {
-      showToast('No evaluation ID', 'error');
+    if (!evalId || !config) {
+      showToast('No evaluation ID or configuration available', 'error');
       return;
     }
     const fileName = getFilename('config.yaml');
