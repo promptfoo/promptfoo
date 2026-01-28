@@ -156,22 +156,22 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const rate = getValue<number>() ?? 0;
           const colorClass = getASRColorClass(rate);
           return (
-            <span className={cn('font-mono text-sm tabular-nums text-right block', colorClass)}>
+            <span className={cn('font-mono tabular-nums', colorClass)}>
               {formatASRForDisplay(rate)}%
             </span>
           );
         },
         size: 140,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'numTests',
         header: '# Tests',
         cell: ({ getValue }) => (
-          <span className="font-mono text-sm tabular-nums text-right block">
-            {getValue<number>()}
-          </span>
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
         size: 80,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'evalId',
