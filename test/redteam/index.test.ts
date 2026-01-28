@@ -3108,9 +3108,8 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Named policy should show just the name (no hash in display)
-      expect(cleanReport).toMatch(/Secret Protection Policy/);
-      expect(cleanReport).not.toMatch(/Secret Protection Policy \[[a-f0-9]/); // No hash after name
+      // Named policy should show name with short ID for uniqueness (may be truncated in display)
+      expect(cleanReport).toMatch(/Secret Protection Policy \[[a-f0-9]/);
       // Inline policy should show: "policy [hash]: preview..."
       expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
     });
@@ -3170,9 +3169,8 @@ describe('Language configuration', () => {
       // Built-in plugins should show their ID directly
       expect(cleanReport).toMatch(/hallucination/);
       expect(cleanReport).toMatch(/contracts/);
-      // Named policy should show just the name
-      expect(cleanReport).toMatch(/Data Protection Policy/);
-      expect(cleanReport).not.toMatch(/Data Protection Policy \[/); // No ID after name
+      // Named policy should show name with short ID for uniqueness (may be truncated in display)
+      expect(cleanReport).toMatch(/Data Protection Policy \[[a-f0-9]/);
       // Inline policy should show "policy [hash]: preview..."
       expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
       // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)

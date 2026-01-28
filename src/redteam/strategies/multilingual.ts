@@ -80,10 +80,12 @@ function truncateForLog(output: unknown, maxLength = 2000): string {
 
 const DEFAULT_BATCH_SIZE = 2; // Default number of languages to process in a single batch (balanced for efficiency and reliability)
 
+import type { StrategyConfig } from '../types';
+
 /**
  * Helper function to get the concurrency limit from config or use default
  */
-export function getConcurrencyLimit(config: Record<string, any> = {}): number {
+export function getConcurrencyLimit(config: StrategyConfig = {}): number {
   const n = Number(config?.maxConcurrency);
   if (!Number.isFinite(n) || n <= 0) {
     return DEFAULT_MAX_CONCURRENCY;
@@ -101,7 +103,7 @@ function shouldShowProgressBar(): boolean {
 /**
  * Helper function to get the batch size from config or use default
  */
-function getBatchSize(config: Record<string, any> = {}): number {
+function getBatchSize(config: StrategyConfig = {}): number {
   const n = Number(config.batchSize);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : DEFAULT_BATCH_SIZE;
 }
@@ -110,7 +112,7 @@ function getBatchSize(config: Record<string, any> = {}): number {
  * Helper function to get the remote chunk size - automatically determined for reliability
  * Smaller chunks = more reliable but more API calls. Larger chunks = fewer calls but more timeouts.
  */
-function getRemoteChunkSize(config: Record<string, any> = {}): number {
+function getRemoteChunkSize(config: StrategyConfig = {}): number {
   const size = Number(config.remoteChunkSize);
   if (Number.isFinite(size) && size >= 1) {
     return Math.floor(size);
@@ -121,7 +123,7 @@ function getRemoteChunkSize(config: Record<string, any> = {}): number {
 async function processRemoteChunk(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   const payload = {
     task: 'multilingual',
@@ -163,7 +165,7 @@ function createDedupeKey(testCase: TestCase, injectVar: string, language?: strin
 async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   try {
     const chunkSize = getRemoteChunkSize(config);
@@ -525,7 +527,7 @@ export async function translateBatch(
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   // Deprecation warning - this strategy will be removed in a future version
   logger.debug(

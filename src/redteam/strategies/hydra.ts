@@ -1,9 +1,10 @@
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export function addHydra(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): TestCase[] {
   const providerName = 'promptfoo:redteam:hydra';
   const metricSuffix = 'Hydra';

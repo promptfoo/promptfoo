@@ -29,9 +29,10 @@ import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
-import { addCompositeTestCases } from './singleTurnComposite';
+import { addCompositeTestCases, type CompositeConfig } from './singleTurnComposite';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -72,7 +73,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'basic',
-    action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
+    action: async (_testCases: TestCase[], _injectVar: string, _config?: StrategyConfig) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];
@@ -176,7 +177,12 @@ export const Strategies: Strategy[] = [
     id: 'jailbreak:composite',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
-      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      // Cast to CompositeConfig - at runtime, config will have n and modelFamily when this strategy is used
+      const newTestCases = await addCompositeTestCases(
+        testCases,
+        injectVar,
+        config as CompositeConfig,
+      );
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;
     },

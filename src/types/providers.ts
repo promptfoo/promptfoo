@@ -32,7 +32,9 @@ interface AtomicTestCase {
   success?: boolean;
   score?: number;
   failureReason?: string;
+  // biome-ignore lint/suspicious/noExplicitAny: Metadata stores arbitrary key-value pairs accessed with dot notation
   metadata?: Record<string, any>;
+  // biome-ignore lint/suspicious/noExplicitAny: Options stores arbitrary configuration values
   options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
@@ -50,6 +52,7 @@ export interface ModerationFlag {
 export interface ProviderOptions {
   id?: ProviderId;
   label?: ProviderLabel;
+  // biome-ignore lint/suspicious/noExplicitAny: Config accepts arbitrary provider-specific options
   config?: any;
   prompts?: string[];
   transform?: string;
@@ -60,6 +63,7 @@ export interface ProviderOptions {
 
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
+  // biome-ignore lint/suspicious/noExplicitAny: Cache interface varies by implementation
   getCache?: any;
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
@@ -104,12 +108,14 @@ export interface ApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  // biome-ignore lint/suspicious/noExplicitAny: Config accepts arbitrary provider-specific options
   config?: any;
   delay?: number;
   getSessionId?: () => string;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string;
+  // biome-ignore lint/suspicious/noExplicitAny: Serialization can produce any JSON-compatible value
   toJSON?: () => any;
   /**
    * Cleanup method called when a provider call is aborted (e.g., due to timeout)
@@ -165,6 +171,7 @@ export interface ProviderResponse {
       headers: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
+    // biome-ignore lint/suspicious/noExplicitAny: Metadata stores arbitrary provider-specific values
     [key: string]: any;
   };
   /**
@@ -177,12 +184,15 @@ export interface ProviderResponse {
    * Can be a simple string or an array of chat messages.
    */
   prompt?: string | ChatMessage[];
+  // biome-ignore lint/suspicious/noExplicitAny: Raw response preserves provider's original format
   raw?: string | any;
+  // biome-ignore lint/suspicious/noExplicitAny: Output can be string or structured data (objects, arrays)
   output?: string | any;
   /**
    * Output after provider-level transform. Used by contextTransform to ensure
    * it operates on provider-normalized output, independent of test transforms.
    */
+  // biome-ignore lint/suspicious/noExplicitAny: Transformed output can be any serializable type
   providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
@@ -226,6 +236,7 @@ export interface ProviderEmbeddingResponse {
   metadata?: {
     transformed?: boolean;
     originalText?: string;
+    // biome-ignore lint/suspicious/noExplicitAny: Metadata stores arbitrary provider-specific values
     [key: string]: any;
   };
 }
@@ -252,6 +263,7 @@ export type CallApiFunction = {
   label?: string;
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: Type guard requires any parameter for flexibility
 export function isApiProvider(provider: any): provider is ApiProvider {
   return (
     typeof provider === 'object' &&
@@ -261,6 +273,7 @@ export function isApiProvider(provider: any): provider is ApiProvider {
   );
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: Type guard requires any parameter for flexibility
 export function isProviderOptions(provider: any): provider is ProviderOptions {
   return (
     typeof provider === 'object' &&
@@ -281,6 +294,7 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+  // biome-ignore lint/suspicious/noExplicitAny: Request transformation can produce any structure
   transformedRequest?: any;
 }
 

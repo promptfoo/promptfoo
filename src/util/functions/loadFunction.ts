@@ -46,7 +46,7 @@ export async function loadFunction<T extends Function>({
     let func: T;
     if (isJavascriptFile(resolvedPath)) {
       const module = await importModule(resolvedPath, functionName);
-      let moduleFunc: any;
+      let moduleFunc: unknown;
 
       if (functionName) {
         moduleFunc = module;
@@ -69,7 +69,7 @@ export async function loadFunction<T extends Function>({
       }
       func = moduleFunc as T;
     } else {
-      const result = (...args: any[]) =>
+      const result = (...args: (string | number | object | undefined)[]) =>
         runPython(resolvedPath, functionName || defaultFunctionName, args);
       func = result as unknown as T;
     }

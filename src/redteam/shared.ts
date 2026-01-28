@@ -80,9 +80,16 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   let redteamConfig;
   try {
+    const liveRedteamCommandLineOptions = (
+      options.liveRedteamConfig &&
+      typeof options.liveRedteamConfig === 'object' &&
+      'commandLineOptions' in options.liveRedteamConfig
+        ? options.liveRedteamConfig.commandLineOptions
+        : {}
+    ) as Record<string, unknown>;
     redteamConfig = await doGenerateRedteam({
       ...passThroughOptions,
-      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...liveRedteamCommandLineOptions,
       ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
       config: configPath,
       output: redteamPath,
@@ -92,6 +99,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       inRedteamRun: true,
       abortSignal: options.abortSignal,
       progressBar: options.progressBar,
+      liveRedteamConfig: options.liveRedteamConfig as Record<string, unknown> | undefined,
     });
   } catch (error) {
     if (error instanceof PartialGenerationError) {

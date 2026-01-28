@@ -8,16 +8,18 @@ import {
 } from './protobuf';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
+interface OTLPAttributeValue {
+  stringValue?: string;
+  intValue?: string;
+  doubleValue?: number;
+  boolValue?: boolean;
+  arrayValue?: { values: OTLPAttributeValue[] };
+  kvlistValue?: { values: OTLPAttribute[] };
+}
+
 interface OTLPAttribute {
   key: string;
-  value: {
-    stringValue?: string;
-    intValue?: string;
-    doubleValue?: number;
-    boolValue?: boolean;
-    arrayValue?: { values: any[] };
-    kvlistValue?: { values: OTLPAttribute[] };
-  };
+  value: OTLPAttributeValue;
 }
 
 interface OTLPSpan {
@@ -67,7 +69,7 @@ export class OTLPReceiver {
   private app: express.Application;
   private traceStore: TraceStore;
   private port?: number;
-  private server?: any; // http.Server type
+  private server?: ReturnType<express.Application['listen']>;
 
   constructor() {
     this.app = express();
@@ -215,18 +217,20 @@ export class OTLPReceiver {
     });
 
     // Global error handler
-    this.app.use((error: any, _req: any, res: any, _next: any) => {
-      logger.error(`[OtlpReceiver] Global error handler: ${error}`);
-      logger.error(`[OtlpReceiver] Error stack: ${error.stack}`);
+    this.app.use(
+      (error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+        logger.error(`[OtlpReceiver] Global error handler: ${error}`);
+        logger.error(`[OtlpReceiver] Error stack: ${error.stack}`);
 
-      // Handle JSON parsing errors
-      if (error instanceof SyntaxError && 'body' in error) {
-        res.status(400).json({ error: 'Invalid JSON' });
-        return;
-      }
+        // Handle JSON parsing errors
+        if (error instanceof SyntaxError && 'body' in error) {
+          res.status(400).json({ error: 'Invalid JSON' });
+          return;
+        }
 
-      res.status(500).json({ error: 'Internal server error' });
-    });
+        res.status(500).json({ error: 'Internal server error' });
+      },
+    );
   }
 
   private parseOTLPJSONRequest(body: OTLPTraceRequest): ParsedTrace[] {
@@ -256,7 +260,7 @@ export class OTLPReceiver {
 
           // Parse attributes
           const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
-          const attributes: Record<string, any> = {
+          const attributes: Record<string, unknown> = {
             ...resourceAttributes,
             ...this.parseAttributes(span.attributes),
             'otel.scope.name': scopeSpan.scope?.name,
@@ -317,7 +321,7 @@ export class OTLPReceiver {
 
           // Parse attributes
           const spanKindName = SPAN_KIND_MAP[span.kind ?? 0] ?? 'unspecified';
-          const attributes: Record<string, any> = {
+          const attributes: Record<string, unknown> = {
             ...resourceAttributes,
             ...this.parseDecodedAttributes(span.attributes),
             'otel.scope.name': scopeSpan.scope?.name,
@@ -357,12 +361,12 @@ export class OTLPReceiver {
     return traces;
   }
 
-  private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {
+  private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, unknown> {
     if (!attributes) {
       return {};
     }
 
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
 
     for (const attr of attributes) {
       const value = this.parseDecodedAttributeValue(attr.value);
@@ -374,7 +378,7 @@ export class OTLPReceiver {
     return result;
   }
 
-  private parseDecodedAttributeValue(value: DecodedAttribute['value']): any {
+  private parseDecodedAttributeValue(value: DecodedAttribute['value']): unknown {
     if (!value) {
       return undefined;
     }
@@ -397,7 +401,7 @@ export class OTLPReceiver {
       return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
     }
     if (value.kvlistValue?.values) {
-      const kvMap: Record<string, any> = {};
+      const kvMap: Record<string, unknown> = {};
       for (const kv of value.kvlistValue.values) {
         kvMap[kv.key] = this.parseDecodedAttributeValue(kv.value);
       }
@@ -406,12 +410,12 @@ export class OTLPReceiver {
     return undefined;
   }
 
-  private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
+  private parseAttributes(attributes?: OTLPAttribute[]): Record<string, unknown> {
     if (!attributes) {
       return {};
     }
 
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
 
     for (const attr of attributes) {
       const value = this.parseAttributeValue(attr.value);
@@ -423,7 +427,7 @@ export class OTLPReceiver {
     return result;
   }
 
-  private parseAttributeValue(value: OTLPAttribute['value']): any {
+  private parseAttributeValue(value: OTLPAttributeValue): unknown {
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }
@@ -440,7 +444,7 @@ export class OTLPReceiver {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
     }
     if (value.kvlistValue?.values) {
-      const kvMap: Record<string, any> = {};
+      const kvMap: Record<string, unknown> = {};
       for (const kv of value.kvlistValue.values) {
         kvMap[kv.key] = this.parseAttributeValue(kv.value);
       }

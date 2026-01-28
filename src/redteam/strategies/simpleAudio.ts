@@ -101,6 +101,13 @@ export async function textToAudio(
   }
 }
 
+import type { StrategyConfig } from '../types';
+
+interface AudioConfig extends StrategyConfig {
+  language?: string;
+  evalId?: string;
+}
+
 /**
  * Adds audio encoding to test cases
  * @throws Error if the remote API for audio conversion is unavailable
@@ -108,7 +115,7 @@ export async function textToAudio(
 export async function addAudioToBase64(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any> = {},
+  config: AudioConfig = {},
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
   const language = config.language || 'en';
@@ -136,7 +143,11 @@ export async function addAudioToBase64(
     const originalText = String(testCase.vars[injectVar]);
 
     // Convert text to audio using the remote API
-    const audioResult = await textToAudio(originalText, language, { evalId });
+    const audioResult = await textToAudio(
+      originalText,
+      typeof language === 'string' ? language : 'en',
+      { evalId },
+    );
 
     audioTestCases.push({
       ...testCase,

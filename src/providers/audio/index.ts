@@ -16,6 +16,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderResponse,
 } from '../../types/providers';
 import type {
   AudioFormat,
@@ -248,7 +249,7 @@ export class UnifiedAudioProvider implements AudioRealtimeProvider {
   /**
    * Normalize the provider response to a standard format
    */
-  private normalizeResponse(response: any): AudioProviderResponse {
+  private normalizeResponse(response: ProviderResponse): AudioProviderResponse {
     const normalized: AudioProviderResponse = {
       output: response.output,
       error: response.error,

@@ -611,7 +611,8 @@ export async function resolveConfigs(
   cliState.basePath = basePath;
 
   // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
-  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+  const defaultTestRaw: string | Partial<TestCase> | undefined =
+    fileConfig.defaultTest || defaultConfig.defaultTest;
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;

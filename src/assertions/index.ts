@@ -299,8 +299,15 @@ export async function runAssertion({
           traceId: traceData.traceId,
           evaluationId: traceData.evaluationId,
           testCaseId: traceData.testCaseId,
-          metadata: traceData.metadata,
-          spans: traceData.spans || [],
+          metadata: traceData.metadata ?? undefined,
+          spans: traceData.spans.map((span) => ({
+            ...span,
+            parentSpanId: span.parentSpanId ?? undefined,
+            endTime: span.endTime ?? undefined,
+            attributes: span.attributes ?? undefined,
+            statusCode: span.statusCode ?? undefined,
+            statusMessage: span.statusMessage ?? undefined,
+          })),
         };
       }
     } catch (error) {

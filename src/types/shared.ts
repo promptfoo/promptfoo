@@ -42,6 +42,7 @@ export const BaseTokenUsageSchema = z.object({
 export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
+// biome-ignore lint/suspicious/noExplicitAny: Filter functions accept varying argument types (string, number, etc.)
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
 // VarValue represents the type of values that can be stored in Vars

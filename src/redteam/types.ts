@@ -134,8 +134,8 @@ type TestCase = {
   vars?: Record<string, unknown>;
   provider?: string | ProviderOptions | ApiProvider;
   providerOutput?: string | Record<string, unknown>;
-  assert?: any;
-  options?: any;
+  assert?: unknown;
+  options?: unknown;
 };
 
 // Derived types
@@ -210,7 +210,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   burpEscapeJson?: boolean;
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
-  configFromCloud?: any;
+  configFromCloud?: unknown;
   strict?: boolean;
 }
 
@@ -256,14 +256,14 @@ export interface RedteamRunOptions {
   strict?: boolean;
 
   // Used by webui
-  liveRedteamConfig?: any;
+  liveRedteamConfig?: unknown;
   logCallback?: (message: string) => void;
   progressCallback?: (
     completed: number,
     total: number,
     index: number | string,
-    evalStep: any, // RunEvalOptions, but introduces circular dependency
-    metrics: any, // PromptMetrics, but introduces circular dependency
+    evalStep: unknown,
+    metrics: unknown,
   ) => void;
   abortSignal?: AbortSignal;
 
@@ -274,7 +274,13 @@ export interface SavedRedteamConfig {
   description: string;
   prompts: string[];
   target: ProviderOptions;
-  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  plugins: (
+    | RedteamPlugin
+    | {
+        id: string;
+        config?: Record<string, unknown>;
+      }
+  )[];
   strategies: RedteamStrategy[];
   purpose?: string;
   frameworks?: FrameworkComplianceId[];
@@ -348,7 +354,7 @@ export interface RedteamHistoryEntry {
  */
 export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  messages: Record<string, any>[];
+  messages: Record<string, unknown>[];
   stopReason: string;
   redteamHistory?: RedteamHistoryEntry[];
   sessionIds?: string[];

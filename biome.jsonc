@@ -287,12 +287,23 @@
     },
     {
       "includes": [
-        "src/providers/**/*",
-        "src/redteam/**/*",
-        "src/util/**/*",
-        "src/commands/**/*",
-        "src/types/**/*",
-        "src/tracing/**/*"
+        "src/redteam/commands/**/*", // 7
+        "src/redteam/providers/**/*", // 23
+        "src/redteam/plugins/**/*", // 24
+        "src/redteam/strategies/**/*", // 34
+        "src/util/*.ts", // 18
+        "src/commands/*.ts", // 4
+        "src/commands/mcp/**/*", // 18
+        "src/providers/*.ts", // 41 (top-level provider files)
+        "src/providers/hyperbolic/**/*", // 6
+        "src/providers/anthropic/**/*", // 10
+        "src/providers/xai/**/*", // 13
+        "src/providers/responses/**/*", // 24
+        "src/providers/azure/**/*", // 42
+        "src/providers/elevenlabs/**/*", // 45
+        "src/providers/google/**/*", // 51
+        "src/providers/bedrock/**/*", // 101
+        "src/providers/openai/**/*" // 118
       ],
       "linter": {
         "rules": {

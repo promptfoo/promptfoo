@@ -321,7 +321,7 @@ export async function extractGoalFromPrompt(
   // Skip goal extraction for dataset plugins since they use static datasets with pre-defined goals
   if (pluginId) {
     const shortPluginId = getShortPluginId(pluginId);
-    if (DATASET_PLUGINS.includes(shortPluginId as any)) {
+    if (DATASET_PLUGINS.includes(shortPluginId as (typeof DATASET_PLUGINS)[number])) {
       logger.debug(`Skipping goal extraction for dataset plugin: ${shortPluginId}`);
       return null;
     }
@@ -381,7 +381,7 @@ export async function extractGoalFromPrompt(
   }
 }
 
-function toSessionIdString(value: any): string | undefined {
+function toSessionIdString(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }

@@ -1075,7 +1075,7 @@ export default function Review({
                         config: { ...config.target.config, delay: value },
                       });
                     } else if (key === 'maxConcurrency') {
-                      updateConfig('maxConcurrency', value);
+                      updateConfig('maxConcurrency', value as number | undefined);
                     } else if (key === 'verbose') {
                       updateConfig('target', {
                         ...config.target,

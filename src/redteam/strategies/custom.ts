@@ -1,9 +1,10 @@
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export function addCustom(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
   strategyId: string = 'custom',
 ): TestCase[] {
   // Extract variant from strategy ID (e.g., 'custom:aggressive' -> 'aggressive')

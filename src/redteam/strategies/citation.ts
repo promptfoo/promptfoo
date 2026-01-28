@@ -9,11 +9,12 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -144,7 +145,7 @@ async function generateCitations(
 export async function addCitationTestCases(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, unknown>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error('Citation strategy requires remote generation to be enabled');

@@ -8,11 +8,12 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 async function generateLikertPrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -125,7 +126,7 @@ async function generateLikertPrompts(
 export async function addLikertTestCases(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, unknown>,
+  config: StrategyConfig,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error('Likert jailbreak strategy requires remote generation to be enabled');

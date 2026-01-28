@@ -7,7 +7,12 @@ import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import {
+  type TestCase,
+  type TestGeneratorConfig,
+  type TestSuite,
+  type UnifiedConfig,
+} from '../../types/index';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
@@ -88,7 +93,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
     const existingTests = existingConfig.tests;
-    let testsArray: any[] = [];
+    let testsArray: (string | TestCase | TestGeneratorConfig)[] = [];
     if (Array.isArray(existingTests)) {
       testsArray = existingTests;
     } else if (existingTests) {

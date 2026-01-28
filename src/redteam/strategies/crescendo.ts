@@ -1,9 +1,10 @@
 import type { TestCase } from '../../types/index';
+import type { StrategyConfig } from '../types';
 
 export function addCrescendo(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: StrategyConfig,
 ): TestCase[] {
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);

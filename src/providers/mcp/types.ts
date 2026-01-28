@@ -103,9 +103,9 @@ export interface MCPConfig {
 }
 
 export interface MCPToolInputSchema {
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   required?: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface MCPTool {

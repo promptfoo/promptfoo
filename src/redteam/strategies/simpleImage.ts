@@ -196,13 +196,19 @@ async function textToImage(
   }
 }
 
+import type { StrategyConfig } from '../types';
+
+interface ImageConfig extends StrategyConfig {
+  evalId?: string;
+}
+
 /**
  * Adds image encoding to test cases
  */
 export async function addImageToBase64(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any> = {},
+  config: ImageConfig = {},
 ): Promise<TestCase[]> {
   const imageTestCases: TestCase[] = [];
   const evalId = config.evalId;
@@ -236,7 +242,7 @@ export async function addImageToBase64(
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
         metric: assertion.type?.startsWith('promptfoo:redteam:')
-          ? `${assertion.type?.split(':').pop() || assertion.metric}/Image-Encoded`
+          ? `${(assertion.type?.split(':').pop() || assertion.metric) ?? 'Metric'}/Image-Encoded`
           : assertion.metric,
       })),
       vars: {
