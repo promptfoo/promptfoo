@@ -1040,6 +1040,12 @@
         },
         "runSerially": {
           "type": "boolean"
+        },
+        "showVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": {}

@@ -809,6 +809,9 @@ export const TestCaseSchema = z.object({
       disableConversationVar: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+      // List of variable names to display in results table (allowlist). If not provided, all variables are shown.
+      // Typically set in defaultTest.options for suite-wide display configuration.
+      showVars: z.array(z.string()).optional(),
     })
     .catchall(z.any())
     .optional(),
