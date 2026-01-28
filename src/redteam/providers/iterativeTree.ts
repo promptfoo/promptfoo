@@ -1075,8 +1075,8 @@ async function runRedteamConversation({
       storedGraderResult,
       sessionIds: extractSessionIds(treeOutputs),
       ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
+        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+      }),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,
