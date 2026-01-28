@@ -22,6 +22,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -326,6 +327,12 @@ export async function runRedteamConversation({
         injectVar,
         perTurnLayers,
         Strategies,
+        {
+          evaluationId: context?.evaluationId,
+          testCaseId: test?.metadata?.testCaseId as string | undefined,
+          purpose: test?.metadata?.purpose as string | undefined,
+          goal: test?.metadata?.goal as string | undefined,
+        },
       );
 
       if (lastTransformResult.error) {
@@ -467,6 +474,68 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
+
+        // Build grading context with exfil tracking data
+        let gradingContext:
+          | {
+              traceContext?: TraceContextData | null;
+              traceSummary?: string;
+              wasExfiltrated?: boolean;
+              exfilCount?: number;
+              exfilRecords?: Array<{
+                timestamp: string;
+                ip: string;
+                userAgent: string;
+                queryParams: Record<string, string>;
+              }>;
+            }
+          | undefined;
+
+        // First try to get exfil data from provider response metadata (Playwright provider)
+        if (targetResponse.metadata?.wasExfiltrated !== undefined) {
+          logger.debug('[Iterative] Using exfil data from provider response metadata');
+          gradingContext = {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: graderTraceSummary }
+              : {}),
+            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
+            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
+            // Note: Full exfilRecords with all fields come from server API, not provider metadata
+            exfilRecords: [],
+          };
+        } else {
+          // Try to fetch exfil tracking from server API via webPageUuid
+          const webPageUuid =
+            (test.metadata?.webPageUuid as string) ||
+            (iterationTest.metadata?.webPageUuid as string);
+          if (webPageUuid) {
+            const evalId =
+              context?.evaluationId ??
+              (test.metadata?.evaluationId as string | undefined) ??
+              (iterationTest.metadata?.evaluationId as string | undefined);
+            logger.debug('[Iterative] Fetching exfil tracking from server API', {
+              webPageUuid,
+              evalId,
+            });
+            const exfilData = await checkExfilTracking(webPageUuid, evalId);
+            if (exfilData) {
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext, traceSummary: graderTraceSummary }
+                  : {}),
+                wasExfiltrated: exfilData.wasExfiltrated,
+                exfilCount: exfilData.exfilCount,
+                exfilRecords: exfilData.exfilRecords,
+              };
+            }
+          }
+        }
+
+        // Fallback to just tracing context if no exfil data found
+        if (!gradingContext && tracingOptions.includeInGrading) {
+          gradingContext = { traceContext, traceSummary: graderTraceSummary };
+        }
+
         const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
@@ -475,12 +544,7 @@ export async function runRedteamConversation({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined,
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: graderTraceSummary,
-              }
-            : undefined,
+          gradingContext,
         );
         storedGraderResult = {
           ...grade,

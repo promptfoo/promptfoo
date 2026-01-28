@@ -8,6 +8,7 @@ import {
   BASE_PLUGINS,
   BIAS_PLUGINS,
   CONFIG_REQUIRED_PLUGINS,
+  GRADER_PLUGIN_IDS,
   HARM_PLUGINS,
   PII_PLUGINS,
 } from '../../../src/redteam/constants';
@@ -141,6 +142,7 @@ describe('Plugin IDs', () => {
             ...BASE_PLUGINS,
             ...ADDITIONAL_PLUGINS,
             ...CONFIG_REQUIRED_PLUGINS,
+            ...GRADER_PLUGIN_IDS,
             ...PII_PLUGINS,
             ...BIAS_PLUGINS,
             'pii', // Add the general pii plugin
