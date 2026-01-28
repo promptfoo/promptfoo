@@ -14,6 +14,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
 import { Spinner } from './components/ui/spinner';
 import { TooltipProvider } from './components/ui/tooltip';
+import {
+  EVAL_ROUTES,
+  LAUNCHER_ROUTES,
+  MODEL_AUDIT_ROUTES,
+  REDTEAM_ROUTES,
+  ROUTES,
+} from './constants/routes';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 
@@ -51,7 +58,7 @@ const router = createBrowserRouter(
     <>
       {import.meta.env.VITE_PROMPTFOO_LAUNCHER && (
         <Route
-          path="/launcher"
+          path={LAUNCHER_ROUTES.ROOT}
           element={
             <ErrorBoundary name="Launcher">
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
@@ -61,19 +68,21 @@ const router = createBrowserRouter(
           }
         />
       )}
-      <Route path="/" element={<PageShell />}>
+      <Route path={ROUTES.HOME} element={<PageShell />}>
         <Route element={<TelemetryTracker />}>
           <Route
             index
             element={
               <Navigate
-                to={import.meta.env.VITE_PROMPTFOO_LAUNCHER ? '/launcher' : '/eval'}
+                to={
+                  import.meta.env.VITE_PROMPTFOO_LAUNCHER ? LAUNCHER_ROUTES.ROOT : EVAL_ROUTES.ROOT
+                }
                 replace
               />
             }
           />
           <Route
-            path="/datasets"
+            path={ROUTES.DATASETS}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <DatasetsPage />
@@ -81,7 +90,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/eval"
+            path={EVAL_ROUTES.ROOT}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <EvalPage />
@@ -89,7 +98,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/evals"
+            path={EVAL_ROUTES.LIST}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <EvalsIndexPage />
@@ -106,9 +115,9 @@ const router = createBrowserRouter(
           />
 
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
-          <Route path="/progress" element={<Navigate to="/history" replace />} />
+          <Route path="/progress" element={<Navigate to={ROUTES.HISTORY} replace />} />
           <Route
-            path="/history"
+            path={ROUTES.HISTORY}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <HistoryPage />
@@ -117,7 +126,7 @@ const router = createBrowserRouter(
           />
 
           <Route
-            path="/prompts"
+            path={ROUTES.PROMPTS}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <PromptsPage />
@@ -127,7 +136,7 @@ const router = createBrowserRouter(
 
           {/* Model Audit routes - mirrors eval structure */}
           <Route
-            path="/model-audit"
+            path={MODEL_AUDIT_ROUTES.ROOT}
             element={
               <ErrorBoundary name="Model Audit">
                 <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
@@ -137,7 +146,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/model-audits"
+            path={MODEL_AUDIT_ROUTES.LIST}
             element={
               <ErrorBoundary name="Model Audit History">
                 <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
@@ -147,7 +156,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/model-audit/setup"
+            path={MODEL_AUDIT_ROUTES.SETUP}
             element={
               <ErrorBoundary name="Model Audit Setup">
                 <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
@@ -167,11 +176,17 @@ const router = createBrowserRouter(
             }
           />
           {/* Redirect legacy /model-audit/history route */}
-          <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
-
-          <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route
-            path="/redteam/setup"
+            path="/model-audit/history"
+            element={<Navigate to={MODEL_AUDIT_ROUTES.LIST} replace />}
+          />
+
+          <Route
+            path={REDTEAM_ROUTES.ROOT}
+            element={<Navigate to={REDTEAM_ROUTES.SETUP} replace />}
+          />
+          <Route
+            path={REDTEAM_ROUTES.SETUP}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <RedteamSetupPage />
@@ -180,9 +195,9 @@ const router = createBrowserRouter(
           />
 
           {/* Redirect legacy /report route to /reports (since v0.118.2) */}
-          <Route path="/report" element={<Navigate to="/reports" replace />} />
+          <Route path="/report" element={<Navigate to={REDTEAM_ROUTES.REPORTS} replace />} />
           <Route
-            path="/reports"
+            path={REDTEAM_ROUTES.REPORTS}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <ReportPage />
@@ -190,7 +205,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/setup"
+            path={ROUTES.SETUP}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <EvalCreatorPage />
@@ -198,7 +213,7 @@ const router = createBrowserRouter(
             }
           />
           <Route
-            path="/login"
+            path={ROUTES.LOGIN}
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <LoginPage />
