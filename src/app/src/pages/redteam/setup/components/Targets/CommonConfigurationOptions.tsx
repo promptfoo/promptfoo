@@ -5,6 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
@@ -15,7 +16,7 @@ import type { ProviderOptions } from '@promptfoo/types';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onValidationChange?: (hasErrors: boolean) => void;
   extensions?: string[];
   onExtensionsChange?: (extensions: string[]) => void;
@@ -40,7 +41,7 @@ const CommonConfigurationOptions = ({
   onPromptsChange,
   hideTestGeneration = false,
 }: CommonConfigurationOptionsProps) => {
-  const inputs = (selectedTarget as any).inputs as Record<string, string> | undefined;
+  const inputs = (selectedTarget as { inputs?: Record<string, string> }).inputs;
   const hasInputs = inputs && Object.keys(inputs).length > 0;
   const hasInstructions = !!testGenerationInstructions?.trim();
   const [isTestGenExpanded, setIsTestGenExpanded] = useState(hasInputs || hasInstructions);
@@ -109,7 +110,7 @@ const CommonConfigurationOptions = ({
           <CollapsibleContent className="space-y-6 px-4 pb-4 pt-4">
             {/* Instructions */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Instructions</label>
+              <Label className="mb-1.5 block">Instructions</Label>
               <p className="mb-2 text-sm text-muted-foreground">
                 Additional guidance for generating red team attacks. Useful if you need to tweak
                 anything from structure to specific scenarios for your application.
@@ -143,9 +144,7 @@ const CommonConfigurationOptions = ({
 
             {/* Multi-Variable Inputs */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                Generate Multiple Variables
-              </label>
+              <Label className="mb-1.5 block">Generate Multiple Variables</Label>
               <p className="mb-2 text-sm text-muted-foreground">
                 Define variables that will be generated alongside adversarial prompts. Use{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">

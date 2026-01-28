@@ -7,10 +7,10 @@ import { Checkbox } from '@app/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import {
-  AGENTIC_STRATEGIES,
-  CONFIGURABLE_STRATEGIES,
-  DEFAULT_STRATEGIES,
-  MULTI_MODAL_STRATEGIES,
+  AGENTIC_STRATEGIES_SET,
+  CONFIGURABLE_STRATEGIES_SET,
+  DEFAULT_STRATEGIES_SET,
+  MULTI_MODAL_STRATEGIES_SET,
   type Plugin,
 } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
@@ -26,6 +26,9 @@ const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
 // Strategies that do not support test case generation
 // These strategies will have the test case generation button disabled in the UI
 const STRATEGIES_WITHOUT_TEST_CASE_GENERATION = ['retry', 'other-encodings'] as const;
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET: ReadonlySet<
+  (typeof STRATEGIES_WITHOUT_TEST_CASE_GENERATION)[number]
+> = new Set(STRATEGIES_WITHOUT_TEST_CASE_GENERATION);
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -78,9 +81,10 @@ export function StrategyItem({
   const requiresConfig = isSelected && !isConfigured;
 
   const hasSettingsButton =
-    requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
+    requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION.includes(
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
     strategy.id as any,
   );
 
@@ -149,15 +153,15 @@ export function StrategyItem({
         <div className={cn('mb-2 flex flex-wrap items-center gap-2', hasSettingsButton && 'pr-10')}>
           <span className="font-medium">{strategy.name}</span>
           <div className="flex flex-wrap gap-1">
-            {DEFAULT_STRATEGIES.includes(strategy.id as any) && (
+            {DEFAULT_STRATEGIES_SET.has(strategy.id) && (
               <Badge variant="secondary">Recommended</Badge>
             )}
-            {AGENTIC_STRATEGIES.includes(strategy.id as any) && (
+            {AGENTIC_STRATEGIES_SET.has(strategy.id) && (
               <Badge className="border border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400">
                 Agent
               </Badge>
             )}
-            {MULTI_MODAL_STRATEGIES.includes(strategy.id as any) && (
+            {MULTI_MODAL_STRATEGIES_SET.has(strategy.id) && (
               <Badge className="border border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400">
                 Multi-modal
               </Badge>

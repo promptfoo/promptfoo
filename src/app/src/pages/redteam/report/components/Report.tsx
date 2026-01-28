@@ -520,8 +520,8 @@ const App = () => {
   const actionButtons = useMemo(
     () => (
       <div className="flex items-center gap-1">
-        <Tooltip>
-          {evalId && (
+        {evalId && (
+          <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
@@ -540,9 +540,9 @@ const App = () => {
                 <ListOrdered className="size-5" />
               </Button>
             </TooltipTrigger>
-          )}
-          <TooltipContent>View all logs</TooltipContent>
-        </Tooltip>
+            <TooltipContent>View all logs</TooltipContent>
+          </Tooltip>
+        )}
         {evalId && evalData && (
           <ReportDownloadButton
             evalDescription={evalData?.config.description || evalId}
@@ -782,8 +782,10 @@ const App = () => {
 
                   <div className="min-w-[200px]">
                     <Select
-                      value={selectedCategories.length === 1 ? selectedCategories[0] : ''}
-                      onValueChange={(value) => setSelectedCategories(value ? [value] : [])}
+                      value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+                      onValueChange={(value) =>
+                        setSelectedCategories(value === 'all' ? [] : [value])
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Risk Categories">
@@ -793,7 +795,7 @@ const App = () => {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Categories</SelectItem>
+                        <SelectItem value="all">All Categories</SelectItem>
                         {availableCategories.map((category) => (
                           <SelectItem key={category} value={category}>
                             {category}
@@ -805,8 +807,10 @@ const App = () => {
 
                   <div className="min-w-[200px]">
                     <Select
-                      value={selectedStrategies.length === 1 ? selectedStrategies[0] : ''}
-                      onValueChange={(value) => setSelectedStrategies(value ? [value] : [])}
+                      value={selectedStrategies.length === 1 ? selectedStrategies[0] : 'all'}
+                      onValueChange={(value) =>
+                        setSelectedStrategies(value === 'all' ? [] : [value])
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Strategies">
@@ -816,7 +820,7 @@ const App = () => {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Strategies</SelectItem>
+                        <SelectItem value="all">All Strategies</SelectItem>
                         {availableStrategies.map((strategy) => (
                           <SelectItem key={strategy} value={strategy}>
                             {strategy}

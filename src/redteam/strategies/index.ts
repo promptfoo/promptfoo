@@ -263,11 +263,23 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak-templates',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding jailbreak templates to ${testCases.length} test cases`);
+      const newTestCases = await addInjections(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} jailbreak template test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    // Deprecated: Use 'jailbreak-templates' instead. This alias exists for backward compatibility.
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
+      logger.warn(
+        'Strategy "prompt-injection" is deprecated. Use "jailbreak-templates" instead. ' +
+          'This strategy applies static jailbreak templates and does not cover modern prompt injection techniques.',
+      );
       const newTestCases = await addInjections(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
     },
   },

@@ -28,14 +28,17 @@ import {
   PII_PLUGINS,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  TELECOM_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
+import { isValidPolicyObject } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { generateReport, getPluginBaseDisplayId, getPluginSeverity } from './report';
+import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import { extractGoalFromPrompt, extractVariablesFromJson } from './util';
@@ -43,6 +46,7 @@ import { extractGoalFromPrompt, extractVariablesFromJson } from './util';
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
   FailedPluginInfo,
+  Policy,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -70,13 +74,6 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
 }
 
 const MAX_MAX_CONCURRENCY = 20;
-
-/**
- * Gets the severity level for a plugin based on its ID and configuration.
- * @param pluginId - The ID of the plugin.
- * @param pluginConfig - Optional configuration for the plugin.
- * @returns The severity level.
- */
 
 /**
  * Resolves top-level file paths in the plugin configuration.
@@ -118,6 +115,7 @@ const categories = {
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
+  telecom: TELECOM_PLUGINS,
 } as const;
 
 /**
@@ -292,6 +290,8 @@ async function applyStrategies(
       injectVar,
       {
         ...(strategy.config || {}),
+        // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
+        redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,
@@ -657,6 +657,7 @@ export async function synthesize({
   });
 
   await validateStrategies(strategies);
+  await validateSharpDependency(strategies, plugins);
 
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
@@ -690,12 +691,22 @@ export async function synthesize({
           // Build a concise display string for the plugin
           let configSummary = '';
           if (p.config) {
-            if (p.id === 'policy' && typeof p.config.policy === 'string') {
-              // For policy plugins, show truncated policy text to help differentiate
-              const policyText = p.config.policy.trim().replace(/\n+/g, ' ');
-              const truncated =
-                policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-              configSummary = ` "${truncated}"`;
+            if (p.id === 'policy') {
+              const policy = p.config?.policy as Policy;
+              if (isValidPolicyObject(policy)) {
+                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                if (policy.name) {
+                  configSummary = ` ${policy.name}:`;
+                }
+                configSummary += ` "${truncated}"`;
+              } else {
+                const policyText = policy.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                configSummary = truncated;
+              }
             } else {
               // For other plugins with config, just indicate config exists
               configSummary = ' (custom config)';
@@ -927,16 +938,11 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  // Pre-compute indices for each plugin to ensure unique display IDs (e.g., multiple policy plugins)
-  // This avoids race conditions when plugins are processed concurrently
-  const pluginIndices = new Map<object, number>();
-  const pluginIdCounts = new Map<string, number>();
-  for (const plugin of plugins) {
-    const currentCount = (pluginIdCounts.get(plugin.id) || 0) + 1;
-    pluginIdCounts.set(plugin.id, currentCount);
-    pluginIndices.set(plugin, currentCount);
-  }
+  // Track policy plugin indices for unique display IDs (policy #1, policy #2, etc.)
+  let policyIndex = 0;
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    // Increment policy index for each policy plugin to ensure unique display IDs
+    const currentPolicyIndex = plugin.id === 'policy' ? ++policyIndex : undefined;
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1069,23 +1075,17 @@ export async function synthesize({
 
       // If multiple defined languages were used, create separate report entries for each language
       // Otherwise, use the aggregated result for the plugin
-      // NOTE: Use index to ensure unique display IDs (e.g., multiple policy plugins)
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Use pre-computed index to ensure unique display IDs (avoids race condition)
-      const currentIndex = pluginIndices.get(plugin) || 1;
-      // Only pass index for plugins that can have duplicates (like policy)
-      const baseId = getPluginBaseDisplayId(
-        plugin,
-        plugin.id === 'policy' ? currentIndex : undefined,
-      );
+      // Get the display ID for this plugin (also serves as the unique key)
+      const baseDisplayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
         // Put language prefix at the beginning so it's visible even with truncation
         for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
-          // Use format like "(Hmong) policy #1: ..." so language is visible in truncated table
-          const displayId = langKey === 'en' ? baseId : `(${langKey}) ${baseId}`;
+          // Use format like "(Hmong) Policy Name" so language is visible in truncated table
+          const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
           pluginResults[displayId] = { requested, generated: result.generated };
@@ -1095,7 +1095,7 @@ export async function synthesize({
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
-        pluginResults[baseId] = { requested, generated };
+        pluginResults[baseDisplayId] = { requested, generated };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1138,20 +1138,20 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const baseId = getPluginBaseDisplayId(plugin);
-        pluginResults[baseId] = {
+        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+        pluginResults[displayId] = {
           requested: plugin.numTests,
           generated: customTests.length,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        const baseId = getPluginBaseDisplayId(plugin);
-        pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
+        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+        pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      const baseId = getPluginBaseDisplayId(plugin);
-      pluginResults[baseId] = { requested: plugin.numTests, generated: 0 };
+      const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+      pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
   });

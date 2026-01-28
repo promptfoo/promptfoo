@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -54,7 +55,7 @@ import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   bodyError: string | React.ReactNode | null;
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
@@ -69,7 +70,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
@@ -573,7 +574,7 @@ ${exampleRequest}`;
                 maxHeight: '40rem',
               }}
             />
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         ) : (
           <>
@@ -605,7 +606,7 @@ ${exampleRequest}`;
                   placeholder="https://example.com/api/chat"
                 />
               </div>
-              {urlError && <p className="text-sm text-destructive">{urlError}</p>}
+              {urlError && <HelperText error>{urlError}</HelperText>}
             </div>
 
             <p className="mb-2 mt-6 font-medium">Headers</p>
@@ -668,7 +669,7 @@ ${exampleRequest}`;
                 }}
               />
             </div>
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         )}
 

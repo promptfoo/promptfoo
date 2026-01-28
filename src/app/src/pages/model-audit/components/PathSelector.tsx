@@ -4,6 +4,7 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   ClearIcon,
   CloudIcon,
@@ -19,6 +20,7 @@ import {
   UploadIcon,
 } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -286,9 +288,9 @@ export default function PathSelector({
 
           {/* Drag and Drop Zone */}
           <div>
-            <label htmlFor="model-path-input" className="text-sm text-muted-foreground mb-2 block">
+            <Label htmlFor="model-path-input" className="text-muted-foreground block">
               Add model path
-            </label>
+            </Label>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -346,7 +348,11 @@ export default function PathSelector({
               {isChecking ? 'Checking...' : 'Add'}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive -mt-4">{error}</p>}
+          {error && (
+            <HelperText error className="-mt-4">
+              {error}
+            </HelperText>
+          )}
 
           {/* Recent Paths */}
           {recentPaths.length > 0 && (

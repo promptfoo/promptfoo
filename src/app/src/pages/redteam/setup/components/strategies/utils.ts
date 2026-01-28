@@ -82,6 +82,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,
   'jailbreak:tree': 150,
+  'jailbreak-templates': 1,
   layer: 1,
   leetspeak: 1,
   'math-prompt': 1,

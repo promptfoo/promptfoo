@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
+import { HelperText } from './helper-text';
 import { Label } from './label';
 
 export type NumberInputChangeFn = (value?: number) => void;
@@ -98,7 +99,7 @@ function NumberInput({
   const errorMessage = typeof error === 'string' ? error : undefined;
 
   return (
-    <div className={cn('flex flex-col gap-1.5', fullWidth && 'w-full')}>
+    <div className={cn('flex flex-col', fullWidth && 'w-full')}>
       {label && (
         <Label
           htmlFor={inputId}
@@ -142,15 +143,9 @@ function NumberInput({
         )}
       </div>
       {(helperText || errorMessage) && (
-        <p
-          className={cn(
-            'text-xs',
-            hasError ? 'text-destructive' : 'text-muted-foreground',
-            disabled && 'opacity-50',
-          )}
-        >
+        <HelperText error={hasError} className={cn(disabled && 'opacity-50')}>
           {errorMessage || helperText}
-        </p>
+        </HelperText>
       )}
     </div>
   );
