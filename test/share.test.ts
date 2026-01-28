@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -662,6 +662,10 @@ describe('adaptive chunk retry', () => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
     vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('splits chunk on 413 Payload Too Large and retries', async () => {

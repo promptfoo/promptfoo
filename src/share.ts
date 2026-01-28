@@ -279,10 +279,13 @@ async function sendChunkWithRetry(
   config: AdaptiveChunkConfig,
   onProgress: (sentCount: number) => void,
   depth: number = 0,
+  maxDepth?: number,
 ): Promise<number> {
-  const MAX_DEPTH = 10; // Prevent infinite recursion (allows splitting down to 1/1024 of original)
+  // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
+  const effectiveMaxDepth =
+    maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
 
-  if (depth > MAX_DEPTH) {
+  if (depth > effectiveMaxDepth) {
     throw new Error(`Maximum retry depth exceeded. Cannot send chunk of ${chunk.length} results.`);
   }
 
@@ -325,6 +328,7 @@ async function sendChunkWithRetry(
       config,
       onProgress,
       depth + 1,
+      effectiveMaxDepth,
     );
     const secondSent = await sendChunkWithRetry(
       secondHalf,
@@ -334,6 +338,7 @@ async function sendChunkWithRetry(
       config,
       onProgress,
       depth + 1,
+      effectiveMaxDepth,
     );
 
     return firstSent + secondSent;
@@ -393,7 +398,9 @@ async function sendChunkedResults(
   const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
   const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
   const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
-  const resultsPerChunk = envChunkSize ?? calculatedChunkSize;
+  // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
+  const resultsPerChunk =
+    typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
 
   // Adaptive chunk configuration for retry logic
   const chunkConfig: AdaptiveChunkConfig = {
