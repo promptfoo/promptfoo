@@ -26,7 +26,7 @@ class CustomApiProvider {
           content: prompt,
         },
       ],
-      max_tokens: Number.parseInt(this.config?.max_tokens, 10) || 1024,
+      max_completion_tokens: Number.parseInt(this.config?.max_tokens, 10) || 1024,
       temperature: Number.parseFloat(this.config?.temperature) || 0,
     };
 
