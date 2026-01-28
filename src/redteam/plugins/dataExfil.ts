@@ -109,8 +109,22 @@ export class DataExfilGrader extends RedteamGraderBase {
     else {
       const webPageUuid = test.metadata?.webPageUuid as string | undefined;
       if (webPageUuid) {
-        const evalId = test.metadata?.evaluationId as string | undefined;
-        logger.debug('[DataExfilGrader] Fetching tracking data for UUID:', { webPageUuid, evalId });
+        // Try to get evalId from metadata, or extract from webPageUrl
+        // URL format: /dynamic-pages/{evalId}/{uuid}
+        let evalId = test.metadata?.evaluationId as string | undefined;
+        if (!evalId) {
+          const webPageUrl = test.metadata?.webPageUrl as string | undefined;
+          logger.debug('[DataExfilGrader] Extracting evalId from webPageUrl', {
+            webPageUrl,
+            metadataKeys: test.metadata ? Object.keys(test.metadata) : [],
+          });
+          if (webPageUrl) {
+            const match = webPageUrl.match(/\/dynamic-pages\/([^/]+)\//);
+            if (match) {
+              evalId = match[1];
+            }
+          }
+        }
 
         const tracking = await checkExfilTracking(webPageUuid, evalId);
         if (tracking) {

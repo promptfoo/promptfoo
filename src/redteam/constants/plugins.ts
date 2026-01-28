@@ -313,6 +313,7 @@ export const ADDITIONAL_PLUGINS = [
   'coppa',
   'cross-session-leak',
   'cyberseceval',
+  'data-exfil',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
@@ -389,10 +390,6 @@ type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
-
-// Grader-only plugin IDs (these are graders that don't generate test cases,
-// they only grade responses from other plugins)
-export const GRADER_PLUGIN_IDS = ['data-exfil'] as const;
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
@@ -495,6 +492,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'cca',
   'competitors',
   'coppa',
+  'data-exfil',
   'ferpa',
   'goal-misalignment',
   'harmful:misinformation-disinformation',

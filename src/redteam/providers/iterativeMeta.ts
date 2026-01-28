@@ -484,7 +484,9 @@ export async function runMetaAgentRedteam({
           };
         } else {
           // Try to fetch exfil tracking from server API via webPageUuid
+          // Check multiple sources: transform result metadata, test metadata, iteration test metadata
           const webPageUuid =
+            (lastTransformResult?.metadata?.webPageUuid as string) ||
             (test.metadata?.webPageUuid as string) ||
             (iterationTest.metadata?.webPageUuid as string);
           if (webPageUuid) {

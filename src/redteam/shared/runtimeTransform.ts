@@ -39,6 +39,8 @@ export interface TransformResult {
   error?: string;
   /** Additional display vars from the transform (e.g., fetchPrompt, embeddedInjection) */
   displayVars?: Record<string, string>;
+  /** Metadata from the transform (e.g., webPageUuid, webPageUrl from indirect-web-pwn) */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -197,6 +199,8 @@ export async function applyRuntimeTransforms(
     prompt: transformedPrompt,
     originalPrompt,
     ...(Object.keys(displayVars).length > 0 && { displayVars }),
+    // Include metadata from the transform (e.g., webPageUuid from indirect-web-pwn)
+    metadata: testCase.metadata,
   };
 
   // Check for storage keys in metadata (set by strategies that store to file system)
