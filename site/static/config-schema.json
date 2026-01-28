@@ -2863,7 +2863,17 @@
           "maximum": 9007199254740991
         },
         "filterMetadata": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "filterPattern": {
           "type": "string"

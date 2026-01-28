@@ -196,6 +196,7 @@ describe('TrueFoundry', () => {
           model: 'openai/gpt-4',
           messages: [{ role: 'user', content: 'Test prompt' }],
           max_tokens: 1024,
+          temperature: 0,
         };
 
         expect(mockedFetchWithRetries).toHaveBeenCalledWith(
