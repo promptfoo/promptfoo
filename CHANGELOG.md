@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.19](https://github.com/promptfoo/promptfoo/compare/0.120.18...0.120.19) (2026-01-28)
+
+
+### Features
+
+* **app:** enhance DataTable with column alignment and styling improvements ([#7349](https://github.com/promptfoo/promptfoo/issues/7349)) ([8b8b122](https://github.com/promptfoo/promptfoo/commit/8b8b1223cef96257783caf69079976090db0062c))
+* **app:** extend UI component interfaces for data-testid support ([#7339](https://github.com/promptfoo/promptfoo/issues/7339)) ([d9dc48a](https://github.com/promptfoo/promptfoo/commit/d9dc48a4866c1657ef7d4355deddd8f7ecc6dcaa))
+* **webui:** Make severity cards colourful again ([#7346](https://github.com/promptfoo/promptfoo/issues/7346)) ([ba3c3db](https://github.com/promptfoo/promptfoo/commit/ba3c3db57d9968a85b2b7fcdd35ea61039df8934))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @opencode-ai/sdk to ^1.1.33 ([#7327](https://github.com/promptfoo/promptfoo/issues/7327)) ([bc8ee96](https://github.com/promptfoo/promptfoo/commit/bc8ee96af4f424a25d3e66579205d717894f81a1))
+* **deps:** update dependency @opencode-ai/sdk to ^1.1.34 ([#7332](https://github.com/promptfoo/promptfoo/issues/7332)) ([a9523d5](https://github.com/promptfoo/promptfoo/commit/a9523d51826d42c4d762ac0d414900c04b318cc4))
+* **deps:** update dependency ai to ^6.0.49 ([#7341](https://github.com/promptfoo/promptfoo/issues/7341)) ([a957b98](https://github.com/promptfoo/promptfoo/commit/a957b98754982c60fc75fbdb61b6b32c03c81532))
+* serialize Error objects properly in log context ([#7351](https://github.com/promptfoo/promptfoo/issues/7351)) ([584b283](https://github.com/promptfoo/promptfoo/commit/584b283134c8496ce2468003522aa13558bd4182))
+* **share:** add adaptive chunk retry for large eval uploads ([#7335](https://github.com/promptfoo/promptfoo/issues/7335)) ([1f114da](https://github.com/promptfoo/promptfoo/commit/1f114da4b3a9d81e04a771471fcae6df84ba95fd))
+* **webui:** Make chevron clickable for combobox ([#7347](https://github.com/promptfoo/promptfoo/issues/7347)) ([e7be12d](https://github.com/promptfoo/promptfoo/commit/e7be12d351f6b137f1964120277775ed384654ad))
+
 ## [0.120.18](https://github.com/promptfoo/promptfoo/compare/0.120.17...0.120.18) (2026-01-28)
 
 ### Features
