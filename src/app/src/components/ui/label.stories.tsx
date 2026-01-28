@@ -1,4 +1,5 @@
 import { Checkbox } from './checkbox';
+import { HelperText } from './helper-text';
 import { Input } from './input';
 import { Label } from './label';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -28,7 +29,7 @@ export const Default: Story = {
 // With input
 export const WithInput: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="email">Email</Label>
       <Input type="email" id="email" placeholder="Email" />
     </div>
@@ -40,7 +41,9 @@ export const WithCheckbox: Story = {
   render: () => (
     <div className="flex items-center space-x-2">
       <Checkbox id="terms" />
-      <Label htmlFor="terms">Accept terms and conditions</Label>
+      <Label htmlFor="terms" inline>
+        Accept terms and conditions
+      </Label>
     </div>
   ),
 };
@@ -48,7 +51,7 @@ export const WithCheckbox: Story = {
 // Required field
 export const Required: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="username">
         Username <span className="text-destructive">*</span>
       </Label>
@@ -60,7 +63,7 @@ export const Required: Story = {
 // Disabled state
 export const Disabled: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="disabled" className="text-muted-foreground">
         Disabled Field
       </Label>
@@ -72,10 +75,10 @@ export const Disabled: Story = {
 // With helper text
 export const WithHelperText: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="password">Password</Label>
       <Input type="password" id="password" placeholder="Enter password" />
-      <p className="text-sm text-muted-foreground">Must be at least 8 characters long</p>
+      <HelperText>Must be at least 8 characters long</HelperText>
     </div>
   ),
 };
@@ -84,21 +87,23 @@ export const WithHelperText: Story = {
 export const FormLayout: Story = {
   render: () => (
     <div className="space-y-4 w-full max-w-sm">
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="firstName">First Name</Label>
         <Input id="firstName" placeholder="John" />
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="lastName">Last Name</Label>
         <Input id="lastName" placeholder="Doe" />
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="email-form">Email</Label>
         <Input id="email-form" type="email" placeholder="john@example.com" />
       </div>
       <div className="flex items-center space-x-2">
         <Checkbox id="newsletter" />
-        <Label htmlFor="newsletter">Subscribe to newsletter</Label>
+        <Label htmlFor="newsletter" inline>
+          Subscribe to newsletter
+        </Label>
       </div>
     </div>
   ),

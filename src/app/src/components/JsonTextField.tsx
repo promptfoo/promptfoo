@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { HelperText } from '@app/components/ui/helper-text';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
@@ -38,7 +39,7 @@ const JsonTextField = ({
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       {label && (
         <Label htmlFor={id} className={cn(error && 'text-destructive')}>
           {label}
@@ -53,9 +54,7 @@ const JsonTextField = ({
         {...props}
       />
       {(error || helperText) && (
-        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>
-          {error ? 'Invalid JSON' : helperText}
-        </p>
+        <HelperText error={error}>{error ? 'Invalid JSON' : helperText}</HelperText>
       )}
     </div>
   );

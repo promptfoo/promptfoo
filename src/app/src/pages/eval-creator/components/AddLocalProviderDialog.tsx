@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
@@ -84,9 +85,9 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
               }}
               className={error ? 'border-destructive' : ''}
             />
-            <p className={`text-sm ${error ? 'text-destructive' : 'text-muted-foreground'}`}>
+            <HelperText error={!!error}>
               {error || 'Example: /home/user/projects/my-provider.py'}
-            </p>
+            </HelperText>
           </div>
         </div>
 

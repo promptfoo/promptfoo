@@ -44,7 +44,9 @@ export const WithLabel: Story = {
   render: () => (
     <div className="flex items-center space-x-2">
       <Checkbox id="terms" />
-      <Label htmlFor="terms">Accept terms and conditions</Label>
+      <Label htmlFor="terms" inline>
+        Accept terms and conditions
+      </Label>
     </div>
   ),
 };
@@ -55,13 +57,13 @@ export const Disabled: Story = {
     <div className="space-y-4">
       <div className="flex items-center space-x-2">
         <Checkbox id="disabled-unchecked" disabled />
-        <Label htmlFor="disabled-unchecked" className="text-muted-foreground">
+        <Label htmlFor="disabled-unchecked" inline className="text-muted-foreground">
           Disabled unchecked
         </Label>
       </div>
       <div className="flex items-center space-x-2">
         <Checkbox id="disabled-checked" disabled checked />
-        <Label htmlFor="disabled-checked" className="text-muted-foreground">
+        <Label htmlFor="disabled-checked" inline className="text-muted-foreground">
           Disabled checked
         </Label>
       </div>
@@ -88,7 +90,9 @@ export const Interactive: Story = {
             checked={checked}
             onCheckedChange={(value) => setChecked(value === true)}
           />
-          <Label htmlFor="interactive">Toggle me</Label>
+          <Label htmlFor="interactive" inline>
+            Toggle me
+          </Label>
         </div>
         <p className="text-sm text-muted-foreground">
           Checkbox is: {checked ? 'checked' : 'unchecked'}
@@ -120,7 +124,7 @@ export const CheckboxGroup: Story = {
                 checked={selected.includes(option)}
                 onCheckedChange={() => toggleOption(option)}
               />
-              <Label htmlFor={option}>
+              <Label htmlFor={option} inline>
                 {option === 'option1' && 'Email notifications'}
                 {option === 'option2' && 'Push notifications'}
                 {option === 'option3' && 'SMS notifications'}

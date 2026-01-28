@@ -3181,6 +3181,234 @@ describe('Language configuration', () => {
     });
   });
 
+  describe('redteamProvider config propagation to strategies', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
+    });
+
+    it('should pass redteamProvider from cliState.config to strategy actions', async () => {
+      // Import cliState to set up the redteam provider config
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with a mock redteam provider - this is the provider that should
+      // be passed to strategies for use by agentic providers (iterative, crescendo, etc.)
+      cliState.config = {
+        redteam: {
+          provider: 'vertex:gemini-2.5-flash',
+        },
+      } as any;
+
+      try {
+        // Mock plugin to return a test case
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        // Mock strategy that captures the config it receives
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading to return a mock provider for test generation
+        // This avoids the loadApiProviders error while still testing strategy config
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        // Restore original cliState
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as undefined when not configured in cliState', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState WITHOUT redteam provider
+      cliState.config = {
+        redteam: {},
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'jailbreak' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(mockStrategyAction).toHaveBeenCalled();
+        expect(capturedConfig).toBeDefined();
+        // When not configured, redteamProvider should be undefined
+        expect(capturedConfig?.redteamProvider).toBeUndefined();
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as object when configured as provider options', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with provider options object
+      const providerOptions = {
+        id: 'vertex:gemini-2.5-flash',
+        config: { temperature: 0.7 },
+      };
+      cliState.config = {
+        redteam: {
+          provider: providerOptions,
+        },
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          // Should pass the full provider options object
+          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+  });
+
   describe('Multi-input mode plugin exclusion', () => {
     it('should exclude dataset-exempt plugins in multi-input mode', async () => {
       const result = await synthesize({

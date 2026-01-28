@@ -10,6 +10,7 @@ permissions:
   contents: read
   pull-requests: read
   checks: write
+  id-token: write # Required for OIDC authentication with Codecov
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -105,7 +106,17 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard && ' -- --coverage' || '' }}
+
+      - name: Upload Backend Coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/coverage-final.json
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   build:
     name: Build on Node ${{ matrix.node }}
@@ -311,6 +322,40 @@ jobs:
         working-directory: site
         run: npm run build
 
+  code-scan-action:
+    name: Code Scan Action
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install Code Scan Action Dependencies
+        working-directory: code-scan-action
+        run: npm install
+
+      - name: Type Check
+        working-directory: code-scan-action
+        run: npm run tsc
+
+      - name: Build Action
+        working-directory: code-scan-action
+        run: npm run build
+
   site-tests:
     name: Site tests
     timeout-minutes: 5
@@ -339,7 +384,7 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -358,8 +403,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run App Tests
-        run: npm run test:app
+      - name: Run App Tests with Coverage
+        run: npm run test:coverage --prefix src/app
+
+      - name: Upload Frontend Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./src/app/coverage/coverage-final.json
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   integration-tests:
     name: Run Integration Tests

@@ -36,7 +36,11 @@ export function RecommendedOptions({
               onCheckedChange={(checked) => onMultiTurnChange(checked === true)}
               className="mt-0.5"
             />
-            <Label htmlFor="multi-turn-checkbox" className="cursor-pointer text-sm font-normal">
+            <Label
+              htmlFor="multi-turn-checkbox"
+              inline
+              className="cursor-pointer text-sm font-normal"
+            >
               {mediumPreset.options.multiTurn.label}
             </Label>
           </div>
@@ -53,13 +57,21 @@ export function RecommendedOptions({
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="true" id="stateful-yes-rec" />
-                  <Label htmlFor="stateful-yes-rec" className="cursor-pointer text-sm font-normal">
+                  <Label
+                    htmlFor="stateful-yes-rec"
+                    inline
+                    className="cursor-pointer text-sm font-normal"
+                  >
                     Yes - my system is stateful and maintains conversation history
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="false" id="stateful-no-rec" />
-                  <Label htmlFor="stateful-no-rec" className="cursor-pointer text-sm font-normal">
+                  <Label
+                    htmlFor="stateful-no-rec"
+                    inline
+                    className="cursor-pointer text-sm font-normal"
+                  >
                     No - my system is not stateful, the full conversation history must be sent on
                     every request
                   </Label>

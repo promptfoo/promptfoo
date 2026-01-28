@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
+import { HelperText } from './helper-text';
 import { Label } from './label';
 import { Textarea } from './textarea';
 
@@ -31,14 +32,14 @@ const JsonTextarea = ({ label, defaultValue = '', onChange, className }: JsonTex
   };
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn('flex flex-col', className)}>
       <Label>{label}</Label>
       <Textarea
         value={value}
         onChange={handleChange}
         className={cn('min-h-20 font-mono text-sm', error && 'border-destructive')}
       />
-      {error && <p className="text-sm text-destructive">Invalid JSON</p>}
+      {error && <HelperText error>Invalid JSON</HelperText>}
     </div>
   );
 };

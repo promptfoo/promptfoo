@@ -41,6 +41,11 @@ const severityStyles: Record<
     text: 'text-emerald-500 dark:text-emerald-400',
     bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
   },
+  [Severity.Informational]: {
+    border: 'border-l-blue-500',
+    text: 'text-blue-500 dark:text-blue-400',
+    bg: 'bg-blue-50/50 dark:bg-blue-950/20',
+  },
 };
 
 export default function SeverityCard({

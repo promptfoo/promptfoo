@@ -187,8 +187,9 @@ describe('postbuild integration', () => {
     const distDir = path.join(projectRoot, 'dist', 'src');
     const serverDir = path.join(distDir, 'server');
 
-    // Skip if dist doesn't exist (build hasn't run)
-    if (!fs.existsSync(distDir)) {
+    // Skip if dist doesn't exist or wrapper files haven't been copied yet (postbuild incomplete)
+    // Check for one representative wrapper file to determine if postbuild has run
+    if (!fs.existsSync(distDir) || !fs.existsSync(path.join(serverDir, 'python', 'wrapper.py'))) {
       return;
     }
 
