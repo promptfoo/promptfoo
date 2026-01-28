@@ -82,6 +82,7 @@ vi.mock('../../src/esm', async () => ({
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
 const mockFsMkdirSync = vi.hoisted(() => vi.fn());
+const mockFsWriteFileSync = vi.hoisted(() => vi.fn());
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -91,10 +92,12 @@ vi.mock('fs', async (importOriginal) => {
       readFileSync: mockFsReadFileSync,
       existsSync: mockFsExistsSync,
       mkdirSync: mockFsMkdirSync,
+      writeFileSync: mockFsWriteFileSync,
     },
     readFileSync: mockFsReadFileSync,
     existsSync: mockFsExistsSync,
     mkdirSync: mockFsMkdirSync,
+    writeFileSync: mockFsWriteFileSync,
   };
 });
 

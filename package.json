@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.120.17",
+  "version": "0.120.18",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -183,7 +183,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@ibm-cloud/watsonx-ai": "^1.7.7",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.89.0",
+    "@openai/codex-sdk": "^0.92.0",
     "@playwright/browser-chromium": "^1.58.0",
     "@rollup/rollup-linux-x64-gnu": "^4.56.0",
     "@slack/web-api": "^7.13.0",
@@ -219,8 +219,8 @@
     "@inquirer/input": "^5.0.4",
     "@inquirer/select": "^5.0.4",
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "@openai/agents": "^0.4.1",
-    "@opencode-ai/sdk": "^1.1.31",
+    "@openai/agents": "^0.4.2",
+    "@opencode-ai/sdk": "^1.1.33",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.211.0",
@@ -292,7 +292,7 @@
     "undici": "^7.19.0",
     "winston": "^3.19.0",
     "ws": "^8.19.0",
-    "zod": "^4.3.5"
+    "zod": "^4.3.6"
   },
   "madge": {
     "detectiveOptions": {

@@ -322,6 +322,40 @@ jobs:
         working-directory: site
         run: npm run build
 
+  code-scan-action:
+    name: Code Scan Action
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install Code Scan Action Dependencies
+        working-directory: code-scan-action
+        run: npm install
+
+      - name: Type Check
+        working-directory: code-scan-action
+        run: npm run tsc
+
+      - name: Build Action
+        working-directory: code-scan-action
+        run: npm run build
+
   site-tests:
     name: Site tests
     timeout-minutes: 5
