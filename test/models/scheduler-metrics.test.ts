@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
+
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+
 import type { SchedulerMetrics } from '../../src/types';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -29,11 +31,9 @@ describe('SchedulerMetrics persistence', () => {
 
   beforeEach(async () => {
     // Create a new eval
-    evalInstance = await Eval.create(
-      { description: 'Test eval for scheduler metrics' },
-      [],
-      { id: randomUUID() },
-    );
+    evalInstance = await Eval.create({ description: 'Test eval for scheduler metrics' }, [], {
+      id: randomUUID(),
+    });
   });
 
   afterEach(() => {

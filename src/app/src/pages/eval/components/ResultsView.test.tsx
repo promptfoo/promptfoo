@@ -2385,7 +2385,7 @@ describe('ResultsView Concurrency Display', () => {
     });
   });
 
-  it('should display concurrency chip when stats.maxConcurrency is available', async () => {
+  it('should NOT display concurrency badge for normal runs (concurrency > 1, no rate limits)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2404,7 +2404,14 @@ describe('ResultsView Concurrency Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, maxConcurrency: 8 },
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 8,
+      },
     });
 
     renderWithRouter(
@@ -2415,14 +2422,12 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display consolidated concurrency chip as "Concurrency 8/8"
-    await waitFor(() => {
-      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
-      expect(screen.getByText(/8\/8/)).toBeInTheDocument();
-    });
+    // No concurrency badge should be shown for normal parallel runs
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText(/Sequential/)).toBeNull();
   });
 
-  it('should display concurrency chip when stats.concurrencyUsed is available', async () => {
+  it('should display "Rate limited" badge when schedulerMetrics.concurrencyReduced is true', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2441,7 +2446,22 @@ describe('ResultsView Concurrency Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, concurrencyUsed: 4 },
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 4,
+        schedulerMetrics: {
+          minConcurrency: 2,
+          maxConcurrency: 8,
+          finalConcurrency: 4,
+          rateLimitHits: 5,
+          retriedRequests: 3,
+          concurrencyReduced: true,
+        },
+      },
     });
 
     renderWithRouter(
@@ -2452,14 +2472,14 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display consolidated concurrency chip as "Concurrency 4/4"
+    // Should display rate limited badge with arrow notation
     await waitFor(() => {
-      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
-      expect(screen.getByText(/4\/4/)).toBeInTheDocument();
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+      expect(screen.getByText(/8 → 4/)).toBeInTheDocument();
     });
   });
 
-  it('should display consolidated concurrency chip when both values are available', async () => {
+  it('should display "Sequential" badge when concurrencyUsed is 1 and maxConcurrency > 1', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2496,14 +2516,13 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display consolidated chip as "Concurrency 1/8" (effective/configured)
+    // Should display sequential badge
     await waitFor(() => {
-      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
-      expect(screen.getByText(/1\/8/)).toBeInTheDocument();
+      expect(screen.getByText('Sequential')).toBeInTheDocument();
     });
   });
 
-  it('should not display concurrency chip when maxConcurrency is 0', async () => {
+  it('should NOT display Sequential badge when concurrencyUsed is 1 and maxConcurrency is 1', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2522,7 +2541,14 @@ describe('ResultsView Concurrency Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, maxConcurrency: 0 },
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 1,
+        concurrencyUsed: 1,
+      },
     });
 
     renderWithRouter(
@@ -2533,11 +2559,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Concurrency chip should not be present when value is 0
-    expect(screen.queryByText(/Concurrency/)).toBeNull();
+    // Should NOT display sequential badge when user configured concurrency=1
+    expect(screen.queryByText('Sequential')).toBeNull();
   });
 
-  it('should not display concurrency chip when concurrencyUsed is 0', async () => {
+  it('should display "Rate limited" badge instead of "Sequential" when rate limits caused reduction to 1', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2556,7 +2582,22 @@ describe('ResultsView Concurrency Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, concurrencyUsed: 0 },
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 1,
+        schedulerMetrics: {
+          minConcurrency: 1,
+          maxConcurrency: 8,
+          finalConcurrency: 1,
+          rateLimitHits: 10,
+          retriedRequests: 5,
+          concurrencyReduced: true,
+        },
+      },
     });
 
     renderWithRouter(
@@ -2567,11 +2608,14 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Concurrency chip should not be present when value is 0
-    expect(screen.queryByText(/Concurrency/)).toBeNull();
+    // Should display rate limited badge, not sequential
+    await waitFor(() => {
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Sequential')).toBeNull();
   });
 
-  it('should not display concurrency chip when stats is null', async () => {
+  it('should not display any concurrency-related badge when stats is null', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2601,45 +2645,12 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Concurrency chip should not be present
-    expect(screen.queryByText(/Concurrency/)).toBeNull();
+    // No concurrency-related badge should be present
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
   });
 
-  it('should not display concurrency chip when stats has no concurrency fields', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Concurrency chip should not be present
-    expect(screen.queryByText(/Concurrency/)).toBeNull();
-  });
-
-  it('should display duration and concurrency chips together', async () => {
+  it('should display duration badge for normal parallel runs', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2677,12 +2688,13 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display duration and consolidated concurrency chip
+    // Should display duration
     await waitFor(() => {
       expect(screen.getByText('45.0s')).toBeInTheDocument();
-      expect(screen.getByText(/Concurrency/)).toBeInTheDocument();
-      expect(screen.getByText(/4\/8/)).toBeInTheDocument();
     });
+    // Should NOT display any concurrency badge for normal runs
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
   });
 });
 
