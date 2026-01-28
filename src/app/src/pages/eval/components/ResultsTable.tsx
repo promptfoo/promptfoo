@@ -712,6 +712,20 @@ function ResultsTable({
                   }
                 }
 
+                // For variables like embeddedInjection, check transformDisplayVars as fallback
+                // This handles layer mode where embeddedInjection is in transformDisplayVars, not vars
+                if (!value || value === '') {
+                  for (const output of row.outputs || []) {
+                    const transformVars = output?.metadata?.transformDisplayVars as
+                      | Record<string, string>
+                      | undefined;
+                    if (transformVars?.[varName]) {
+                      value = transformVars[varName];
+                      break;
+                    }
+                  }
+                }
+
                 // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
@@ -901,7 +915,17 @@ function ResultsTable({
       return [];
     }
 
-    const varKeyArray = Array.from(transformVarKeys);
+    // Filter out keys that already exist in head.vars to avoid duplicate columns
+    // This handles the case where standalone mode has embeddedInjection in vars
+    // and layer mode has it in transformDisplayVars - we want one unified column
+    const existingVarNames = new Set(head.vars);
+    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+
+    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
+    if (varKeyArray.length === 0) {
+      return [];
+    }
+
     return [
       columnHelper.group({
         id: 'transformDisplayVars',
@@ -939,7 +963,7 @@ function ResultsTable({
         ),
       }),
     ];
-  }, [columnHelper, tableBody, maxTextLength]);
+  }, [columnHelper, tableBody, maxTextLength, head.vars]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {

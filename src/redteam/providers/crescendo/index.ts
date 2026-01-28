@@ -304,8 +304,11 @@ export class CrescendoProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
-    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
 
     const tracingOptions = resolveTracingOptions({
       strategyId: 'crescendo',
@@ -420,6 +423,11 @@ export class CrescendoProvider implements ApiProvider {
         // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
         if (transformResult?.displayVars) {
           lastTransformDisplayVars = transformResult.displayVars;
+        }
+
+        // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+        if (transformResult?.prompt) {
+          lastFinalAttackPrompt = transformResult.prompt;
         }
 
         // Track current input vars for history entry
@@ -701,7 +709,8 @@ export class CrescendoProvider implements ApiProvider {
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
-        redteamFinalPrompt: finalPrompt,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,

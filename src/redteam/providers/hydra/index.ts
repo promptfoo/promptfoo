@@ -286,8 +286,11 @@ export class HydraProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
-    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
 
     // Find the grader
     const { getGraderById } = await import('../../graders');
@@ -547,6 +550,9 @@ export class HydraProvider implements ApiProvider {
           lastTransformDisplayVars = lastTransformResult.displayVars;
         }
       }
+
+      // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+      lastFinalAttackPrompt = finalTargetPrompt;
 
       // Get target response
       const iterationStart = Date.now();
@@ -889,6 +895,7 @@ export class HydraProvider implements ApiProvider {
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

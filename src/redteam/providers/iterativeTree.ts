@@ -525,8 +525,11 @@ async function runRedteamConversation({
   const treeOutputs: TreeSearchOutput[] = [];
   let lastResponse: TargetResponse | undefined = undefined;
 
-  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
+
+  // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+  let lastFinalAttackPrompt: string | undefined;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -618,6 +621,9 @@ async function runRedteamConversation({
             lastTransformDisplayVars = lastTransformResult.displayVars;
           }
         }
+
+        // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+        lastFinalAttackPrompt = finalInjectVar;
 
         // Build updated vars - handle multi-input mode
         const updatedVars: Record<string, VarValue> = {
@@ -844,7 +850,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -885,7 +891,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -927,7 +933,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1048,7 +1054,7 @@ async function runRedteamConversation({
     prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
-      redteamFinalPrompt: bestNode.prompt,
+      redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],
       attempts,
       redteamTreeHistory: treeOutputs,

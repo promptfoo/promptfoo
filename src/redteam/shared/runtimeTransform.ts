@@ -37,7 +37,7 @@ export interface TransformResult {
   image?: MediaData;
   /** Error message if transform failed - caller should skip the turn */
   error?: string;
-  /** Additional display vars from the transform (e.g., embeddedInjection, webPageUrl) */
+  /** Additional display vars from the transform (e.g., fetchPrompt, embeddedInjection) */
   displayVars?: Record<string, string>;
 }
 

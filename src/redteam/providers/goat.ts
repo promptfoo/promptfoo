@@ -197,8 +197,11 @@ export default class GoatProvider implements ApiProvider {
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
 
-    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
@@ -507,6 +510,9 @@ export default class GoatProvider implements ApiProvider {
           if (lastTransformResult.displayVars) {
             lastTransformDisplayVars = lastTransformResult.displayVars;
           }
+
+          // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+          lastFinalAttackPrompt = lastTransformResult.prompt;
         }
 
         const iterationStart = Date.now();
@@ -733,7 +739,8 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: finalPrompt,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         stopReason:
           this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess

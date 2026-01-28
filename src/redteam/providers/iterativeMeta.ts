@@ -160,8 +160,11 @@ export async function runMetaAgentRedteam({
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
-  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
+
+  // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+  let lastFinalAttackPrompt: string | undefined;
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
@@ -312,6 +315,9 @@ export async function runMetaAgentRedteam({
         lastTransformDisplayVars = lastTransformResult.displayVars;
       }
     }
+
+    // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+    lastFinalAttackPrompt = finalAttackPrompt;
 
     // Render the actual prompt with the agent's attack
     // Escape nunjucks template syntax (replace {{ with { { to break the pattern)
@@ -563,7 +569,7 @@ export async function runMetaAgentRedteam({
     // Check if vulnerability was achieved
     if (graderResult?.pass === false) {
       vulnerabilityAchieved = true;
-      bestPrompt = attackPrompt;
+      bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
       stopReason = 'Grader failed';
       finalIteration = i + 1;
@@ -583,7 +589,9 @@ export async function runMetaAgentRedteam({
     metadata: {
       finalIteration,
       vulnerabilityAchieved,
-      redteamFinalPrompt: bestPrompt,
+      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+      redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
       storedGraderResult,
       stopReason,
       redteamHistory,
