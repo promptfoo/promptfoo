@@ -49,7 +49,7 @@ import {
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
 
@@ -280,7 +280,7 @@ export async function doGenerateRedteam(
   }
 
   // Validate email for remote generation
-  if (shouldGenerateRemote()) {
+  if (!neverGenerateRemote()) {
     let hasValidEmail = false;
     while (!hasValidEmail) {
       const { emailNeedsValidation } = await promptForEmailUnverified();
