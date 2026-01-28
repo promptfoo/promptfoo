@@ -73,6 +73,7 @@ vi.mock('../../../src/models/eval', () => {
         clearResults: vi.fn().mockReturnValue(undefined),
         setDurationMs: vi.fn(),
         setConcurrencyUsed: vi.fn(),
+        setSchedulerMetrics: vi.fn(),
 
         getTable: vi.fn().mockResolvedValue({
           head: {

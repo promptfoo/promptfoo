@@ -39,6 +39,7 @@ describe('evaluator trace integration', () => {
     setVars: vi.fn(),
     setDurationMs: vi.fn(),
     setConcurrencyUsed: vi.fn(),
+    setSchedulerMetrics: vi.fn(),
     results: [],
     prompts: [],
     persisted: false,
