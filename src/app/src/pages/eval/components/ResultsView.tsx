@@ -960,7 +960,34 @@ export default function ResultsView({
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="text-sm">
-                        <div>Running {stats.concurrencyUsed} tests at a time</div>
+                        <div>
+                          <strong>Effective:</strong> {stats.concurrencyUsed} parallel requests
+                        </div>
+                        {stats.maxConcurrency != null && (
+                          <div>
+                            <strong>Configured:</strong> {stats.maxConcurrency} (from CLI -j,
+                            config, or env)
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              {/* Fallback for old evals that have maxConcurrency but not concurrencyUsed */}
+              {stats?.concurrencyUsed == null &&
+                stats?.maxConcurrency != null &&
+                stats.maxConcurrency > 1 &&
+                !stats?.schedulerMetrics?.concurrencyReduced && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                        <Layers className="size-3.5 mr-1" />
+                        {stats.maxConcurrency} max
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <div>Configured to run up to {stats.maxConcurrency} tests at a time</div>
                       </div>
                     </TooltipContent>
                   </Tooltip>

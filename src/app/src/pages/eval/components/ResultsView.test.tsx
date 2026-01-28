@@ -2655,6 +2655,53 @@ describe('ResultsView Concurrency Display', () => {
     expect(screen.queryByText(/parallel/)).toBeNull();
   });
 
+  it('should display "X max" fallback badge for old evals with maxConcurrency but no concurrencyUsed', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 4,
+        // concurrencyUsed is undefined (old eval)
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display "4 max" fallback badge for old evals
+    await waitFor(() => {
+      expect(screen.getByText(/4 max/)).toBeInTheDocument();
+    });
+    // Should NOT show rate limited, sequential, or parallel
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
+  });
+
   it('should display duration badge for normal parallel runs', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
