@@ -195,6 +195,10 @@ export default class IndirectWebPwnProvider implements ApiProvider {
   /**
    * Generate a prompt asking the target to fetch the URL.
    * Uses different phrasing on each attempt.
+   *
+   * Note: This is a fallback when the server doesn't provide a fetch prompt.
+   * When useLlm is true, the server generates more sophisticated, context-aware
+   * fetch prompts via LLM. This function is only used as a fallback.
    */
   private generateFetchPrompt(url: string, attemptNumber: number): string {
     const prompts = [
@@ -261,6 +265,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         uuid: webPage.uuid,
         fullUrl: webPage.fullUrl,
         path: webPage.path,
+        hasServerFetchPrompt: !!webPage.fetchPrompt,
       });
 
       // 2. Internal fetch loop
@@ -270,8 +275,9 @@ export default class IndirectWebPwnProvider implements ApiProvider {
           `[IndirectWebPwn] Fetch attempt ${attempt + 1}/${this.config.maxFetchAttempts}`,
         );
 
-        // Generate prompt asking target to fetch the URL
-        const fetchPrompt = this.generateFetchPrompt(webPage.fullUrl, attempt);
+        // Use server-generated fetch prompt if available, otherwise fall back to local generation
+        const fetchPrompt =
+          webPage.fetchPrompt || this.generateFetchPrompt(webPage.fullUrl, attempt);
 
         logger.debug('[IndirectWebPwn] Sending fetch prompt to target', {
           fetchPrompt,

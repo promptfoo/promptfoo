@@ -30,6 +30,8 @@ interface PageState {
   turnCount: number;
   embeddingLocation: string;
   createdAt: number; // Timestamp for TTL-based cleanup
+  /** Server-generated fetch prompt (if useLlm was enabled) */
+  fetchPrompt?: string;
 }
 
 // Module-level state for tracking pages across per-turn calls
@@ -186,8 +188,12 @@ function replaceUrlsWithExfilPlaceholder(prompt: string): string {
  * Generate a prompt asking the target to fetch the URL.
  * Uses different phrasing on each turn.
  *
- * Note: These are fallback prompts used when useLlm is false or LLM generation fails.
- * When useLlm is true, the server generates more sophisticated, context-aware fetch prompts.
+ * Note: This is a fallback when the server doesn't provide a fetch prompt.
+ * When useLlm is true, the server generates more sophisticated, context-aware
+ * fetch prompts via LLM. This function is only used when:
+ * - useLlm is false (no LLM generation requested)
+ * - Server LLM generation fails
+ * - Response doesn't include a fetchPrompt
  */
 function generateFetchPrompt(url: string, turnNumber: number): string {
   const prompts = [
@@ -364,11 +370,9 @@ function transformForStandaloneMode(
     return {
       ...testCase,
       // Add display variables for the UI Variables column
-      // In standalone mode, fetchPrompt and webPageUrl are set by the provider during execution
       vars: {
         ...testCase.vars,
         embeddedInjection: originalText, // The attack payload to embed in the web page
-        // fetchPrompt and webPageUrl will be set by provider during execution
       },
       provider: {
         id: providerName,
@@ -466,10 +470,14 @@ async function transformForPerTurnLayer(
           preferSmallModel,
         );
 
-        // Update state with new embedding location
+        // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
         pageState.turnCount++;
         pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
+        // Update fetch prompt if server provided a new one
+        if (response.fetchPrompt) {
+          pageState.fetchPrompt = response.fetchPrompt;
+        }
 
         logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
           uuid: pageState.uuid,
@@ -477,6 +485,7 @@ async function transformForPerTurnLayer(
           newEmbeddingLocation: pageState.embeddingLocation,
           turnCount: pageState.turnCount,
           updateCount: response.updateCount,
+          hasServerFetchPrompt: !!response.fetchPrompt,
         });
       } catch (error) {
         logger.error('[IndirectWebPwn] Failed to update page', {
@@ -518,6 +527,7 @@ async function transformForPerTurnLayer(
           turnCount: 1,
           embeddingLocation: response.embeddingLocation || 'main_content',
           createdAt: Date.now(),
+          fetchPrompt: response.fetchPrompt, // Server-generated fetch prompt (if useLlm)
         };
         pageStateMap.set(stateKey, pageState);
 
@@ -526,6 +536,7 @@ async function transformForPerTurnLayer(
           fullUrl: pageState.fullUrl,
           embeddingLocation: pageState.embeddingLocation,
           turnCount: 1,
+          hasServerFetchPrompt: !!response.fetchPrompt,
         });
       } catch (error) {
         logger.error('[IndirectWebPwn] Failed to create page', {
@@ -540,25 +551,25 @@ async function transformForPerTurnLayer(
       turnNumber = 1;
     }
 
-    // Generate the fetch prompt
-    const fetchPrompt = generateFetchPrompt(pageState.fullUrl, turnNumber);
+    // Use server-generated fetch prompt if available, otherwise fall back to local generation
+    const fetchPrompt = pageState.fetchPrompt || generateFetchPrompt(pageState.fullUrl, turnNumber);
 
     logger.debug('[IndirectWebPwn] Transform complete', {
       turnNumber,
       fetchPromptPreview: fetchPrompt.substring(0, 100),
       webPageUrl: pageState.fullUrl,
       embeddingLocation: pageState.embeddingLocation,
+      usedServerFetchPrompt: !!pageState.fetchPrompt,
     });
 
     // Return transformed test case
-    // Add both the fetch prompt (what's sent to the AI) and the embedded injection (what's in the page)
-    // as display variables so they show up in the UI Variables column
+    // The injectVar (prompt) is set to fetchPrompt - what's sent to the AI
+    // embeddedInjection shows the attack payload embedded in the web page
     results.push({
       ...testCase,
       vars: {
         ...testCase.vars,
-        [injectVar]: fetchPrompt,
-        fetchPrompt, // The prompt sent to AI asking it to visit the URL
+        [injectVar]: fetchPrompt, // prompt column shows "Please visit URL..."
         embeddedInjection: attackPrompt, // The attack payload embedded in the web page
       },
       metadata: {

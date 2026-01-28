@@ -31,6 +31,8 @@ export interface CreateWebPageResponse {
   path: string;
   fullUrl: string;
   embeddingLocation?: string;
+  /** LLM-generated fetch prompt asking the AI to visit the URL */
+  fetchPrompt?: string;
 }
 
 /**
@@ -42,6 +44,8 @@ export interface UpdateWebPageResponse {
   updatedAt: string;
   embeddingLocation?: string;
   updateCount?: number;
+  /** LLM-generated fetch prompt asking the AI to visit the URL */
+  fetchPrompt?: string;
 }
 
 /**
