@@ -637,7 +637,7 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak # Iterative strategy that benefits from trace feedback
+    - jailbreak:meta # Iterative strategy that benefits from trace feedback
 ```
 
 ### Strategy-Specific Configuration
