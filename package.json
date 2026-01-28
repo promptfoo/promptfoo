@@ -219,7 +219,7 @@
     "@inquirer/input": "^5.0.4",
     "@inquirer/select": "^5.0.4",
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "@openai/agents": "^0.4.1",
+    "@openai/agents": "^0.4.2",
     "@opencode-ai/sdk": "^1.1.32",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.0",
