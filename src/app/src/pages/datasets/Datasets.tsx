@@ -103,7 +103,9 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         id: 'numPrompts',
         header: 'Total Prompts',
         accessorFn: (row) => row.prompts?.length || 0,
-        cell: ({ getValue }) => <span className="font-mono tabular-nums">{getValue<number>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
         size: 140,
         meta: { align: 'right' },
       },
