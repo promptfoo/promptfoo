@@ -1,0 +1,38 @@
+# Example: Evaluate Langfuse traces
+#
+# This config demonstrates loading traces from Langfuse and evaluating
+# them with promptfoo assertions.
+#
+# Setup:
+#   1. Set environment variables:
+#      - LANGFUSE_PUBLIC_KEY
+#      - LANGFUSE_SECRET_KEY
+#      - LANGFUSE_BASE_URL (or LANGFUSE_HOST)
+#
+#   2. Run: promptfoo eval -c promptfooconfig.yaml
+#
+# See: https://promptfoo.dev/docs/integrations/langfuse
+
+description: Langfuse traces evaluation example
+
+# Load traces from Langfuse
+# URL format: langfuse://traces?<params>
+# Supported params: limit, userId, sessionId, tags, name, fromTimestamp, toTimestamp
+tests: langfuse://traces?limit=10
+
+# Use the stored output directly (assertion-only evaluation)
+# The echo provider returns the output variable from the trace
+providers:
+  - id: echo
+    config:
+      text: '{{output}}'
+
+prompts:
+  - '{{input}}'
+
+# Assertions to run on each trace
+defaultTest:
+  assert:
+    # Verify output exists
+    - type: javascript
+      value: typeof output === 'string' && output.length > 0
