@@ -59,7 +59,12 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { isPromptAllowed } from './util/promptMatching';
-import { isProviderAllowed } from './util/provider';
+import {
+  isAnthropicProvider,
+  isGoogleProvider,
+  isOpenAiProvider,
+  isProviderAllowed,
+} from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2264,6 +2269,11 @@ class Evaluator {
       usesExampleProvider,
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
+
+      // Provider type detection (including third-party platforms)
+      hasOpenAiProviders: testSuite.providers.some((p) => isOpenAiProvider(p.id())),
+      hasAnthropicProviders: testSuite.providers.some((p) => isAnthropicProvider(p.id())),
+      hasGoogleProviders: testSuite.providers.some((p) => isGoogleProvider(p.id())),
     });
 
     // Save the eval record to persist durationMs
