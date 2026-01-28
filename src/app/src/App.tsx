@@ -72,23 +72,67 @@ const router = createBrowserRouter(
               />
             }
           />
-          <Route path="/datasets" element={<DatasetsPage />} />
-          <Route path="/eval" element={<EvalPage />} />
-          <Route path="/evals" element={<EvalsIndexPage />} />
-          <Route path="/eval/:evalId" element={<EvalPage />} />
+          <Route
+            path="/datasets"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <DatasetsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/eval"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/evals"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalsIndexPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/eval/:evalId"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalPage />
+              </Suspense>
+            }
+          />
 
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
           <Route path="/progress" element={<Navigate to="/history" replace />} />
-          <Route path="/history" element={<HistoryPage />} />
+          <Route
+            path="/history"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <HistoryPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/prompts" element={<PromptsPage />} />
+          <Route
+            path="/prompts"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <PromptsPage />
+              </Suspense>
+            }
+          />
 
           {/* Model Audit routes - mirrors eval structure */}
           <Route
             path="/model-audit"
             element={
               <ErrorBoundary name="Model Audit">
-                <ModelAuditLatestPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditLatestPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
@@ -96,7 +140,9 @@ const router = createBrowserRouter(
             path="/model-audits"
             element={
               <ErrorBoundary name="Model Audit History">
-                <ModelAuditHistoryPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditHistoryPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
@@ -104,7 +150,9 @@ const router = createBrowserRouter(
             path="/model-audit/setup"
             element={
               <ErrorBoundary name="Model Audit Setup">
-                <ModelAuditSetupPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditSetupPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
@@ -112,7 +160,9 @@ const router = createBrowserRouter(
             path="/model-audit/:id"
             element={
               <ErrorBoundary name="Model Audit Result">
-                <ModelAuditResultPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditResultPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
@@ -120,14 +170,49 @@ const router = createBrowserRouter(
           <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
 
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
-          <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+          <Route
+            path="/redteam/setup"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <RedteamSetupPage />
+              </Suspense>
+            }
+          />
 
           {/* Redirect legacy /report route to /reports (since v0.118.2) */}
           <Route path="/report" element={<Navigate to="/reports" replace />} />
-          <Route path="/reports" element={<ReportPage />} />
-          <Route path="/setup" element={<EvalCreatorPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+          <Route
+            path="/reports"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <ReportPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/setup"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalCreatorPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/login"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <LoginPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <NotFoundPage />
+              </Suspense>
+            }
+          />
         </Route>
       </Route>
     </>,

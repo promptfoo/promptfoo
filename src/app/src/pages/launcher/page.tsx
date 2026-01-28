@@ -95,6 +95,11 @@ export default function LauncherPage() {
         }, 1000);
       }
     } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
+      // Clear pending navigation when connection drops
+      if (navTimeoutRef.current) {
+        clearTimeout(navTimeoutRef.current);
+        navTimeoutRef.current = null;
+      }
       setIsConnecting(true);
     }
   }, [healthStatus, navigate, isInitialConnection]);

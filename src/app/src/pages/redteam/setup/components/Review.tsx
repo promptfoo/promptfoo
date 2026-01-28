@@ -826,7 +826,12 @@ export default function Review({
                         className="absolute right-1 top-1 size-6"
                         onClick={() => {
                           const intentPlugin = config.plugins.find(
-                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+                            (
+                              p,
+                            ): p is {
+                              id: 'intent';
+                              config: { intent: string | string[] | (string | string[])[] };
+                            } =>
                               typeof p === 'object' &&
                               p.id === 'intent' &&
                               p.config?.intent !== undefined,
@@ -837,7 +842,23 @@ export default function Review({
                               ? intentPlugin.config.intent
                               : [intentPlugin.config.intent];
 
-                            const newIntents = currentIntents.filter((i) => i !== intent);
+                            // Filter out the intent, handling both single strings and multi-step arrays
+                            // The displayed `intent` is a joined string "Step 1 → Step 2" for multi-step intents
+                            const newIntents = currentIntents.filter((i) => {
+                              if (typeof i === 'string') {
+                                return i !== intent;
+                              }
+                              // Multi-step intent: compare joined representation
+                              if (Array.isArray(i)) {
+                                const joined = i
+                                  .filter(
+                                    (s): s is string => typeof s === 'string' && s.trim() !== '',
+                                  )
+                                  .join(' → ');
+                                return joined !== intent;
+                              }
+                              return true;
+                            });
 
                             const newPlugins = config.plugins.map((p) =>
                               typeof p === 'object' && p.id === 'intent'

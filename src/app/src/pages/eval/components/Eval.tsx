@@ -204,6 +204,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
+    // Reset comparison mode for ALL branches (including websocket)
+    console.log('Eval init: Resetting comparison mode');
+    setInComparisonMode(false);
+    setComparisonEvalIds([]);
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -325,9 +330,6 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
-    console.log('Eval init: Resetting comparison mode');
-    setInComparisonMode(false);
-    setComparisonEvalIds([]);
     // Cleanup for non-websocket branches (websocket branch returns its own cleanup above)
     return () => {
       controller.abort();
