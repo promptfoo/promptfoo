@@ -2385,7 +2385,7 @@ describe('ResultsView Concurrency Display', () => {
     });
   });
 
-  it('should NOT display concurrency badge for normal runs (concurrency > 1, no rate limits)', async () => {
+  it('should display "X parallel" badge for normal runs (concurrency > 1, no rate limits)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2422,7 +2422,11 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // No concurrency badge should be shown for normal parallel runs
+    // Should display "8 parallel" badge for normal parallel runs
+    await waitFor(() => {
+      expect(screen.getByText(/8 parallel/)).toBeInTheDocument();
+    });
+    // Should NOT show rate limited or sequential
     expect(screen.queryByText(/Rate limited/)).toBeNull();
     expect(screen.queryByText(/Sequential/)).toBeNull();
   });
@@ -2648,6 +2652,7 @@ describe('ResultsView Concurrency Display', () => {
     // No concurrency-related badge should be present
     expect(screen.queryByText(/Rate limited/)).toBeNull();
     expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
   });
 
   it('should display duration badge for normal parallel runs', async () => {
@@ -2688,11 +2693,12 @@ describe('ResultsView Concurrency Display', () => {
       />,
     );
 
-    // Should display duration
+    // Should display duration and parallel badge
     await waitFor(() => {
       expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getByText(/4 parallel/)).toBeInTheDocument();
     });
-    // Should NOT display any concurrency badge for normal runs
+    // Should NOT display rate limited or sequential
     expect(screen.queryByText(/Rate limited/)).toBeNull();
     expect(screen.queryByText('Sequential')).toBeNull();
   });

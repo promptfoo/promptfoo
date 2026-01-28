@@ -39,6 +39,7 @@ import {
   Copy,
   Edit,
   Eye,
+  Layers,
   Play,
   Settings,
   Share,
@@ -892,16 +893,7 @@ export default function ResultsView({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <div className="text-sm">
-                      <div>Total evaluation duration (wall-clock time)</div>
-                      {stats?.concurrencyUsed != null &&
-                        stats.concurrencyUsed > 1 &&
-                        !stats?.schedulerMetrics?.concurrencyReduced && (
-                          <div className="text-muted-foreground">
-                            {stats.concurrencyUsed} parallel requests
-                          </div>
-                        )}
-                    </div>
+                    <div className="text-sm">Total evaluation duration (wall-clock time)</div>
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -952,6 +944,23 @@ export default function ResultsView({
                         <div className="text-muted-foreground">
                           Due to conversation mode or storeOutputAs
                         </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              {stats?.concurrencyUsed != null &&
+                stats.concurrencyUsed > 1 &&
+                !stats?.schedulerMetrics?.concurrencyReduced && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                        <Layers className="size-3.5 mr-1" />
+                        {stats.concurrencyUsed} parallel
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <div>Running {stats.concurrencyUsed} tests at a time</div>
                       </div>
                     </TooltipContent>
                   </Tooltip>
