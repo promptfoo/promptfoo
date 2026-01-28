@@ -214,7 +214,7 @@ describe('AzureResponsesProvider', () => {
       // Test that max_output_tokens: 0 is correctly sent (not filtered out by falsy check)
       // Note: While max_output_tokens: 0 is impractical, it should still be sent if explicitly configured
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { max_output_tokens: 0 },
+        config: { max_output_tokens: 0 } as any,
       });
 
       const body = await provider.getAzureResponsesBody('Hello world');

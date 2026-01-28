@@ -246,7 +246,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       messages,
       seed: config.seed,
       ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(maxCompletionTokens !== undefined ? { max_completion_tokens: maxCompletionTokens } : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
