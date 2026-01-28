@@ -527,9 +527,13 @@ async function runRedteamConversation({
 
   // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
+  let bestTransformDisplayVars: Record<string, string> | undefined;
 
-  // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+  // Track transformed prompts for UI display (e.g., fetchPrompt for indirect-web-pwn)
+  // - lastFinalAttackPrompt: the most recent transform (for fallback)
+  // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
   let lastFinalAttackPrompt: string | undefined;
+  let bestFinalAttackPrompt: string | undefined;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -717,6 +721,9 @@ async function runRedteamConversation({
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
+          // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
+          bestFinalAttackPrompt = finalInjectVar;
+          bestTransformDisplayVars = lastTransformDisplayVars;
           logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else if (score > bestScore) {
           bestScore = score;
@@ -850,14 +857,16 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
-              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -891,14 +900,16 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
-              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -933,14 +944,16 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
-              ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse?.guardrails,
@@ -1054,14 +1067,16 @@ async function runRedteamConversation({
     prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
-      redteamFinalPrompt: lastFinalAttackPrompt || bestNode.prompt,
+      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
       sessionIds: extractSessionIds(treeOutputs),
-      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,
