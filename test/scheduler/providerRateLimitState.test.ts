@@ -225,7 +225,8 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          // Use 0 for immediate retry to work with fake timers
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
           getRetryAfter: () => 0,
         },
       );
@@ -282,7 +283,8 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          // Use 0 for immediate retry to work with fake timers
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
           getRetryAfter: () => 0,
         },
       );
@@ -354,7 +356,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 0, // Use 0 for immediate retry to avoid timer issues with fake timers
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
@@ -382,7 +385,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1,
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
