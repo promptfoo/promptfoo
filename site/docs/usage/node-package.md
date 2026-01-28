@@ -238,11 +238,15 @@ Here's the example output in JSON format:
   "stats": {
     "successes": 4,
     "failures": 0,
+    "errors": 0,
     "tokenUsage": {
       "total": 120,
       "prompt": 72,
       "completion": 48
-    }
+    },
+    "durationMs": 1234,
+    "maxConcurrency": 4,
+    "concurrencyUsed": 4
   },
   "table": [
     ["Rephrase this in French: {{body}}", "Rephrase this like a pirate: {{body}}", "body"],

@@ -402,12 +402,46 @@ export interface EvaluateTable {
   body: EvaluateTableRow[];
 }
 
+/**
+ * Metrics captured from the adaptive scheduler during evaluation.
+ * Tracks rate limit behavior and concurrency adjustments.
+ */
+export interface SchedulerMetrics {
+  /** Lowest concurrency reached during evaluation */
+  minConcurrency: number;
+  /** Highest concurrency (initial value) */
+  maxConcurrency: number;
+  /** Concurrency at evaluation end */
+  finalConcurrency: number;
+  /** Total 429 rate limit errors encountered */
+  rateLimitHits: number;
+  /** Total retry attempts */
+  retriedRequests: number;
+  /** True if adaptive scheduler reduced concurrency due to rate limits */
+  concurrencyReduced: boolean;
+}
+
+/**
+ * Statistics about an evaluation run.
+ * Includes success/failure counts, token usage, timing, and concurrency information.
+ */
 export interface EvaluateStats {
+  /** Number of test cases that passed */
   successes: number;
+  /** Number of test cases that failed assertions */
   failures: number;
+  /** Number of test cases that resulted in errors (e.g., API failures, timeouts) */
   errors: number;
+  /** Aggregated token usage across all test cases */
   tokenUsage: Required<TokenUsage>;
+  /** Total wall-clock time for the evaluation in milliseconds */
   durationMs?: number;
+  /** The configured/requested concurrency from CLI (-j), config, or env (before runtime overrides) */
+  maxConcurrency?: number;
+  /** The actual concurrency used during evaluation (after runtime overrides for _conversation, storeOutputAs, etc.) */
+  concurrencyUsed?: number;
+  /** Runtime metrics from the adaptive scheduler (rate limits, concurrency changes) */
+  schedulerMetrics?: SchedulerMetrics;
 }
 
 export interface EvaluateSummaryV3 {

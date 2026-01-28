@@ -2356,6 +2356,401 @@ describe('ResultsView Duration Display', () => {
   });
 });
 
+describe('ResultsView Concurrency Display', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+  const mockRecentEvals: ResultLightweightWithLabel[] = [
+    {
+      evalId: 'eval-1',
+      datasetId: null,
+      label: 'Evaluation 1',
+      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
+      description: 'Test evaluation 1',
+      numTests: 5,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+  });
+
+  it('should display "X parallel" badge for normal runs (concurrency > 1, no rate limits)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 8,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display "8 parallel" badge for normal parallel runs
+    await waitFor(() => {
+      expect(screen.getByText(/8 parallel/)).toBeInTheDocument();
+    });
+    // Should NOT show rate limited or sequential
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText(/Sequential/)).toBeNull();
+  });
+
+  it('should display "Rate limited" badge when schedulerMetrics.concurrencyReduced is true', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 4,
+        schedulerMetrics: {
+          minConcurrency: 2,
+          maxConcurrency: 8,
+          finalConcurrency: 4,
+          rateLimitHits: 5,
+          retriedRequests: 3,
+          concurrencyReduced: true,
+        },
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display rate limited badge with arrow notation
+    await waitFor(() => {
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+      expect(screen.getByText(/8 → 4/)).toBeInTheDocument();
+    });
+  });
+
+  it('should display "Sequential" badge when concurrencyUsed is 1 and maxConcurrency > 1', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 1,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display sequential badge
+    await waitFor(() => {
+      expect(screen.getByText('Sequential')).toBeInTheDocument();
+    });
+  });
+
+  it('should NOT display Sequential badge when concurrencyUsed is 1 and maxConcurrency is 1', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 1,
+        concurrencyUsed: 1,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should NOT display sequential badge when user configured concurrency=1
+    expect(screen.queryByText('Sequential')).toBeNull();
+  });
+
+  it('should display "Rate limited" badge instead of "Sequential" when rate limits caused reduction to 1', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 8,
+        concurrencyUsed: 1,
+        schedulerMetrics: {
+          minConcurrency: 1,
+          maxConcurrency: 8,
+          finalConcurrency: 1,
+          rateLimitHits: 10,
+          retriedRequests: 5,
+          concurrencyReduced: true,
+        },
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display rate limited badge, not sequential
+    await waitFor(() => {
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Sequential')).toBeNull();
+  });
+
+  it('should not display any concurrency-related badge when stats is null', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: null,
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // No concurrency-related badge should be present
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
+  });
+
+  it('should display "X max" fallback badge for old evals with maxConcurrency but no concurrencyUsed', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        maxConcurrency: 4,
+        // concurrencyUsed is undefined (old eval)
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display "4 max" fallback badge for old evals
+    await waitFor(() => {
+      expect(screen.getByText(/4 max/)).toBeInTheDocument();
+    });
+    // Should NOT show rate limited, sequential, or parallel
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
+  });
+
+  it('should display duration badge for normal parallel runs', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        durationMs: 45000,
+        maxConcurrency: 8,
+        concurrencyUsed: 4,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display duration and parallel badge
+    await waitFor(() => {
+      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getByText(/4 parallel/)).toBeInTheDocument();
+    });
+    // Should NOT display rate limited or sequential
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+  });
+});
+
 describe('ResultsView Browser History', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
