@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
@@ -24,6 +24,20 @@ const RunTestSuiteButton = () => {
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearPollingInterval = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearPollingInterval();
+    };
+  }, [clearPollingInterval]);
 
   const isDisabled =
     isRunning ||
@@ -66,25 +80,25 @@ const RunTestSuiteButton = () => {
 
       const job = await response.json();
 
-      const intervalId = setInterval(async () => {
+      pollingIntervalRef.current = setInterval(async () => {
         try {
           const progressResponse = await callApi(`/eval/job/${job.id}/`);
 
           if (!progressResponse.ok) {
-            clearInterval(intervalId);
+            clearPollingInterval();
             throw new Error(`HTTP error! status: ${progressResponse.status}`);
           }
 
           const progressData = await progressResponse.json();
 
           if (progressData.status === 'complete') {
-            clearInterval(intervalId);
+            clearPollingInterval();
             setIsRunning(false);
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
           } else if (['failed', 'error'].includes(progressData.status)) {
-            clearInterval(intervalId);
+            clearPollingInterval();
             setIsRunning(false);
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
           } else {
@@ -95,7 +109,7 @@ const RunTestSuiteButton = () => {
             setProgressPercent(percent);
           }
         } catch (error) {
-          clearInterval(intervalId);
+          clearPollingInterval();
           console.error(error);
           setIsRunning(false);
           alert(`An error occurred: ${(error as Error).message}`);

@@ -1544,4 +1544,125 @@ Application Details:
       expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
+
+  describe('Intent Rendering', () => {
+    it('should display simple string intents', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: ['Book a flight', 'Cancel reservation'],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Book a flight')).toBeInTheDocument();
+      expect(screen.getByText('Cancel reservation')).toBeInTheDocument();
+    });
+
+    it('should display multi-step intents with arrow separator', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: [
+                  ['Search for flights', 'Select departure', 'Complete booking'],
+                  ['Login', 'View account', 'Change password'],
+                ],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Multi-step intents should be joined with ' → '
+      expect(
+        screen.getByText('Search for flights → Select departure → Complete booking'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Login → View account → Change password')).toBeInTheDocument();
+    });
+
+    it('should handle mixed simple and multi-step intents', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: ['Simple intent', ['Step one', 'Step two'], 'Another simple intent'],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Simple intent')).toBeInTheDocument();
+      expect(screen.getByText('Step one → Step two')).toBeInTheDocument();
+      expect(screen.getByText('Another simple intent')).toBeInTheDocument();
+    });
+
+    it('should filter out empty strings in multi-step intents', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: [['Valid step', '', 'Another valid step', '  ']],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithTooltipProvider(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Should only show valid steps joined
+      expect(screen.getByText('Valid step → Another valid step')).toBeInTheDocument();
+    });
+  });
 });

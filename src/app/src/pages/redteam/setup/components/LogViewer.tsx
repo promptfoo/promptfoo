@@ -22,6 +22,8 @@ export function LogViewer({ logs }: LogViewerProps) {
     main: 0,
     fullscreen: 0,
   });
+  // Track RAF IDs for cleanup
+  const rafIdsRef = useRef<number[]>([]);
 
   // Detect dark mode from data-theme attribute with reactive updates
   const [isDarkMode, setIsDarkMode] = useState(
@@ -77,29 +79,62 @@ export function LogViewer({ logs }: LogViewerProps) {
   // Auto-scroll effect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
+    // Cancel any pending RAF callbacks from previous renders
+    for (const id of rafIdsRef.current) {
+      cancelAnimationFrame(id);
+    }
+    rafIdsRef.current = [];
+
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {
         const container = logsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
+        const id = requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
+        rafIdsRef.current.push(id);
       }
       if (fullscreenLogsContainerRef.current) {
         const container = fullscreenLogsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
+        const id = requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
+        rafIdsRef.current.push(id);
       }
     } else {
       // Restore previous scroll positions
       if (logsContainerRef.current) {
-        logsContainerRef.current.scrollTop = previousScrollPositionRef.current.main;
+        const container = logsContainerRef.current;
+        const id = requestAnimationFrame(() => {
+          container.scrollTop = previousScrollPositionRef.current.main;
+        });
+        rafIdsRef.current.push(id);
       }
       if (fullscreenLogsContainerRef.current) {
-        fullscreenLogsContainerRef.current.scrollTop = previousScrollPositionRef.current.fullscreen;
+        const container = fullscreenLogsContainerRef.current;
+        const id = requestAnimationFrame(() => {
+          container.scrollTop = previousScrollPositionRef.current.fullscreen;
+        });
+        rafIdsRef.current.push(id);
       }
     }
+
+    // Cleanup: cancel all pending RAF callbacks on unmount
+    return () => {
+      for (const id of rafIdsRef.current) {
+        cancelAnimationFrame(id);
+      }
+    };
   }, [logs, shouldAutoScroll]);
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      // Capture container before RAF to avoid stale ref if component unmounts
+      const container = containerRef.current;
+      const id = requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+      // Track for cleanup on unmount
+      rafIdsRef.current.push(id);
       setShouldAutoScroll(true);
     }
   }, []);

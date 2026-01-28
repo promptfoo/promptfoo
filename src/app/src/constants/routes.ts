@@ -31,6 +31,11 @@ export const REDTEAM_ROUTES = {
   REPORT_DETAIL: (evalId: string) => `/reports?evalId=${evalId}`,
 } as const;
 
+// Launcher route (for local development proxy)
+export const LAUNCHER_ROUTES = {
+  ROOT: '/launcher',
+} as const;
+
 // Other routes
 export const ROUTES = {
   HOME: '/',

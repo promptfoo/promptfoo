@@ -56,10 +56,10 @@ export default function InputsEditor({
   }, [variables]);
 
   const addVariable = () => {
-    const existingNames = variables.map((v) => v.name);
+    const existingNames = new Set(variables.map((v) => v.name));
     let counter = 1;
     let newName = 'variable';
-    while (existingNames.includes(newName)) {
+    while (existingNames.has(newName)) {
       newName = `variable${counter}`;
       counter++;
     }

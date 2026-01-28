@@ -106,7 +106,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+    <audio controls style={audioPlayerStyle}>
       <source src={audioUrl} type={`audio/${format}`} />
       Your browser does not support the audio element.
     </audio>
@@ -116,6 +116,19 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
+const audioPlayerStyle = { maxWidth: '100%', height: '32px' } as const;
+const stickyHeaderHiddenStyle = { display: 'none' } as const;
+const audioMediaStyle = { maxWidth: '100%' } as const;
+const videoMediaStyle = { maxWidth: '100%', maxHeight: '200px' } as const;
+const imageMediaStyle = { maxWidth: '100%', maxHeight: '200px' } as const;
+const mediaWrapperStyle = { marginBottom: '8px' } as const;
+const mediaMetaStyle = { fontSize: '0.8em', color: '#666' } as const;
+const helpCursorStyle = { cursor: 'help' } as const;
+const filteredMetricStyle = { fontSize: '0.9em', color: '#666', marginLeft: '4px' } as const;
+const errorCellStyle = { padding: '20px', color: 'red', fontSize: '12px' } as const;
+const pendingCellStyle = { padding: '20px' } as const;
+const inlineImageStyle = { maxWidth: '100%', height: 'auto', cursor: 'pointer' } as const;
+const lightboxImageStyle = { maxWidth: '90%', maxHeight: '90vh', objectFit: 'contain' } as const;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -246,7 +259,7 @@ function ResultsTableHeader({
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
-      <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
+      <div className="header-dismiss" style={stickyHeader ? undefined : stickyHeaderHiddenStyle}>
         <button
           type="button"
           onClick={() => setStickyHeader(false)}
@@ -737,7 +750,7 @@ function ResultsTable({
 
                   if (mediaType === 'audio' && audioSource) {
                     mediaElement = (
-                      <audio controls style={{ maxWidth: '100%' }}>
+                      <audio controls style={audioMediaStyle}>
                         <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
                         Your browser does not support the audio element.
                       </audio>
@@ -751,7 +764,7 @@ function ResultsTable({
                         : `data:${mediaType}/${format};base64,${value}`;
 
                     mediaElement = (
-                      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+                      <video controls style={videoMediaStyle}>
                         <source src={mediaSrc} type={`video/${format || 'mp4'}`} />
                         Your browser does not support the video element.
                       </video>
@@ -761,7 +774,7 @@ function ResultsTable({
                       <img
                         src={imageSrc}
                         alt="Input image"
-                        style={{ maxWidth: '100%', maxHeight: '200px' }}
+                        style={imageMediaStyle}
                         onClick={() => toggleLightbox?.(imageSrc)}
                       />
                     );
@@ -770,10 +783,10 @@ function ResultsTable({
                   if (mediaElement) {
                     return (
                       <div className="cell">
-                        <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
+                        <div style={mediaWrapperStyle}>{mediaElement}</div>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span style={{ fontSize: '0.8em', color: '#666' }}>
+                            <span style={mediaMetaStyle}>
                               {mediaMetadata.path} ({mediaType}/{format})
                             </span>
                           </TooltipTrigger>
@@ -956,7 +969,7 @@ function ResultsTable({
                       <strong>Total Cost:</strong>{' '}
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span style={{ cursor: 'help' }}>
+                          <span style={helpCursorStyle}>
                             $
                             {Intl.NumberFormat(undefined, {
                               minimumFractionDigits: 2,
@@ -977,7 +990,7 @@ function ResultsTable({
                         </TooltipContent>
                       </Tooltip>
                       {filteredMetrics?.cost && testCounts[idx]?.filtered ? (
-                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                        <span style={filteredMetricStyle}>
                           ($
                           {Intl.NumberFormat(undefined, {
                             minimumFractionDigits: 2,
@@ -995,7 +1008,7 @@ function ResultsTable({
                         maximumFractionDigits: 0,
                       }).format(metrics.tokenUsage.total)}
                       {filteredMetrics?.tokenUsage?.total ? (
-                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                        <span style={filteredMetricStyle}>
                           (
                           {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
@@ -1017,7 +1030,7 @@ function ResultsTable({
                           : 0,
                       )}
                       {filteredMetrics?.tokenUsage?.total && testCounts[idx]?.filtered ? (
-                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                        <span style={filteredMetricStyle}>
                           (
                           {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
@@ -1039,7 +1052,7 @@ function ResultsTable({
                       )}{' '}
                       ms
                       {filteredMetrics?.totalLatencyMs && testCounts[idx]?.filtered ? (
-                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                        <span style={filteredMetricStyle}>
                           (
                           {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
@@ -1142,7 +1155,7 @@ function ResultsTable({
                     resourceId={prompt.id}
                   />
                   {details}
-                  {filterMode === 'failures' && head.prompts.length > 1 && (
+                  {filterMode === 'failures' && head.prompts.length > 1 ? (
                     <label className="flex items-center gap-2 text-xs cursor-pointer">
                       <Checkbox
                         checked={isChecked}
@@ -1152,7 +1165,7 @@ function ResultsTable({
                       />
                       <span>Show failures</span>
                     </label>
-                  )}
+                  ) : null}
                 </div>
               );
             },
@@ -1161,11 +1174,7 @@ function ResultsTable({
               return output ? (
                 <ErrorBoundary
                   name={`EvalOutputCell-${info.row.index}-${idx}`}
-                  fallback={
-                    <div style={{ padding: '20px', color: 'red', fontSize: '12px' }}>
-                      Error loading cell
-                    </div>
-                  }
+                  fallback={<div style={errorCellStyle}>Error loading cell</div>}
                 >
                   <EvalOutputCell
                     output={output}
@@ -1188,7 +1197,7 @@ function ResultsTable({
                   />
                 </ErrorBoundary>
               ) : (
-                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
+                <div style={pendingCellStyle}>'Test still in progress...'</div>
               );
             },
             size: PROMPT_COLUMN_SIZE_PX,
@@ -1415,7 +1424,7 @@ function ResultsTable({
     // Initial sync
     handleScroll();
     // Keep in sync on resize
-    window.addEventListener('resize', handleScroll);
+    window.addEventListener('resize', handleScroll, { passive: true });
 
     return () => {
       if (rafId !== null) {
@@ -1434,12 +1443,12 @@ function ResultsTable({
     // of the viewport (because the parent container is a flexbox).
     <>
       {filteredResultsCount === 0 &&
-        !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
-          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
-            <p>No results found for the current filters.</p>
-          </div>
-        )}
+      !isFetching &&
+      (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) ? (
+        <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+          <p>No results found for the current filters.</p>
+        </div>
+      ) : null}
       <div className="h-4" />
       <ResultsTableHeader
         reactTable={reactTable}
@@ -1528,24 +1537,12 @@ function ResultsTable({
                           <img
                             src={imgSrc}
                             alt="Base64 encoded image"
-                            style={{
-                              maxWidth: '100%',
-                              height: 'auto',
-                              cursor: 'pointer',
-                            }}
+                            style={inlineImageStyle}
                             onClick={() => toggleLightbox(imgSrc)}
                           />
                           {lightboxOpen && lightboxImage === imgSrc && (
                             <div className="lightbox" onClick={() => toggleLightbox()}>
-                              <img
-                                src={lightboxImage}
-                                alt="Lightbox"
-                                style={{
-                                  maxWidth: '90%',
-                                  maxHeight: '90vh',
-                                  objectFit: 'contain',
-                                }}
-                              />
+                              <img src={lightboxImage} alt="Lightbox" style={lightboxImageStyle} />
                             </div>
                           )}
                           {originalImageText ? (
@@ -1600,13 +1597,13 @@ function ResultsTable({
           results
         </div>
 
-        {filteredResultsCount > 0 && (
+        {filteredResultsCount > 0 ? (
           <div>
             Page{' '}
             <span className="font-semibold">{reactTable.getState().pagination.pageIndex + 1}</span>{' '}
             of <span className="font-semibold">{pageCount}</span>
           </div>
-        )}
+        ) : null}
 
         <div className="flex items-center gap-2">
           {/* PAGE SIZE SELECTOR */}
