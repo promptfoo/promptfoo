@@ -19,32 +19,38 @@ const severityStyles: Record<
     border: string;
     text: string;
     bg: string;
+    accent: string;
   }
 > = {
   [Severity.Critical]: {
     border: 'border-l-red-800',
     text: 'text-red-800 dark:text-red-400',
     bg: 'bg-red-50/50 dark:bg-red-950/20',
+    accent: 'bg-red-800',
   },
   [Severity.High]: {
     border: 'border-l-red-500',
     text: 'text-red-500 dark:text-red-400',
     bg: 'bg-red-50/50 dark:bg-red-900/20',
+    accent: 'bg-red-500',
   },
   [Severity.Medium]: {
     border: 'border-l-amber-500',
     text: 'text-amber-500 dark:text-amber-400',
     bg: 'bg-amber-50/50 dark:bg-amber-950/20',
+    accent: 'bg-amber-500',
   },
   [Severity.Low]: {
     border: 'border-l-emerald-500',
     text: 'text-emerald-500 dark:text-emerald-400',
     bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
+    accent: 'bg-emerald-500',
   },
   [Severity.Informational]: {
     border: 'border-l-blue-500',
     text: 'text-blue-500 dark:text-blue-400',
     bg: 'bg-blue-50/50 dark:bg-blue-950/20',
+    accent: 'bg-blue-500',
   },
 };
 
@@ -63,7 +69,7 @@ export default function SeverityCard({
   const isInactive = hasActiveFilter && !isActive;
 
   const content = (
-    <CardContent className="flex h-full flex-col items-start justify-center pt-6">
+    <CardContent className="flex h-full flex-col items-start justify-center pl-5 pt-6">
       <h3
         className={cn(
           'mb-1 text-lg font-semibold',
@@ -84,8 +90,7 @@ export default function SeverityCard({
   const cardContent = (
     <Card
       className={cn(
-        'h-full border-l-[5px] transition-all duration-200',
-        hasIssues ? styles.border : 'border-l-muted-foreground/50',
+        'relative h-full overflow-hidden transition-all duration-200',
         hasIssues ? styles.bg : 'bg-transparent grayscale-[0.5]',
         isInactive && 'opacity-40',
         navigateOnClick &&
@@ -113,6 +118,12 @@ export default function SeverityCard({
           : undefined
       }
     >
+      <div
+        className={cn(
+          'absolute left-0 top-0 h-full w-1.5',
+          hasIssues ? styles.accent : 'bg-muted-foreground/30',
+        )}
+      />
       {content}
     </Card>
   );
