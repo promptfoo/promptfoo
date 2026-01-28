@@ -5,14 +5,19 @@ import { HelperText } from './helper-text';
 import { Label } from './label';
 import { Textarea } from './textarea';
 
-interface JsonTextareaProps {
+interface JsonTextareaProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 'defaultValue'> {
   label: string;
   defaultValue?: string;
   onChange?: (parsed: unknown) => void;
-  className?: string;
 }
 
-const JsonTextarea = ({ label, defaultValue = '', onChange, className }: JsonTextareaProps) => {
+const JsonTextarea = ({
+  label,
+  defaultValue = '',
+  onChange,
+  className,
+  ...props
+}: JsonTextareaProps) => {
   const [value, setValue] = React.useState(defaultValue);
   const [error, setError] = React.useState(false);
 
@@ -32,7 +37,7 @@ const JsonTextarea = ({ label, defaultValue = '', onChange, className }: JsonTex
   };
 
   return (
-    <div className={cn('flex flex-col', className)}>
+    <div className={cn('flex flex-col', className)} {...props}>
       <Label>{label}</Label>
       <Textarea
         value={value}
