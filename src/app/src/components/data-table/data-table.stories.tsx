@@ -109,7 +109,10 @@ const columns: ColumnDef<Evaluation>[] = [
     size: 100,
     cell: ({ row }) => {
       const score = row.getValue('score') as number;
-      return <span className="font-mono">{score}%</span>;
+      return <span className="font-mono tabular-nums">{score}%</span>;
+    },
+    meta: {
+      align: 'right',
     },
   },
   {

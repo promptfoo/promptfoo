@@ -339,19 +339,22 @@ export function DataTable<TData, TValue = unknown>({
         style={maxHeight ? { maxHeight } : undefined}
       >
         <table className="w-full" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0 z-10">
+          <thead className="bg-zinc-100 dark:bg-zinc-800/50 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sortDirection = header.column.getIsSorted();
                   const canResize = header.column.getCanResize();
+                  const align = header.column.columnDef.meta?.align ?? 'left';
+                  const isRightAligned = align === 'right';
 
                   return (
                     <th
                       key={header.id}
                       className={cn(
-                        'py-3 text-left text-sm font-semibold relative',
+                        'group py-3 text-sm font-semibold relative',
+                        isRightAligned ? 'text-right' : 'text-left',
                         header.column.id === 'select' ? 'px-3' : 'px-4 overflow-hidden',
                         canSort && 'cursor-pointer select-none hover:bg-muted/80',
                       )}
@@ -361,12 +364,22 @@ export function DataTable<TData, TValue = unknown>({
                       onClick={header.column.getToggleSortingHandler()}
                     >
                       {header.isPlaceholder ? null : (
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div
+                          className={cn(
+                            'flex items-center gap-1 min-w-0',
+                            isRightAligned && 'flex-row-reverse',
+                          )}
+                        >
                           <span className="truncate">
                             {flexRender(header.column.columnDef.header, header.getContext())}
                           </span>
                           {canSort && (
-                            <span className="shrink-0">
+                            <span
+                              className={cn(
+                                'shrink-0 transition-opacity',
+                                !sortDirection && 'opacity-0 group-hover:opacity-100',
+                              )}
+                            >
                               {sortDirection === 'asc' ? (
                                 <ArrowUp className="size-4" />
                               ) : sortDirection === 'desc' ? (
@@ -408,28 +421,32 @@ export function DataTable<TData, TValue = unknown>({
                     onRowClick && 'cursor-pointer hover:bg-muted/50',
                   )}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className={cn(
-                        'py-3 text-sm',
-                        cell.column.id === 'select'
-                          ? 'px-3 cursor-pointer'
-                          : 'px-4 overflow-hidden text-ellipsis',
-                      )}
-                      style={{ width: cell.column.getSize() }}
-                      onClick={
-                        cell.column.id === 'select'
-                          ? (e) => {
-                              e.stopPropagation();
-                              row.toggleSelected();
-                            }
-                          : undefined
-                      }
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+                    return (
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          'py-3 text-sm',
+                          cell.column.id === 'select'
+                            ? 'px-3 cursor-pointer'
+                            : 'px-4 overflow-hidden text-ellipsis',
+                          cellAlign === 'right' && 'text-right',
+                        )}
+                        style={{ width: cell.column.getSize() }}
+                        onClick={
+                          cell.column.id === 'select'
+                            ? (e) => {
+                                e.stopPropagation();
+                                row.toggleSelected();
+                              }
+                            : undefined
+                        }
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             ) : (
