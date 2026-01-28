@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FocusEvent, KeyboardEvent, MouseEvent } from 'react';
 
@@ -11,16 +12,13 @@ export interface ComboboxOption {
   description?: string;
 }
 
-interface ComboboxProps {
+interface ComboboxProps extends Omit<React.ComponentProps<'input'>, 'onChange' | 'value' | 'type'> {
   options: ComboboxOption[];
   value?: string;
   onChange: (value: string) => void;
-  placeholder?: string;
   emptyMessage?: string;
-  disabled?: boolean;
   clearable?: boolean;
   label?: string;
-  className?: string;
 }
 
 function Combobox({
@@ -33,6 +31,7 @@ function Combobox({
   clearable = true,
   label,
   className,
+  ...props
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -207,6 +206,7 @@ function Combobox({
         <PopoverAnchor asChild>
           <div className="relative">
             <input
+              {...props}
               id={inputId}
               ref={inputRef}
               type="text"
