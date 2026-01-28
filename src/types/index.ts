@@ -643,6 +643,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: z.string().optional(),
+
+  // If this assertion fails, try the next assertion in the list as a fallback
+  fallback: z.union([z.literal('next'), z.boolean()]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
