@@ -18,37 +18,43 @@ const severityStyles: Record<
   {
     border: string;
     text: string;
+    numberText: string;
     bg: string;
     accent: string;
   }
 > = {
   [Severity.Critical]: {
     border: 'border-l-red-800',
-    text: 'text-red-900 dark:text-red-400',
+    text: 'text-red-700 dark:text-red-400',
+    numberText: 'text-red-600 dark:text-red-400',
     bg: 'bg-red-50/50 dark:bg-red-950/20',
     accent: 'bg-red-800',
   },
   [Severity.High]: {
     border: 'border-l-red-500',
     text: 'text-red-700 dark:text-red-400',
+    numberText: 'text-red-600 dark:text-red-400',
     bg: 'bg-red-50/50 dark:bg-red-900/20',
     accent: 'bg-red-500',
   },
   [Severity.Medium]: {
     border: 'border-l-amber-500',
     text: 'text-amber-700 dark:text-amber-400',
+    numberText: 'text-amber-600 dark:text-amber-400',
     bg: 'bg-amber-50/50 dark:bg-amber-950/20',
     accent: 'bg-amber-500',
   },
   [Severity.Low]: {
     border: 'border-l-emerald-500',
     text: 'text-emerald-700 dark:text-emerald-400',
+    numberText: 'text-emerald-600 dark:text-emerald-400',
     bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
     accent: 'bg-emerald-500',
   },
   [Severity.Informational]: {
     border: 'border-l-blue-500',
     text: 'text-blue-700 dark:text-blue-400',
+    numberText: 'text-blue-600 dark:text-blue-400',
     bg: 'bg-blue-50/50 dark:bg-blue-950/20',
     accent: 'bg-blue-500',
   },
@@ -78,7 +84,12 @@ export default function SeverityCard({
       >
         {severityDisplayNames[severity]}
       </h3>
-      <span className={cn('text-3xl font-bold', hasIssues ? styles.text : 'text-muted-foreground')}>
+      <span
+        className={cn(
+          'text-3xl font-bold',
+          hasIssues ? styles.numberText : 'text-muted-foreground',
+        )}
+      >
         {issueCount}
       </span>
       <span className={cn('text-sm', hasIssues ? styles.text : 'text-muted-foreground')}>
