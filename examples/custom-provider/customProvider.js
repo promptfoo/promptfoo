@@ -1,5 +1,8 @@
-// const promptfoo = require('../../dist/src/index.js').default;
-const promptfoo = require('promptfoo').default;
+// ESM import (recommended for modern projects)
+import promptfoo from 'promptfoo';
+
+// CommonJS alternative (for legacy Node.js projects):
+// const promptfoo = require('promptfoo').default;
 
 class CustomApiProvider {
   constructor(options) {
@@ -16,14 +19,14 @@ class CustomApiProvider {
 
   async callApi(prompt) {
     const body = {
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5.2',
       messages: [
         {
           role: 'user',
           content: prompt,
         },
       ],
-      max_tokens: Number.parseInt(this.config?.max_tokens, 10) || 1024,
+      max_completion_tokens: Number.parseInt(this.config?.max_tokens, 10) || 1024,
       temperature: Number.parseFloat(this.config?.temperature) || 0,
     };
 
@@ -53,4 +56,8 @@ class CustomApiProvider {
   }
 }
 
-module.exports = CustomApiProvider;
+// ESM export (recommended for modern projects)
+export default CustomApiProvider;
+
+// CommonJS alternative (for legacy Node.js projects):
+// module.exports = CustomApiProvider;
