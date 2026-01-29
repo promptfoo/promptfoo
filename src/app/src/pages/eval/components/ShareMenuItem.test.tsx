@@ -11,12 +11,12 @@ vi.mock('@app/utils/api', () => ({
 
 // Mock the dropdown menu components to avoid context dependency
 vi.mock('@app/components/ui/dropdown-menu', () => ({
-  DropdownMenuItem: vi.fn(({ children, disabled, onClick, className }) => (
+  DropdownMenuItem: vi.fn(({ children, disabled, onSelect, className }) => (
     <button
       type="button"
       role="menuitem"
       disabled={disabled}
-      onClick={onClick}
+      onClick={(e) => onSelect?.(e)}
       className={className}
     >
       {children}
@@ -31,35 +31,9 @@ vi.mock('@app/components/ui/tooltip', () => ({
   TooltipContent: vi.fn(({ children }) => <div data-testid="tooltip-content">{children}</div>),
 }));
 
-// Mock ShareModal to avoid testing it again
-vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open, onClose, evalId, onShare }) => {
-    if (!open) {
-      return null;
-    }
-    const handleShare = async () => {
-      try {
-        await onShare(evalId);
-      } catch {
-        // Error is expected in some tests, swallow it
-      }
-    };
-    return (
-      <div data-testid="share-modal">
-        <span data-testid="modal-eval-id">{evalId}</span>
-        <button type="button" onClick={onClose} data-testid="modal-close">
-          Close
-        </button>
-        <button type="button" onClick={handleShare} data-testid="modal-share">
-          Generate Share
-        </button>
-      </div>
-    );
-  }),
-}));
-
 describe('ShareMenuItem', () => {
   const mockCallApi = vi.mocked(callApi);
+  const mockOnClick = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,7 +50,7 @@ describe('ShareMenuItem', () => {
       // Never resolves to keep in loading state
       mockCallApi.mockImplementation(() => new Promise(() => {}));
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       const menuItem = screen.getByRole('menuitem', { name: /share/i });
       expect(menuItem).toBeDisabled();
@@ -91,7 +65,7 @@ describe('ShareMenuItem', () => {
         }),
       );
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -108,7 +82,7 @@ describe('ShareMenuItem', () => {
         }),
       );
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -129,7 +103,7 @@ describe('ShareMenuItem', () => {
         }),
       );
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -142,7 +116,7 @@ describe('ShareMenuItem', () => {
     it('shows error message when API call fails', async () => {
       mockCallApi.mockResolvedValue(Response.json({ error: 'Server error' }, { status: 500 }));
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -155,7 +129,7 @@ describe('ShareMenuItem', () => {
     it('shows error message when API call throws', async () => {
       mockCallApi.mockRejectedValue(new Error('Network error'));
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -165,7 +139,7 @@ describe('ShareMenuItem', () => {
       expect(screen.getByText(/Failed to check sharing status/i)).toBeInTheDocument();
     });
 
-    it('opens share modal when clicking enabled share button', async () => {
+    it('calls onClick when clicking enabled share button', async () => {
       mockCallApi.mockResolvedValue(
         Response.json({
           domain: 'localhost:3000',
@@ -174,7 +148,7 @@ describe('ShareMenuItem', () => {
         }),
       );
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -184,10 +158,29 @@ describe('ShareMenuItem', () => {
       const menuItem = screen.getByRole('menuitem', { name: /share/i });
       await userEvent.click(menuItem);
 
+      expect(mockOnClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onClick when menu item is disabled', async () => {
+      mockCallApi.mockResolvedValue(
+        Response.json({
+          domain: 'localhost:3000',
+          isCloudEnabled: false,
+          sharingEnabled: false,
+        }),
+      );
+
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
+
       await waitFor(() => {
-        expect(screen.getByTestId('share-modal')).toBeInTheDocument();
-        expect(screen.getByTestId('modal-eval-id')).toHaveTextContent('test-eval-id');
+        const menuItem = screen.getByRole('menuitem', { name: /share/i });
+        expect(menuItem).toBeDisabled();
       });
+
+      const menuItem = screen.getByRole('menuitem', { name: /share/i });
+      await userEvent.click(menuItem);
+
+      expect(mockOnClick).not.toHaveBeenCalled();
     });
 
     it('rechecks sharing status when evalId changes', async () => {
@@ -199,13 +192,13 @@ describe('ShareMenuItem', () => {
         }),
       );
 
-      const { rerender } = render(<ShareMenuItem evalId="eval-1" />);
+      const { rerender } = render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=eval-1');
       });
 
-      rerender(<ShareMenuItem evalId="eval-2" />);
+      rerender(<ShareMenuItem evalId="eval-2" onClick={mockOnClick} />);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=eval-2');
@@ -229,7 +222,7 @@ describe('ShareMenuItem', () => {
 
       const { default: ShareMenuItemNonLocal } = await import('./ShareMenuItem');
 
-      render(<ShareMenuItemNonLocal evalId="test-eval-id" />);
+      render(<ShareMenuItemNonLocal evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -239,122 +232,26 @@ describe('ShareMenuItem', () => {
       // Should not call API for non-local instances
       expect(mockCallApi).not.toHaveBeenCalled();
     });
-  });
 
-  describe('handleShare function', () => {
-    it('calls share API and returns URL for local instances', async () => {
-      const shareUrl = 'https://app.example.com/eval/test-eval-id';
+    it('calls onClick when clicking share button on non-local instances', async () => {
+      vi.resetModules();
+      vi.doMock('@app/constants', () => ({
+        IS_RUNNING_LOCALLY: false,
+      }));
 
-      // First call is check-domain, second is share
-      mockCallApi
-        .mockResolvedValueOnce(
-          Response.json({
-            domain: 'localhost:3000',
-            isCloudEnabled: true,
-            sharingEnabled: true,
-          }),
-        )
-        .mockResolvedValueOnce(
-          Response.json({
-            url: shareUrl,
-          }),
-        );
+      const { default: ShareMenuItemNonLocal } = await import('./ShareMenuItem');
 
-      render(<ShareMenuItem evalId="test-eval-id" />);
+      render(<ShareMenuItemNonLocal evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
         expect(menuItem).not.toBeDisabled();
       });
 
-      // Click to open modal
       const menuItem = screen.getByRole('menuitem', { name: /share/i });
       await userEvent.click(menuItem);
 
-      // Click the generate share button in the mock modal
-      const shareButton = screen.getByTestId('modal-share');
-      await userEvent.click(shareButton);
-
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith(
-          '/results/share',
-          expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({ id: 'test-eval-id' }),
-          }),
-        );
-      });
-    });
-
-    it('throws error when share API fails', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      mockCallApi
-        .mockResolvedValueOnce(
-          Response.json({
-            domain: 'localhost:3000',
-            isCloudEnabled: true,
-            sharingEnabled: true,
-          }),
-        )
-        .mockResolvedValueOnce(Response.json({ error: 'Unauthorized' }, { status: 401 }));
-
-      render(<ShareMenuItem evalId="test-eval-id" />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
-
-      // Click to open modal
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      await userEvent.click(menuItem);
-
-      // Click the generate share button in the mock modal
-      const shareButton = screen.getByTestId('modal-share');
-      await userEvent.click(shareButton);
-
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Failed to generate share URL:',
-          expect.any(Error),
-        );
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-  });
-
-  describe('modal interactions', () => {
-    it('closes modal when onClose is called', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
-
-      render(<ShareMenuItem evalId="test-eval-id" />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
-
-      // Open modal
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      await userEvent.click(menuItem);
-
-      expect(screen.getByTestId('share-modal')).toBeInTheDocument();
-
-      // Close modal
-      const closeButton = screen.getByTestId('modal-close');
-      await userEvent.click(closeButton);
-
-      await waitFor(() => {
-        expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
-      });
+      expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
   });
 });

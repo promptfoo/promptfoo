@@ -60,6 +60,7 @@ import ResultsCharts from './ResultsCharts';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareMenuItem from './ShareMenuItem';
+import { ShareDialog } from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -177,6 +178,9 @@ export default function ResultsView({
 
   // State for download dialog
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
+
+  // State for share dialog
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
@@ -640,7 +644,10 @@ export default function ResultsView({
                         <Copy className="size-4 mr-2" />
                         Copy
                       </DropdownMenuItem>
-                      <ShareMenuItem evalId={currentEvalId} />
+                      <ShareMenuItem
+                        evalId={currentEvalId}
+                        onClick={() => setShareDialogOpen(true)}
+                      />
                       <DropdownMenuItem
                         onClick={handleDeleteEvalClick}
                         className="text-destructive"
@@ -873,6 +880,11 @@ export default function ResultsView({
         filterByDatasetId
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
+      <ShareDialog
+        open={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        evalId={currentEvalId}
+      />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}

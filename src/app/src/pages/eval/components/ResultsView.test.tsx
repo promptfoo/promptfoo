@@ -56,6 +56,9 @@ vi.mock('./store', () => {
 
 vi.mock('./ShareModal', () => ({
   default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
+  ShareDialog: vi.fn(({ open }) =>
+    open ? <div data-testid="share-dialog">Share Dialog</div> : null,
+  ),
 }));
 
 vi.mock('./ResultsTable', () => ({
@@ -113,6 +116,10 @@ vi.mock('./DownloadMenu', () => ({
     <button onClick={onClick}>Download</button>
   ),
   DownloadDialog: () => <div>Download Dialog</div>,
+}));
+
+vi.mock('./ShareMenuItem', () => ({
+  default: ({ onClick }: { onClick: () => void }) => <button onClick={onClick}>Share</button>,
 }));
 
 vi.mock('./CompareEvalMenuItem', () => ({
@@ -283,7 +290,7 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(shareButton);
 
     await waitFor(() => {
-      expect(screen.getByTestId('share-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('share-dialog')).toBeInTheDocument();
     });
   });
 
