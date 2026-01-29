@@ -373,6 +373,173 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   res.json({ message: 'Job cancelled' });
 });
 
+// ============================================================================
+// Configuration Agent Endpoints
+// ============================================================================
+
+import { ConfigurationAgent } from '../../redteam/configAgent';
+
+import type { UserInput } from '../../redteam/configAgent/types';
+
+// Store active configuration agent sessions
+const configAgentSessions = new Map<string, ConfigurationAgent>();
+
+const StartConfigAgentSchema = z.object({
+  baseUrl: z.string().min(1, 'URL is required'),
+  hints: z
+    .object({
+      apiType: z.string().optional(),
+      hasAuth: z.boolean().optional(),
+      authType: z.string().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Start a new configuration agent session
+ */
+redteamRouter.post('/config-agent/start', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = StartConfigAgentSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    const { baseUrl } = parsedBody.data;
+
+    // Create new agent
+    const agent = new ConfigurationAgent(baseUrl);
+    const session = agent.getSession();
+
+    // Store the agent
+    configAgentSessions.set(session.id, agent);
+
+    // Start discovery (async)
+    agent.startDiscovery().catch((err) => {
+      logger.error('[ConfigAgent] Discovery error', { error: err });
+    });
+
+    res.json({
+      sessionId: session.id,
+      messages: agent.getMessages(),
+    });
+  } catch (error) {
+    logger.error('[ConfigAgent] Start error', { error });
+    res.status(500).json({ error: 'Failed to start configuration agent' });
+  }
+});
+
+const UserInputSchema = z.object({
+  sessionId: z.string(),
+  type: z.enum(['message', 'option', 'api_key', 'confirmation']),
+  value: z.union([z.string(), z.boolean()]),
+  field: z.string().optional(),
+});
+
+/**
+ * Send user input to a configuration agent session
+ */
+redteamRouter.post('/config-agent/input', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = UserInputSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    const input = parsedBody.data as UserInput;
+    const agent = configAgentSessions.get(input.sessionId);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    await agent.handleUserInput(input);
+
+    res.json({
+      messages: agent.getMessages(),
+      session: agent.getSession(),
+    });
+  } catch (error) {
+    logger.error('[ConfigAgent] Input error', { error });
+    res.status(500).json({ error: 'Failed to process input' });
+  }
+});
+
+/**
+ * Get the current state of a configuration agent session
+ */
+redteamRouter.get(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (!agent) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      res.json({
+        messages: agent.getMessages(),
+        session: agent.getSession(),
+        config: agent.getFinalConfig(),
+        isComplete: agent.isComplete(),
+      });
+    } catch (error) {
+      logger.error('[ConfigAgent] Get session error', { error });
+      res.status(500).json({ error: 'Failed to get session' });
+    }
+  },
+);
+
+/**
+ * Cancel a configuration agent session
+ */
+redteamRouter.delete(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (agent) {
+        agent.cancel();
+        configAgentSessions.delete(sessionId);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('[ConfigAgent] Cancel error', { error });
+      res.status(500).json({ error: 'Failed to cancel session' });
+    }
+  },
+);
+
+// Clean up old sessions periodically (sessions older than 1 hour)
+const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000; // 1 hour
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [sessionId, agent] of configAgentSessions) {
+      const session = agent.getSession();
+      if (now - session.startedAt > CONFIG_AGENT_SESSION_TTL) {
+        agent.cancel();
+        configAgentSessions.delete(sessionId);
+        logger.debug('[ConfigAgent] Cleaned up expired session', { sessionId });
+      }
+    }
+  },
+  5 * 60 * 1000,
+); // Check every 5 minutes
+
+// ============================================================================
+// Cloud Task Proxy (catch-all - must be last)
+// ============================================================================
+
 /**
  * Proxies requests to Promptfoo Cloud to invoke tasks.
  *
