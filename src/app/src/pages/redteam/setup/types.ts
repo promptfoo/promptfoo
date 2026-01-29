@@ -1,6 +1,10 @@
 import type { HttpProviderConfig } from '@promptfoo/providers/http';
 import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfoo/types';
+import type {
+  ApplicationDefinition as ApplicationDefinitionType,
+  ReconContext as ReconContextType,
+} from '@promptfoo/validators/recon';
 
 /**
  * UI-specific TLS configuration properties for tracking input methods.
@@ -40,28 +44,9 @@ export interface HttpProviderOptions extends Omit<CoreProviderOptions, 'config'>
   config?: HttpProviderConfigUI;
 }
 
-export interface ApplicationDefinition {
-  purpose?: string;
-  features?: string;
-  hasAccessTo?: string;
-  doesNotHaveAccessTo?: string;
-  userTypes?: string;
-  securityRequirements?: string;
-  exampleIdentifiers?: string;
-  industry?: string;
-  sensitiveDataTypes?: string;
-  criticalActions?: string;
-  forbiddenTopics?: string;
-  competitors?: string;
-  systemPrompt?: string;
-  redteamUser?: string;
-  accessToData?: string;
-  forbiddenData?: string;
-  accessToActions?: string;
-  forbiddenActions?: string;
-  connectedSystems?: string;
-  attackConstraints?: string;
-}
+// Re-export shared types from validators (single source of truth)
+export type ApplicationDefinition = ApplicationDefinitionType;
+export type ReconContext = ReconContextType;
 
 export interface Config {
   description: string;

@@ -18,6 +18,7 @@ export const TelemetryEventSchema = z.object({
     'redteam generate',
     'redteam init',
     'redteam poison',
+    'redteam recon',
     'redteam report',
     'redteam run',
     'redteam setup',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import PylonChat from '@app/components/PylonChat';
@@ -13,6 +13,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
@@ -47,13 +48,15 @@ import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
+import { usePendingRecon } from './hooks/usePendingRecon';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import { countPopulatedFields } from './utils/applicationDefinition';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config, ReconContext, RedteamUITarget } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -102,7 +105,12 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const {
+    config,
+    setFullConfig,
+    resetConfig,
+    setReconContext: setStoreReconContext,
+  } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -110,6 +118,29 @@ export default function RedTeamSetupPage() {
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [configName, setConfigName] = useState('');
   const toast = useToast();
+
+  // Handle pending recon from CLI handoff
+  const handleReconApplied = useCallback(
+    (tabIndex: number) => {
+      setValue(tabIndex);
+      // Skip setup modal if recon was applied
+      setSetupModalOpen(false);
+      markSetupAsSeen();
+      toast.showToast('Recon configuration applied! Review and configure your target.', 'success');
+    },
+    [markSetupAsSeen, toast],
+  );
+
+  // Handle recon errors (e.g., no pending file found)
+  const handleReconError = useCallback(
+    (message: string) => {
+      toast.showToast(message, 'warning', 5000);
+    },
+    [toast],
+  );
+
+  // Fetch pending recon configuration from CLI handoff
+  const { isLoading: isLoadingRecon } = usePendingRecon(handleReconApplied, handleReconError);
 
   // Add new state:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -341,7 +372,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };
@@ -349,6 +379,10 @@ export default function RedTeamSetupPage() {
           target.config = { ...target.config, stateful: true };
         }
       }
+
+      // Check if this is a recon-generated config with structured metadata
+      const isReconConfig =
+        yamlConfig.metadata?.version === 1 && yamlConfig.metadata?.source === 'recon-cli';
 
       // Parse applicationDefinition from purpose string or use explicit definition if available
       // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
@@ -373,8 +407,70 @@ export default function RedTeamSetupPage() {
         extensions: yamlConfig.extensions,
       };
 
-      setFullConfig(mappedConfig);
-      toast.showToast('Configuration loaded successfully', 'success');
+      // Import structured applicationDefinition from recon metadata if available
+      if (isReconConfig && yamlConfig.metadata?.applicationDefinition) {
+        const reconAppDef = yamlConfig.metadata.applicationDefinition;
+        mappedConfig.applicationDefinition = {
+          ...mappedConfig.applicationDefinition,
+          purpose: reconAppDef.purpose || mappedConfig.applicationDefinition.purpose,
+          features: reconAppDef.features,
+          industry: reconAppDef.industry,
+          systemPrompt: reconAppDef.systemPrompt,
+          hasAccessTo: reconAppDef.hasAccessTo,
+          doesNotHaveAccessTo: reconAppDef.doesNotHaveAccessTo,
+          userTypes: reconAppDef.userTypes,
+          securityRequirements: reconAppDef.securityRequirements,
+          sensitiveDataTypes: reconAppDef.sensitiveDataTypes,
+          exampleIdentifiers: reconAppDef.exampleIdentifiers,
+          criticalActions: reconAppDef.criticalActions,
+          forbiddenTopics: reconAppDef.forbiddenTopics,
+          attackConstraints: reconAppDef.attackConstraints,
+          competitors: reconAppDef.competitors,
+          connectedSystems:
+            reconAppDef.connectedSystems || mappedConfig.applicationDefinition.connectedSystems,
+          redteamUser: reconAppDef.redteamUser || mappedConfig.applicationDefinition.redteamUser,
+        };
+
+        // Set stateful flag from recon details if applicable
+        if (yamlConfig.metadata?.reconDetails?.stateful) {
+          if (typeof target === 'object') {
+            target.config = { ...target.config, stateful: true };
+            mappedConfig.target = target;
+          }
+        }
+
+        // Import entities from recon details if not already set from redteam config
+        if (!mappedConfig.entities?.length && yamlConfig.metadata?.reconDetails?.entities?.length) {
+          mappedConfig.entities = yamlConfig.metadata.reconDetails.entities;
+        }
+      }
+
+      // Set reconContext for recon-generated configs so the banner displays
+      if (isReconConfig) {
+        const meaningfulFields = countPopulatedFields(mappedConfig.applicationDefinition);
+        // Parse generatedAt ISO string to Unix timestamp (ms), fallback to now if invalid
+        const generatedAt = yamlConfig.metadata?.generatedAt;
+        const timestamp = generatedAt ? new Date(generatedAt).getTime() : Date.now();
+        const reconContext: ReconContext = {
+          source: 'recon-cli',
+          timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
+          codebaseDirectory: yamlConfig.metadata?.scannedDirectory,
+          keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles?.length,
+          fieldsPopulated: meaningfulFields,
+          discoveredToolsCount: yamlConfig.metadata?.reconDetails?.discoveredTools?.length,
+          securityNotes: yamlConfig.metadata?.reconDetails?.securityNotes,
+        };
+        setFullConfig(mappedConfig, reconContext);
+        setStoreReconContext(reconContext);
+      } else {
+        setFullConfig(mappedConfig);
+      }
+      toast.showToast(
+        isReconConfig
+          ? 'Recon configuration imported successfully'
+          : 'Configuration loaded successfully',
+        'success',
+      );
       setLoadDialogOpen(false);
     } catch (error) {
       console.error('Failed to load configuration file', error);
@@ -454,6 +550,13 @@ export default function RedTeamSetupPage() {
 
   return (
     <UserProvider>
+      {/* Loading overlay for recon fetch */}
+      {isLoadingRecon && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <Spinner size="lg" />
+          <p className="mt-4 text-muted-foreground">Loading recon configuration...</p>
+        </div>
+      )}
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}

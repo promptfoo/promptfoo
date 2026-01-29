@@ -200,6 +200,31 @@ export interface OpenAICodexSDKConfig {
    * @see https://developers.openai.com/codex/changelog/
    */
   collaboration_mode?: CollaborationMode;
+
+  /**
+   * Callback for streaming events (requires enable_streaming: true)
+   * Called with each event during execution for progress updates
+   */
+  on_event?: (event: CodexStreamEvent) => void;
+}
+
+/**
+ * Streaming event from Codex SDK for progress tracking
+ */
+export interface CodexStreamEvent {
+  type: 'item.started' | 'item.completed' | 'item.updated' | 'turn.started' | 'turn.completed';
+  item?: {
+    type: string;
+    /** For command execution items */
+    call?: { command?: string };
+    /** For file change items */
+    path?: string;
+    /** For MCP tool calls */
+    tool?: string;
+    server?: string;
+    /** For agent messages */
+    text?: string;
+  };
 }
 
 /**
@@ -558,6 +583,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           const abortError = new Error('AbortError');
           abortError.name = 'AbortError';
           throw abortError;
+        }
+
+        // Call event callback if provided (for progress updates)
+        if (this.config.on_event) {
+          try {
+            this.config.on_event(event as CodexStreamEvent);
+          } catch (err) {
+            logger.debug('Error in on_event callback', { err });
+          }
         }
 
         switch (event.type) {

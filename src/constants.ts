@@ -28,6 +28,23 @@ export function getDefaultPort(): number {
   return getEnvInt('API_PORT', 15500);
 }
 
+/**
+ * Constructs a localhost URL for the web UI.
+ * Used for CLI-to-browser handoff (e.g., recon, setup).
+ *
+ * @param path - The path portion of the URL (e.g., '/redteam/setup')
+ * @param queryParams - Optional query parameters to append
+ * @returns The full localhost URL (e.g., 'http://localhost:15500/redteam/setup?source=recon')
+ */
+export function getLocalAppUrl(path: string, queryParams?: Record<string, string>): string {
+  const base = `http://localhost:${getDefaultPort()}${path}`;
+  if (!queryParams || Object.keys(queryParams).length === 0) {
+    return base;
+  }
+  const params = new URLSearchParams(queryParams).toString();
+  return `${base}?${params}`;
+}
+
 // Maximum width for terminal outputs.
 export const TERMINAL_MAX_WIDTH =
   process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10

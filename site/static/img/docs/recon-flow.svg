@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380">
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="cliGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="aiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="configGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="uiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="380" fill="#fafafa"/>
+
+  <!-- Connector line -->
+  <path d="M 150 180 Q 250 180 300 180 L 600 180 Q 650 180 750 180"
+        stroke="#e2e8f0" stroke-width="3" fill="none" stroke-dasharray="8,4"/>
+
+  <!-- Step 1: CLI Command -->
+  <g transform="translate(40, 100)">
+    <rect x="0" y="0" width="130" height="160" rx="12" fill="url(#cliGradient)" filter="url(#shadow)"/>
+    <text x="65" y="35" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="500">STEP 1</text>
+
+    <!-- Terminal icon -->
+    <rect x="40" y="50" width="50" height="35" rx="4" fill="#0f172a" stroke="#475569" stroke-width="1"/>
+    <text x="50" y="72" font-family="monospace" font-size="10" fill="#22c55e">$_</text>
+
+    <text x="65" y="110" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">Run Recon</text>
+    <text x="65" y="130" font-family="monospace" font-size="9" fill="#94a3b8" text-anchor="middle">promptfoo recon</text>
+    <text x="65" y="148" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Point at codebase</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <g transform="translate(175, 165)">
+    <path d="M 0 15 L 35 15" stroke="#cbd5e1" stroke-width="2"/>
+    <polygon points="35,15 28,10 28,20" fill="#cbd5e1"/>
+  </g>
+
+  <!-- Step 2: AI Analysis -->
+  <g transform="translate(220, 60)">
+    <rect x="0" y="0" width="360" height="240" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow)"/>
+
+    <!-- Header bar -->
+    <rect x="0" y="0" width="360" height="50" rx="16" fill="url(#aiGradient)"/>
+    <rect x="0" y="35" width="360" height="15" fill="url(#aiGradient)"/>
+
+    <text x="180" y="22" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-weight="500">STEP 2</text>
+    <text x="180" y="40" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="14" fill="#ffffff" text-anchor="middle" font-weight="700">AI-Powered Analysis</text>
+
+    <!-- Four phases in 2x2 grid -->
+    <g transform="translate(15, 65)">
+      <!-- Phase 1 -->
+      <rect x="0" y="0" width="160" height="75" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+      <circle cx="20" cy="20" r="12" fill="#ede9fe"/>
+      <text x="20" y="25" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#7c3aed" text-anchor="middle" font-weight="700">1</text>
+      <text x="42" y="24" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#1e293b" font-weight="600">App Context</text>
+      <text x="12" y="45" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">README, dependencies,</text>
+      <text x="12" y="58" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">entry points</text>
+
+      <!-- Phase 2 -->
+      <rect x="170" y="0" width="160" height="75" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+      <circle cx="190" cy="20" r="12" fill="#ede9fe"/>
+      <text x="190" y="25" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#7c3aed" text-anchor="middle" font-weight="700">2</text>
+      <text x="212" y="24" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#1e293b" font-weight="600">LLM Discovery</text>
+      <text x="182" y="45" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">Prompts, tools,</text>
+      <text x="182" y="58" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">guardrails</text>
+
+      <!-- Phase 3 -->
+      <rect x="0" y="85" width="160" height="75" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+      <circle cx="20" cy="105" r="12" fill="#ede9fe"/>
+      <text x="20" y="110" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#7c3aed" text-anchor="middle" font-weight="700">3</text>
+      <text x="42" y="109" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#1e293b" font-weight="600">Attack Surface</text>
+      <text x="12" y="130" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">Roles, permissions,</text>
+      <text x="12" y="143" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">sensitive data</text>
+
+      <!-- Phase 4 -->
+      <rect x="170" y="85" width="160" height="75" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+      <circle cx="190" cy="105" r="12" fill="#ede9fe"/>
+      <text x="190" y="110" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#7c3aed" text-anchor="middle" font-weight="700">4</text>
+      <text x="212" y="109" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="11" fill="#1e293b" font-weight="600">Entities</text>
+      <text x="182" y="130" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">Companies, names,</text>
+      <text x="182" y="143" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b">data formats</text>
+    </g>
+
+    <!-- Output badge -->
+    <rect x="120" y="215" width="120" height="22" rx="11" fill="url(#configGradient)"/>
+    <text x="180" y="230" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="600">Config Generated</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <g transform="translate(585, 165)">
+    <path d="M 0 15 L 35 15" stroke="#cbd5e1" stroke-width="2"/>
+    <polygon points="35,15 28,10 28,20" fill="#cbd5e1"/>
+  </g>
+
+  <!-- Step 3: Web UI -->
+  <g transform="translate(630, 100)">
+    <rect x="0" y="0" width="130" height="160" rx="12" fill="url(#uiGradient)" filter="url(#shadow)"/>
+    <text x="65" y="35" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="12" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-weight="500">STEP 3</text>
+
+    <!-- Browser window icon -->
+    <rect x="35" y="48" width="60" height="42" rx="4" fill="#ffffff"/>
+    <rect x="35" y="48" width="60" height="10" rx="4" fill="#fef3c7"/>
+    <rect x="35" y="54" width="60" height="4" fill="#fef3c7"/>
+    <circle cx="42" cy="53" r="2" fill="#ef4444"/>
+    <circle cx="50" cy="53" r="2" fill="#f59e0b"/>
+    <circle cx="58" cy="53" r="2" fill="#22c55e"/>
+
+    <text x="65" y="115" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">Review &amp; Run</text>
+    <text x="65" y="133" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)" text-anchor="middle">Adjust plugins</text>
+    <text x="65" y="148" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)" text-anchor="middle">Start red team</text>
+  </g>
+
+  <!-- Bottom tagline -->
+  <text x="450" y="345" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="13" fill="#64748b" text-anchor="middle">
+    Automatic red team configuration from your codebase in seconds
+  </text>
+</svg>

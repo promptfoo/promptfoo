@@ -19,6 +19,7 @@ import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/d
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
+import ReconSummaryBanner from './ReconSummaryBanner';
 
 import type { ApplicationDefinition } from '../types';
 
@@ -298,6 +299,8 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             </button>
           </div>
 
+          <ReconSummaryBanner />
+
           {testMode === 'application' ? (
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
@@ -324,6 +327,21 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       limitations.{' '}
                       <a
                         href="https://promptfoo.dev/docs/red-team/discovery"
+                        target="_blank"
+                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
+                      >
+                        Learn more
+                      </a>
+                    </p>
+
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      <strong>Have source code access?</strong> Use{' '}
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        promptfoo redteam recon --dir ./your-app
+                      </code>{' '}
+                      to auto-populate fields from your codebase.{' '}
+                      <a
+                        href="https://promptfoo.dev/docs/red-team/recon"
                         target="_blank"
                         className="text-primary/80 underline underline-offset-2 hover:text-primary"
                       >
