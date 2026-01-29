@@ -177,22 +177,12 @@ export type UpdateEvalResponse = z.infer<typeof UpdateEvalResponseSchema>;
 
 export const AddResultsParamsSchema = EvalIdParamSchema;
 
-/** Permissive schema for eval results - validates array structure. */
-export const AddResultsRequestSchema = z.array(
-  z
-    .object({
-      promptIdx: z.number().int().nonnegative(),
-      testIdx: z.number().int().nonnegative(),
-      success: z.boolean(),
-      // Allow nullable/missing score for backward compatibility with older payloads
-      score: z
-        .number()
-        .nullable()
-        .optional()
-        .transform((v) => v ?? 0),
-    })
-    .passthrough(),
-);
+/** Permissive schema for eval results - validates array structure only.
+ * EvalResult objects have many fields (prompt, error, latencyMs, provider,
+ * gradingResult, namedScores, cost, metadata, etc.) so we just validate
+ * it's an array and preserve all fields with passthrough.
+ */
+export const AddResultsRequestSchema = z.array(z.record(z.string(), z.unknown()));
 
 export type AddResultsParams = z.infer<typeof AddResultsParamsSchema>;
 export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
