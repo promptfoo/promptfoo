@@ -37,6 +37,9 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(() => {
     memoryExporter.reset();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 

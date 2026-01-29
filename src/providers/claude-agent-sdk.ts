@@ -866,7 +866,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const modelName = config.model || 'default';
     const spanContext = {
       system: 'anthropic',
-      operationName: 'chat' as const,
+      operationName: 'agent' as const,
       model: modelName,
       providerId: this.providerId,
       traceparent,

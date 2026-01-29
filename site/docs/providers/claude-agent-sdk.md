@@ -551,12 +551,12 @@ providers:
 When `deep_tracing` is enabled:
 
 1. A root span is created for each agent execution using OpenTelemetry GenAI semantic conventions
-2. Claude Agent SDK is configured to export its internal events to promptfoo's OTLP receiver
+2. Claude Agent SDK is configured to export its internal events to Promptfoo's OTLP receiver
 3. All child events (tool calls, API requests, etc.) are linked to the root span via W3C trace context
 
 ### Viewing Traces
 
-After running an eval with `deep_tracing` enabled, you can view the traces in the promptfoo web UI:
+After running an eval with `deep_tracing` enabled, you can view the traces in the Promptfoo web UI:
 
 ```bash
 # Run eval with tracing
