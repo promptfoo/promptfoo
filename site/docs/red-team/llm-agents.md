@@ -37,8 +37,8 @@ redteam:
     - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
     - 'bfla' # Tests for Broken Function Level Authorization issues
   strategies:
-    - 'prompt-injection'
-    - 'jailbreak'
+    - 'jailbreak:composite'
+    - 'jailbreak:meta'
 ```
 
 The RBAC plugin tests whether the agent respects predefined access control policies. The BOLA and BFLA plugins check if the agent can be tricked into accessing or modifying resources or functions beyond its intended scope.
@@ -72,8 +72,8 @@ redteam:
     - 'rag-poisoning' # Tests if RAG-based agents can be poisoned with malicious documents
     - 'rag-document-exfiltration' # Checks if sensitive documents can be extracted from RAG systems
   strategies:
-    - 'prompt-injection'
-    - 'jailbreak'
+    - 'jailbreak:composite'
+    - 'jailbreak:meta'
     - 'jailbreak:tree' # Uses a tree-based approach to test complex jailbreak attempts
 ```
 
@@ -106,7 +106,7 @@ redteam:
   plugins:
     - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
   strategies:
-    - 'jailbreak'
+    - 'jailbreak:meta'
     - 'crescendo' # Multi-turn strategy that gradually builds up an attack
     - 'mischievous-user'
 ```
@@ -142,7 +142,7 @@ redteam:
     - 'excessive-agency' # Checks if the agent exceeds its intended capabilities
     - 'rbac' # Ensures proper access control across multiple actions
   strategies:
-    - 'jailbreak' # Generates complex attack scenarios
+    - 'jailbreak:meta' # Generates complex attack scenarios
 ```
 
 ## Tool and API Manipulation
@@ -178,8 +178,8 @@ redteam:
     - 'tool-discovery' # Tests if the agent reveals available tools to unauthorized users
     - 'mcp' # Tests Model Context Protocol implementations for security vulnerabilities
   strategies:
-    - 'prompt-injection'
-    - 'jailbreak'
+    - 'jailbreak:composite'
+    - 'jailbreak:meta'
 ```
 
 ## Objective Function Exploitation
@@ -203,8 +203,8 @@ redteam:
     - 'excessive-agency' # Detects if the agent takes actions beyond its intended scope
     - 'harmful' # Checks for harmful or malicious behavior
   strategies:
-    - 'prompt-injection'
-    - 'jailbreak'
+    - 'jailbreak:composite'
+    - 'jailbreak:meta'
 ```
 
 ## Prompt Leak
@@ -231,8 +231,8 @@ redteam:
       config:
         policy: 'The agent must not reveal any information from its prompt or context.'
   strategies:
-    - 'prompt-injection'
-    - 'jailbreak'
+    - 'jailbreak:composite'
+    - 'jailbreak:meta'
 ```
 
 This example use a custom policy plugin that generates test cases based on specific rules.
@@ -360,7 +360,7 @@ redteam:
     - harmful
     - rbac
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - crescendo
 ```
 

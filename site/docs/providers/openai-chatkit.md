@@ -368,7 +368,7 @@ redteam:
     - prompt-injection
     - hijacking
   strategies:
-    - jailbreak
+    - jailbreak:meta
 
 providers:
   - openai:chatkit:wf_xxxxx

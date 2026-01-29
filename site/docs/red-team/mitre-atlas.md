@@ -29,8 +29,8 @@ redteam:
   plugins:
     - mitre:atlas
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta:meta
+    - jailbreak:composite
 ```
 
 Or target specific tactics:
@@ -77,7 +77,7 @@ redteam:
     - prompt-extraction
     - rbac
   strategies:
-    - jailbreak
+    - jailbreak:meta
 ```
 
 Or use the ATLAS shorthand:
@@ -162,9 +162,9 @@ redteam:
     - ssrf
   strategies:
     - base64
-    - jailbreak
+    - jailbreak:meta
+    - jailbreak:composite
     - leetspeak
-    - prompt-injection
     - rot13
 ```
 
@@ -209,8 +209,9 @@ redteam:
     - hallucination
     - indirect-prompt-injection
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:tree
+    - jailbreak:composite
 ```
 
 Or use the ATLAS shorthand:
@@ -322,8 +323,8 @@ redteam:
   plugins:
     - mitre:atlas
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta:meta
+    - jailbreak:composite
     - base64
     - rot13
 ```
@@ -364,8 +365,8 @@ redteam:
     - owasp:llm
     - nist:ai:measure
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta:meta
+    - jailbreak:composite
 ```
 
 ## Best Practices for ATLAS-Based Red Teaming

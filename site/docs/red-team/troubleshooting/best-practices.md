@@ -40,7 +40,7 @@ Apply several [strategies](/docs/red-team/strategies/) together to maximize cove
 ```yaml
 redteam:
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:tree
     - jailbreak:composite
 ```
