@@ -44,8 +44,10 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     return;
   }
 
-  // Use req.body after validation to preserve nested provider config fields
-  // that may not be in the schema (provider configs can have arbitrary keys)
+  // Trade-off: Use req.body after validation to preserve nested provider config fields.
+  // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
+  // aren't in the schema. Using result.data would strip these via Zod's passthrough.
+  // This bypasses any future Zod transforms/coercions but is necessary for provider flexibility.
   const { evaluateOptions, ...testSuite } = req.body as {
     evaluateOptions?: EvaluateOptions;
     sharing?: boolean;
@@ -554,9 +556,10 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Return both output and any error information for debugging
+    // Use ?? to preserve valid falsy outputs (0, false, empty string)
     res.json(
       EvalSchemas.Replay.Response.parse({
-        output: output || '',
+        output: output ?? '',
         error: firstResult?.response?.error,
         response: firstResult?.response, // Include full response for debugging
       }),
@@ -681,7 +684,8 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       logger.debug('[POST /api/eval] Saving eval results (v4) to database');
       const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
         author: incEval.author,
-        createdAt: incEval.createdAt ? new Date(incEval.createdAt) : undefined,
+        // Use !== undefined to handle createdAt=0 (Unix epoch)
+        createdAt: incEval.createdAt !== undefined ? new Date(incEval.createdAt) : undefined,
         results: incEval.results,
         vars: incEval.vars,
       });
