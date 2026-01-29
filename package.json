@@ -81,7 +81,8 @@
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
+    "hooks:install": "mkdir -p .git/hooks && ln -sf ../../scripts/pre-commit .git/hooks/pre-commit && echo 'Pre-commit hook installed. Add ENABLE_PRECOMMIT_LINT=1 to .env to enable.'"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
