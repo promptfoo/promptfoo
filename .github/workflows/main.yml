@@ -624,9 +624,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Run actionlint
-        id: actionlint
-        uses: raven-actions/actionlint@v2
+      - name: Install and run actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint
 
   ruby:
     name: Check Ruby
