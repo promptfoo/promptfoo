@@ -384,3 +384,27 @@ export const CustomToolbarOptions: Story = {
     />
   ),
 };
+
+// Print styles demo - shows table in dark mode context
+// When printed, the table will appear in light mode
+export const PrintStyles: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <div className="dark bg-zinc-950 p-6 rounded-lg">
+        <p className="text-sm text-zinc-400 mb-4">
+          This table is displayed in dark mode. Use your browser's print preview (Cmd/Ctrl + P) to
+          see how it renders in light mode for printing.
+        </p>
+        <DataTable columns={columns} data={sampleData} />
+      </div>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The DataTable includes print-specific styles that force light mode colors when printing, ensuring readability regardless of the current theme.',
+      },
+    },
+  },
+};

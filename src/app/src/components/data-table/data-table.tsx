@@ -318,10 +318,11 @@ export function DataTable<TData, TValue = unknown>({
       <div
         className={cn(
           'rounded-lg border border-border bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
+          'print:bg-white print:border-gray-300',
         )}
       >
         {showToolbar && (
-          <div className="shrink-0">
+          <div className="shrink-0 print:hidden">
             <DataTableToolbar
               table={table}
               globalFilter={globalFilter}
@@ -341,10 +342,10 @@ export function DataTable<TData, TValue = unknown>({
           className="overflow-auto flex-1 min-h-0"
           style={maxHeight ? { maxHeight } : undefined}
         >
-          <table className="w-full" style={{ tableLayout: 'fixed' }}>
-            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10">
+          <table className="w-full print:text-black" style={{ tableLayout: 'fixed' }}>
+            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
               {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id} className="border-b border-border">
+                <tr key={headerGroup.id} className="border-b border-border print:border-gray-300">
                   {headerGroup.headers.map((header) => {
                     const canSort = header.column.getCanSort();
                     const sortDirection = header.column.getIsSorted();
@@ -424,7 +425,7 @@ export function DataTable<TData, TValue = unknown>({
                     key={row.id}
                     onClick={() => onRowClick?.(row.original)}
                     className={cn(
-                      'border-b border-border transition-colors',
+                      'border-b border-border transition-colors print:border-gray-300',
                       onRowClick && 'cursor-pointer hover:bg-muted/50',
                     )}
                   >
@@ -472,7 +473,7 @@ export function DataTable<TData, TValue = unknown>({
       </div>
 
       {showPagination && hasData && (
-        <div className="shrink-0">
+        <div className="shrink-0 print:hidden">
           <DataTablePagination
             table={table}
             pageIndex={pagination.pageIndex}
