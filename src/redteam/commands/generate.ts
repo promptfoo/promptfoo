@@ -9,12 +9,18 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
-import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  getUserEmail,
+  promptForEmailUnverified,
+} from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
+import { EMAIL_OK_STATUS } from '../../types/email';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -43,7 +49,7 @@ import {
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
 
@@ -271,6 +277,16 @@ export async function doGenerateRedteam(
       ),
     );
     return null;
+  }
+
+  // Validate email for remote generation
+  if (!neverGenerateRemote()) {
+    let hasValidEmail = false;
+    while (!hasValidEmail) {
+      const { emailNeedsValidation } = await promptForEmailUnverified();
+      const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+      hasValidEmail = res === EMAIL_OK_STATUS;
+    }
   }
 
   const startTime = Date.now();
