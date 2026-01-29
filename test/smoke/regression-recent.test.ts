@@ -391,6 +391,72 @@ tests:
     });
   });
 
+  describe('Provider Wrapper', () => {
+    describe('#7353 - class-based provider prototype id() method preservation', () => {
+      it('preserves id() method when using class-based providers in eval', () => {
+        // Bug #7353: When wrapProviderWithRateLimiting wraps a class-based provider,
+        // the spread operator doesn't copy prototype methods like id().
+        // This caused "TypeError: redteamProvider.id is not a function" in redteam
+        // strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+        //
+        // The fix explicitly delegates id() to the original provider.
+        const configPath = path.join(FIXTURES_DIR, 'configs/class-provider-7353.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'class-provider-7353-output.json');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+          { cwd: path.join(FIXTURES_DIR, 'configs') },
+        );
+
+        if (exitCode !== 0) {
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
+        }
+
+        // Should not fail with "id is not a function"
+        expect(stderr).not.toContain('is not a function');
+        expect(exitCode).toBe(0);
+
+        // Verify the output file was created and contains valid results
+        expect(fs.existsSync(outputPath)).toBe(true);
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The test should have run successfully with the class-based provider
+        expect(parsed.results.results[0].success).toBe(true);
+        // Verify the provider's id() method was accessible (included in output)
+        expect(parsed.results.results[0].response.output).toContain('ClassProvider');
+      });
+
+      it('preserves id() method when using class-based providers in redteam', () => {
+        // This tests the actual redteam flow where the bug manifested.
+        // The redteam provider (attacker model) gets wrapped with rate limiting,
+        // and strategies call TokenUsageTracker.trackUsage(provider.id(), ...).
+        const configPath = path.join(FIXTURES_DIR, 'configs/redteam-class-provider-7353.yaml');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['redteam', 'generate', '-c', configPath, '--no-cache'],
+          { cwd: path.join(FIXTURES_DIR, 'configs'), timeout: 120000 },
+        );
+
+        // The key assertion: should NOT fail with "id is not a function"
+        // This was the specific error from bug #7353
+        expect(stderr).not.toContain('is not a function');
+        expect(stdout + stderr).not.toContain('redteamProvider.id is not a function');
+
+        // The command may fail for other reasons (e.g., our simple provider
+        // doesn't generate proper attack prompts), but that's OK - we just
+        // need to verify the id() method is accessible.
+        if (exitCode !== 0) {
+          // If it failed, make sure it wasn't due to the id() bug
+          const output = stdout + stderr;
+          expect(output).not.toContain('TypeError');
+          expect(output).not.toContain('is not a function');
+        }
+      });
+    });
+  });
+
   describe('JSON Schema Validation', () => {
     describe('#7096 - TestCase options and metadata schema validation', () => {
       it('validates config with combined options from merged schemas', () => {

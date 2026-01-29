@@ -539,7 +539,7 @@ const TestSuites = ({
           showFilter={true}
           showExport={false}
           showPagination={true}
-          initialPageSize={25}
+          initialPageSize={10}
           getRowId={(row) => row.id}
         />
       </Card>
