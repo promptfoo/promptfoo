@@ -803,6 +803,7 @@ describe('convertResultsToTable', () => {
     it('should show all vars when showVars is not provided (default behavior)', () => {
       const resultsFile: ResultsFile = {
         version: 4,
+        config: {}, // No defaultTest, so no showVars
         prompts: [
           {
             raw: 'test prompt',
@@ -852,6 +853,13 @@ describe('convertResultsToTable', () => {
     it('should filter vars when showVars is provided', () => {
       const resultsFile: ResultsFile = {
         version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: ['language', 'input'], // Hide sessionId
+            },
+          },
+        },
         prompts: [
           {
             raw: 'test prompt',
@@ -882,11 +890,7 @@ describe('convertResultsToTable', () => {
               },
               success: true,
               promptId: 'prompt1',
-              testCase: {
-                options: {
-                  showVars: ['language', 'input'], // Hide sessionId
-                },
-              },
+              testCase: {},
               // @ts-ignore
               failureReason: 'none',
               score: 1,
@@ -906,6 +910,13 @@ describe('convertResultsToTable', () => {
     it('should show all vars when showVars is empty array', () => {
       const resultsFile: ResultsFile = {
         version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: [], // Empty array = show all
+            },
+          },
+        },
         prompts: [
           {
             raw: 'test prompt',
@@ -935,11 +946,7 @@ describe('convertResultsToTable', () => {
               },
               success: true,
               promptId: 'prompt1',
-              testCase: {
-                options: {
-                  showVars: [], // Empty array = show all
-                },
-              },
+              testCase: {},
               // @ts-ignore
               failureReason: 'none',
               score: 1,
@@ -958,6 +965,13 @@ describe('convertResultsToTable', () => {
     it('should handle showVars with vars that do not exist', () => {
       const resultsFile: ResultsFile = {
         version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: ['language', 'nonexistent'], // nonexistent var ignored
+            },
+          },
+        },
         prompts: [
           {
             raw: 'test prompt',
@@ -987,11 +1001,7 @@ describe('convertResultsToTable', () => {
               },
               success: true,
               promptId: 'prompt1',
-              testCase: {
-                options: {
-                  showVars: ['language', 'nonexistent'], // nonexistent var ignored
-                },
-              },
+              testCase: {},
               // @ts-ignore
               failureReason: 'none',
               score: 1,

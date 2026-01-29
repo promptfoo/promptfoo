@@ -161,11 +161,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const rows = Object.values(rowMap);
   
-  // Extract showVars from the first test case that has it defined.
-  // When showVars is set in defaultTest.options, it gets merged into all test cases,
-  // so they all share the same configuration for suite-wide display.
-  const showVars = results.results.find((r) => r.testCase?.options?.showVars)?.testCase?.options
-    ?.showVars;
+  // Extract showVars from defaultTest config (suite-wide display configuration).
+  const showVars =
+    typeof eval_.config?.defaultTest === 'object'
+      ? eval_.config.defaultTest.options?.showVars
+      : undefined;
   
   // Filter variables based on showVars configuration
   const visibleVars = filterVisibleVars(varsForHeader, showVars);
