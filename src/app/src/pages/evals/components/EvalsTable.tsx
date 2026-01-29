@@ -128,7 +128,8 @@ export default function EvalsTable({
         throw new Error('Failed to delete evals');
       }
 
-      setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
+      const selectedSet = new Set(selectedEvalIds);
+      setEvals((prev) => prev.filter((e) => !selectedSet.has(e.evalId)));
       setRowSelection({});
       setConfirmDeleteOpen(false);
     } catch (err) {

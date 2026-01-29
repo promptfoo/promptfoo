@@ -2393,3 +2393,107 @@ describe('EvalOutputCell inline image lightbox', () => {
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 });
+
+describe('EvalOutputCell searchRegex memoization', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsWithText = (text: string, searchText: string): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'First output',
+      testCase: {},
+    },
+    maxTextLength: 1000,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Test comment',
+        componentResults: [],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text,
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText,
+    showDiffs: false,
+    showStats: false,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should handle invalid regex patterns without crashing', () => {
+    const invalidPatterns = ['(', '[', '*', '+', '?', '{', '\\'];
+
+    for (const pattern of invalidPatterns) {
+      const props = createPropsWithText('Test output text', pattern);
+
+      // Should not throw error
+      const { unmount } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      // Should still display the output text
+      expect(screen.getByText('Test output text')).toBeInTheDocument();
+
+      // Clean up before next iteration
+      unmount();
+    }
+  });
+
+  it('should handle special regex characters in search text without crashing', () => {
+    const props = createPropsWithText('Cost: $100 (10% off)', '\\$');
+
+    // Should not throw error when rendering with escaped regex character
+    expect(() => renderWithProviders(<EvalOutputCell {...props} />)).not.toThrow();
+  });
+
+  it('should handle empty searchText by returning null regex', () => {
+    const props = createPropsWithText('Test output text', '');
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Text should be displayed
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('should handle unicode characters in search pattern', () => {
+    const props = createPropsWithText('Hello 世界 World', '世界');
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Should display the text with unicode characters
+    expect(screen.getByText((content) => content.includes('世界'))).toBeInTheDocument();
+  });
+
+  it('should handle very long search patterns', () => {
+    const longPattern = 'a'.repeat(100);
+    const longText = `Some text ${longPattern} more text`;
+    const props = createPropsWithText(longText, longPattern);
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Should handle long patterns without errors
+    expect(screen.getByText((content) => content.includes(longPattern))).toBeInTheDocument();
+  });
+});

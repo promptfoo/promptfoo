@@ -62,15 +62,22 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Handlers
   // ================================
 
-  const fetchRecentFileEvals = async () => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
-      setFailed(true);
-      return;
+  const fetchRecentFileEvals = async (signal?: AbortSignal) => {
+    try {
+      const resp = await callApi(`/results`, { cache: 'no-store', signal });
+      if (!resp.ok) {
+        setFailed(true);
+        return;
+      }
+      const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+      setRecentEvals(body.data);
+      return body.data;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      throw error;
     }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
   };
 
   /**
@@ -172,6 +179,8 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
+    const controller = new AbortController();
+    let socket: ReturnType<typeof SocketIOClient> | null = null;
     const _searchParams = new URLSearchParams(window.location.search);
 
     // Use getState() to avoid adding functions to dependencies
@@ -195,6 +204,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
+    // Reset comparison mode for ALL branches (including websocket)
+    console.log('Eval init: Resetting comparison mode');
+    setInComparisonMode(false);
+    setComparisonEvalIds([]);
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -202,7 +216,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         if (success) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
-          fetchRecentFileEvals();
+          fetchRecentFileEvals(controller.signal);
           // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
@@ -238,7 +252,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         }
       }
 
-      const socket = SocketIOClient(socketUrl, { path: socketPath });
+      socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
        * Populates the table store with the most recent eval result.
@@ -258,7 +272,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        const newRecentEvals = await fetchRecentFileEvals();
+        const newRecentEvals = await fetchRecentFileEvals(controller.signal);
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
@@ -284,15 +298,20 @@ export default function Eval({ fetchId }: EvalOptions) {
           await handleResultsFile(data);
         });
 
+      // Capture socket reference for cleanup (TypeScript needs this for type narrowing)
+      const socketRef = socket;
       return () => {
-        socket.disconnect();
+        controller.abort();
+        socketRef.off('init');
+        socketRef.off('update');
+        socketRef.disconnect();
         setIsStreaming(false);
       };
     } else {
       console.log('Eval init: Fetching eval via recent');
       // Fetch from server
       const run = async () => {
-        const evals = await fetchRecentFileEvals();
+        const evals = await fetchRecentFileEvals(controller.signal);
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
@@ -311,9 +330,10 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
-    console.log('Eval init: Resetting comparison mode');
-    setInComparisonMode(false);
-    setComparisonEvalIds([]);
+    // Cleanup for non-websocket branches (websocket branch returns its own cleanup above)
+    return () => {
+      controller.abort();
+    };
   }, [
     apiBaseUrl,
     fetchId,

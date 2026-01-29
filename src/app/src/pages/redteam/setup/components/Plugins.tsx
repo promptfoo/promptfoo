@@ -235,55 +235,51 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     [config.plugins, updatePlugins],
   );
 
-  const isConfigValid = useCallback(() => {
-    for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-        const config = pluginConfig[plugin];
-        if (!config || Object.keys(config).length === 0) {
-          return false;
+  const { isConfigValid, hasAnyPluginsConfigured } = useMemo(() => {
+    let hasAny = false;
+    let allValid = true;
+
+    for (const plugin of config.plugins) {
+      const id = typeof plugin === 'string' ? plugin : plugin.id;
+
+      if (id !== 'policy' && id !== 'intent') {
+        hasAny = true;
+      }
+
+      if (id === 'policy') {
+        const policy = typeof plugin === 'object' ? plugin.config?.policy : undefined;
+        if (typeof policy === 'string' && policy.trim().length > 0) {
+          hasAny = true;
         }
-        for (const key in config) {
-          const value = config[key as keyof PluginConfig];
+      }
+
+      if (id === 'intent') {
+        const intents = typeof plugin === 'object' ? plugin.config?.intent : undefined;
+        if (Array.isArray(intents) && intents.length > 0) {
+          hasAny = true;
+        }
+      }
+
+      if (PLUGINS_REQUIRING_CONFIG.includes(id)) {
+        const configForPlugin = typeof plugin === 'object' ? plugin.config : undefined;
+        if (!configForPlugin || Object.keys(configForPlugin).length === 0) {
+          allValid = false;
+          continue;
+        }
+        for (const key in configForPlugin) {
+          const value = configForPlugin[key as keyof PluginConfig];
           if (Array.isArray(value) && value.length === 0) {
-            return false;
+            allValid = false;
           }
           if (typeof value === 'string' && value.trim() === '') {
-            return false;
+            allValid = false;
           }
         }
       }
     }
-    return true;
-  }, [selectedPlugins, pluginConfig]);
 
-  const hasAnyPluginsConfigured = useCallback(() => {
-    // Check regular plugins
-    if (selectedPlugins.size > 0) {
-      return true;
-    }
-
-    // Check custom policies with actual content
-    const hasPolicies = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'policy' &&
-        p.config?.policy &&
-        typeof p.config.policy === 'string' &&
-        p.config.policy.trim().length > 0,
-    );
-
-    // Check custom intents with actual content
-    const hasIntents = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'intent' &&
-        p.config?.intent &&
-        Array.isArray(p.config.intent) &&
-        p.config.intent.length > 0,
-    );
-
-    return hasPolicies || hasIntents;
-  }, [selectedPlugins, config.plugins]);
+    return { isConfigValid: allValid, hasAnyPluginsConfigured: hasAny };
+  }, [config.plugins]);
 
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
@@ -310,11 +306,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   );
 
   const getNextButtonTooltip = useCallback(() => {
-    if (!hasAnyPluginsConfigured()) {
+    if (!hasAnyPluginsConfigured) {
       return 'Select at least one plugin';
     }
 
-    if (!isConfigValid()) {
+    if (!isConfigValid) {
       const missingConfigPlugins = Array.from(selectedPlugins).filter(
         (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
       );
@@ -363,9 +359,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       description={<div className="max-w-[1200px]">{DESCRIPTIONS_BY_TAB[activeTab]}</div>}
       onNext={onNext}
       onBack={onBack}
-      nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
+      nextDisabled={!isConfigValid || !hasAnyPluginsConfigured}
       warningMessage={
-        !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
+        !isConfigValid || !hasAnyPluginsConfigured ? getNextButtonTooltip() : undefined
       }
     >
       {/* Warning banner when remote generation is disabled */}

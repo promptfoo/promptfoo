@@ -42,11 +42,10 @@ export const useStore = create<EvalConfigState>()(
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
+      // Pure getter - no side effects, safe to call during render
       getTestSuite: () => {
         const { config } = get();
-
         // Transform config to match the expected EvaluateTestSuiteWithEvaluateOptions format
-        // Note: The 'tests' field in UnifiedConfig maps to 'testCases' in the old store
         return {
           description: config.description,
           env: config.env,
@@ -54,7 +53,7 @@ export const useStore = create<EvalConfigState>()(
           prompts: config.prompts,
           providers: config.providers,
           scenarios: config.scenarios,
-          tests: config.tests || [], // This is what was 'testCases' before
+          tests: config.tests || [],
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
           derivedMetrics: config.derivedMetrics,

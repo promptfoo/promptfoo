@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 
 import { PageContainer, PageHeader } from '@app/components/layout';
 import { Button } from '@app/components/ui/button';
@@ -25,8 +25,9 @@ import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
 import TestCasesSection from './TestCasesSection';
-import YamlEditor from './YamlEditor';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+
+const YamlEditor = lazy(() => import('./YamlEditor'));
 
 function ErrorFallback({
   error,
@@ -653,7 +654,9 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} />
+            <Suspense fallback={<div className="h-64 animate-pulse bg-muted rounded" />}>
+              <YamlEditor key={resetKey} />
+            </Suspense>
           </div>
         </TabsContent>
       </Tabs>

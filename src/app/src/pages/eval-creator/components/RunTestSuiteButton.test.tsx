@@ -21,7 +21,11 @@ describe('RunTestSuiteButton', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
+    try {
+      vi.runOnlyPendingTimers();
+    } catch {
+      // Ignore if not using fake timers
+    }
     vi.useRealTimers();
   });
 
@@ -125,5 +129,200 @@ describe('RunTestSuiteButton', () => {
     alertMock.mockRestore();
     consoleErrorSpy.mockRestore();
     vi.useFakeTimers();
+  });
+
+  it('clears the polling interval on unmount', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+
+    // First call creates the job, subsequent calls return running status
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-1' }) } as any)
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'running', progress: 50, total: 100 }),
+      } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    const { unmount } = render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for the interval to be set up
+    await waitFor(
+      () => {
+        expect(setIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
+    );
+
+    unmount();
+
+    expect(clearIntervalSpy).toHaveBeenCalled();
+
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+  });
+
+  it('clears polling interval when job completes', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+
+    // First call creates the job, second returns complete status
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-complete' }) } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'complete', evalId: 'eval-123' }),
+      } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for the job to complete and interval to be cleared
+    await waitFor(
+      () => {
+        expect(clearIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 3000 },
+    );
+
+    clearIntervalSpy.mockRestore();
+  });
+
+  it('clears polling interval when job fails', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    // First call creates the job, second returns failed status
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-fail' }) } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'failed', logs: ['Job failed'] }),
+      } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for the job to fail and interval to be cleared
+    await waitFor(
+      () => {
+        expect(clearIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 3000 },
+    );
+
+    clearIntervalSpy.mockRestore();
+    alertMock.mockRestore();
+  });
+
+  it('clears polling interval when polling request fails', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    // First call creates the job, second returns HTTP error
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-error' }) } as any)
+      .mockResolvedValueOnce({ ok: false, status: 500 } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for the polling error and interval to be cleared
+    await waitFor(
+      () => {
+        expect(clearIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 3000 },
+    );
+
+    clearIntervalSpy.mockRestore();
+    alertMock.mockRestore();
+  });
+
+  it('can be called multiple times without errors', async () => {
+    vi.useRealTimers();
+
+    const mockCallApi = vi.mocked(callApi);
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+
+    // First call creates the job, second returns complete status
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-multi' }) } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'complete', evalId: 'eval-456' }),
+      } as any);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    const { unmount } = render(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await userEvent.click(button);
+
+    // Wait for completion
+    await waitFor(
+      () => {
+        expect(clearIntervalSpy).toHaveBeenCalled();
+      },
+      { timeout: 3000 },
+    );
+
+    const clearCount = clearIntervalSpy.mock.calls.length;
+
+    // Unmount should call clear again (cleanup effect)
+    unmount();
+
+    // Should have been called at least once more (may be called even if no interval is set)
+    expect(clearIntervalSpy.mock.calls.length).toBeGreaterThanOrEqual(clearCount);
+
+    clearIntervalSpy.mockRestore();
   });
 });

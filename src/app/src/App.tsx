@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -12,24 +12,33 @@ import {
 } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
+import { Spinner } from './components/ui/spinner';
 import { TooltipProvider } from './components/ui/tooltip';
+import {
+  EVAL_ROUTES,
+  LAUNCHER_ROUTES,
+  MODEL_AUDIT_ROUTES,
+  REDTEAM_ROUTES,
+  ROUTES,
+} from './constants/routes';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
-import DatasetsPage from './pages/datasets/page';
-import EvalPage from './pages/eval/page';
-import EvalCreatorPage from './pages/eval-creator/page';
-import EvalsIndexPage from './pages/evals/page';
-import HistoryPage from './pages/history/page';
-import LauncherPage from './pages/launcher/page';
-import LoginPage from './pages/login';
-import ModelAuditHistoryPage from './pages/model-audit-history/page';
-import ModelAuditLatestPage from './pages/model-audit-latest/page';
-import ModelAuditResultPage from './pages/model-audit-result/page';
-import ModelAuditSetupPage from './pages/model-audit-setup/page';
-import NotFoundPage from './pages/NotFoundPage';
-import PromptsPage from './pages/prompts/page';
-import ReportPage from './pages/redteam/report/page';
-import RedteamSetupPage from './pages/redteam/setup/page';
+
+const DatasetsPage = lazy(() => import('./pages/datasets/page'));
+const EvalPage = lazy(() => import('./pages/eval/page'));
+const EvalCreatorPage = lazy(() => import('./pages/eval-creator/page'));
+const EvalsIndexPage = lazy(() => import('./pages/evals/page'));
+const HistoryPage = lazy(() => import('./pages/history/page'));
+const LauncherPage = lazy(() => import('./pages/launcher/page'));
+const LoginPage = lazy(() => import('./pages/login'));
+const ModelAuditHistoryPage = lazy(() => import('./pages/model-audit-history/page'));
+const ModelAuditLatestPage = lazy(() => import('./pages/model-audit-latest/page'));
+const ModelAuditResultPage = lazy(() => import('./pages/model-audit-result/page'));
+const ModelAuditSetupPage = lazy(() => import('./pages/model-audit-setup/page'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const PromptsPage = lazy(() => import('./pages/prompts/page'));
+const ReportPage = lazy(() => import('./pages/redteam/report/page'));
+const RedteamSetupPage = lazy(() => import('./pages/redteam/setup/page'));
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -48,52 +57,111 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       {import.meta.env.VITE_PROMPTFOO_LAUNCHER && (
-        <Route path="/launcher" element={<LauncherPage />} />
+        <Route
+          path={LAUNCHER_ROUTES.ROOT}
+          element={
+            <ErrorBoundary name="Launcher">
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <LauncherPage />
+              </Suspense>
+            </ErrorBoundary>
+          }
+        />
       )}
-      <Route path="/" element={<PageShell />}>
+      <Route path={ROUTES.HOME} element={<PageShell />}>
         <Route element={<TelemetryTracker />}>
           <Route
             index
             element={
               <Navigate
-                to={import.meta.env.VITE_PROMPTFOO_LAUNCHER ? '/launcher' : '/eval'}
+                to={
+                  import.meta.env.VITE_PROMPTFOO_LAUNCHER ? LAUNCHER_ROUTES.ROOT : EVAL_ROUTES.ROOT
+                }
                 replace
               />
             }
           />
-          <Route path="/datasets" element={<DatasetsPage />} />
-          <Route path="/eval" element={<EvalPage />} />
-          <Route path="/evals" element={<EvalsIndexPage />} />
-          <Route path="/eval/:evalId" element={<EvalPage />} />
+          <Route
+            path={ROUTES.DATASETS}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <DatasetsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path={EVAL_ROUTES.ROOT}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path={EVAL_ROUTES.LIST}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalsIndexPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/eval/:evalId"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalPage />
+              </Suspense>
+            }
+          />
 
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
-          <Route path="/progress" element={<Navigate to="/history" replace />} />
-          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/progress" element={<Navigate to={ROUTES.HISTORY} replace />} />
+          <Route
+            path={ROUTES.HISTORY}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <HistoryPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/prompts" element={<PromptsPage />} />
+          <Route
+            path={ROUTES.PROMPTS}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <PromptsPage />
+              </Suspense>
+            }
+          />
 
           {/* Model Audit routes - mirrors eval structure */}
           <Route
-            path="/model-audit"
+            path={MODEL_AUDIT_ROUTES.ROOT}
             element={
               <ErrorBoundary name="Model Audit">
-                <ModelAuditLatestPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditLatestPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
           <Route
-            path="/model-audits"
+            path={MODEL_AUDIT_ROUTES.LIST}
             element={
               <ErrorBoundary name="Model Audit History">
-                <ModelAuditHistoryPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditHistoryPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
           <Route
-            path="/model-audit/setup"
+            path={MODEL_AUDIT_ROUTES.SETUP}
             element={
               <ErrorBoundary name="Model Audit Setup">
-                <ModelAuditSetupPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditSetupPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
@@ -101,22 +169,65 @@ const router = createBrowserRouter(
             path="/model-audit/:id"
             element={
               <ErrorBoundary name="Model Audit Result">
-                <ModelAuditResultPage />
+                <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                  <ModelAuditResultPage />
+                </Suspense>
               </ErrorBoundary>
             }
           />
           {/* Redirect legacy /model-audit/history route */}
-          <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
+          <Route
+            path="/model-audit/history"
+            element={<Navigate to={MODEL_AUDIT_ROUTES.LIST} replace />}
+          />
 
-          <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
-          <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+          <Route
+            path={REDTEAM_ROUTES.ROOT}
+            element={<Navigate to={REDTEAM_ROUTES.SETUP} replace />}
+          />
+          <Route
+            path={REDTEAM_ROUTES.SETUP}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <RedteamSetupPage />
+              </Suspense>
+            }
+          />
 
           {/* Redirect legacy /report route to /reports (since v0.118.2) */}
-          <Route path="/report" element={<Navigate to="/reports" replace />} />
-          <Route path="/reports" element={<ReportPage />} />
-          <Route path="/setup" element={<EvalCreatorPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+          <Route path="/report" element={<Navigate to={REDTEAM_ROUTES.REPORTS} replace />} />
+          <Route
+            path={REDTEAM_ROUTES.REPORTS}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <ReportPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path={ROUTES.SETUP}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <EvalCreatorPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path={ROUTES.LOGIN}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <LoginPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <NotFoundPage />
+              </Suspense>
+            }
+          />
         </Route>
       </Route>
     </>,
