@@ -29,7 +29,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -275,7 +275,7 @@
     "opener": "^1.5.2",
     "ora": "^9.1.0",
     "pem": "~1.14.8",
-    "posthog-node": "~5.21.2",
+    "posthog-node": "~5.23.0",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
