@@ -53,7 +53,7 @@
     "prismjs": "^1.30.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-is": "^19.2.3",
+    "react-is": "^19.2.4",
     "react-error-boundary": "^6.1.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.0",
