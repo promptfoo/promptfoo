@@ -109,8 +109,8 @@ const SENSITIVE_PATTERNS: Array<{
 export interface GenAISpanContext {
   /** The GenAI system (e.g., 'openai', 'anthropic', 'bedrock') */
   system: string;
-  /** The operation type */
-  operationName: 'chat' | 'completion' | 'embedding';
+  /** The operation type - includes agent and tool_call for agent-based providers */
+  operationName: 'chat' | 'completion' | 'embedding' | 'agent' | 'tool_call';
   /** The requested model name */
   model: string;
   /** The promptfoo provider ID */
