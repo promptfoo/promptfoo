@@ -103,9 +103,11 @@ export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 /**
  * Schema for creating a new evaluation job.
  * Based on EvaluateTestSuiteWithEvaluateOptions type.
- * Inherits prompts schema from TestSuiteConfigSchema (string | array | record).
+ * Note: prompts must be an array for this endpoint (evaluate() expects array).
  */
 export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
+  // Override prompts to require array - evaluate() calls .map() on prompts
+  prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
   evaluateOptions: EvaluateOptionsSchema.optional(),
 }).passthrough();
 
@@ -199,7 +201,8 @@ export const ReplayRequestSchema = z.object({
 export const ReplayResponseSchema = z.object({
   // Provider outputs can be strings, objects (JSON mode), or arrays (tool calls)
   output: z.unknown(),
-  error: z.string().optional(),
+  // Providers can emit null, string, or undefined for errors
+  error: z.string().nullable().optional(),
   response: z.record(z.string(), z.unknown()).optional(),
 });
 

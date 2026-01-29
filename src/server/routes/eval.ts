@@ -29,6 +29,7 @@ import type {
   Job,
   PromptMetrics,
   ResultsFile,
+  Vars,
 } from '../../index';
 
 export const evalRouter = Router();
@@ -43,8 +44,9 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     return;
   }
 
-  // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTestSuite
-  const { evaluateOptions, ...testSuite } = result.data as unknown as {
+  // Use req.body after validation to preserve nested provider config fields
+  // that may not be in the schema (provider configs can have arbitrary keys)
+  const { evaluateOptions, ...testSuite } = req.body as {
     evaluateOptions?: EvaluateOptions;
     sharing?: boolean;
     [key: string]: unknown;
@@ -528,7 +530,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         providers: [providerConfig],
         tests: [
           {
-            vars: (variables || {}) as Record<string, string>,
+            vars: (variables || {}) as Vars,
           },
         ],
       },
