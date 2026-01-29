@@ -50,7 +50,7 @@ fi
 # Run Prettier on staged CSS/HTML/MD/YAML files
 if [ -n "$STAGED_PRETTIER_FILES" ]; then
   echo "Formatting with Prettier..."
-  echo "$STAGED_PRETTIER_FILES" | xargs prettier --write
+  echo "$STAGED_PRETTIER_FILES" | xargs npx prettier --write
   PRETTIER_EXIT=$?
 
   if [ $PRETTIER_EXIT -ne 0 ]; then
