@@ -1,7 +1,7 @@
 /**
- * OTLP Protobuf decoder for trace data
+ * OTLP Protobuf decoder for trace and log data
  *
- * Uses protobufjs to decode binary OTLP trace requests sent with
+ * Uses protobufjs to decode binary OTLP trace and log requests sent with
  * Content-Type: application/x-protobuf
  */
 
@@ -11,9 +11,11 @@ import protobuf from 'protobufjs';
 import { getDirectory } from '../esm';
 import logger from '../logger';
 
-// Cached protobuf root
-let protoRoot: protobuf.Root | null = null;
-let ExportTraceServiceRequest: protobuf.Type | null = null;
+// Cached protobuf roots and message types
+let protoRoot: protobuf.Root | null = null,
+  logsProtoRoot: protobuf.Root | null = null,
+  ExportTraceServiceRequest: protobuf.Type | null = null,
+  ExportLogsServiceRequestType: protobuf.Type | null = null;
 
 /**
  * Get the path to the proto files directory.
@@ -75,6 +77,56 @@ async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
   );
 
   return ExportTraceServiceRequest;
+}
+
+/**
+ * Load and cache the OTLP logs proto definitions
+ */
+async function loadLogsProtoDefinitions(): Promise<protobuf.Root> {
+  if (logsProtoRoot) {
+    return logsProtoRoot;
+  }
+
+  logger.debug('[Protobuf] Loading OTLP logs proto definitions');
+
+  const protoDir = getProtoDir();
+  logger.debug(`[Protobuf] Proto directory for logs: ${protoDir}`);
+
+  try {
+    // Create a new Root with the proto directory as the include path
+    const root = new protobuf.Root();
+
+    // Configure the root to resolve imports from the proto directory
+    root.resolvePath = (_origin: string, target: string) => {
+      return path.join(protoDir, target);
+    };
+
+    // Load the logs service proto which imports the others
+    await root.load('opentelemetry/proto/collector/logs/v1/logs_service.proto');
+
+    logsProtoRoot = root;
+    logger.debug('[Protobuf] Successfully loaded OTLP logs proto definitions');
+    return logsProtoRoot;
+  } catch (error) {
+    logger.error(`[Protobuf] Failed to load logs proto definitions: ${error}`);
+    throw error;
+  }
+}
+
+/**
+ * Get the ExportLogsServiceRequest message type
+ */
+async function getExportLogsServiceRequestType(): Promise<protobuf.Type> {
+  if (ExportLogsServiceRequestType) {
+    return ExportLogsServiceRequestType;
+  }
+
+  const root = await loadLogsProtoDefinitions();
+  ExportLogsServiceRequestType = root.lookupType(
+    'opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest',
+  );
+
+  return ExportLogsServiceRequestType;
 }
 
 /**
@@ -170,6 +222,52 @@ export interface DecodedExportTraceServiceRequest {
   resourceSpans: DecodedResourceSpans[];
 }
 
+// ============================================================================
+// Log-related types (for OTLP /v1/logs endpoint)
+// ============================================================================
+
+/**
+ * Decoded OTLP log record
+ */
+export interface DecodedLogRecord {
+  timeUnixNano: Long | number;
+  observedTimeUnixNano?: Long | number;
+  severityNumber?: number;
+  severityText?: string;
+  body?: DecodedAttributeValue;
+  attributes?: DecodedAttribute[];
+  droppedAttributesCount?: number;
+  flags?: number;
+  traceId?: Uint8Array;
+  spanId?: Uint8Array;
+  eventName?: string;
+}
+
+/**
+ * Decoded OTLP scope logs
+ */
+export interface DecodedScopeLogs {
+  scope?: DecodedScope;
+  logRecords: DecodedLogRecord[];
+  schemaUrl?: string;
+}
+
+/**
+ * Decoded OTLP resource logs
+ */
+export interface DecodedResourceLogs {
+  resource?: DecodedResource;
+  scopeLogs: DecodedScopeLogs[];
+  schemaUrl?: string;
+}
+
+/**
+ * Decoded ExportLogsServiceRequest
+ */
+export interface DecodedExportLogsServiceRequest {
+  resourceLogs: DecodedResourceLogs[];
+}
+
 // Long type from protobufjs
 interface Long {
   low: number;
@@ -238,11 +336,47 @@ export async function decodeExportTraceServiceRequest(
 }
 
 /**
+ * Decode a binary OTLP ExportLogsServiceRequest
+ *
+ * @param data - The binary protobuf data
+ * @returns The decoded request object
+ */
+export async function decodeExportLogsServiceRequest(
+  data: Buffer | Uint8Array,
+): Promise<DecodedExportLogsServiceRequest> {
+  const messageType = await getExportLogsServiceRequestType();
+
+  try {
+    // Decode the protobuf message
+    const message = messageType.decode(data instanceof Buffer ? new Uint8Array(data) : data);
+
+    // Convert to plain JavaScript object
+    const decoded = messageType.toObject(message, {
+      longs: Number, // Convert longs to numbers (may lose precision for very large values)
+      bytes: Uint8Array, // Keep bytes as Uint8Array
+      defaults: true, // Include default values
+      arrays: true, // Always use arrays for repeated fields
+    }) as DecodedExportLogsServiceRequest;
+
+    logger.debug(
+      `[Protobuf] Decoded ExportLogsServiceRequest with ${decoded.resourceLogs?.length || 0} resource logs`,
+    );
+
+    return decoded;
+  } catch (error) {
+    logger.error(`[Protobuf] Failed to decode ExportLogsServiceRequest: ${error}`);
+    throw new Error(`Invalid protobuf data: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+/**
  * Initialize the protobuf loader (preload proto definitions)
  * Call this at startup for faster first request handling
  */
 export async function initializeProtobuf(): Promise<void> {
   await loadProtoDefinitions();
   await getExportTraceServiceRequestType();
+  await loadLogsProtoDefinitions();
+  await getExportLogsServiceRequestType();
   logger.debug('[Protobuf] Protobuf decoder initialized');
 }
