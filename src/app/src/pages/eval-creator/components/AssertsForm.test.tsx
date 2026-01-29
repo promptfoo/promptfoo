@@ -119,9 +119,8 @@ describe('AssertsForm', () => {
   it('should handle undefined initialValues gracefully by defaulting to an empty array', () => {
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={[]} />);
 
-    const assertionsHeader = screen.getByText('Assertions');
-    expect(assertionsHeader).toBeInTheDocument();
-
+    // Note: The "Assertions" header was moved to the parent component (TestCaseDialog)
+    // to allow adding a "Generate with AI" button next to it.
     const addAssertButton = screen.getByRole('button', { name: 'Add Assertion' });
     expect(addAssertButton).toBeInTheDocument();
   });
