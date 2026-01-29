@@ -92,7 +92,11 @@ const columns: ColumnDef<Evaluation>[] = [
       const status = row.getValue('status') as string;
       const variant =
         status === 'passed' ? 'success' : status === 'failed' ? 'destructive' : 'secondary';
-      return <Badge variant={variant}>{status}</Badge>;
+      return (
+        <Badge variant={variant} truncate>
+          {status}
+        </Badge>
+      );
     },
     meta: {
       filterVariant: 'select',
