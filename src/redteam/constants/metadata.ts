@@ -416,17 +416,19 @@ export const Severity = {
   High: 'high',
   Medium: 'medium',
   Low: 'low',
+  Informational: 'informational',
 } as const;
 export type Severity = (typeof Severity)[keyof typeof Severity];
 
 // Zod schema for Severity validation
-export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low']);
+export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'informational']);
 
 export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Critical]: 'Critical',
   [Severity.High]: 'High',
   [Severity.Medium]: 'Medium',
   [Severity.Low]: 'Low',
+  [Severity.Informational]: 'Informational',
 };
 
 export const severityRiskScores: Record<Severity, number> = {
@@ -434,6 +436,7 @@ export const severityRiskScores: Record<Severity, number> = {
   [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
   [Severity.Low]: 0.0,
+  [Severity.Informational]: 0.0,
 };
 
 /*

@@ -12,6 +12,8 @@ declare module '@tanstack/react-table' {
   interface ColumnMeta<TData, TValue> {
     filterVariant?: 'select';
     filterOptions?: Array<{ label: string; value: string }>;
+    /** Column alignment - affects both header and cell content. When 'right', sort icon appears on the left of the header label. */
+    align?: 'left' | 'right';
   }
 }
 

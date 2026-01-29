@@ -2422,7 +2422,7 @@
                   "severity": {
                     "description": "Severity level for this plugin",
                     "type": "string",
-                    "enum": ["critical", "high", "medium", "low"]
+                    "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
                 "required": ["id", "numTests"],
@@ -2883,7 +2883,17 @@
           "maximum": 9007199254740991
         },
         "filterMetadata": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "filterPattern": {
           "type": "string"
