@@ -2558,6 +2558,31 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "gradingGuidance": {
+          "description": "External grading guidance document - file path (.txt, .md, .pdf) or inline text",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "extractionMode": {
+                  "description": "Extraction mode: openai_chunking (default, LLM-based), openai_agent (requires @openai/agents), claude_agent (requires @anthropic-ai/claude-agent-sdk)",
+                  "type": "string",
+                  "enum": ["openai_chunking", "openai_agent", "claude_agent"]
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": ["plugins", "strategies"],

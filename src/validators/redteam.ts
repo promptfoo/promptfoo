@@ -314,6 +314,22 @@ export const RedteamConfigSchema = z
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
     ),
+    gradingGuidance: z
+      .union([
+        z.string(),
+        z.object({
+          text: z.string().optional(),
+          file: z.string().optional(),
+          extractionMode: z
+            .enum(['openai_chunking', 'openai_agent', 'claude_agent'])
+            .optional()
+            .describe(
+              'Extraction mode: openai_chunking (default, LLM-based), openai_agent (requires @openai/agents), claude_agent (requires @anthropic-ai/claude-agent-sdk)',
+            ),
+        }),
+      ])
+      .optional()
+      .describe('External grading guidance document - file path (.txt, .md, .pdf) or inline text'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -547,6 +563,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.gradingGuidance ? { gradingGuidance: data.gradingGuidance } : {}),
     };
   });
 

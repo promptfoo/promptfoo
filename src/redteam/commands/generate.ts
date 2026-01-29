@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { extractTextFromPDF } from '../../evaluatorHelpers';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -40,9 +41,16 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
+import {
+  extractGuidanceForPlugins,
+  extractGuidanceForPluginsWithAgent,
+  extractGuidanceForPluginsWithOpenAIAgent,
+  type GuidanceExtractionResult,
+} from '../extraction/guidanceExtractor';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
+import { redteamProviderManager } from '../providers/shared';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
@@ -50,6 +58,7 @@ import type { Command } from 'commander';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   FailedPluginInfo,
+  GradingGuidanceExtractionMode,
   PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -402,6 +411,173 @@ export async function doGenerateRedteam(
     }
   }
 
+  // Load external grading guidance and start extraction early (non-blocking)
+  // The extraction runs in the background while other setup continues
+  let guidanceExtractionPromise: Promise<GuidanceExtractionResult> | null = null;
+  let guidanceText: string | undefined;
+  let configExtractionMode: GradingGuidanceExtractionMode | undefined;
+
+  if (redteamConfig?.gradingGuidance) {
+    // Resolve relative paths from the config file's directory
+    const configDir = configPath ? path.dirname(path.resolve(configPath)) : process.cwd();
+
+    if (typeof redteamConfig.gradingGuidance === 'string') {
+      // If it's a string, check if it's a file path or inline text
+      const potentialPath = redteamConfig.gradingGuidance;
+
+      // Determine if this looks like a file path and if the file exists
+      // Use explicit file:// prefix or check if file exists to avoid false positives
+      // (e.g., "This guidance is for test.txt files" should not be treated as a file path)
+      let isFilePath = false;
+      let filePath = potentialPath;
+
+      if (potentialPath.startsWith('file://')) {
+        // Explicit file:// prefix - always treat as file path
+        isFilePath = true;
+        filePath = potentialPath.slice(7);
+      } else if (
+        potentialPath.endsWith('.txt') ||
+        potentialPath.endsWith('.md') ||
+        potentialPath.endsWith('.pdf')
+      ) {
+        // Looks like a file extension - check if file actually exists
+        const testPath = path.isAbsolute(potentialPath)
+          ? potentialPath
+          : path.resolve(configDir, potentialPath);
+        if (fs.existsSync(testPath)) {
+          isFilePath = true;
+          filePath = potentialPath;
+        }
+      }
+
+      if (isFilePath) {
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(configDir, filePath);
+        try {
+          if (absolutePath.endsWith('.pdf')) {
+            guidanceText = await extractTextFromPDF(absolutePath);
+          } else {
+            guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          }
+          logger.info(`Loaded grading guidance from file: ${absolutePath}`);
+        } catch (error) {
+          logger.error(
+            `Failed to load grading guidance file: ${absolutePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else {
+        // Treat as inline text
+        guidanceText = potentialPath;
+        logger.info('Using inline grading guidance text');
+      }
+    } else {
+      // Object form: { text?: string, file?: string, extractionMode?: string }
+      const guidanceConfig = redteamConfig.gradingGuidance;
+
+      // Capture extraction mode from config if specified
+      if (guidanceConfig.extractionMode) {
+        configExtractionMode = guidanceConfig.extractionMode;
+      }
+
+      if (guidanceConfig.file) {
+        const filePath = guidanceConfig.file.startsWith('file://')
+          ? guidanceConfig.file.slice(7)
+          : guidanceConfig.file;
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(configDir, filePath);
+        try {
+          if (absolutePath.endsWith('.pdf')) {
+            guidanceText = await extractTextFromPDF(absolutePath);
+          } else {
+            guidanceText = fs.readFileSync(absolutePath, 'utf-8');
+          }
+          logger.info(`Loaded grading guidance from file: ${absolutePath}`);
+        } catch (error) {
+          logger.error(
+            `Failed to load grading guidance file: ${absolutePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else if (guidanceConfig.text) {
+        guidanceText = guidanceConfig.text;
+        logger.info('Using inline grading guidance text');
+      }
+    }
+
+    // Start extraction early (non-blocking) - runs in PARALLEL with synthesis
+    // Extraction is only needed for the output config, not for test generation
+    if (guidanceText && process.env.SMART_GRADING_GUIDANCE_EXTRACTION !== 'false') {
+      // Assign to const for TypeScript type narrowing (guidanceText is now definitely string)
+      const loadedGuidanceText = guidanceText;
+
+      // Extraction modes (config takes precedence over env var):
+      // - "openai_chunking" (default): LLM chunking approach - exhaustive, comprehensive
+      // - "claude_agent": Claude Agent SDK with Grep/Read tools - focused, concise
+      // - "openai_agent": OpenAI Agents SDK with custom tools - alternative agent approach
+      //
+      // For backwards compatibility, also support legacy env var values:
+      // - "llm" → openai_chunking
+      // - "agent" → claude_agent
+      // - "openai-agent" → openai_agent
+      const envMode = process.env.GRADING_GUIDANCE_EXTRACTION_MODE;
+      let extractionMode: GradingGuidanceExtractionMode = 'openai_chunking';
+
+      if (configExtractionMode) {
+        // Config takes precedence
+        extractionMode = configExtractionMode;
+      } else if (envMode) {
+        // Map legacy env var values to new mode names
+        if (envMode === 'agent' || envMode === 'claude_agent') {
+          extractionMode = 'claude_agent';
+        } else if (envMode === 'openai-agent' || envMode === 'openai_agent') {
+          extractionMode = 'openai_agent';
+        } else if (envMode === 'llm' || envMode === 'openai_chunking') {
+          extractionMode = 'openai_chunking';
+        } else {
+          logger.warn(
+            `[GradingGuidance] Unknown extraction mode "${envMode}", using default "openai_chunking"`,
+          );
+        }
+      }
+
+      const pluginIds = plugins.map((p) => p.id);
+
+      if (extractionMode === 'claude_agent') {
+        logger.info(
+          '[GradingGuidance] Starting Claude agent-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off Claude agent-based extraction without awaiting
+        guidanceExtractionPromise = extractGuidanceForPluginsWithAgent(
+          loadedGuidanceText,
+          pluginIds,
+        );
+      } else if (extractionMode === 'openai_agent') {
+        logger.info(
+          '[GradingGuidance] Starting OpenAI agent-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off OpenAI agent-based extraction without awaiting
+        guidanceExtractionPromise = extractGuidanceForPluginsWithOpenAIAgent(
+          loadedGuidanceText,
+          pluginIds,
+        );
+      } else {
+        // Default: openai_chunking
+        logger.info(
+          '[GradingGuidance] Starting LLM-based extraction (runs parallel with synthesis)...',
+        );
+        // Fire off LLM-based extraction without awaiting - will be awaited after synthesis completes
+        guidanceExtractionPromise = (async () => {
+          const redteamProvider = await redteamProviderManager.getProvider({});
+          return extractGuidanceForPlugins(loadedGuidanceText, pluginIds, redteamProvider);
+        })();
+      }
+    }
+  }
+
+  // NOTE: Guidance injection happens AFTER synthesis completes (see below)
+  // This allows extraction to run in parallel with test generation
+
   let strategies: (string | { id: string })[] =
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
   if (options.strategies) {
@@ -588,6 +764,80 @@ export async function doGenerateRedteam(
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
     return null;
+  }
+
+  // Now that synthesis is complete, await the guidance extraction and inject into plugins
+  // This ran in parallel with synthesis, so minimal additional wait time
+  if (guidanceText) {
+    if (guidanceExtractionPromise !== null) {
+      // Smart extraction: await the background extraction (should be done or nearly done)
+      const extractions = await guidanceExtractionPromise;
+
+      // Inject per-plugin extracted guidance
+      plugins = plugins.map((plugin) => {
+        const extracted = extractions[plugin.id];
+        if (extracted) {
+          logger.info(
+            `[GradingGuidance] ${plugin.id} → ${extracted.length} chars of relevant guidance`,
+          );
+        } else {
+          logger.debug(`[GradingGuidance] ${plugin.id} → no relevant guidance found`);
+        }
+        return {
+          ...plugin,
+          config: {
+            ...plugin.config,
+            ...(extracted ? { externalGradingGuidance: extracted } : {}),
+          },
+        };
+      });
+
+      logger.info(`[GradingGuidance] Smart extraction complete for ${plugins.length} plugins`);
+    } else {
+      // Legacy: inject full document to all plugins
+      logger.info('[GradingGuidance] Using full document injection (legacy mode)');
+      plugins = plugins.map((plugin) => ({
+        ...plugin,
+        config: {
+          ...plugin.config,
+          externalGradingGuidance: guidanceText,
+        },
+      }));
+      logger.info(`Injected grading guidance into ${plugins.length} plugins`);
+    }
+
+    // CRITICAL: Update test cases' pluginConfig to include externalGradingGuidance
+    // The test metadata was captured before guidance was extracted, so we need to
+    // propagate the extracted guidance to each test case's pluginConfig
+    const guidanceByPlugin = new Map<string, string>();
+    plugins.forEach((p) => {
+      if (p.config?.externalGradingGuidance) {
+        guidanceByPlugin.set(p.id, p.config.externalGradingGuidance as string);
+      }
+    });
+
+    if (guidanceByPlugin.size > 0) {
+      redteamTests = redteamTests.map((test) => {
+        const pluginId = test.metadata?.pluginId;
+        const guidance = pluginId ? guidanceByPlugin.get(pluginId) : undefined;
+        if (guidance) {
+          return {
+            ...test,
+            metadata: {
+              ...test.metadata,
+              pluginConfig: {
+                ...(test.metadata?.pluginConfig || {}),
+                externalGradingGuidance: guidance,
+              },
+            },
+          };
+        }
+        return test;
+      });
+      logger.debug(
+        `[GradingGuidance] Updated ${guidanceByPlugin.size} test cases with extracted guidance`,
+      );
+    }
   }
 
   const updatedRedteamConfig = {
