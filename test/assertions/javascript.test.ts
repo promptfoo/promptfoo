@@ -594,6 +594,52 @@ describe('JavaScript file references', () => {
     });
   });
 
+  // Fix for GitHub issue #7334: Dynamic vars should be resolved when passed to assertions
+  it('should use resolved vars parameter over test.vars when provided (issue #7334)', async () => {
+    const output = 'Expected output';
+
+    // Simulates the case where test.vars has an unresolved file:// reference
+    // but the vars parameter has the resolved value
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.dynamicVar === "resolved-value"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      test: { vars: { dynamicVar: 'file://some-script.js' } } as AtomicTestCase,
+      // Pass resolved vars - this should take precedence over test.vars
+      vars: { dynamicVar: 'resolved-value' },
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fall back to test.vars when vars parameter is not provided', async () => {
+    const output = 'Expected output';
+
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.foo === "bar"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      test: { vars: { foo: 'bar' } } as AtomicTestCase,
+      // No vars parameter - should fall back to test.vars
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should pass when the function returns pass', async () => {
     const output = 'Expected output';
 

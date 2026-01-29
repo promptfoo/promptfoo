@@ -590,6 +590,7 @@ export async function runEval({
       }
 
       // Pass providerTransformedOutput for contextTransform to use
+      // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -599,6 +600,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
+        vars,
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
