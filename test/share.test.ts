@@ -608,10 +608,10 @@ describe('createShareableUrl', () => {
         .fn()
         .mockRejectedValue(new Error('Failed to fetch traces'));
 
-      const result = await createShareableUrl(mockEvalTracesError as Eval);
-
-      // Should return null when an error occurs
-      expect(result).toBeNull();
+      // Should throw when an error occurs
+      await expect(createShareableUrl(mockEvalTracesError as Eval)).rejects.toThrow(
+        'Failed to fetch traces',
+      );
     });
   });
 
@@ -812,9 +812,10 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    // Should return null (rollback is attempted)
-    const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBeNull();
+    // Should throw error (rollback is attempted)
+    await expect(createShareableUrl(mockEval as Eval)).rejects.toThrow(
+      'Failed to send even a single result',
+    );
   });
 
   it('throws on unknown errors without retry', async () => {
@@ -856,10 +857,10 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    const result = await createShareableUrl(mockEval as Eval);
-
-    // Should fail without retrying (unknown error type)
-    expect(result).toBeNull();
+    // Should throw without retrying (unknown error type)
+    await expect(createShareableUrl(mockEval as Eval)).rejects.toThrow(
+      '500 Internal Server Error: Server error',
+    );
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });

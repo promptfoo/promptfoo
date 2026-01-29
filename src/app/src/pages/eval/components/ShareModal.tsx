@@ -49,6 +49,8 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
         const data = (await response.json()) as {
           domain: string;
           isCloudEnabled: boolean;
+          sharingEnabled: boolean;
+          authError?: string;
           error?: string;
         };
 
@@ -65,9 +67,11 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             try {
               const url = await onShare(evalId);
               setShareUrl(url);
-            } catch (error) {
-              console.error('Failed to generate share URL:', error);
-              setError('Failed to generate share URL');
+            } catch (err) {
+              console.error('Failed to generate share URL:', err);
+              const errorMessage =
+                err instanceof Error ? err.message : 'Failed to generate share URL';
+              setError(errorMessage);
             } finally {
               setIsLoading(false);
             }

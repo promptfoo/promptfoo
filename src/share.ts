@@ -365,11 +365,16 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+interface SendChunkedResultsOutput {
+  evalId: string | null;
+  error?: Error;
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
   options: ShareOptions = {},
-): Promise<string | null> {
+): Promise<SendChunkedResultsOutput> {
   const isVerbose = isDebugEnabled();
   const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
@@ -383,7 +388,7 @@ async function sendChunkedResults(
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
-    return null;
+    return { evalId: null };
   }
   if (inlineBlobs && inlineCache) {
     sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
@@ -493,19 +498,20 @@ async function sendChunkedResults(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
 
-    return evalId;
+    return { evalId };
   } catch (e) {
     if (progressBar) {
       progressBar.stop();
     }
 
-    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+    const error = e instanceof Error ? e : new Error(String(e));
+    logger.error(`Upload failed: ${error.message}`);
 
     if (evalId) {
       logger.info(`Upload failed, rolling back...`);
       await rollbackEval(url, evalId, headers);
     }
-    return null;
+    return { evalId: null, error };
   } finally {
     if (progressBar) {
       progressBar.stop();
@@ -641,14 +647,17 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent });
+  const result = await sendChunkedResults(evalRecord, url, { silent });
 
-  if (!evalId) {
+  if (!result.evalId) {
+    if (result.error) {
+      throw result.error;
+    }
     return null;
   }
-  logger.debug(`New eval ID on remote instance: ${evalId}`);
+  logger.debug(`New eval ID on remote instance: ${result.evalId}`);
 
-  return getShareableUrl(evalRecord, evalId, showAuth);
+  return getShareableUrl(evalRecord, result.evalId, showAuth);
 }
 
 /**

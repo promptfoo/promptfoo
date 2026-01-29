@@ -19,7 +19,12 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
+import {
+  createShareableUrl,
+  determineShareDomain,
+  isSharingEnabled,
+  stripAuthFromUrl,
+} from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -30,6 +35,7 @@ import {
   getTestCases,
   readResult,
 } from '../util/database';
+import { fetchWithProxy } from '../util/fetch/index';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { blobsRouter } from './routes/blobs';
@@ -222,7 +228,35 @@ export function createApp() {
 
     const { domain } = determineShareDomain(eval_);
     const isCloudEnabled = cloudConfig.isEnabled();
-    res.json({ domain, isCloudEnabled });
+    let sharingEnabled = isSharingEnabled(eval_);
+    let authError: string | undefined;
+
+    // If cloud is enabled, validate that the auth token is actually valid
+    if (isCloudEnabled && sharingEnabled) {
+      try {
+        const apiHost = cloudConfig.getApiHost();
+        const apiKey = cloudConfig.getApiKey();
+        const response = await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+          sharingEnabled = false;
+          authError =
+            response.status === 401
+              ? 'Authentication failed. Please run `promptfoo auth login` to re-authenticate.'
+              : `Cloud API error: ${response.statusText}`;
+        }
+      } catch (error) {
+        logger.debug(
+          `Failed to validate cloud auth: ${error instanceof Error ? error.message : error}`,
+        );
+        sharingEnabled = false;
+        authError = 'Could not connect to cloud service. Please check your network connection.';
+      }
+    }
+
+    res.json({ domain, isCloudEnabled, sharingEnabled, authError });
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
@@ -243,10 +277,9 @@ export function createApp() {
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
-      logger.error(
-        `Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`,
-      );
-      res.status(500).json({ error: 'Failed to generate share URL' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to generate share URL for eval ${id}: ${errorMessage}`);
+      res.status(500).json({ error: `Failed to generate share URL: ${errorMessage}` });
     }
   });
 
