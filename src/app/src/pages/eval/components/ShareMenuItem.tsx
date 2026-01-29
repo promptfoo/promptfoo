@@ -111,11 +111,7 @@ export default function ShareMenuItem({ evalId }: ShareMenuItemProps) {
           onClick={handleShareButtonClick}
           disabled={shareLoading || sharingEnabled === null}
         >
-          {shareLoading ? (
-            <Spinner className="size-4 mr-2" />
-          ) : (
-            <Share className="size-4 mr-2" />
-          )}
+          {shareLoading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
           Share
         </DropdownMenuItem>
       )}
