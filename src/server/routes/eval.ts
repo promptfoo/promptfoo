@@ -21,7 +21,6 @@ import type { Request, Response } from 'express';
 
 import type {
   EvalTableDTO,
-  EvaluateOptions,
   EvaluateSummaryV2,
   EvaluateTable,
   EvaluateTestSuite,
@@ -44,14 +43,15 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     return;
   }
 
-  // Trade-off: Use req.body after validation to preserve nested provider config fields.
+  // Use validated data but merge providers from req.body to preserve nested config fields.
   // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
-  // aren't in the schema. Using result.data would strip these via Zod's passthrough.
-  // This bypasses any future Zod transforms/coercions but is necessary for provider flexibility.
-  const { evaluateOptions, ...testSuite } = req.body as {
-    evaluateOptions?: EvaluateOptions;
-    sharing?: boolean;
-    [key: string]: unknown;
+  // nested provider schemas may strip. This keeps Zod transforms/coercions while
+  // preserving provider flexibility.
+  const { evaluateOptions, providers: _validatedProviders, ...restData } = result.data;
+  const testSuite = {
+    ...restData,
+    // Preserve raw providers from req.body to keep nested config fields
+    providers: (req.body as { providers?: unknown }).providers,
   };
   const id = crypto.randomUUID();
   evalJobs.set(id, {
@@ -548,18 +548,28 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
 
     // Better output extraction - handle different response structures
     const firstResult = summary.results[0];
-    let output = firstResult?.response?.output;
+    let output: unknown = firstResult?.response?.output;
 
     // If still no output, try the raw response
-    if (!output && firstResult?.response?.raw) {
+    if (output === undefined && firstResult?.response?.raw) {
       output = firstResult.response.raw;
     }
 
+    // Serialize non-string outputs for UI compatibility
+    // Frontend expects string output; structured outputs (JSON/tools) would render as [object Object]
+    let serializedOutput: string;
+    if (output === null || output === undefined) {
+      serializedOutput = '';
+    } else if (typeof output === 'string') {
+      serializedOutput = output;
+    } else {
+      serializedOutput = JSON.stringify(output, null, 2);
+    }
+
     // Return both output and any error information for debugging
-    // Use ?? to preserve valid falsy outputs (0, false, empty string)
     res.json(
       EvalSchemas.Replay.Response.parse({
-        output: output ?? '',
+        output: serializedOutput,
         error: firstResult?.response?.error,
         response: firstResult?.response, // Include full response for debugging
       }),

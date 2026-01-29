@@ -186,8 +186,8 @@ export const AddResultsParamsSchema = EvalIdParamSchema;
 export const AddResultsRequestSchema = z.array(
   z
     .object({
-      promptIdx: z.number(),
-      testIdx: z.number(),
+      promptIdx: z.number().int().nonnegative(),
+      testIdx: z.number().int().nonnegative(),
       success: z.boolean(),
       score: z.number(),
     })
@@ -207,10 +207,11 @@ export const ReplayRequestSchema = z.object({
 });
 
 export const ReplayResponseSchema = z.object({
-  // Provider outputs can be strings, objects (JSON mode), or arrays (tool calls)
-  output: z.unknown(),
+  // Server serializes non-string outputs to JSON for UI compatibility
+  output: z.string(),
   // Providers can emit null, string, or undefined for errors
   error: z.string().nullable().optional(),
+  // Full response object preserved for debugging (may contain structured output)
   response: z.record(z.string(), z.unknown()).optional(),
 });
 
