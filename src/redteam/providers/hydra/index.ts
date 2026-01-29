@@ -346,6 +346,7 @@ export class HydraProvider implements ApiProvider {
             label: 'hydra-agent',
           },
           vars: {},
+          ...(context?.evaluationId && { evaluationId: context.evaluationId }),
         },
         options,
       );
@@ -786,6 +787,7 @@ export class HydraProvider implements ApiProvider {
               label: 'hydra-learning-update',
             },
             vars: {},
+            ...(context?.evaluationId && { evaluationId: context.evaluationId }),
           },
           options,
         );

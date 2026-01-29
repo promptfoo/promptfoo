@@ -622,12 +622,15 @@ export async function matchesLlmRubric(
     shouldGenerateRemote()
   ) {
     return {
-      ...(await doRemoteGrading({
-        task: 'llm-rubric',
-        rubric,
-        output: llmOutput,
-        vars: vars || {},
-      })),
+      ...(await doRemoteGrading(
+        {
+          task: 'llm-rubric',
+          rubric,
+          output: llmOutput,
+          vars: vars || {},
+        },
+        { evaluationId: providerCallContext?.evaluationId },
+      )),
       assertion,
     };
   }

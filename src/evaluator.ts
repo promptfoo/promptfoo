@@ -397,9 +397,14 @@ export async function runEval({
         callApiContext.bustCache = true;
       }
 
-      // Only add trace context properties if tracing is enabled
+      // Always set evaluationId so providers can forward it to remote servers
+      if (evalId) {
+        callApiContext.evaluationId = evalId;
+      }
+      // Add trace context properties if tracing is enabled
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
+        // traceContext.evaluationId takes precedence if tracing is active
         callApiContext.evaluationId = traceContext.evaluationId;
         callApiContext.testCaseId = traceContext.testCaseId;
       }
@@ -554,6 +559,7 @@ export async function runEval({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        evaluationId: evalId,
       });
 
       if (!checkResult.pass) {
@@ -874,6 +880,10 @@ class Evaluator {
     if (!options.silent) {
       logger.info(`Starting evaluation ${this.evalRecord.id}`);
     }
+
+    // Store evaluationId globally so remote task/grading calls can include it
+    const cliState = (await import('./cliState')).default;
+    cliState.evaluationId = this.evalRecord.id;
 
     // Add abort checks at key points
     checkAbort();
