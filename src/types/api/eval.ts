@@ -240,7 +240,8 @@ export const SaveEvalRequestSchema = z
     prompts: z.array(z.record(z.string(), z.unknown())).optional(),
     results: z.array(z.record(z.string(), z.unknown())).optional(),
     author: z.string().nullable().optional(),
-    createdAt: z.string().optional(),
+    // createdAt can be string (ISO date) or number (Unix timestamp)
+    createdAt: z.union([z.string(), z.number()]).optional(),
     vars: z.array(z.string()).optional(),
   })
   .passthrough();
