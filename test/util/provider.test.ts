@@ -5,6 +5,9 @@ import {
   doesProviderRefMatch,
   getProviderDescription,
   getProviderIdentifier,
+  isAnthropicProvider,
+  isGoogleProvider,
+  isOpenAiProvider,
   isProviderAllowed,
   providerToIdentifier,
 } from '../../src/util/provider';
@@ -217,5 +220,110 @@ describe('isProviderAllowed', () => {
     const provider = createProvider('openai:gpt-4');
     expect(isProviderAllowed(provider, ['anthropic:*', 'openai:*'])).toBe(true);
     expect(isProviderAllowed(provider, ['anthropic:*', 'google:*'])).toBe(false);
+  });
+});
+
+describe('isOpenAiProvider', () => {
+  it('detects direct OpenAI providers', () => {
+    expect(isOpenAiProvider('openai:chat:gpt-4o')).toBe(true);
+    expect(isOpenAiProvider('openai:gpt-4')).toBe(true);
+    expect(isOpenAiProvider('openai:completion:gpt-3.5-turbo')).toBe(true);
+    expect(isOpenAiProvider('openai:embedding:text-embedding-ada-002')).toBe(true);
+  });
+
+  it('detects Azure OpenAI providers', () => {
+    // azureopenai: is always OpenAI
+    expect(isOpenAiProvider('azureopenai:chat:my-deployment')).toBe(true);
+    // azure: with OpenAI model indicators
+    expect(isOpenAiProvider('azure:chat:gpt-4-deployment')).toBe(true);
+    expect(isOpenAiProvider('azure:chat:my-gpt-35-turbo')).toBe(true);
+    expect(isOpenAiProvider('azure:completion:davinci-002')).toBe(true);
+    expect(isOpenAiProvider('azure:embedding:text-embedding-ada-002')).toBe(true);
+  });
+
+  it('does not match Azure without OpenAI model indicators', () => {
+    expect(isOpenAiProvider('azure:chat:my-custom-deployment')).toBe(false);
+    expect(isOpenAiProvider('azure:foundry-agent:my-agent')).toBe(false);
+  });
+
+  it('is case insensitive', () => {
+    expect(isOpenAiProvider('OpenAI:chat:gpt-4')).toBe(true);
+    expect(isOpenAiProvider('AZUREOPENAI:chat:my-deployment')).toBe(true);
+    expect(isOpenAiProvider('AZURE:chat:GPT-4-deployment')).toBe(true);
+  });
+
+  it('does not match non-OpenAI providers', () => {
+    expect(isOpenAiProvider('anthropic:messages:claude-3-5-sonnet')).toBe(false);
+    expect(isOpenAiProvider('google:gemini-pro')).toBe(false);
+    expect(isOpenAiProvider('bedrock:anthropic.claude-3-5-sonnet')).toBe(false);
+    expect(isOpenAiProvider('vertex:gemini-2.0-flash')).toBe(false);
+  });
+});
+
+describe('isAnthropicProvider', () => {
+  it('detects direct Anthropic providers', () => {
+    expect(isAnthropicProvider('anthropic:messages:claude-3-5-sonnet')).toBe(true);
+    expect(isAnthropicProvider('anthropic:completion:claude-2.1')).toBe(true);
+    expect(isAnthropicProvider('anthropic:claude-opus-4-5-20251101')).toBe(true);
+  });
+
+  it('detects Bedrock with Claude models', () => {
+    expect(isAnthropicProvider('bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0')).toBe(true);
+    expect(isAnthropicProvider('bedrock:anthropic.claude-opus-4-5-20251101-v1:0')).toBe(true);
+    expect(isAnthropicProvider('bedrock:converse:anthropic.claude-3-opus-20240229-v1:0')).toBe(
+      true,
+    );
+    expect(isAnthropicProvider('bedrock:us.anthropic.claude-3-5-sonnet-20240620-v1:0')).toBe(true);
+    expect(isAnthropicProvider('bedrock:eu.anthropic.claude-3-haiku-20240307-v1:0')).toBe(true);
+  });
+
+  it('detects Vertex with Claude models', () => {
+    expect(isAnthropicProvider('vertex:claude-3-5-sonnet@20240620')).toBe(true);
+    expect(isAnthropicProvider('vertex:claude-3-opus@20240229')).toBe(true);
+  });
+
+  it('is case insensitive', () => {
+    expect(isAnthropicProvider('ANTHROPIC:messages:claude-3-5-sonnet')).toBe(true);
+    expect(isAnthropicProvider('BEDROCK:anthropic.CLAUDE-3-5-sonnet')).toBe(true);
+    expect(isAnthropicProvider('VERTEX:CLAUDE-3-opus')).toBe(true);
+  });
+
+  it('does not match non-Anthropic providers', () => {
+    expect(isAnthropicProvider('openai:chat:gpt-4o')).toBe(false);
+    expect(isAnthropicProvider('google:gemini-pro')).toBe(false);
+    expect(isAnthropicProvider('bedrock:amazon.titan-text-express-v1')).toBe(false);
+    expect(isAnthropicProvider('vertex:gemini-2.0-flash')).toBe(false);
+  });
+});
+
+describe('isGoogleProvider', () => {
+  it('detects direct Google AI Studio providers', () => {
+    expect(isGoogleProvider('google:gemini-pro')).toBe(true);
+    expect(isGoogleProvider('google:gemini-2.0-flash')).toBe(true);
+    expect(isGoogleProvider('google:live:gemini-2.0-flash')).toBe(true);
+    expect(isGoogleProvider('google:image:gemini-pro-vision')).toBe(true);
+  });
+
+  it('detects Vertex with Google models', () => {
+    expect(isGoogleProvider('vertex:gemini-2.0-flash')).toBe(true);
+    expect(isGoogleProvider('vertex:gemini-pro')).toBe(true);
+    expect(isGoogleProvider('vertex:text-bison')).toBe(true);
+    expect(isGoogleProvider('vertex:llama-3.3-70b')).toBe(true);
+  });
+
+  it('is case insensitive', () => {
+    expect(isGoogleProvider('GOOGLE:gemini-pro')).toBe(true);
+    expect(isGoogleProvider('VERTEX:GEMINI-2.0-flash')).toBe(true);
+  });
+
+  it('does not match Vertex with Claude models (they are Anthropic)', () => {
+    expect(isGoogleProvider('vertex:claude-3-5-sonnet@20240620')).toBe(false);
+    expect(isGoogleProvider('vertex:claude-3-opus@20240229')).toBe(false);
+  });
+
+  it('does not match non-Google providers', () => {
+    expect(isGoogleProvider('openai:chat:gpt-4o')).toBe(false);
+    expect(isGoogleProvider('anthropic:messages:claude-3-5-sonnet')).toBe(false);
+    expect(isGoogleProvider('bedrock:anthropic.claude-3-5-sonnet')).toBe(false);
   });
 });
