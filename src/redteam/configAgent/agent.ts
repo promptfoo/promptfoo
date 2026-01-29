@@ -587,6 +587,40 @@ export class ConfigurationAgent {
         }
         break;
 
+      case 'skip':
+        // Use config anyway despite verification failure
+        if (this.session.bestMatch) {
+          this.session.finalConfig = this.session.bestMatch.discoveredConfig;
+          this.session.phase = 'complete';
+          this.addMessage(
+            'info',
+            'Using configuration without verification. Note: The endpoint might not respond as expected.',
+          );
+          this.addMessage('success', 'Configuration ready to apply.', {
+            options: [
+              { id: 'apply', label: 'Apply configuration', value: 'apply', primary: true },
+              { id: 'edit', label: 'Edit first', value: 'edit' },
+            ],
+          });
+        } else {
+          this.addMessage('error', 'No configuration to skip to.');
+        }
+        break;
+
+      case 'edit':
+        this.addMessage(
+          'info',
+          'What would you like to change? You can describe the API format or provide an example request.',
+          {
+            inputRequest: {
+              type: 'text',
+              prompt: 'Describe the changes or paste an example:',
+              field: 'editRequest',
+            },
+          },
+        );
+        break;
+
       default:
         this.addMessage('info', `I'll help you with that. What would you like to do next?`);
     }
