@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
@@ -170,10 +171,10 @@ export default function AdvancedOptionsDialog({
                 })
               }
             />
-            <p className="text-xs text-muted-foreground">
+            <HelperText>
               Format examples: <strong>500MB</strong>, <strong>2GB</strong>, <strong>1.5TB</strong>,{' '}
               <strong>100KB</strong>
-            </p>
+            </HelperText>
           </div>
 
           {/* Strict Mode */}

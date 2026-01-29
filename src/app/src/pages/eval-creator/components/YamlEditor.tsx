@@ -1,9 +1,9 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CancelIcon, SaveIcon, UploadIcon } from '@app/components/ui/icons';
+import { CancelIcon, SaveIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -75,27 +75,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        if (content) {
-          setCode(ensureSchemaComment(content));
-          setHasUnsavedChanges(true);
-          showToast('File loaded into editor', 'info');
-        }
-      };
-      reader.onerror = () => {
-        showToast('Failed to read file', 'error');
-      };
-      reader.readAsText(file);
-    }
-    // Reset the input
-    event.target.value = '';
-  };
-
   const handleSave = () => {
     const success = parseAndUpdateStore(code);
     if (success) {
@@ -146,19 +125,15 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
               <SaveIcon className="size-4 mr-2" />
               Save
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCancel}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={!hasUnsavedChanges}
+            >
               <CancelIcon className="size-4 mr-2" />
-              Reset to UI State
+              Discard Changes
             </Button>
-            <label>
-              <Button variant="ghost" size="sm" asChild>
-                <span className="cursor-pointer">
-                  <UploadIcon className="size-4 mr-2" />
-                  Upload File
-                </span>
-              </Button>
-              <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
-            </label>
           </div>
           {hasUnsavedChanges && (
             <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
@@ -171,7 +146,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       {/* Error display */}
       {parseError && (
         <Alert variant="destructive">
-          <AlertDescription>{parseError}</AlertDescription>
+          <AlertContent>
+            <AlertDescription>{parseError}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

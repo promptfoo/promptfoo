@@ -324,7 +324,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -339,7 +339,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -448,7 +448,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -597,11 +597,17 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       plugins: {
         tooltip: {
           callbacks: {
-            title: (context: any) => {
-              return context[0].raw.evalData.evalId;
+            title: (context: unknown) => {
+              const items = context as TooltipItem<'scatter'>[];
+              const raw = items[0].raw as { evalData: { evalId: string } };
+              return raw.evalData.evalId;
             },
-            label: (context: any) => {
-              const item = context.raw as { x: number; y: number; evalData: ProgressData };
+            label: (context: unknown) => {
+              const item = (context as TooltipItem<'scatter'>).raw as {
+                x: number;
+                y: number;
+                evalData: ProgressData;
+              };
               const { evalData } = item;
               const passRate =
                 (evalData.metrics.testPassCount /
@@ -617,9 +623,9 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (_event: any, elements: any) => {
-        if (elements.length > 0) {
-          const index = elements[0].index;
+      onClick: (_event: unknown, elements: unknown) => {
+        if (Array.isArray(elements) && elements.length > 0) {
+          const index = (elements[0] as { index: number }).index;
           window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },

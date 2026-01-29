@@ -1,1 +1,0 @@
-Tell me about the capital of {{location}}

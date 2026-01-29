@@ -41,7 +41,7 @@ jobs:
       # We use the default ref (main) because pull_request_target runs workflow from base
       # but the base.sha might be older than when helper files were added
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Need full history for incremental diffs
           persist-credentials: false
@@ -107,6 +107,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ env.REVIEW_PROMPT }}
-          claude_args: '--max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'
+          show_full_output: true
+          allowed_bots: use-tusk
+          claude_args: '--model opus --max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'

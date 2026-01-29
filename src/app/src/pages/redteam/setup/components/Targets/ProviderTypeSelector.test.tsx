@@ -354,6 +354,7 @@ describe('ProviderTypeSelector', () => {
           body: JSON.stringify({
             message: '{{prompt}}',
           }),
+          stateful: true,
         },
       },
       'http',
@@ -761,5 +762,291 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.queryByText('AutoGen')).toBeNull();
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+  });
+
+  describe('handleProviderTypeChange - default configuration values', () => {
+    it('should set stateful: true in HTTP provider config by default', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'python',
+        label: 'My Provider',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="python"
+        />,
+      );
+
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
+      if (httpProviderCard) {
+        fireEvent.click(httpProviderCard);
+      }
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        {
+          id: 'http',
+          label: 'My Provider',
+          config: {
+            url: '',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: '{{prompt}}',
+            }),
+            stateful: true,
+          },
+        },
+        'http',
+      );
+    });
+
+    it('should set comprehensive default values for WebSocket provider including type, url, messageTemplate, transformResponse, timeoutMs, and stateful', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'http',
+        label: 'My WebSocket Provider',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      if (websocketProviderCard) {
+        fireEvent.click(websocketProviderCard);
+      }
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        {
+          id: 'websocket',
+          label: 'My WebSocket Provider',
+          config: {
+            type: 'websocket',
+            url: 'wss://example.com/ws',
+            messageTemplate: '{"message": {{prompt | dump}}}',
+            transformResponse: 'data.message',
+            timeoutMs: 300000,
+            stateful: true,
+          },
+        },
+        'websocket',
+      );
+    });
+
+    it('should use DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE constant for WebSocket transformResponse value', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'http',
+        label: 'Test Label',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      if (websocketProviderCard) {
+        fireEvent.click(websocketProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.config.transformResponse).toBe('data.message');
+    });
+
+    it('should use DEFAULT_WEBSOCKET_TIMEOUT_MS constant for WebSocket timeoutMs value', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'http',
+        label: 'Test Label',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      if (websocketProviderCard) {
+        fireEvent.click(websocketProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.config.timeoutMs).toBe(300000);
+    });
+
+    it('should set default navigate step for Browser provider with example.com URL', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'http',
+        label: 'My Browser Provider',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
+      if (browserProviderCard) {
+        fireEvent.click(browserProviderCard);
+      }
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        {
+          id: 'browser',
+          label: 'My Browser Provider',
+          config: {
+            steps: [
+              {
+                action: 'navigate',
+                args: { url: 'https://example.com' },
+              },
+            ],
+          },
+        },
+        'browser',
+      );
+    });
+
+    it('should set enabled: true and verbose: false for MCP provider by default', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'http',
+        label: 'My MCP Provider',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
+      if (mcpProviderCard) {
+        fireEvent.click(mcpProviderCard);
+      }
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        {
+          id: 'mcp',
+          label: 'My MCP Provider',
+          config: {
+            enabled: true,
+            verbose: false,
+          },
+        },
+        'mcp',
+      );
+    });
+
+    it('should preserve provider label when switching to WebSocket provider with new defaults', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'openai:gpt-4',
+        label: 'Custom Label Name',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="openai"
+        />,
+      );
+
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      if (websocketProviderCard) {
+        fireEvent.click(websocketProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('Custom Label Name');
+      expect(callArgs.config.type).toBe('websocket');
+      expect(callArgs.config.stateful).toBe(true);
+    });
+
+    it('should preserve provider label when switching to Browser provider with new defaults', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'anthropic:claude',
+        label: 'My Anthropic Setup',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="anthropic"
+        />,
+      );
+
+      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
+      if (browserProviderCard) {
+        fireEvent.click(browserProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('My Anthropic Setup');
+      expect(callArgs.config.steps).toEqual([
+        {
+          action: 'navigate',
+          args: { url: 'https://example.com' },
+        },
+      ]);
+    });
+
+    it('should preserve provider label when switching to MCP provider with new defaults', () => {
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'python',
+        label: 'Python Integration',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="python"
+        />,
+      );
+
+      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
+      if (mcpProviderCard) {
+        fireEvent.click(mcpProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('Python Integration');
+      expect(callArgs.config.enabled).toBe(true);
+      expect(callArgs.config.verbose).toBe(false);
+    });
   });
 });

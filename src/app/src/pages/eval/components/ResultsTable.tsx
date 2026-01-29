@@ -17,12 +17,16 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { getActualPrompt } from '@app/utils/providerResponse';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
+  type GradingResult,
+  type ProviderOptions,
+  type Vars,
 } from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
@@ -31,7 +35,6 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import yaml from 'js-yaml';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
@@ -39,6 +42,8 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
+import { ProviderDisplay } from './ProviderDisplay';
+import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -218,6 +223,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  hasMinimalScrollRoom,
   zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
@@ -227,11 +233,19 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
   'use no memo';
   return (
-    <div className={`relative ${stickyHeader ? 'results-table-sticky' : ''}`}>
+    <div
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
+    >
       <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
         <button
           type="button"
@@ -388,7 +402,7 @@ function ResultsTable({
         modifiedComponentResults = true;
 
         const humanResultIndex = componentResults.findIndex(
-          (result) => result.assertion?.type === 'human',
+          (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
 
         // If isPass is null, remove the human assertion (unset manual grading)
@@ -417,7 +431,7 @@ function ResultsTable({
             score: finalScore,
             reason: 'Manual result (overrides all other grading results)',
             comment,
-            assertion: { type: 'human' as const },
+            assertion: { type: HUMAN_ASSERTION_TYPE },
           };
 
           if (humanResultIndex === -1) {
@@ -436,7 +450,7 @@ function ResultsTable({
       const { componentResults: _, ...existingGradingResultWithoutComponents } =
         existingOutput.gradingResult || {};
 
-      const gradingResult = {
+      const gradingResult: GradingResult = {
         // Copy over existing fields except componentResults
         ...existingGradingResultWithoutComponents,
         // Ensure required fields have valid values
@@ -459,13 +473,13 @@ function ResultsTable({
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
       if (modifiedComponentResults && componentResults) {
-        (gradingResult as any).componentResults = componentResults;
+        gradingResult.componentResults = componentResults;
       } else if (
         !modifiedComponentResults &&
         existingOutput.gradingResult?.componentResults &&
         existingOutput.gradingResult.componentResults.length > 0
       ) {
-        (gradingResult as any).componentResults = existingOutput.gradingResult.componentResults;
+        gradingResult.componentResults = existingOutput.gradingResult.componentResults;
       }
 
       updatedOutputs[promptIndex].gradingResult = gradingResult;
@@ -683,15 +697,14 @@ function ResultsTable({
                 const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
 
-                // For red team evals, show the final injected prompt for the configured inject variable
-                // This replaces the original prompt with what was actually sent to the model
+                // For red team evals and dynamic prompts, show the actual prompt sent to the model
+                // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy)
                 if (varName === injectVarName) {
-                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
                   for (const output of row.outputs || []) {
-                    // Check if redteamFinalPrompt exists
-                    if (output?.metadata?.redteamFinalPrompt) {
-                      // Replace the original prompt with the injected version
-                      value = output.metadata.redteamFinalPrompt;
+                    const actualPrompt = getActualPrompt(output?.response);
+                    if (actualPrompt) {
+                      value = actualPrompt;
                       break;
                     }
                   }
@@ -787,7 +800,7 @@ function ResultsTable({
                 );
 
                 // Determine if we should show original text (decoded) even without redteamFinalPrompt
-                const testMetadata = (row as any)?.test?.metadata || {};
+                const testMetadata: Record<string, unknown> = row.test?.metadata || {};
                 const metadataOriginal =
                   typeof testMetadata.originalText === 'string'
                     ? testMetadata.originalText
@@ -795,6 +808,7 @@ function ResultsTable({
                 const strategyId = testMetadata.strategyId;
                 const shouldShowOriginal =
                   varName === injectVarName &&
+                  typeof strategyId === 'string' &&
                   isEncodingStrategy(strategyId) &&
                   Boolean(metadataOriginal);
 
@@ -1047,51 +1061,26 @@ function ResultsTable({
                   ) : null}
                 </div>
               ) : null;
-              const providerConfig = Array.isArray(config?.providers)
-                ? config.providers[idx]
-                : undefined;
+              // Get provider string, handling both string and object formats
+              const providerString =
+                typeof prompt.provider === 'string'
+                  ? prompt.provider
+                  : typeof prompt.provider === 'object' && prompt.provider !== null
+                    ? (prompt.provider as ProviderOptions).id || JSON.stringify(prompt.provider)
+                    : String(prompt.provider || 'Unknown provider');
 
-              let providerParts: string[] = [];
-              try {
-                if (prompt.provider && typeof prompt.provider === 'string') {
-                  providerParts = prompt.provider.split(':');
-                } else if (prompt.provider) {
-                  const providerObj = prompt.provider as any; // Use any for flexible typing
-                  const providerId =
-                    typeof providerObj === 'object' && providerObj !== null
-                      ? providerObj.id || JSON.stringify(providerObj)
-                      : String(providerObj);
-                  providerParts = [providerId];
-                }
-              } catch (error) {
-                console.error('Error parsing provider:', error);
-                providerParts = ['Error parsing provider'];
-              }
-
-              const providerDisplay = (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      {providerParts.length > 1 ? (
-                        <>
-                          {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                        </>
-                      ) : (
-                        <strong>{providerParts[0] || 'Unknown provider'}</strong>
-                      )}
-                    </span>
-                  </TooltipTrigger>
-                  {providerConfig && (
-                    <TooltipContent>
-                      <pre>{yaml.dump(providerConfig)}</pre>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              );
               return (
                 <div className="output-header">
                   <div className="pills collapse-font-small">
-                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
+                    {prompt.provider ? (
+                      <div className="provider">
+                        <ProviderDisplay
+                          providerString={providerString}
+                          providersArray={config?.providers as ProviderDef[] | undefined}
+                          fallbackIndex={idx}
+                        />
+                      </div>
+                    ) : null}
                     <div className="summary">
                       <div
                         className={`highlight ${
@@ -1374,6 +1363,33 @@ function ResultsTable({
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
+
+  useEffect(() => {
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
+
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
       return;
@@ -1433,6 +1449,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
         zoom={zoom}
       />
       <div
@@ -1491,12 +1508,13 @@ function ResultsTable({
                         const injectVarName = config?.redteam?.injectVar || 'prompt';
                         const varNameForCol = head.vars[varIdx];
                         if (varNameForCol === injectVarName) {
-                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const testMeta: Record<string, unknown> =
+                            row.original.test?.metadata || {};
                           const fromMeta =
                             typeof testMeta.originalText === 'string'
                               ? testMeta.originalText
                               : undefined;
-                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const testVars: Vars = row.original.test?.vars || {};
                           const fromVars =
                             typeof testVars.image_text === 'string'
                               ? (testVars.image_text as string)

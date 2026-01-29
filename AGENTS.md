@@ -275,6 +275,7 @@ Read these when relevant to your task:
 | `docs/agents/dependency-management.md` | Updating packages              |
 | `docs/agents/logging.md`               | Adding logging to code         |
 | `docs/agents/python.md`                | Python providers/scripts       |
+| `docs/agents/database-security.md`     | Writing database queries       |
 | `src/app/AGENTS.md`                    | Frontend React development     |
 | `src/providers/AGENTS.md`              | Adding/modifying LLM providers |
 | `test/AGENTS.md`                       | Writing tests                  |

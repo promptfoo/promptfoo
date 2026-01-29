@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
@@ -173,7 +173,7 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
 
   // Test 1: Connectivity
   logger.info(`  ◌ Connectivity test ${chalk.dim('(running...)')}`);
-  const connectivityResult = await testProviderConnectivity(provider);
+  const connectivityResult = await testProviderConnectivity({ provider });
   displayTestResult(connectivityResult, 'Connectivity test');
   summary.hasSuggestions = !!connectivityResult.analysis?.changes_needed;
 
@@ -190,8 +190,9 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
       summary.sessionSkipped = true;
     } else {
       logger.info(`  ◌ Session test ${chalk.dim('(running...)')}`);
-      const sessionResult = await testProviderSession(provider, undefined, {
-        skipConfigValidation: true,
+      const sessionResult = await testProviderSession({
+        provider,
+        options: { skipConfigValidation: true },
       });
       displayTestResult(sessionResult, 'Session test');
       summary.sessionPassed = sessionResult.success;
@@ -419,14 +420,14 @@ export async function doValidate(
       logger.error(
         dedent`Configuration validation error:
 Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
-${fromError(configParse.error).message}`,
+${z.prettifyError(configParse.error)}`,
       );
       process.exitCode = 1;
       return;
     }
     const suiteParse = TestSuiteSchema.safeParse(testSuite);
     if (!suiteParse.success) {
-      logger.error(dedent`Test suite validation error:\n${fromError(suiteParse.error).message}`);
+      logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
       process.exitCode = 1;
       return;
     }

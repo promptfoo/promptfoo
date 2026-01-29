@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -22,23 +22,29 @@ import { loadApiProviders, resolveProviderConfigs } from '../../providers/index'
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
+  CommandLineOptionsSchema,
+  EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
+  ProvidersSchema,
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
   type TestSuite,
+  TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { readFilters } from '../../util/index';
+import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { validateTestPromptReferences } from '../validateTestPromptReferences';
+import { validateTestProviderReferences } from '../validateTestProviderReferences';
 
 /**
  * Type guard to check if a test case has vars property
@@ -158,6 +164,41 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   return config;
 }
 
+/**
+ * Renders environment variable templates in a config object using two-pass rendering.
+ * This handles nested templates in config.env (fixes #7079).
+ *
+ * Pass 1: Render config.env values using only process.env (isolated from cliState)
+ * Pass 2: Render full config using pre-rendered config.env as overrides
+ *
+ * @param config - The config object to render
+ * @returns The config with env templates rendered
+ */
+function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
+  // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
+  const processEnvDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  const baseEnvForFirstPass = processEnvDisabled ? {} : process.env;
+
+  // First pass: render config.env values using only process.env (replaceBase=true)
+  // This avoids pulling stale cliState.config?.env in watch/reload scenarios
+  const rawConfigEnv = config.env;
+  const renderedConfigEnv = rawConfigEnv
+    ? (renderEnvOnlyInObject(rawConfigEnv, baseEnvForFirstPass, true) as Record<string, string>)
+    : undefined;
+
+  // Filter out undefined values from renderedConfigEnv (common in JS configs: env: { FOO: process.env.FOO })
+  // Note: To explicitly mask a process.env var, use empty string instead of undefined
+  const filteredConfigEnv = renderedConfigEnv
+    ? Object.fromEntries(Object.entries(renderedConfigEnv).filter(([, v]) => v !== undefined))
+    : undefined;
+
+  // Second pass: render full config using pre-rendered config.env as overrides
+  return renderEnvOnlyInObject(config, filteredConfigEnv);
+}
+
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
@@ -168,27 +209,52 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+
+    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
+    // This allows env vars to be used in paths and other config values.
+    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
+    const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
-      .innerType()
-      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
+    // We create a relaxed schema for validation that makes prompts optional
+    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
+      evaluateOptions: EvaluateOptionsSchema.optional(),
+      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+      providers: ProvidersSchema.optional(),
+      targets: ProvidersSchema.optional(),
+      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+    }).refine(
+      (data) => {
+        const hasTargets = data.targets !== undefined;
+        const hasProviders = data.providers !== undefined;
+        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+      },
+      {
+        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      },
+    );
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = dereferencedConfig;
+    ret = renderedConfig;
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
-    const validationResult = UnifiedConfigSchema.safeParse(imported);
+
+    // Render environment variable templates for JS configs too.
+    // This ensures consistent behavior across config file types.
+    const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+
+    const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = imported as UnifiedConfig;
+    ret = renderedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -744,6 +810,21 @@ export async function resolveConfigs(
   // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
   validateAssertions(
     testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
+
+  // Validate provider references in tests and scenarios
+  validateTestProviderReferences(
+    testSuite.tests || [],
+    testSuite.providers,
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
+  );
+
+  // Validate that all prompt references in tests exist
+  validateTestPromptReferences(
+    testSuite.tests || [],
+    testSuite.prompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 

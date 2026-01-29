@@ -15,6 +15,7 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { ChevronDown, HelpCircle, Lock, Settings } from 'lucide-react';
+import { requiresPluginConfig } from '../constants';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -45,6 +46,7 @@ interface VerticalSuiteCardProps {
   suite: VerticalSuite;
   selectedPlugins: Set<Plugin>;
   onPluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   onConfigClick: (plugin: Plugin) => void;
   onGenerateTestCase: (plugin: Plugin) => void;
   isPluginConfigured: (plugin: Plugin) => boolean;
@@ -53,12 +55,11 @@ interface VerticalSuiteCardProps {
   onUpgradeClick?: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-
 export default function VerticalSuiteCard({
   suite,
   selectedPlugins,
   onPluginToggle,
+  setSelectedPlugins,
   onConfigClick,
   onGenerateTestCase,
   isPluginConfigured,
@@ -85,11 +86,12 @@ export default function VerticalSuiteCard({
   const someSelected = selectedCount > 0 && !allSelected;
 
   const severityCounts = useMemo(() => {
-    const counts = {
+    const counts: Record<Severity, number> = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
       [Severity.Medium]: 0,
       [Severity.Low]: 0,
+      [Severity.Informational]: 0,
     };
     suite.plugins.forEach((plugin) => {
       const severity = riskCategorySeverityMap[plugin];
@@ -106,19 +108,19 @@ export default function VerticalSuiteCard({
       if (isLocked) {
         return;
       }
-      suite.plugins.forEach((plugin) => {
-        if (allSelected) {
-          if (selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        } else {
-          if (!selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        }
-      });
+      // Batch update: toggle all suite plugins in a single state update
+      // This prevents infinite render loops caused by calling onPluginToggle in a forEach loop
+      const newSelection = new Set(selectedPlugins);
+      if (allSelected) {
+        // Remove all suite plugins from selection
+        suite.plugins.forEach((plugin) => newSelection.delete(plugin));
+      } else {
+        // Add all suite plugins to selection
+        suite.plugins.forEach((plugin) => newSelection.add(plugin));
+      }
+      setSelectedPlugins(newSelection);
     },
-    [suite.plugins, allSelected, selectedPlugins, onPluginToggle, isLocked],
+    [suite.plugins, allSelected, selectedPlugins, setSelectedPlugins, isLocked],
   );
 
   const handleExpandClick = useCallback(() => {
@@ -268,6 +270,19 @@ export default function VerticalSuiteCard({
                   <TooltipContent>Low severity</TooltipContent>
                 </Tooltip>
               )}
+              {severityCounts[Severity.Informational] > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-blue-400" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Informational]} Info
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Informational</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
             {/* Actions */}
@@ -344,7 +359,7 @@ export default function VerticalSuiteCard({
                     {group.plugins.map((plugin) => {
                       const isSelected = selectedPlugins.has(plugin);
                       const pluginDisabled = isPluginDisabled(plugin);
-                      const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+                      const requiresConfig = requiresPluginConfig(plugin);
                       const hasError = requiresConfig && !isPluginConfigured(plugin);
                       const severity = riskCategorySeverityMap[plugin];
 
@@ -451,6 +466,8 @@ export default function VerticalSuiteCard({
                                         'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400',
                                       severity === Severity.Low &&
                                         'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400',
+                                      severity === Severity.Informational &&
+                                        'border-sky-200 bg-sky-500/10 text-sky-600 dark:border-sky-800 dark:text-sky-400',
                                     )}
                                   >
                                     {severity}

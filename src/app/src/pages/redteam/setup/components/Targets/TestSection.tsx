@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -15,11 +15,22 @@ import { AlertCircle, CheckCircle, ChevronDown, Info, Play, Send } from 'lucide-
 
 import type { ProviderOptions } from '../../types';
 
+interface ProviderResponseData {
+  metadata?: {
+    http?: { headers?: Record<string, string> };
+    finalRequestBody?: string;
+  };
+  raw?: unknown;
+  output?: unknown;
+  sessionId?: string;
+  error?: string;
+}
+
 export interface TestResult {
   success: boolean;
   message: string;
-  providerResponse?: any;
-  transformedRequest?: string | Record<string, any>;
+  providerResponse?: ProviderResponseData;
+  transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
 }
@@ -100,9 +111,11 @@ const TestSection: React.FC<TestSectionProps> = ({
         {!selectedTarget.config.url && !selectedTarget.config.request && (
           <Alert variant="warning" className="mb-3">
             <AlertCircle className="size-4" />
-            <AlertDescription className="text-sm">
-              Please configure the target URL or request before testing.
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription className="text-sm">
+                Please configure the target URL or request before testing.
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
@@ -126,30 +139,32 @@ const TestSection: React.FC<TestSectionProps> = ({
                 ) : (
                   <AlertCircle className="size-4" />
                 )}
-                <AlertDescription className="text-sm">
-                  <p className="font-medium">
-                    {testResult.changes_needed
-                      ? 'Configuration Changes Needed'
-                      : testResult.success
-                        ? 'Test Passed'
-                        : 'Test Failed'}
-                  </p>
-                  <p className="mt-1">{testResult.message}</p>
+                <AlertContent>
+                  <AlertDescription className="text-sm">
+                    <p className="font-medium">
+                      {testResult.changes_needed
+                        ? 'Configuration Changes Needed'
+                        : testResult.success
+                          ? 'Test Passed'
+                          : 'Test Failed'}
+                    </p>
+                    <p className="mt-1">{testResult.message}</p>
 
-                  {testResult.changes_needed_suggestions &&
-                    testResult.changes_needed_suggestions.length > 0 && (
-                      <div className="mt-2 rounded-md bg-background/50 p-2">
-                        <p className="mb-1.5 font-medium">Suggested Changes</p>
-                        <ul className="m-0 list-disc space-y-0.5 pl-4">
-                          {testResult.changes_needed_suggestions.map(
-                            (suggestion: string, index: number) => (
-                              <li key={index}>{suggestion}</li>
-                            ),
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                </AlertDescription>
+                    {testResult.changes_needed_suggestions &&
+                      testResult.changes_needed_suggestions.length > 0 && (
+                        <div className="mt-2 rounded-md bg-background/50 p-2">
+                          <p className="mb-1.5 font-medium">Suggested Changes</p>
+                          <ul className="m-0 list-disc space-y-0.5 pl-4">
+                            {testResult.changes_needed_suggestions.map(
+                              (suggestion: string, index: number) => (
+                                <li key={index}>{suggestion}</li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
 
@@ -192,13 +207,15 @@ const TestSection: React.FC<TestSectionProps> = ({
                             </CodeBlock>
                           )}
 
-                        {selectedTarget.config.body && !testResult?.transformedRequest && (
-                          <CodeBlock label="Body" maxHeight="300px">
-                            {typeof selectedTarget.config.body === 'string'
-                              ? selectedTarget.config.body
-                              : JSON.stringify(selectedTarget.config.body, null, 2)}
-                          </CodeBlock>
-                        )}
+                        {selectedTarget.config.body &&
+                          !testResult?.providerResponse?.metadata?.finalRequestBody &&
+                          !testResult?.transformedRequest && (
+                            <CodeBlock label="Body" maxHeight="300px">
+                              {typeof selectedTarget.config.body === 'string'
+                                ? selectedTarget.config.body
+                                : JSON.stringify(selectedTarget.config.body, null, 2)}
+                            </CodeBlock>
+                          )}
 
                         {selectedTarget.config.request && (
                           <CodeBlock label="Raw Request" maxHeight="300px">
@@ -206,11 +223,18 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </CodeBlock>
                         )}
 
-                        {testResult?.transformedRequest && (
-                          <CodeBlock label="Transformed Body">
-                            {typeof testResult.transformedRequest === 'string'
-                              ? testResult.transformedRequest
-                              : JSON.stringify(testResult.transformedRequest, null, 2)}
+                        {/* Show rendered body with template variables resolved */}
+                        {(testResult?.providerResponse?.metadata?.finalRequestBody ||
+                          testResult?.transformedRequest) && (
+                          <CodeBlock label="Rendered Body">
+                            {(() => {
+                              const rendered =
+                                testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                testResult?.transformedRequest;
+                              return typeof rendered === 'string'
+                                ? rendered
+                                : JSON.stringify(rendered, null, 2);
+                            })()}
                           </CodeBlock>
                         )}
                       </div>
@@ -220,8 +244,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
                       <Label className="text-sm font-medium">Response</Label>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                        {testResult.providerResponse &&
-                        testResult.providerResponse.raw !== undefined ? (
+                        {testResult.providerResponse?.raw !== undefined ? (
                           <>
                             {responseHeaders && Object.keys(responseHeaders).length > 0 && (
                               <CodeBlock label="Headers">
@@ -230,9 +253,20 @@ const TestSection: React.FC<TestSectionProps> = ({
                             )}
 
                             <CodeBlock label="Raw Response">
-                              {typeof testResult.providerResponse?.raw === 'string'
-                                ? testResult.providerResponse?.raw
-                                : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                              {(() => {
+                                const raw = testResult.providerResponse?.raw;
+                                if (typeof raw === 'string') {
+                                  // Try to parse and format as JSON
+                                  try {
+                                    const parsed = JSON.parse(raw);
+                                    return JSON.stringify(parsed, null, 2);
+                                  } catch {
+                                    // Not valid JSON, return as-is
+                                    return raw;
+                                  }
+                                }
+                                return JSON.stringify(raw, null, 2);
+                              })()}
                             </CodeBlock>
 
                             {testResult.providerResponse?.sessionId && (

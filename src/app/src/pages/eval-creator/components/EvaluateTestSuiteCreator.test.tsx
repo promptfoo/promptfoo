@@ -218,6 +218,82 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(currentConfig).toEqual(DEFAULT_CONFIG);
   });
 
+  it('should render the Upload YAML button in the header', () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    const uploadButton = screen.getByRole('button', { name: /Upload YAML/i });
+    expect(uploadButton).toBeInTheDocument();
+  });
+
+  it('should successfully upload and parse a valid YAML file', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
+    const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    expect(useStore.getState().config.description).toBe('Test Config');
+  });
+
+  it('should handle invalid YAML with error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockInvalidYaml = 'invalid: yaml: content: [unclosed';
+    const mockFile = new File([mockInvalidYaml], 'invalid.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse YAML'),
+        'error',
+      );
+    });
+  });
+
+  it('should handle non-object YAML with error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    // YAML that parses to a string instead of an object
+    const mockScalarYaml = 'just a plain string';
+    const mockFile = new File([mockScalarYaml], 'scalar.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Invalid YAML configuration', 'error');
+    });
+  });
+
+  it('should reset file input after upload to allow re-uploading same file', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = 'description: Test';
+    const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    // File input should be reset to allow re-uploading
+    expect(fileInput.value).toBe('');
+  });
+
   it('should update state when interacting with components', async () => {
     render(<EvaluateTestSuiteCreator />);
 

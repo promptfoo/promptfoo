@@ -14,8 +14,13 @@ Express-based HTTP + WebSocket server for the web UI.
 src/server/
 ├── index.ts       # Entry point
 ├── server.ts      # Express app setup
-├── apiSchemas.ts  # Zod validation schemas
 └── routes/        # API endpoints
+
+src/types/api/     # Shared Zod validation schemas
+├── common.ts      # Shared primitives (EmailSchema, etc.)
+├── eval.ts        # Eval endpoint schemas
+├── providers.ts   # Provider endpoint schemas
+└── user.ts        # User endpoint schemas
 ```
 
 ## Logging
