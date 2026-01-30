@@ -115,10 +115,15 @@ describe('Scanner JSON Output', () => {
     }));
 
     vi.doMock('../../src/codeScan/scanner/socket', () => ({
-      createSocketConnection: vi.fn().mockResolvedValue({
-        emit: vi.fn(),
+      createAgentClient: vi.fn().mockResolvedValue({
+        start: vi.fn(),
+        cancel: vi.fn(),
+        onComplete: vi.fn(),
+        onError: vi.fn(),
         on: vi.fn(),
+        emit: vi.fn(),
         disconnect: vi.fn(),
+        socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() },
       }),
     }));
 
