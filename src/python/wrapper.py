@@ -15,13 +15,15 @@ from promptfoo_logger import logger
 
 def inject_logger_into_context(args):
     """Inject the logger into any dict arguments for hook access via context['logger']."""
-    return [{**arg, 'logger': logger} if isinstance(arg, dict) else arg for arg in args]
+    return [{**arg, "logger": logger} if isinstance(arg, dict) else arg for arg in args]
 
 
 def strip_logger_from_result(result):
     """Remove non-serializable logger from result before JSON serialization."""
     if isinstance(result, dict):
-        return {k: strip_logger_from_result(v) for k, v in result.items() if k != 'logger'}
+        return {
+            k: strip_logger_from_result(v) for k, v in result.items() if k != "logger"
+        }
     elif isinstance(result, list):
         return [strip_logger_from_result(item) for item in result]
     return result
@@ -67,4 +69,6 @@ if __name__ == "__main__":
     clean_result = strip_logger_from_result(result)
     with open(output_path, "w", encoding="utf-8") as fp:
         # Ensure Unicode is preserved by using ensure_ascii=False
-        json.dump({"type": "final_result", "data": clean_result}, fp, ensure_ascii=False)
+        json.dump(
+            {"type": "final_result", "data": clean_result}, fp, ensure_ascii=False
+        )

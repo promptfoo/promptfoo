@@ -30,7 +30,9 @@ class PromptfooLogger:
     return value communication (which uses stdout via file).
     """
 
-    def _log(self, level: str, message: str, data: Optional[dict[str, Any]] = None) -> None:
+    def _log(
+        self, level: str, message: str, data: Optional[dict[str, Any]] = None
+    ) -> None:
         """Output a structured log message."""
         log_entry = {
             "marker": LOG_MARKER,
