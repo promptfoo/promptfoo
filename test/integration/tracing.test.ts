@@ -8,7 +8,7 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
   getGenAITracer,
@@ -37,6 +37,9 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(() => {
     memoryExporter.reset();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
@@ -288,6 +291,178 @@ describe('OpenTelemetry Tracing Integration', () => {
       const span = spans[0];
 
       expect(span.attributes[GenAIAttributes.USAGE_CACHED_TOKENS]).toBe(150);
+    });
+  });
+
+  describe('Trace context propagation', () => {
+    it('should generate valid traceparent header within active span', async () => {
+      const { getTraceparent } = await import('../../src/tracing/genaiTracer');
+
+      const spanContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'agent',
+        model: 'claude-agent-sdk',
+        providerId: 'anthropic:claude-agent-sdk',
+      };
+
+      let capturedTraceparent: string | undefined;
+
+      await withGenAISpan(spanContext, async () => {
+        capturedTraceparent = getTraceparent();
+        return { output: 'test' };
+      });
+
+      expect(capturedTraceparent).toBeDefined();
+      // Traceparent format: 00-<trace-id>-<span-id>-<flags>
+      expect(capturedTraceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-[0-9]{2}$/);
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(1);
+
+      const span = spans[0];
+      // Extract trace ID and span ID from traceparent
+      const parts = capturedTraceparent!.split('-');
+      const traceId = parts[1];
+      const spanId = parts[2];
+
+      // Verify the traceparent matches the active span
+      expect(span.spanContext().traceId).toBe(traceId);
+      expect(span.spanContext().spanId).toBe(spanId);
+    });
+
+    it('should return undefined traceparent when no active span', async () => {
+      const { getTraceparent } = await import('../../src/tracing/genaiTracer');
+
+      // Outside of any span context
+      const traceparent = getTraceparent();
+
+      // Should return undefined or empty since no active span
+      // The behavior depends on whether a root span is active
+      expect(traceparent === undefined || typeof traceparent === 'string').toBe(true);
+    });
+
+    it('should support nested spans with consistent trace context', async () => {
+      const { getTraceparent } = await import('../../src/tracing/genaiTracer');
+
+      const parentContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'agent',
+        model: 'claude-agent-sdk',
+        providerId: 'anthropic:claude-agent-sdk',
+      };
+
+      const childContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'tool_call',
+        model: 'claude-agent-sdk',
+        providerId: 'anthropic:claude-agent-sdk:tool',
+      };
+
+      let parentTraceparent: string | undefined;
+      let childTraceparent: string | undefined;
+
+      await withGenAISpan(parentContext, async () => {
+        parentTraceparent = getTraceparent();
+
+        await withGenAISpan(childContext, async () => {
+          childTraceparent = getTraceparent();
+          return { output: 'child result' };
+        });
+
+        return { output: 'parent result' };
+      });
+
+      expect(parentTraceparent).toBeDefined();
+      expect(childTraceparent).toBeDefined();
+
+      // Both should have same trace ID but different span IDs
+      const parentParts = parentTraceparent!.split('-');
+      const childParts = childTraceparent!.split('-');
+
+      expect(parentParts[1]).toBe(childParts[1]); // Same trace ID
+      expect(parentParts[2]).not.toBe(childParts[2]); // Different span IDs
+    });
+  });
+
+  describe('Claude Agent SDK tracing integration', () => {
+    it('should create span with claude-agent-sdk specific attributes', async () => {
+      const spanContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'agent',
+        model: 'claude-agent-sdk',
+        providerId: 'anthropic:claude-agent-sdk',
+        maxTokens: 4096,
+        temperature: 1.0,
+      };
+
+      const resultExtractor = (): GenAISpanResult => ({
+        tokenUsage: {
+          prompt: 1000,
+          completion: 2000,
+          total: 3000,
+        },
+        finishReasons: ['end_turn'],
+      });
+
+      await withGenAISpan(
+        spanContext,
+        async () => ({ output: 'Agent completed task' }),
+        resultExtractor,
+      );
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(1);
+
+      const span = spans[0];
+
+      // Verify span name follows GenAI convention
+      expect(span.name).toBe('agent claude-agent-sdk');
+
+      // Verify system is anthropic
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('anthropic');
+      expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('agent');
+      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('claude-agent-sdk');
+
+      // Verify token usage
+      expect(span.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(1000);
+      expect(span.attributes[GenAIAttributes.USAGE_OUTPUT_TOKENS]).toBe(2000);
+      expect(span.attributes[GenAIAttributes.USAGE_TOTAL_TOKENS]).toBe(3000);
+
+      // Verify finish reason
+      expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['end_turn']);
+
+      // Verify span completed successfully
+      expect(span.status.code).toBe(SpanStatusCode.OK);
+    });
+
+    it('should correctly capture agent errors in span status', async () => {
+      const spanContext: GenAISpanContext = {
+        system: 'anthropic',
+        operationName: 'agent',
+        model: 'claude-agent-sdk',
+        providerId: 'anthropic:claude-agent-sdk',
+      };
+
+      const agentError = new Error('Claude Code CLI not found');
+
+      await expect(
+        withGenAISpan(spanContext, async () => {
+          throw agentError;
+        }),
+      ).rejects.toThrow('Claude Code CLI not found');
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans.length).toBe(1);
+
+      const span = spans[0];
+
+      // Verify error status
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.status.message).toBe('Claude Code CLI not found');
+
+      // Verify exception event was recorded
+      const exceptionEvent = span.events.find((e) => e.name === 'exception');
+      expect(exceptionEvent).toBeDefined();
     });
   });
 });

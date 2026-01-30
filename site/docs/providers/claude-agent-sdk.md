@@ -163,6 +163,7 @@ prompts:
 | `extra_args`                         | object       | Additional CLI arguments (keys without `--`, values as strings or null for flags)                            | None                     |
 | `path_to_claude_code_executable`     | string       | Path to a custom Claude Code executable                                                                      | Built-in                 |
 | `spawn_claude_code_process`          | function     | Custom spawn function for VMs/containers (programmatic only)                                                 | Default spawn            |
+| `deep_tracing`                       | boolean      | Enable deep tracing to capture internal Claude Agent SDK events via OpenTelemetry                            | false                    |
 
 ## Models
 
@@ -535,6 +536,61 @@ providers:
 ### Custom Spawn Function (Programmatic Only)
 
 For running Claude Code in VMs, containers, or remote environments, you can provide a custom spawn function when using the provider programmatically:
+
+## Deep Tracing
+
+Enable deep tracing to capture internal Claude Agent SDK events (tool calls, API requests, thinking blocks, etc.) for observability and debugging:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      deep_tracing: true
+```
+
+When `deep_tracing` is enabled:
+
+1. A root span is created for each agent execution using OpenTelemetry GenAI semantic conventions
+2. Claude Agent SDK is configured to export its internal events to Promptfoo's OTLP receiver
+3. All child events (tool calls, API requests, etc.) are linked to the root span via W3C trace context
+
+### Viewing Traces
+
+After running an eval with `deep_tracing` enabled, you can view the traces in the Promptfoo web UI:
+
+```bash
+# Run eval with tracing
+promptfoo eval -c config.yaml
+
+# View in web UI
+promptfoo view
+```
+
+Navigate to an individual result and look for the "Traces" tab to see the full span hierarchy.
+
+### What's Captured
+
+Deep tracing captures:
+
+- **Root span**: The overall agent execution with token usage and response
+- **Tool calls**: Each tool invocation (Read, Write, Bash, etc.) as child spans
+- **API requests**: Underlying Claude API calls
+- **Thinking blocks**: Extended thinking content (if enabled)
+
+### Environment Variables
+
+When `deep_tracing` is enabled, the provider automatically sets these environment variables for Claude Agent SDK (unless already set):
+
+| Variable                       | Value                   | Description                                |
+| ------------------------------ | ----------------------- | ------------------------------------------ |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1`                     | Enables telemetry in Claude Agent SDK      |
+| `OTEL_LOGS_EXPORTER`           | `otlp`                  | Exports events via OTLP                    |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | `http://127.0.0.1:4318` | Local OTLP receiver endpoint               |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`             | Uses JSON format for OTLP                  |
+| `OTEL_SERVICE_NAME`            | `claude-agent-sdk`      | Service name for traces                    |
+| `TRACEPARENT`                  | (generated)             | W3C trace context for parent-child linking |
+
+You can override any of these by setting them in your environment before running the eval.
 
 ```typescript
 import { ClaudeCodeSDKProvider } from 'promptfoo';
