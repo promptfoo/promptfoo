@@ -30,7 +30,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^7.3.7",
     "@segment/ajv-human-errors": "^2.15.0",
-    "@swc/core": "^1.15.10",
+    "@swc/core": "^1.15.11",
     "@swc/jest": "^0.2.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
