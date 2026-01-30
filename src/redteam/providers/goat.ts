@@ -304,6 +304,7 @@ export default class GoatProvider implements ApiProvider {
             traceSummary: previousTraceSummary,
             pluginId: context?.test?.metadata?.pluginId,
             strategyId: context?.test?.metadata?.strategyId,
+            ...(context?.evaluationId && { evaluationId: context.evaluationId }),
             ...(context?.evaluationId && context?.testCaseId && {
               testRunId: `${context.evaluationId}-${context.testCaseId}`,
             }),
@@ -350,6 +351,7 @@ export default class GoatProvider implements ApiProvider {
           inputs: this.config.inputs,
           pluginId: context?.test?.metadata?.pluginId,
           strategyId: context?.test?.metadata?.strategyId,
+          ...(context?.evaluationId && { evaluationId: context.evaluationId }),
           ...(context?.evaluationId && context?.testCaseId && {
               testRunId: `${context.evaluationId}-${context.testCaseId}`,
             }),
