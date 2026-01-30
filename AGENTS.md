@@ -214,6 +214,8 @@ EOF
 
 **Before committing:** `npm run l && npm run f`
 
+**Optional pre-commit hook:** A pre-commit hook is installed automatically on `npm install`. Enable it by adding `ENABLE_PRECOMMIT_LINT=1` to your `.env` file - it will run Biome and Prettier on staged files automatically.
+
 ## Logging
 
 Use the logger with object context (auto-sanitized):
