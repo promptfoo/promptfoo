@@ -56,5 +56,5 @@ jobs:
       - name: Install and test
         run: |
           npm ci
-          npm run lint:src -- --max-warnings=999
+          npm run build
           echo "Test completed successfully!"
