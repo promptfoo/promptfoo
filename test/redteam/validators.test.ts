@@ -805,7 +805,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'jailbreak-templates' },
+          { id: 'prompt-injection' },
         ]),
       );
       // Ensure no duplicates
@@ -826,7 +826,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'jailbreak-templates' },
+          { id: 'prompt-injection' },
         ]),
       );
       // Ensure no duplicates
@@ -847,7 +847,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'jailbreak-templates' },
+          { id: 'prompt-injection' },
         ]),
       );
       // Ensure no duplicates

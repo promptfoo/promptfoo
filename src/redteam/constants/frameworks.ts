@@ -77,7 +77,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   'owasp:llm:01': {
     // Prompt Injection
     plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
     // Sensitive Information Disclosure
@@ -90,7 +90,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'cross-session-leak',
       'prompt-extraction',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
     // Supply Chain
@@ -109,12 +109,12 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:05': {
     // Improper Output Handling
     plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:llm:06': {
     // Excessive Agency
@@ -127,7 +127,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'sql-injection',
       'ssrf',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:07': {
     // System Prompt Leakage
@@ -140,7 +140,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:session',
       'pii:social',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
     // Vector and Embedding Weaknesses
@@ -152,7 +152,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:session',
       'pii:social',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:09': {
     // Misinformation
@@ -162,7 +162,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'harmful:misinformation-disinformation',
       'harmful:specialized-advice',
     ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:10': {
     // Unbounded Consumption
@@ -232,31 +232,31 @@ export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
     // ASI01: Agent Goal Hijack
     // Occurs when an attacker alters an agent's objectives or decision path through malicious content
     plugins: ['hijacking', 'system-prompt-override', 'indirect-prompt-injection', 'intent'],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:agentic:asi02': {
     // ASI02: Tool Misuse and Exploitation
     // Occurs when an agent uses legitimate tools in unsafe ways
     plugins: ['excessive-agency', 'mcp', 'tool-discovery'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:agentic:asi03': {
     // ASI03: Identity and Privilege Abuse
     // Agents inherit user/system identities with high-privilege credentials
     plugins: ['rbac', 'bfla', 'bola', 'imitation'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:agentic:asi04': {
     // ASI04: Agentic Supply Chain Vulnerabilities
     // Compromised tools, plugins, prompt templates, and external servers
     plugins: ['indirect-prompt-injection', 'mcp'],
-    strategies: ['jailbreak-templates'],
+    strategies: ['prompt-injection'],
   },
   'owasp:agentic:asi05': {
     // ASI05: Unexpected Code Execution
     // Agents generate or run code/commands unsafely
     plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:agentic:asi06': {
     // ASI06: Memory and Context Poisoning
@@ -268,13 +268,13 @@ export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
     // ASI07: Insecure Inter-Agent Communication
     // Multi-agent systems face spoofed identities, replayed messages, tampering
     plugins: ['indirect-prompt-injection', 'hijacking', 'imitation'],
-    strategies: ['jailbreak-templates'],
+    strategies: ['prompt-injection'],
   },
   'owasp:agentic:asi08': {
     // ASI08: Cascading Failures
     // Small errors in one agent propagate across planning, execution, memory
     plugins: ['hallucination', 'harmful:misinformation-disinformation', 'divergent-repetition'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:agentic:asi09': {
     // ASI09: Human Agent Trust Exploitation
@@ -311,7 +311,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'jailbreak:composite',
       'crescendo',
       'goat',
-      'jailbreak-templates',
+      'prompt-injection',
       'best-of-n',
     ],
   },
@@ -335,7 +335,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'jailbreak',
       'jailbreak:tree',
       'jailbreak:composite',
-      'jailbreak-templates',
+      'prompt-injection',
       'hex',
       'base64',
       'homoglyph',
@@ -382,24 +382,18 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'harmful:self-harm',
       'harmful:hate',
     ],
-    strategies: [
-      'crescendo',
-      'goat',
-      'jailbreak:tree',
-      'jailbreak:composite',
-      'jailbreak-templates',
-    ],
+    strategies: ['crescendo', 'goat', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
   },
 };
 
 export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   'nist:ai:measure:1.1': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:1.2': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.1': {
     plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
@@ -415,7 +409,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:2.4': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.5': {
     plugins: ['excessive-agency'],
@@ -431,7 +425,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:2.7': {
     plugins: ['harmful:cybercrime', 'shell-injection', 'sql-injection'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.8': {
     plugins: ['bfla', 'bola', 'rbac'],
@@ -459,7 +453,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:3.1': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:3.2': {
     plugins: ['excessive-agency'],
@@ -503,7 +497,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'mitre:atlas:initial-access': {
     plugins: ['debug-access', 'harmful:cybercrime', 'shell-injection', 'sql-injection', 'ssrf'],
-    strategies: ['base64', 'jailbreak', 'leetspeak', 'jailbreak-templates', 'rot13'],
+    strategies: ['base64', 'jailbreak', 'leetspeak', 'prompt-injection', 'rot13'],
   },
   'mitre:atlas:ml-attack-staging': {
     plugins: ['ascii-smuggling', 'excessive-agency', 'hallucination', 'indirect-prompt-injection'],
@@ -532,7 +526,7 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   /* ----------  Art. 5 – Prohibited practices  --------------------------------- */
   'eu:ai-act:art5:subliminal-manipulation': {
     plugins: ['hijacking', 'intent', 'excessive-agency'],
-    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
   },
   'eu:ai-act:art5:exploitation-of-vulnerabilities': {
     plugins: ['hijacking', 'imitation', 'harmful:misinformation-disinformation'],
@@ -562,7 +556,7 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   },
   'eu:ai-act:annex3:critical-infrastructure': {
     plugins: ['shell-injection', 'sql-injection', 'ssrf', 'excessive-agency'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'eu:ai-act:annex3:education': {
     plugins: ['harmful:misinformation-disinformation', 'hallucination', 'overreliance'],

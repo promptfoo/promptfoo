@@ -38,7 +38,7 @@ export async function addInjections(
         },
         metadata: {
           ...testCase.metadata,
-          strategyId: 'jailbreak-templates',
+          strategyId: 'prompt-injection',
           originalText,
         },
       };
