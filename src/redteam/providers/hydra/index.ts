@@ -739,27 +739,24 @@ export class HydraProvider implements ApiProvider {
               }
             | undefined;
 
-          // First try to get exfil data from provider response metadata (Playwright provider)
-          if (targetResponse.metadata?.wasExfiltrated !== undefined) {
-            logger.debug('[Hydra] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
-              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
-          } else {
-            // Try to fetch exfil tracking from server API via webPageUuid
-            const webPageUuid = test.metadata?.webPageUuid as string | undefined;
-            if (webPageUuid) {
-              const evalId =
-                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-              logger.debug('[Hydra] Fetching exfil tracking from server API', {
-                webPageUuid,
-                evalId,
-              });
+          // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
+          // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
+          // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
+          const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+          if (webPageUuid) {
+            // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
+            const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+            const evalId =
+              context?.evaluationId ??
+              (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+            logger.debug('[Hydra] Fetching exfil tracking from server API', {
+              webPageUuid,
+              evalId,
+              source: 'lastTransformResult.metadata',
+            });
+
+            try {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
                 gradingContext = {
@@ -771,7 +768,25 @@ export class HydraProvider implements ApiProvider {
                   exfilRecords: exfilData.exfilRecords,
                 };
               }
+            } catch (error) {
+              logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
+                error,
+                webPageUuid,
+              });
             }
+          }
+
+          // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
+          if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+            logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
           }
 
           // Fallback to just tracing context if no exfil data found
