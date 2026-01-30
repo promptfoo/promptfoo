@@ -53,8 +53,14 @@ jobs:
           python --version
           pip --version
 
-      - name: Install and test
-        run: |
-          npm ci
-          npm run build
-          echo "Test completed successfully!"
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify TypeScript
+        run: npx tsc --noEmit
+
+      - name: Run a quick test
+        run: npx vitest run --reporter=verbose test/util/json.test.ts
+
+      - name: Verify complete
+        run: echo "GCP runner test completed successfully!"
