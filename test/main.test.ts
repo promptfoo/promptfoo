@@ -339,6 +339,7 @@ describe('shutdownGracefully', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.resetAllMocks();
     process.exit = originalExit;
   });
 

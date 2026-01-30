@@ -293,7 +293,9 @@ export const shutdownGracefully = async (): Promise<void> => {
   try {
     await withTimeout(telemetry.shutdown(), 'telemetry.shutdown()');
   } catch (error) {
-    logger.debug(`Error during telemetry shutdown: ${error}`);
+    logger.debug('[shutdownGracefully] Telemetry shutdown failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   logger.debug('Closing logger file transports');
