@@ -123,8 +123,8 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    timeout-minutes: 10
-    runs-on: [self-hosted, linux, x64, gcp]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
@@ -468,8 +468,8 @@ jobs:
 
   smoke-tests:
     name: Run Smoke Tests
-    runs-on: [self-hosted, linux, x64, gcp]
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -506,7 +506,7 @@ jobs:
   share-test:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -564,7 +564,7 @@ jobs:
 
   redteam:
     name: Redteam (Production API)
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repo
@@ -590,7 +590,7 @@ jobs:
   redteam-staging:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
