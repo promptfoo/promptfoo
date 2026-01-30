@@ -500,6 +500,76 @@ tests:
       subject: 'sunset over mountains'
 ```
 
+### Video Generation
+
+xAI supports video generation through the Grok Imagine API using the `xai:video:grok-imagine-video` provider:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'Generate a video of: {{scene}}'
+
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      duration: 5 # 1-15 seconds
+      aspect_ratio: '16:9'
+      resolution: '720p'
+
+tests:
+  - vars:
+      scene: a cat playing with yarn
+    assert:
+      - type: cost
+        threshold: 1.0
+```
+
+#### Configuration Options
+
+| Option             | Type   | Default | Description                                       |
+| ------------------ | ------ | ------- | ------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                    |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3 |
+| `resolution`       | string | 720p    | Output resolution: 720p, 480p                     |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                  |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                    |
+
+#### Image-to-Video
+
+Animate a static image by providing an image URL:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      image:
+        url: 'https://example.com/image.jpg'
+      duration: 5
+```
+
+#### Video Editing
+
+Edit an existing video with text instructions:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      video:
+        url: 'https://example.com/source-video.mp4'
+
+prompts:
+  - 'Make the colors more vibrant and add slow motion'
+```
+
+:::note
+Video editing skips duration, aspect ratio, and resolution validation since these are determined by the source video.
+:::
+
+#### Pricing
+
+Video generation is billed at approximately **$0.05 per second** of generated video.
+
 ### Voice Agent API
 
 The xAI Voice Agent API enables real-time voice conversations with Grok models via WebSocket. Use the `xai:voice:<model>` provider format.
