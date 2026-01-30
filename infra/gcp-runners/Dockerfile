@@ -25,19 +25,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Go (stable, used by actionlint and shfmt)
+# Install Go (pinned version with checksum verification)
 ENV GO_VERSION=1.23.6
+ENV GO_SHA256=9379441ea310de000f33a4dc767bd966e72ab2826270e038e78b2c53c2e7802d
 RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    echo "${GO_SHA256}  go${GO_VERSION}.linux-amd64.tar.gz" | sha256sum -c - && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
 
-# Install actionlint for workflow validation
-RUN curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash && \
-    mv actionlint /usr/local/bin/
+# Install actionlint for workflow validation (pinned version)
+ENV ACTIONLINT_VERSION=1.7.7
+RUN curl -sLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" && \
+    tar -xzf "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" actionlint && \
+    mv actionlint /usr/local/bin/ && \
+    rm "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
 
-# Install shfmt for shell formatting
-RUN GOPATH=/tmp/go go install mvdan.cc/sh/v3/cmd/shfmt@latest && \
+# Install shfmt for shell formatting (pinned version)
+ENV SHFMT_VERSION=v3.10.0
+RUN GOPATH=/tmp/go go install "mvdan.cc/sh/v3/cmd/shfmt@${SHFMT_VERSION}" && \
     mv /tmp/go/bin/shfmt /usr/local/bin/ && \
     rm -rf /tmp/go
 
