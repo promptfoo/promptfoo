@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
@@ -281,6 +281,10 @@ describe('JavaScript file references', () => {
     vi.mocked(path.resolve).mockReset();
     vi.mocked(isPackagePath).mockReset();
     vi.mocked(loadFromPackage).mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should handle JavaScript file reference with function name', async () => {
@@ -638,6 +642,28 @@ describe('JavaScript file references', () => {
       pass: true,
       reason: 'Assertion passed',
     });
+  });
+
+  it('should fail when vars parameter has wrong value even if test.vars has correct value (issue #7334 negative)', async () => {
+    const output = 'Expected output';
+
+    // This negative test verifies that vars parameter truly takes precedence over test.vars
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.dynamicVar === "expected-value"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      // test.vars has the "correct" value
+      test: { vars: { dynamicVar: 'expected-value' } } as AtomicTestCase,
+      // But vars parameter has the wrong value - this should take precedence and fail
+      vars: { dynamicVar: 'wrong-value' },
+      providerResponse: { output },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('false');
   });
 
   it('should pass when the function returns pass', async () => {

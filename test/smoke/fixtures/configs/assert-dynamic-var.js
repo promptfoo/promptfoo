@@ -1,6 +1,6 @@
 // Assertion function that verifies dynamic vars are resolved
 // Tests fix for GitHub issue #7334
-module.exports = function (output, context) {
+module.exports = function (_output, context) {
   const dynamicVar = context.vars.DYNAMIC_VAR;
 
   // Check if the variable was resolved (should be an ISO date string)
