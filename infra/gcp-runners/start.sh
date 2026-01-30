@@ -32,8 +32,8 @@ echo "=========================================="
 
 # Cleanup function
 cleanup() {
-    echo "Removing runner registration..."
-    ./config.sh remove --unattended --pat "${GITHUB_TOKEN}" || true
+  echo "Removing runner registration..."
+  ./config.sh remove --unattended --pat "${GITHUB_TOKEN}" || true
 }
 
 # Trap signals for graceful shutdown
@@ -42,4 +42,5 @@ trap 'cleanup; exit 143' TERM
 
 # Run the runner
 echo "Starting runner..."
-./run.sh & wait $!
+./run.sh &
+wait $!

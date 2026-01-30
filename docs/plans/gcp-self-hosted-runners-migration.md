@@ -10,45 +10,45 @@ This plan migrates **Ubuntu-based GitHub Actions jobs** to Google Cloud self-hos
 
 ### Ubuntu Jobs to Migrate (main.yml)
 
-| Job | Timeout | Dependencies | Notes |
-|-----|---------|--------------|-------|
-| `test` (ubuntu-latest matrix) | 10 min | Node 20/22/24, Python 3.14, Ruby 4.0 | 3 parallel jobs |
-| `build` | 5 min | Node 20/22/24 | 3 parallel jobs |
-| `style-check` | 5 min | Node (from .nvmrc) | Biome, Prettier |
-| `shell-format` | 5 min | None | Shell formatting |
-| `assets` | 5 min | Node | JSON schema gen |
-| `python` | 5 min | Python 3.9/3.14 | 2 parallel jobs |
-| `docs` | 5 min | Node | Docusaurus build |
-| `code-scan-action` | 5 min | Node | Action build |
-| `site-tests` | 5 min | Node | Docusaurus tests |
-| `webui` | 10 min | Node | React tests + coverage |
-| `integration-tests` | 5 min | Node, Python, Ruby | Full integration |
-| `smoke-tests` | 7 min | Node, Python, Ruby | Production-like |
-| `share-test` | 10 min | Node | Server + eval |
-| `redteam` | 10 min | Node | Security tests |
-| `redteam-staging` | 10 min | Node | Staging API |
-| `actionlint` | 5 min | None | Workflow linting |
-| `ruby` | 5 min | Ruby 3.0/3.4 | 2 parallel jobs |
-| `golang` | 5 min | Go 1.25 | Wrapper tests |
+| Job                           | Timeout | Dependencies                         | Notes                  |
+| ----------------------------- | ------- | ------------------------------------ | ---------------------- |
+| `test` (ubuntu-latest matrix) | 10 min  | Node 20/22/24, Python 3.14, Ruby 4.0 | 3 parallel jobs        |
+| `build`                       | 5 min   | Node 20/22/24                        | 3 parallel jobs        |
+| `style-check`                 | 5 min   | Node (from .nvmrc)                   | Biome, Prettier        |
+| `shell-format`                | 5 min   | None                                 | Shell formatting       |
+| `assets`                      | 5 min   | Node                                 | JSON schema gen        |
+| `python`                      | 5 min   | Python 3.9/3.14                      | 2 parallel jobs        |
+| `docs`                        | 5 min   | Node                                 | Docusaurus build       |
+| `code-scan-action`            | 5 min   | Node                                 | Action build           |
+| `site-tests`                  | 5 min   | Node                                 | Docusaurus tests       |
+| `webui`                       | 10 min  | Node                                 | React tests + coverage |
+| `integration-tests`           | 5 min   | Node, Python, Ruby                   | Full integration       |
+| `smoke-tests`                 | 7 min   | Node, Python, Ruby                   | Production-like        |
+| `share-test`                  | 10 min  | Node                                 | Server + eval          |
+| `redteam`                     | 10 min  | Node                                 | Security tests         |
+| `redteam-staging`             | 10 min  | Node                                 | Staging API            |
+| `actionlint`                  | 5 min   | None                                 | Workflow linting       |
+| `ruby`                        | 5 min   | Ruby 3.0/3.4                         | 2 parallel jobs        |
+| `golang`                      | 5 min   | Go 1.25                              | Wrapper tests          |
 
 **Total Ubuntu jobs in main.yml:** ~22 (including matrix expansions)
 
 ### Jobs Staying on GitHub-Hosted Runners
 
-| Job | Runner | Reason |
-|-----|--------|--------|
+| Job                     | Runner         | Reason                             |
+| ----------------------- | -------------- | ---------------------------------- |
 | `test` (windows-latest) | windows-latest | Windows not supported on Cloud Run |
-| `test` (macOS-latest) | macos-latest | macOS requires Mac hardware |
+| `test` (macOS-latest)   | macos-latest   | macOS requires Mac hardware        |
 
 ### Other Workflows with Ubuntu Jobs
 
-| Workflow | Jobs | Priority |
-|----------|------|----------|
-| `docker.yml` | test, build, merge, attest | Phase 2 |
-| `release-please.yml` | release, build, publish | Phase 2 |
-| `claude-code-review.yml` | claude-review | Low (infrequent) |
-| `claude.yml` | claude | Low (infrequent) |
-| Others | Various | Low |
+| Workflow                 | Jobs                       | Priority         |
+| ------------------------ | -------------------------- | ---------------- |
+| `docker.yml`             | test, build, merge, attest | Phase 2          |
+| `release-please.yml`     | release, build, publish    | Phase 2          |
+| `claude-code-review.yml` | claude-review              | Low (infrequent) |
+| `claude.yml`             | claude                     | Low (infrequent) |
+| Others                   | Various                    | Low              |
 
 ---
 
@@ -127,6 +127,7 @@ gcloud projects add-iam-policy-binding ${PROJECT_ID} \
 Create a **fine-grained PAT** at https://github.com/settings/tokens?type=beta
 
 **Settings:**
+
 - Token name: `gcp-self-hosted-runners`
 - Expiration: 90 days (or custom)
 - Resource owner: `promptfoo`
@@ -357,6 +358,7 @@ gcloud beta run worker-pools deploy promptfoo-linux-runners \
 ```
 
 **Resource Sizing Rationale:**
+
 - **4 vCPU / 8GB RAM**: Matches GitHub-hosted runner specs (2-core with 7GB)
 - **Max 25 instances**: Covers ~22 Ubuntu jobs + buffer for other workflows
 - **Min 0 instances**: Scale to zero when idle (cost savings)
@@ -375,7 +377,7 @@ kind: CremaConfig
 metadata:
   name: promptfoo-runners
 spec:
-  pollingInterval: 10  # Poll GitHub every 10 seconds
+  pollingInterval: 10 # Poll GitHub every 10 seconds
 
   triggerAuthentications:
     - metadata:
@@ -402,8 +404,8 @@ spec:
               owner: promptfoo
               runnerScope: repo
               repos: promptfoo
-              targetWorkflowQueueLength: 1  # 1 runner per queued job
-              labels: "self-hosted,linux,x64"
+              targetWorkflowQueueLength: 1 # 1 runner per queued job
+              labels: 'self-hosted,linux,x64'
             authenticationRef:
               name: github-trigger-auth
 
@@ -411,16 +413,16 @@ spec:
           horizontalPodAutoscalerConfig:
             behavior:
               scaleDown:
-                stabilizationWindowSeconds: 120  # Wait 2 min before scaling down
+                stabilizationWindowSeconds: 120 # Wait 2 min before scaling down
                 policies:
                   - type: Pods
                     value: 5
                     periodSeconds: 30
               scaleUp:
-                stabilizationWindowSeconds: 0  # Scale up immediately
+                stabilizationWindowSeconds: 0 # Scale up immediately
                 policies:
                   - type: Pods
-                    value: 10  # Scale up 10 at a time
+                    value: 10 # Scale up 10 at a time
                     periodSeconds: 15
 ```
 
@@ -464,6 +466,7 @@ gcloud beta run deploy crema-autoscaler \
 ### Phase 1: Gradual Rollout with Feature Flag
 
 Add repository variable for controlled rollout:
+
 - Go to: Settings → Secrets and variables → Actions → Variables
 - Create: `USE_GCP_RUNNERS` = `false` (start disabled)
 
@@ -615,6 +618,7 @@ jobs:
 ### Step 1: Verify Runner Registration
 
 After deploying, check GitHub:
+
 1. Go to https://github.com/promptfoo/promptfoo/settings/actions/runners
 2. Verify runners appear with labels: `self-hosted`, `linux`, `x64`, `gcp`
 
@@ -677,6 +681,7 @@ gcloud monitoring dashboards create --config-from-file=infra/gcp-runners/dashboa
 ```
 
 **Key Metrics:**
+
 - `run.googleapis.com/worker_pool/instance_count` - Active runners
 - `run.googleapis.com/worker_pool/billable_instance_time` - Cost tracking
 - `run.googleapis.com/worker_pool/request_latencies` - Job pickup time
@@ -702,25 +707,25 @@ gcloud alpha monitoring policies create \
 
 ### Current GitHub Actions (Ubuntu only)
 
-| Metric | Value |
-|--------|-------|
-| Ubuntu jobs per PR | ~22 |
-| Average job duration | ~6 min |
-| PRs per month | ~50 |
-| Push to main per month | ~100 |
-| **Total minutes/month** | ~13,200 |
-| **Cost @ $0.008/min** | **~$106** |
+| Metric                  | Value     |
+| ----------------------- | --------- |
+| Ubuntu jobs per PR      | ~22       |
+| Average job duration    | ~6 min    |
+| PRs per month           | ~50       |
+| Push to main per month  | ~100      |
+| **Total minutes/month** | ~13,200   |
+| **Cost @ $0.008/min**   | **~$106** |
 
 ### GCP Self-Hosted (Estimated)
 
-| Resource | Usage | Rate | Monthly Cost |
-|----------|-------|------|--------------|
-| Worker Pool (4 vCPU, 8GB) | ~150 hrs | $0.088/vCPU-hr + $0.0094/GB-hr | ~$65 |
-| CREMA Service (always-on) | 730 hrs | $0.024/hr | ~$18 |
-| Artifact Registry | 5 GB | $0.10/GB | $0.50 |
-| Secret Manager | 5 secrets | $0.03/active version | $0.15 |
-| Network egress | 30 GB | $0.12/GB | $3.60 |
-| **Total** | | | **~$87** |
+| Resource                  | Usage     | Rate                           | Monthly Cost |
+| ------------------------- | --------- | ------------------------------ | ------------ |
+| Worker Pool (4 vCPU, 8GB) | ~150 hrs  | $0.088/vCPU-hr + $0.0094/GB-hr | ~$65         |
+| CREMA Service (always-on) | 730 hrs   | $0.024/hr                      | ~$18         |
+| Artifact Registry         | 5 GB      | $0.10/GB                       | $0.50        |
+| Secret Manager            | 5 secrets | $0.03/active version           | $0.15        |
+| Network egress            | 30 GB     | $0.12/GB                       | $3.60        |
+| **Total**                 |           |                                | **~$87**     |
 
 ### Savings
 
@@ -729,6 +734,7 @@ gcloud alpha monitoring policies create \
 - **Savings:** ~$19/month (18%)
 
 **Note:** Greater savings possible with:
+
 - Spot/preemptible instances (60-90% discount)
 - Committed use discounts
 - Optimizing runner specs based on actual usage
