@@ -402,7 +402,7 @@ jobs:
   webui:
     name: webui tests
     timeout-minutes: 10
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
