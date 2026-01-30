@@ -23,5 +23,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
       - name: Validate renovate.json
         run: npx --yes --package renovate -- renovate-config-validator

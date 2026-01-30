@@ -224,11 +224,25 @@ jobs:
     runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - uses: actions/checkout@v6
-      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
-        env:
-          SHFMT_OPTS: '-i 2' # 2 space indent
-        with:
-          sh_checker_shellcheck_disable: true
+
+      - name: Check shell formatting with shfmt
+        run: |
+          # Find all shell scripts and check formatting
+          # shfmt is pre-installed on GCP runner
+          FAILED=0
+          for file in $(git ls-files '*.sh'); do
+            if ! shfmt -i 2 -d "$file" > /dev/null 2>&1; then
+              echo "Formatting issue in: $file"
+              shfmt -i 2 -d "$file" || true
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "Shell formatting issues found. Run 'shfmt -i 2 -w <file>' to fix."
+            exit 1
+          fi
+          echo "All shell scripts are properly formatted."
 
   assets:
     name: Generate Assets
