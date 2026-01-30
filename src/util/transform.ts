@@ -71,8 +71,26 @@ function getPythonTransformFunction(
   filePath: string,
   functionName: string = 'get_transform',
 ): Function {
-  return async (output: string, context: { vars: Vars }) => {
-    return runPython(filePath, functionName, [output, context]);
+  return async (output: string | object, context: { vars: Vars } | object) => {
+    // Helper to sanitize objects by removing non-serializable properties
+    const sanitize = (obj: object): object => {
+      const sanitized = { ...obj };
+      delete (sanitized as Record<string, unknown>).logger;
+      delete (sanitized as Record<string, unknown>).getCache;
+      delete (sanitized as Record<string, unknown>).filters;
+      delete (sanitized as Record<string, unknown>).originalProvider;
+      return sanitized;
+    };
+
+    // Sanitize output if it's an object (e.g., hook context for NEW convention)
+    const sanitizedOutput =
+      typeof output === 'object' && output !== null ? sanitize(output) : output;
+
+    // Sanitize context if it's an object (e.g., hook context for LEGACY convention)
+    const sanitizedContext =
+      typeof context === 'object' && context !== null ? sanitize(context) : context;
+
+    return runPython(filePath, functionName, [sanitizedOutput, sanitizedContext]);
   };
 }
 

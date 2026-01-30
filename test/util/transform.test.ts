@@ -207,6 +207,63 @@ describe('util', () => {
       );
     });
 
+    it('strips non-serializable properties from context before calling Python', async () => {
+      const output = 'hello';
+      const context = {
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+        logger: { info: vi.fn(), debug: vi.fn() }, // Non-serializable
+        getCache: vi.fn(), // Non-serializable
+        filters: { someFilter: vi.fn() }, // Non-serializable
+        originalProvider: { callApi: vi.fn() }, // Non-serializable
+      };
+      const pythonFilePath = 'file://transform.py';
+
+      await transform(pythonFilePath, output, context);
+
+      // Verify runPython was called with sanitized context (no logger, getCache, filters, originalProvider)
+      expect(runPython).toHaveBeenCalledWith(
+        expect.stringContaining('transform.py'),
+        'get_transform',
+        [
+          output,
+          expect.not.objectContaining({
+            logger: expect.anything(),
+            getCache: expect.anything(),
+            filters: expect.anything(),
+            originalProvider: expect.anything(),
+          }),
+        ],
+      );
+
+      // Also verify the sanitized context still has the serializable properties
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[1]).toEqual({
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+      });
+    });
+
+    it('strips non-serializable properties from output when output is an object (hook context)', async () => {
+      // When hooks use NEW convention, output is the context object
+      const hookContext = {
+        suite: { tests: [] },
+        logger: { info: vi.fn() }, // Non-serializable - should be stripped
+      };
+      const secondArg = { hookName: 'beforeAll' };
+      const pythonFilePath = 'file://hooks.py:extension_hook';
+
+      // Override mock for this test since output is an object, not a string
+      vi.mocked(runPython).mockResolvedValueOnce({ suite: { tests: [] } });
+
+      await transform(pythonFilePath, hookContext, secondArg);
+
+      // Verify runPython was called with sanitized hookContext (no logger)
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[0]).toEqual({ suite: { tests: [] } });
+      expect(callArgs[0]).not.toHaveProperty('logger');
+    });
+
     it('does not throw error when validateReturn is false and function returns undefined', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
