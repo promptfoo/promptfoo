@@ -173,7 +173,7 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
