@@ -9,12 +9,18 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
-import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  getUserEmail,
+  promptForEmailUnverified,
+} from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
+import { EMAIL_OK_STATUS } from '../../types/email';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -42,8 +48,8 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
-import { isValidPolicyObject } from '../plugins/policy/utils';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
+import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
 import type { Command } from 'commander';
 
@@ -273,6 +279,16 @@ export async function doGenerateRedteam(
     return null;
   }
 
+  // Validate email for remote generation
+  if (!neverGenerateRemote()) {
+    let hasValidEmail = false;
+    while (!hasValidEmail) {
+      const { emailNeedsValidation } = await promptForEmailUnverified();
+      const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+      hasValidEmail = res === EMAIL_OK_STATUS;
+    }
+  }
+
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
@@ -364,8 +380,12 @@ export async function doGenerateRedteam(
 
   // Resolve policy references.
   // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  // Only reusable policies (with UUID ids) need to be fetched; inline policies already have their text.
   const policyPluginsWithRefs = plugins.filter(
-    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+    (plugin) =>
+      plugin.config?.policy &&
+      isValidPolicyObject(plugin.config?.policy) &&
+      determinePolicyTypeFromId(plugin.config.policy.id) === 'reusable',
   );
   if (policyPluginsWithRefs.length > 0) {
     // Always use the calling user's team id for fetching policies.

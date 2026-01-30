@@ -1,5 +1,44 @@
+import type { HttpProviderConfig } from '@promptfoo/providers/http';
 import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { TestCase } from '@promptfoo/types';
+import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfoo/types';
+
+/**
+ * UI-specific TLS configuration properties for tracking input methods.
+ * These are not part of the core HttpProviderConfig but are used in the UI
+ * to track which input method the user has selected for each field.
+ */
+interface TlsConfigUI {
+  enabled?: boolean;
+  certInputType?: 'upload' | 'path' | 'inline';
+  keyInputType?: 'upload' | 'path' | 'inline';
+  jksInputType?: 'upload' | 'path';
+  pfxInputType?: 'upload' | 'path' | 'base64';
+  caInputType?: 'upload' | 'path' | 'inline';
+  jksContent?: string;
+  jksFileName?: string;
+  jksPath?: string;
+  keyAlias?: string;
+  jksExtractConfigured?: boolean;
+  certificateType?: 'pem' | 'pfx' | 'pkcs12' | 'jks';
+}
+
+/**
+ * Extended HTTP provider config that includes UI-specific properties
+ * for tracking TLS input methods.
+ */
+interface HttpProviderConfigUI extends Omit<HttpProviderConfig, 'signatureAuth' | 'tls'> {
+  signatureAuth?: HttpProviderConfig['signatureAuth'];
+  tls?: HttpProviderConfig['tls'] & TlsConfigUI;
+}
+
+/**
+ * Type-safe provider options for HTTP providers used in redteam setup.
+ * This provides proper typing for HTTP-specific config fields, including
+ * UI-specific properties for TLS configuration.
+ */
+export interface HttpProviderOptions extends Omit<CoreProviderOptions, 'config'> {
+  config?: HttpProviderConfigUI;
+}
 
 export interface ApplicationDefinition {
   purpose?: string;
@@ -39,6 +78,8 @@ export interface Config {
   defaultTest?: TestCase;
   extensions?: string[];
   language?: string | string[]; // Global language configuration
+  // Provider used for generating adversarial inputs (redteam provider)
+  provider?: string | CoreProviderOptions;
 }
 
 export interface ProviderOptions {
@@ -74,7 +115,7 @@ export interface ProviderOptions {
         }>
       | string;
     stateful?: boolean;
-    sessionSource?: 'client' | 'server';
+    sessionSource?: 'client' | 'server' | 'endpoint';
     streamResponse?: string;
   };
 }

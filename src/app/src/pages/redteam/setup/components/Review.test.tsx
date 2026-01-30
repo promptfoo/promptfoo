@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
@@ -9,12 +10,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
-// Helper to render with TooltipProvider
-let rerenderWithTooltipProvider: (ui: React.ReactElement) => void;
-const renderWithTooltipProvider = (ui: React.ReactElement) => {
-  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
-  rerenderWithTooltipProvider = (newUi: React.ReactElement) => {
-    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
+// Helper to render with required providers
+let rerenderWithProviders: (ui: React.ReactElement) => void;
+const renderWithProviders = (ui: React.ReactElement) => {
+  const result = render(
+    <EvalHistoryProvider>
+      <TooltipProvider delayDuration={0}>{ui}</TooltipProvider>
+    </EvalHistoryProvider>,
+  );
+  rerenderWithProviders = (newUi: React.ReactElement) => {
+    result.rerender(
+      <EvalHistoryProvider>
+        <TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>
+      </EvalHistoryProvider>,
+    );
   };
   return result;
 };
@@ -173,7 +182,7 @@ describe('Review Component', () => {
 
   describe('Component Integration', () => {
     it('renders all main sections including Advanced Configuration accordion', () => {
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -189,7 +198,7 @@ describe('Review Component', () => {
     });
 
     it('renders configuration description field', () => {
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -203,7 +212,7 @@ describe('Review Component', () => {
     });
 
     it('renders DefaultTestVariables component inside CollapsibleContent when expanded', () => {
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -225,7 +234,7 @@ describe('Review Component', () => {
 
   describe('Advanced Configuration Accordion', () => {
     it('should render the accordion collapsed by default when there are no test variables', () => {
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -253,7 +262,7 @@ describe('Review Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -268,7 +277,7 @@ describe('Review Component', () => {
     });
 
     it('displays the advanced configuration description text when the accordion is expanded', async () => {
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -291,7 +300,7 @@ describe('Review Component', () => {
   });
 
   it('renders DefaultTestVariables without Paper wrapper when Advanced Configuration is expanded', async () => {
-    renderWithTooltipProvider(
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -330,7 +339,7 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    renderWithTooltipProvider(
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -354,7 +363,7 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    renderWithTooltipProvider(
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -386,7 +395,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -407,7 +416,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -426,7 +435,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -445,7 +454,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -464,7 +473,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -483,7 +492,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -506,7 +515,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -532,7 +541,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -555,7 +564,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -576,7 +585,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -595,7 +604,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -616,7 +625,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -641,7 +650,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -671,7 +680,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -695,7 +704,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -726,7 +735,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -800,7 +809,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -837,7 +846,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -870,7 +879,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -904,7 +913,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -949,7 +958,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -972,7 +981,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -999,7 +1008,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1017,7 +1026,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1035,7 +1044,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1054,7 +1063,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1073,7 +1082,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1095,7 +1104,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1117,7 +1126,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1139,7 +1148,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1163,7 +1172,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1184,7 +1193,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerenderWithTooltipProvider(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1222,7 +1231,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1256,7 +1265,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1294,7 +1303,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1340,7 +1349,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1387,7 +1396,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1445,7 +1454,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1493,7 +1502,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1529,7 +1538,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithTooltipProvider(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}

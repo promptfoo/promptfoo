@@ -631,12 +631,14 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
       ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,

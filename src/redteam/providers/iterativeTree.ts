@@ -777,6 +777,7 @@ async function runRedteamConversation({
           });
           return {
             output: targetResponse.output,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -816,6 +817,7 @@ async function runRedteamConversation({
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -856,6 +858,7 @@ async function runRedteamConversation({
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
@@ -975,6 +978,7 @@ async function runRedteamConversation({
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,

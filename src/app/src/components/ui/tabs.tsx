@@ -18,7 +18,7 @@ function Tabs({ className, orientation = 'horizontal', ...props }: TabsProps) {
     <TabsPrimitive.Root
       orientation={orientation}
       data-orientation={orientation}
-      className={cn('group', className)}
+      className={cn('group/tabs', className)}
       {...props}
     />
   );
@@ -52,22 +52,22 @@ function TabsList({
         // Base styles
         'group/list inline-flex items-center text-muted-foreground',
         // Horizontal orientation (default)
-        'group-data-[orientation=horizontal]:flex-row',
+        'group-data-[orientation=horizontal]/tabs:flex-row',
         // Vertical orientation
-        'group-data-[orientation=vertical]:flex-col group-data-[orientation=vertical]:items-stretch',
+        'group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:items-stretch',
         // Pill variant
         variant === 'pill' && [
           'justify-center rounded-md bg-muted p-1',
-          'group-data-[orientation=horizontal]:h-10',
-          'group-data-[orientation=vertical]:h-auto group-data-[orientation=vertical]:w-full',
+          'group-data-[orientation=horizontal]/tabs:h-10',
+          'group-data-[orientation=vertical]/tabs:h-auto group-data-[orientation=vertical]/tabs:w-full',
           fullWidth && 'w-full',
         ],
         // Line variant - horizontal
         variant === 'line' && [
           'h-auto gap-0 bg-transparent p-0',
-          'group-data-[orientation=horizontal]:w-full group-data-[orientation=horizontal]:justify-start group-data-[orientation=horizontal]:border-b group-data-[orientation=horizontal]:border-border',
+          'group-data-[orientation=horizontal]/tabs:w-full group-data-[orientation=horizontal]/tabs:justify-start group-data-[orientation=horizontal]/tabs:border-b group-data-[orientation=horizontal]/tabs:border-border',
           // Line variant - vertical
-          'group-data-[orientation=vertical]:w-full group-data-[orientation=vertical]:border-r group-data-[orientation=vertical]:border-border',
+          'group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:border-r group-data-[orientation=vertical]/tabs:border-border',
         ],
         className,
       )}
@@ -104,22 +104,22 @@ function TabsTrigger({
         'inline-flex cursor-pointer items-center whitespace-nowrap text-sm font-medium transition-all',
         'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         'disabled:pointer-events-none disabled:opacity-50',
+        // Default padding (pill variant) - explicit fallback for Tailwind v4 compatibility
+        'rounded-sm px-3 py-1.5',
+        'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
         // Horizontal alignment
-        'group-data-[orientation=horizontal]:justify-center',
+        'group-data-[orientation=horizontal]/tabs:justify-center',
         // Vertical alignment
-        'group-data-[orientation=vertical]:justify-start group-data-[orientation=vertical]:w-full',
-        // Pill variant styles
-        'group-data-[variant=pill]/list:rounded-sm group-data-[variant=pill]/list:px-3 group-data-[variant=pill]/list:py-1.5',
-        'group-data-[variant=pill]/list:data-[state=active]:bg-background group-data-[variant=pill]/list:data-[state=active]:text-foreground group-data-[variant=pill]/list:data-[state=active]:shadow-sm',
-        // Line variant styles - horizontal
+        'group-data-[orientation=vertical]/tabs:justify-start group-data-[orientation=vertical]/tabs:w-full',
+        // Line variant styles - override default pill styles
         'group-data-[variant=line]/list:relative group-data-[variant=line]/list:rounded-none group-data-[variant=line]/list:bg-transparent group-data-[variant=line]/list:px-4 group-data-[variant=line]/list:py-3',
-        'group-data-[variant=line]/list:hover:text-foreground',
+        'group-data-[variant=line]/list:shadow-none group-data-[variant=line]/list:hover:text-foreground',
         // Line variant - horizontal specific (bottom border indicator)
-        'group-data-[orientation=horizontal]:group-data-[variant=line]/list:flex-1 group-data-[orientation=horizontal]:group-data-[variant=line]/list:border-b-2 group-data-[orientation=horizontal]:group-data-[variant=line]/list:border-transparent',
-        'group-data-[orientation=horizontal]:group-data-[variant=line]/list:data-[state=active]:border-primary group-data-[orientation=horizontal]:group-data-[variant=line]/list:data-[state=active]:text-foreground',
+        'group-data-[orientation=horizontal]/tabs:group-data-[variant=line]/list:flex-1 group-data-[orientation=horizontal]/tabs:group-data-[variant=line]/list:border-b-2 group-data-[orientation=horizontal]/tabs:group-data-[variant=line]/list:border-transparent',
+        'group-data-[orientation=horizontal]/tabs:group-data-[variant=line]/list:data-[state=active]:border-primary group-data-[orientation=horizontal]/tabs:group-data-[variant=line]/list:data-[state=active]:text-foreground',
         // Line variant - vertical specific (right border indicator)
-        'group-data-[orientation=vertical]:group-data-[variant=line]/list:border-r-2 group-data-[orientation=vertical]:group-data-[variant=line]/list:border-transparent',
-        'group-data-[orientation=vertical]:group-data-[variant=line]/list:data-[state=active]:border-primary group-data-[orientation=vertical]:group-data-[variant=line]/list:data-[state=active]:text-foreground',
+        'group-data-[orientation=vertical]/tabs:group-data-[variant=line]/list:border-r-2 group-data-[orientation=vertical]/tabs:group-data-[variant=line]/list:border-transparent',
+        'group-data-[orientation=vertical]/tabs:group-data-[variant=line]/list:data-[state=active]:border-primary group-data-[orientation=vertical]/tabs:group-data-[variant=line]/list:data-[state=active]:text-foreground',
         className,
       )}
       {...props}
@@ -142,9 +142,9 @@ function TabsContent({
       className={cn(
         'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         // Horizontal - content below tabs
-        'group-data-[orientation=horizontal]:mt-2',
+        'group-data-[orientation=horizontal]/tabs:mt-2',
         // Vertical - content beside tabs
-        'group-data-[orientation=vertical]:ml-0 group-data-[orientation=vertical]:flex-1',
+        'group-data-[orientation=vertical]/tabs:ml-0 group-data-[orientation=vertical]/tabs:flex-1',
         // Animation
         'data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:duration-150',
         className,

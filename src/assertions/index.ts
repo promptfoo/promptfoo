@@ -33,6 +33,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -253,6 +254,7 @@ export async function runAssertion({
   provider,
   assertion,
   test,
+  vars,
   latencyMs,
   providerResponse,
   traceId,
@@ -262,12 +264,16 @@ export async function runAssertion({
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
   evaluationId?: string;
 }): Promise<GradingResult> {
+  // Use resolved vars if provided, otherwise fall back to test.vars
+  const resolvedVars = vars || test.vars || {};
+
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
@@ -275,7 +281,7 @@ export async function runAssertion({
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
-      vars: test.vars,
+      vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
@@ -283,7 +289,7 @@ export async function runAssertion({
 
   const context: AssertionValueFunctionContext = {
     prompt,
-    vars: test.vars || {},
+    vars: resolvedVars,
     test,
     logProbs,
     provider,
@@ -382,7 +388,7 @@ export async function runAssertion({
       valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -391,7 +397,7 @@ export async function runAssertion({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, test.vars || {});
+        return nunjucks.renderString(v, resolvedVars);
       }
       return v;
     });
@@ -449,7 +455,7 @@ export async function runAssertion({
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
-        vars: test.vars || {},
+        vars: resolvedVars,
         test,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
         ...(evaluationId && { evaluationId }),
@@ -516,6 +522,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  vars,
   traceId,
   evaluationId,
 }: {
@@ -525,6 +532,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   traceId?: string;
   evaluationId?: string;
 }): Promise<GradingResult> {
@@ -581,6 +589,7 @@ export async function runAssertions({
         providerResponse,
         assertion,
         test,
+        vars,
         latencyMs,
         assertIndex: index,
         traceId,
@@ -590,7 +599,7 @@ export async function runAssertions({
       assertResult.addResult({
         index,
         result,
-        metric: renderMetricName(assertion.metric, test.vars || {}),
+        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
         weight: assertion.weight,
       });
     },
@@ -606,7 +615,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(metric, test.vars || {}),
+      metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
   });

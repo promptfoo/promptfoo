@@ -3,16 +3,17 @@ import React from 'react';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface HttpStatusCodeTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const highlightJS = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.javascript;
+    const grammar = Prism?.languages?.javascript;
     if (!grammar) {
       return code;
     }
@@ -43,7 +44,7 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
       </p>
       <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
         <Editor
-          value={selectedTarget.config.validateStatus || ''}
+          value={(selectedTarget.config?.validateStatus as string) || ''}
           onValueChange={(code) => updateCustomTarget('validateStatus', code)}
           highlight={highlightJS}
           padding={10}

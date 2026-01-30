@@ -132,6 +132,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
 
     return {
       ...targetResponse,
+      prompt: renderedAttackerPrompt,
       metadata: {
         ...targetResponse.metadata,
         redteamFinalPrompt: renderedAttackerPrompt,

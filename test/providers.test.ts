@@ -510,9 +510,9 @@ describe('loadApiProvider', () => {
 
   it('should load GitHub provider with default model', async () => {
     const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
       config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       }),
     });
@@ -520,10 +520,10 @@ describe('loadApiProvider', () => {
   });
 
   it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4.1-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
       config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       }),
     });
