@@ -492,6 +492,111 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('Invalid JSON response');
     });
 
+    it('should handle empty string content by falling back to tool_calls', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: '', // Empty string content
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'testFunction',
+                    arguments: '{"test": true}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // Should fall back to tool_calls when content is empty string
+      expect(result.error).toBeUndefined();
+      expect(result.output).toEqual([
+        {
+          id: 'call_123',
+          type: 'function',
+          function: {
+            name: 'testFunction',
+            arguments: '{"test": true}',
+          },
+        },
+      ]);
+    });
+
+    it('should not attempt JSON.parse on empty string content with json_schema format', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: '', // Empty string content
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const loggerErrorSpy = vi.spyOn(logger, 'error');
+
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            response_format: { type: 'json_schema' },
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Should not attempt JSON.parse on empty string (would cause "Unexpected end of JSON input")
+      expect(loggerErrorSpy).not.toHaveBeenCalled();
+      // Output should be undefined since content is empty and no tool_calls
+      expect(result.output).toBeUndefined();
+    });
+
     it('should use correct API URL based on legacy dataSources config from prompt', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -1167,5 +1272,72 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('15');
     });
+  });
+});
+
+// Additional tests for reasoning model response_format handling - appended
+describe('reasoning model response_format handling', () => {
+  it('should not attempt JSON.parse for reasoning models even with response_format', async () => {
+    const reasoningProvider = new AzureChatCompletionProvider('gpt-5-deployment', {
+      config: {
+        apiHost: 'test.azure.com',
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+      },
+    });
+    (reasoningProvider as any).authHeaders = { 'api-key': 'test-key' };
+    (reasoningProvider as any).initialized = true;
+
+    const mockResponse = {
+      id: 'mock-id',
+      object: 'chat.completion',
+      created: Date.now(),
+      model: 'gpt-5',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: 'This is a plain text response, not JSON',
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        total_tokens: 30,
+        completion_tokens_details: {
+          reasoning_tokens: 100,
+        },
+      },
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const loggerErrorSpy = vi.spyOn(logger, 'error');
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const result = await reasoningProvider.callApi('test prompt', {
+      prompt: {
+        config: {
+          response_format: { type: 'json_object' },
+        },
+        label: 'test prompt',
+        raw: 'test prompt',
+      },
+      vars: {},
+    });
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('response_format is not supported by reasoning models'),
+    );
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
+    expect(result.output).toBe('This is a plain text response, not JSON');
   });
 });

@@ -145,6 +145,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
 
+    // Warn if response_format is used with reasoning models (unsupported parameter)
+    if (isReasoningModel && config.response_format) {
+      logger.warn(
+        `[Azure] response_format is not supported by reasoning models (${this.deploymentName}). ` +
+          'The parameter will be ignored and raw output will be returned without JSON parsing.',
+      );
+    }
+
     // Get max tokens based on model type
     const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxCompletionTokens = config.max_completion_tokens;
@@ -380,7 +388,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
         }
 
-        if (output == null) {
+        // Handle empty/null content - fall back to tool calls if available
+        // Use !output to catch null, undefined, AND empty strings (which would fail JSON.parse)
+        if (!output) {
           // Handle tool_calls and function_call
           const toolCalls = message.tool_calls;
           const functionCall = message.function_call;
@@ -408,8 +418,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             output = toolCalls ?? functionCall;
           }
         } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+          typeof output === 'string' &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object') &&
+          // Skip JSON parsing for reasoning models - they don't support response_format
+          // and the parameter has no effect, so we should return raw output
+          !this.isReasoningModel()
         ) {
           try {
             output = JSON.parse(output);
