@@ -21,8 +21,7 @@ jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 10
-    # Use GCP self-hosted runners for Ubuntu, GitHub-hosted for Windows/macOS
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted", "linux", "x64", "gcp"]') || matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +124,7 @@ jobs:
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
@@ -175,7 +174,7 @@ jobs:
   style-check:
     name: Style Check
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -222,7 +221,7 @@ jobs:
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
@@ -234,7 +233,7 @@ jobs:
   assets:
     name: Generate Assets
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -268,7 +267,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.9, 3.14]
@@ -298,7 +297,7 @@ jobs:
   docs:
     name: Build Docs
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -328,7 +327,7 @@ jobs:
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -362,7 +361,7 @@ jobs:
   site-tests:
     name: Site tests
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -388,7 +387,7 @@ jobs:
   webui:
     name: webui tests
     timeout-minutes: 10
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -420,7 +419,7 @@ jobs:
 
   integration-tests:
     name: Run Integration Tests
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout repo
@@ -455,7 +454,7 @@ jobs:
 
   smoke-tests:
     name: Run Smoke Tests
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
       - name: Checkout repo
@@ -493,7 +492,7 @@ jobs:
   share-test:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -551,7 +550,7 @@ jobs:
 
   redteam:
     name: Redteam (Production API)
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repo
@@ -577,7 +576,7 @@ jobs:
   redteam-staging:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -617,7 +616,7 @@ jobs:
 
   actionlint:
     name: GitHub Actions Lint
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -633,7 +632,7 @@ jobs:
   ruby:
     name: Check Ruby
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         ruby-version: ['3.0', '3.4']
@@ -680,7 +679,7 @@ jobs:
 
   golang:
     name: Go Tests
-    runs-on: [self-hosted, linux, x64, gcp]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout repo
