@@ -162,10 +162,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const rows = Object.values(rowMap);
 
   // Extract showVars from defaultTest config (suite-wide display configuration).
-  const showVars =
+  let showVars =
     typeof eval_.config?.defaultTest === 'object'
       ? eval_.config?.defaultTest?.options?.showVars
       : undefined;
+
+  // Ensure showVars is an array or undefined (defensive check)
+  if (showVars !== undefined && !Array.isArray(showVars)) {
+    showVars = undefined;
+  }
 
   // Filter variables based on showVars configuration
   const visibleVars = filterVisibleVars(varsForHeader, showVars);
