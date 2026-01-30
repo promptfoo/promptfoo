@@ -45,11 +45,13 @@ import {
 } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
+import { ConfigAgentDrawer } from '../ConfigAgent';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
 
+import type { DiscoveredConfig } from '../../hooks/useConfigAgent';
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
 
@@ -142,6 +144,7 @@ Content-Type: application/json
 
   // Import menu state
   const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
+  const [configAgentOpen, setConfigAgentOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
@@ -513,6 +516,48 @@ ${exampleRequest}`;
     }
   };
 
+  const handleConfigAgentDiscovered = useCallback(
+    (discoveredConfig: DiscoveredConfig) => {
+      // Apply the discovered configuration
+      resetState(false);
+
+      // Build the URL from baseUrl + path
+      const baseUrl = selectedTarget.config.url || '';
+      const fullUrl = discoveredConfig.path
+        ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
+        : baseUrl;
+
+      updateCustomTarget('url', fullUrl);
+      updateCustomTarget('method', discoveredConfig.method);
+
+      if (discoveredConfig.headers) {
+        updateCustomTarget('headers', discoveredConfig.headers);
+        setHeaders(
+          Object.entries(discoveredConfig.headers).map(([key, value]) => ({
+            key,
+            value: String(value),
+          })),
+        );
+      }
+
+      if (discoveredConfig.body) {
+        const formattedBody =
+          typeof discoveredConfig.body === 'string'
+            ? discoveredConfig.body
+            : JSON.stringify(discoveredConfig.body, null, 2);
+        setRequestBody(formattedBody);
+        updateCustomTarget('body', discoveredConfig.body);
+      }
+
+      if (discoveredConfig.transformResponse) {
+        updateCustomTarget('transformResponse', discoveredConfig.transformResponse);
+      }
+
+      setConfigAgentOpen(false);
+    },
+    [resetState, updateCustomTarget, selectedTarget.config.url],
+  );
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -537,8 +582,12 @@ ${exampleRequest}`;
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+            <DropdownMenuItem onClick={() => setConfigAgentOpen(true)}>
               <Sparkles className="mr-2 size-4" />
+              Auto-Configure from URL
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+              <AlignLeft className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
@@ -867,6 +916,14 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+      />
+
+      {/* Config Agent Drawer */}
+      <ConfigAgentDrawer
+        open={configAgentOpen}
+        onClose={() => setConfigAgentOpen(false)}
+        initialUrl={selectedTarget.config.url || ''}
+        onConfigDiscovered={handleConfigAgentDiscovered}
       />
     </div>
   );
