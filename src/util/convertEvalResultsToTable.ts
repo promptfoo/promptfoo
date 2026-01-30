@@ -13,12 +13,12 @@ import { getActualPrompt } from '../util/providerResponse';
  */
 function filterVisibleVars(allVars: Set<string>, showVars: string[] | undefined): string[] {
   const sortedVars = [...allVars].sort();
-  
+
   // If showVars is not provided or empty, show all vars (default behavior)
   if (!showVars || showVars.length === 0) {
     return sortedVars;
   }
-  
+
   // Filter to only show vars in the allowlist, preserving sorted order
   return sortedVars.filter((varName) => showVars.includes(varName));
 }
@@ -160,16 +160,16 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  
+
   // Extract showVars from defaultTest config (suite-wide display configuration).
   const showVars =
-  typeof eval_.config?.defaultTest === 'object'
-    ? eval_.config?.defaultTest?.options?.showVars
-    : undefined;
-  
+    typeof eval_.config?.defaultTest === 'object'
+      ? eval_.config?.defaultTest?.options?.showVars
+      : undefined;
+
   // Filter variables based on showVars configuration
   const visibleVars = filterVisibleVars(varsForHeader, showVars);
-  
+
   for (const row of rows) {
     row.vars = visibleVars.map((varName) => {
       const varValue = varValuesForRow.get(row.testIdx)?.[varName] || '';
