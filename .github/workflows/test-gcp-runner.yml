@@ -1,0 +1,52 @@
+name: Test GCP Runner
+on: workflow_dispatch
+
+jobs:
+  test-runner:
+    runs-on: [self-hosted, linux, x64, gcp]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check environment
+        run: |
+          echo "=== System ==="
+          uname -a
+          cat /etc/os-release
+
+          echo ""
+          echo "=== Go ==="
+          go version
+
+          echo ""
+          echo "=== Available tools ==="
+          which actionlint && actionlint --version
+          which shfmt && shfmt --version
+          which jq && jq --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check Node
+        run: |
+          echo "=== Node.js ==="
+          node --version
+          npm --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Python
+        run: |
+          echo "=== Python ==="
+          python --version
+          pip --version
+
+      - name: Install and test
+        run: |
+          npm ci
+          npm run lint:src -- --max-warnings=999
+          echo "Test completed successfully!"
