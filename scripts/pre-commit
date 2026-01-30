@@ -1,23 +1,24 @@
 #!/bin/bash
 # Pre-commit hook for linting changed files
-# Only runs when ENABLE_PRECOMMIT_LINT is set in environment or .env file
+# Runs by default. Set DISABLE_PRECOMMIT_LINT=1 in environment or .env file to skip.
 #
-# To enable:
-#   1. Add ENABLE_PRECOMMIT_LINT=1 to your .env file or export it in your shell
-#   2. Symlink this script to .git/hooks/pre-commit:
-#      ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+# To disable:
+#   1. Add DISABLE_PRECOMMIT_LINT=1 to your .env file or export it in your shell
+#
+# The hook is auto-installed via npm install. To manually install:
+#   ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
 
-# Load .env file if it exists (to check for ENABLE_PRECOMMIT_LINT)
+# Load .env file if it exists (to check for DISABLE_PRECOMMIT_LINT)
 if [ -f .env ]; then
-  # Only export ENABLE_PRECOMMIT_LINT from .env, don't expose other secrets
-  ENABLE_PRECOMMIT_LINT_FROM_ENV=$(grep -E '^ENABLE_PRECOMMIT_LINT=' .env | cut -d '=' -f2-)
-  if [ -n "$ENABLE_PRECOMMIT_LINT_FROM_ENV" ]; then
-    export ENABLE_PRECOMMIT_LINT="$ENABLE_PRECOMMIT_LINT_FROM_ENV"
+  # Only export DISABLE_PRECOMMIT_LINT from .env, don't expose other secrets
+  DISABLE_PRECOMMIT_LINT_FROM_ENV=$(grep -E '^DISABLE_PRECOMMIT_LINT=' .env | cut -d '=' -f2-)
+  if [ -n "$DISABLE_PRECOMMIT_LINT_FROM_ENV" ]; then
+    export DISABLE_PRECOMMIT_LINT="$DISABLE_PRECOMMIT_LINT_FROM_ENV"
   fi
 fi
 
-# Skip if ENABLE_PRECOMMIT_LINT is not set or empty
-if [ -z "$ENABLE_PRECOMMIT_LINT" ]; then
+# Skip if DISABLE_PRECOMMIT_LINT is set and non-empty
+if [ -n "$DISABLE_PRECOMMIT_LINT" ]; then
   exit 0
 fi
 
