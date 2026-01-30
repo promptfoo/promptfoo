@@ -82,6 +82,7 @@ export class ConfigurationAgent {
 
   /**
    * Normalize URL (ensure protocol, remove trailing slash)
+   * Includes SSRF protection to block internal/private addresses
    */
   private normalizeUrl(url: string): string {
     let normalized = url.trim();
@@ -93,6 +94,85 @@ export class ConfigurationAgent {
 
     // Remove trailing slash
     normalized = normalized.replace(/\/+$/, '');
+
+    // Validate URL structure
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(normalized);
+    } catch {
+      throw new Error('Invalid URL format');
+    }
+
+    // SSRF Protection: Block private/internal addresses
+    const hostname = parsedUrl.hostname.toLowerCase();
+
+    // Block localhost and loopback
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.localhost')
+    ) {
+      throw new Error('Access to localhost is not allowed');
+    }
+
+    // Block private IP ranges
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b, c] = ipv4Match.map(Number);
+
+      // 10.0.0.0/8
+      if (a === 10) {
+        throw new Error('Access to private IP addresses is not allowed');
+      }
+
+      // 172.16.0.0/12
+      if (a === 172 && b >= 16 && b <= 31) {
+        throw new Error('Access to private IP addresses is not allowed');
+      }
+
+      // 192.168.0.0/16
+      if (a === 192 && b === 168) {
+        throw new Error('Access to private IP addresses is not allowed');
+      }
+
+      // 169.254.0.0/16 (link-local)
+      if (a === 169 && b === 254) {
+        throw new Error('Access to link-local addresses is not allowed');
+      }
+
+      // 127.0.0.0/8 (loopback range)
+      if (a === 127) {
+        throw new Error('Access to loopback addresses is not allowed');
+      }
+
+      // 0.0.0.0/8
+      if (a === 0) {
+        throw new Error('Access to reserved addresses is not allowed');
+      }
+
+      // Block AWS metadata endpoint
+      if (a === 169 && b === 254 && c === 169 && Number(ipv4Match[4]) === 254) {
+        throw new Error('Access to cloud metadata endpoints is not allowed');
+      }
+    }
+
+    // Block common cloud metadata hostnames
+    const metadataHosts = [
+      'metadata.google.internal',
+      'metadata.goog',
+      'metadata',
+      'instance-data',
+    ];
+    if (metadataHosts.includes(hostname)) {
+      throw new Error('Access to cloud metadata endpoints is not allowed');
+    }
+
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Only HTTP and HTTPS protocols are allowed');
+    }
 
     return normalized;
   }

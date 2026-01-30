@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 
@@ -96,39 +96,92 @@ export function useConfigAgent(): UseConfigAgentReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track polling state to enable cleanup
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollingActiveRef = useRef<boolean>(false);
+  const mountedRef = useRef<boolean>(true);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pollingActiveRef.current = false;
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  /**
+   * Stop any active polling
+   */
+  const stopPolling = useCallback(() => {
+    pollingActiveRef.current = false;
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  }, []);
+
   /**
    * Poll for session updates
    */
-  const pollSession = useCallback(async (sid: string) => {
-    const poll = async () => {
-      try {
-        const response = await callApi(`/redteam/config-agent/session/${sid}`);
-        if (!response.ok) {
+  const pollSession = useCallback(
+    async (sid: string) => {
+      // Stop any existing polling before starting new one
+      stopPolling();
+      pollingActiveRef.current = true;
+
+      const poll = async () => {
+        // Check if polling should continue
+        if (!mountedRef.current || !pollingActiveRef.current) {
           return;
         }
 
-        const data = await response.json();
-        setMessages(data.messages || []);
-        setSession(data.session || null);
+        try {
+          const response = await callApi(`/redteam/config-agent/session/${sid}`);
+          if (!response.ok || !mountedRef.current || !pollingActiveRef.current) {
+            return;
+          }
 
-        // Continue polling if not complete
-        if (data.session && !['complete', 'error'].includes(data.session.phase)) {
-          // Check if we're waiting for user input
-          const lastMessage = data.messages?.[data.messages.length - 1];
-          const waitingForInput =
-            lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
+          const data = await response.json();
 
-          if (!waitingForInput) {
-            setTimeout(poll, 1000);
+          // Only update state if still mounted and polling is active
+          if (!mountedRef.current || !pollingActiveRef.current) {
+            return;
+          }
+
+          setMessages(data.messages || []);
+          setSession(data.session || null);
+
+          // Continue polling if not complete
+          if (data.session && !['complete', 'error'].includes(data.session.phase)) {
+            // Check if we're waiting for user input
+            const lastMessage = data.messages?.[data.messages.length - 1];
+            const waitingForInput =
+              lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
+
+            if (!waitingForInput && pollingActiveRef.current) {
+              pollingTimeoutRef.current = setTimeout(poll, 1000);
+            }
+          } else {
+            // Polling complete, clean up
+            pollingActiveRef.current = false;
+          }
+        } catch {
+          // Ignore polling errors, but stop if unmounted
+          if (!mountedRef.current) {
+            pollingActiveRef.current = false;
           }
         }
-      } catch {
-        // Ignore polling errors
-      }
-    };
+      };
 
-    poll();
-  }, []);
+      poll();
+    },
+    [stopPolling],
+  );
 
   /**
    * Start a new configuration agent session
@@ -248,6 +301,9 @@ export function useConfigAgent(): UseConfigAgentReturn {
    * Cancel the current session
    */
   const cancelSession = useCallback(async () => {
+    // Stop polling first
+    stopPolling();
+
     if (!sessionId) {
       return;
     }
@@ -264,18 +320,21 @@ export function useConfigAgent(): UseConfigAgentReturn {
     setMessages([]);
     setSession(null);
     setError(null);
-  }, [sessionId]);
+  }, [sessionId, stopPolling]);
 
   /**
    * Reset state
    */
   const reset = useCallback(() => {
+    // Stop polling first
+    stopPolling();
+
     setSessionId(null);
     setMessages([]);
     setSession(null);
     setError(null);
     setIsLoading(false);
-  }, []);
+  }, [stopPolling]);
 
   return {
     sessionId,

@@ -31,7 +31,6 @@ interface ConfigAgentChatProps {
   onSendMessage: (message: string) => void;
   onSelectOption: (optionId: string) => void;
   onSubmitApiKey: (apiKey: string, field?: string) => void;
-  onConfirm: (confirmed: boolean) => void;
 }
 
 /**
@@ -43,7 +42,6 @@ export default function ConfigAgentChat({
   onSendMessage,
   onSelectOption,
   onSubmitApiKey,
-  onConfirm: _onConfirm,
 }: ConfigAgentChatProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -279,6 +277,7 @@ function MessageBubble({ message, icon, background, theme }: MessageBubbleProps)
 
         <Typography
           variant="body2"
+          component="div"
           sx={{
             whiteSpace: 'pre-wrap',
             '& strong': { fontWeight: 600 },
@@ -290,10 +289,9 @@ function MessageBubble({ message, icon, background, theme }: MessageBubbleProps)
               fontSize: '0.85em',
             },
           }}
-          dangerouslySetInnerHTML={{
-            __html: formatMarkdown(message.content),
-          }}
-        />
+        >
+          {renderFormattedText(message.content, theme)}
+        </Typography>
 
         {/* Show discovered config preview */}
         {message.metadata?.discoveredConfig && (
@@ -343,15 +341,80 @@ function ConfigPreview({ config, theme }: ConfigPreviewProps) {
 }
 
 /**
- * Simple markdown formatting (bold, code, newlines)
+ * Safely render formatted text without dangerouslySetInnerHTML
+ * Supports: **bold**, `code`, and newlines
  */
-function formatMarkdown(text: string): string {
+function renderFormattedText(text: string, theme: Theme): React.ReactNode {
   if (!text) {
-    return '';
+    return null;
   }
 
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br />');
+  // Split by newlines first
+  const lines = text.split('\n');
+
+  return lines.map((line, lineIndex) => {
+    // Parse each line for bold and code formatting
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let keyIndex = 0;
+
+    while (remaining.length > 0) {
+      // Check for bold (**text**)
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      // Check for code (`text`)
+      const codeMatch = remaining.match(/`(.+?)`/);
+
+      // Find which comes first
+      const boldIndex = boldMatch ? remaining.indexOf(boldMatch[0]) : -1;
+      const codeIndex = codeMatch ? remaining.indexOf(codeMatch[0]) : -1;
+
+      // No more matches, add remaining text
+      if (boldIndex === -1 && codeIndex === -1) {
+        if (remaining) {
+          parts.push(remaining);
+        }
+        break;
+      }
+
+      // Determine which match comes first
+      const usesBold = boldIndex !== -1 && (codeIndex === -1 || boldIndex < codeIndex);
+      const matchIndex = usesBold ? boldIndex : codeIndex;
+      const match = usesBold ? boldMatch! : codeMatch!;
+
+      // Add text before the match
+      if (matchIndex > 0) {
+        parts.push(remaining.slice(0, matchIndex));
+      }
+
+      // Add the formatted element
+      if (usesBold) {
+        parts.push(<strong key={`b-${lineIndex}-${keyIndex++}`}>{match[1]}</strong>);
+      } else {
+        parts.push(
+          <code
+            key={`c-${lineIndex}-${keyIndex++}`}
+            style={{
+              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+              padding: '0 4px',
+              borderRadius: 4,
+              fontFamily: 'monospace',
+              fontSize: '0.85em',
+            }}
+          >
+            {match[1]}
+          </code>,
+        );
+      }
+
+      // Continue with remaining text
+      remaining = remaining.slice(matchIndex + match[0].length);
+    }
+
+    // Add line break between lines (except after last line)
+    if (lineIndex < lines.length - 1) {
+      parts.push(<br key={`br-${lineIndex}`} />);
+    }
+
+    return <React.Fragment key={`line-${lineIndex}`}>{parts}</React.Fragment>;
+  });
 }

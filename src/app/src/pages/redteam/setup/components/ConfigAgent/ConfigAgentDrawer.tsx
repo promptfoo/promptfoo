@@ -38,7 +38,6 @@ export default function ConfigAgentDrawer({
     sendMessage,
     selectOption,
     submitApiKey,
-    confirm,
     cancelSession,
     reset,
   } = useConfigAgent();
@@ -131,7 +130,6 @@ export default function ConfigAgentDrawer({
                 onSendMessage={sendMessage}
                 onSelectOption={selectOption}
                 onSubmitApiKey={submitApiKey}
-                onConfirm={confirm}
               />
             </Box>
 

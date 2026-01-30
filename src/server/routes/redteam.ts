@@ -384,6 +384,66 @@ import type { UserInput } from '../../redteam/configAgent/types';
 // Store active configuration agent sessions
 const configAgentSessions = new Map<string, ConfigurationAgent>();
 
+// Maximum number of concurrent sessions allowed
+const MAX_CONFIG_AGENT_SESSIONS = 100;
+
+/**
+ * Sanitize session data to remove sensitive information before sending to client
+ */
+function sanitizeSessionForClient(
+  session: ReturnType<ConfigurationAgent['getSession']>,
+): Record<string, unknown> {
+  // Create a sanitized copy without sensitive user inputs
+  const sanitizedSession = { ...session };
+
+  // Remove sensitive fields from userInputs
+  if (sanitizedSession.userInputs) {
+    const sanitizedInputs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(sanitizedSession.userInputs)) {
+      // Mask API keys and other sensitive fields
+      if (
+        key === 'apiKey' ||
+        key.toLowerCase().includes('key') ||
+        key.toLowerCase().includes('secret') ||
+        key.toLowerCase().includes('password') ||
+        key.toLowerCase().includes('token')
+      ) {
+        // Show masked version (last 4 chars only)
+        const strValue = String(value);
+        sanitizedInputs[key] = strValue.length > 4 ? `••••${strValue.slice(-4)}` : '••••';
+      } else {
+        sanitizedInputs[key] = value;
+      }
+    }
+    sanitizedSession.userInputs = sanitizedInputs;
+  }
+
+  // Also sanitize finalConfig headers that might contain auth
+  if (sanitizedSession.finalConfig?.headers) {
+    const sanitizedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(sanitizedSession.finalConfig.headers)) {
+      if (
+        key.toLowerCase() === 'authorization' ||
+        key.toLowerCase().includes('api-key') ||
+        key.toLowerCase().includes('apikey') ||
+        key.toLowerCase() === 'x-api-key'
+      ) {
+        // Mask sensitive header values
+        sanitizedHeaders[key] =
+          value.length > 10 ? `${value.slice(0, 6)}••••${value.slice(-4)}` : '••••';
+      } else {
+        sanitizedHeaders[key] = value;
+      }
+    }
+    sanitizedSession.finalConfig = {
+      ...sanitizedSession.finalConfig,
+      headers: sanitizedHeaders,
+    };
+  }
+
+  return sanitizedSession;
+}
+
 const StartConfigAgentSchema = z.object({
   baseUrl: z.string().min(1, 'URL is required'),
   hints: z
@@ -408,8 +468,26 @@ redteamRouter.post('/config-agent/start', async (req: Request, res: Response): P
 
     const { baseUrl } = parsedBody.data;
 
-    // Create new agent
-    const agent = new ConfigurationAgent(baseUrl);
+    // Check session limit to prevent DoS
+    if (configAgentSessions.size >= MAX_CONFIG_AGENT_SESSIONS) {
+      res.status(503).json({
+        error: 'Too many active sessions. Please try again later.',
+      });
+      return;
+    }
+
+    // Create new agent (may throw on invalid/blocked URLs)
+    let agent: ConfigurationAgent;
+    try {
+      agent = new ConfigurationAgent(baseUrl);
+    } catch (urlError) {
+      // URL validation failed (SSRF protection)
+      res.status(400).json({
+        error: urlError instanceof Error ? urlError.message : 'Invalid URL',
+      });
+      return;
+    }
+
     const session = agent.getSession();
 
     // Store the agent
@@ -458,9 +536,12 @@ redteamRouter.post('/config-agent/input', async (req: Request, res: Response): P
 
     await agent.handleUserInput(input);
 
+    // Sanitize session data to remove sensitive information
+    const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
     res.json({
       messages: agent.getMessages(),
-      session: agent.getSession(),
+      session: sanitizedSession,
     });
   } catch (error) {
     logger.error('[ConfigAgent] Input error', { error });
@@ -483,9 +564,12 @@ redteamRouter.get(
         return;
       }
 
+      // Sanitize session data to remove sensitive information
+      const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
       res.json({
         messages: agent.getMessages(),
-        session: agent.getSession(),
+        session: sanitizedSession,
         config: agent.getFinalConfig(),
         isComplete: agent.isComplete(),
       });
