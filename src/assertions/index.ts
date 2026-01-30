@@ -450,6 +450,7 @@ export async function runAssertion({
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: test.vars || {},
+        test,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
         ...(evaluationId && { evaluationId }),
       }

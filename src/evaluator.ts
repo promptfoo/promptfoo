@@ -401,10 +401,11 @@ export async function runEval({
       if (evalId) {
         callApiContext.evaluationId = evalId;
       }
+      // Always set testCaseId
+      callApiContext.testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
       // Add trace context properties if tracing is enabled
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
-        // traceContext.evaluationId takes precedence if tracing is active
         callApiContext.evaluationId = traceContext.evaluationId;
         callApiContext.testCaseId = traceContext.testCaseId;
       }

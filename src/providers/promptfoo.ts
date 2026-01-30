@@ -209,6 +209,11 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       ...((context?.evaluationId || cliState.evaluationId) && {
         evaluationId: context?.evaluationId || cliState.evaluationId,
       }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
+      ...(context?.evaluationId && context?.testCaseId && {
+        testRunId: `${context.evaluationId}-${context.testCaseId}`,
+      }),
     };
 
     try {
@@ -327,6 +332,8 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       ...((context?.evaluationId || cliState.evaluationId) && {
         evaluationId: context?.evaluationId || cliState.evaluationId,
       }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
     };
 
     try {

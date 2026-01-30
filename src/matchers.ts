@@ -628,6 +628,8 @@ export async function matchesLlmRubric(
           rubric,
           output: llmOutput,
           vars: vars || {},
+          pluginId: providerCallContext?.test?.metadata?.pluginId,
+          strategyId: providerCallContext?.test?.metadata?.strategyId,
         },
         { evaluationId: providerCallContext?.evaluationId },
       )),
