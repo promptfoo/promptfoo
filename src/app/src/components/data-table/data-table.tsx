@@ -140,7 +140,23 @@ export function DataTable<TData, TValue = unknown>({
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [isPending, startTransition] = React.useTransition();
+  const [isPrinting, setIsPrinting] = React.useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Detect print mode to show all rows when printing
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia('print');
+    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      setIsPrinting(e.matches);
+    };
+
+    // Set initial state
+    handleChange(mediaQuery);
+
+    // Listen for changes
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
@@ -420,7 +436,8 @@ export function DataTable<TData, TValue = unknown>({
             </thead>
             <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
               {hasData ? (
-                table.getRowModel().rows.map((row) => (
+                // When printing, show all rows instead of just the current page
+                (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows).map((row) => (
                   <tr
                     key={row.id}
                     onClick={() => onRowClick?.(row.original)}
