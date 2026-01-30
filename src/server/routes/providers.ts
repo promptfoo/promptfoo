@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { defaultProviders } from '../../constants/defaultProviders';
-import { getEnvString } from '../../envars';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
@@ -184,7 +184,17 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     return;
   }
 
-  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+  const apiKey = cloudConfig.getApiKey();
+  if (!apiKey) {
+    res.status(401).json({
+      error: 'Authentication required',
+      details:
+        'This feature requires being logged in to Promptfoo Cloud. Run `promptfoo auth login` to authenticate.',
+    });
+    return;
+  }
+
+  const HOST = cloudConfig.getApiHost();
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
@@ -196,6 +206,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         requestExample,
