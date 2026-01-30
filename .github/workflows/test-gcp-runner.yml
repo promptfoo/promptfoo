@@ -1,5 +1,10 @@
 name: Test GCP Runner
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/test-gcp-runner.yml'
+      - 'infra/gcp-runners/**'
 
 jobs:
   test-runner:
