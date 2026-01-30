@@ -810,7 +810,7 @@ export const TestCaseSchema = z.object({
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
       // List of variable names to display in results table (allowlist). If not provided, all variables are shown.
-      // Typically set in defaultTest.options for suite-wide display configuration.
+      // Set in defaultTest.options for suite-wide configuration.
       showVars: z.array(z.string()).optional(),
     })
     .catchall(z.any())
