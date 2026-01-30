@@ -21,7 +21,8 @@ jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 10
-    runs-on: ${{ matrix.os }}
+    # Use GCP self-hosted runners for Linux, GitHub-hosted for macOS/Windows
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted", "linux", "x64", "gcp"]') || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
