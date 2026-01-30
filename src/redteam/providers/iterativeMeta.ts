@@ -470,34 +470,24 @@ export async function runMetaAgentRedteam({
             }
           | undefined;
 
-        // First try to get exfil data from provider response metadata (Playwright provider)
-        if (targetResponse.metadata?.wasExfiltrated !== undefined) {
-          logger.debug('[IterativeMeta] Using exfil data from provider response metadata');
-          gradingContext = {
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
-            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
-            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
-            // Note: Full exfilRecords with all fields come from server API, not provider metadata
-            exfilRecords: [],
-          };
-        } else {
-          // Try to fetch exfil tracking from server API via webPageUuid
-          // Check multiple sources: transform result metadata, test metadata, iteration test metadata
-          const webPageUuid =
-            (lastTransformResult?.metadata?.webPageUuid as string) ||
-            (test.metadata?.webPageUuid as string) ||
-            (iterationTest.metadata?.webPageUuid as string);
-          if (webPageUuid) {
-            const evalId =
-              context?.evaluationId ??
-              (test.metadata?.evaluationId as string | undefined) ??
-              (iterationTest.metadata?.evaluationId as string | undefined);
-            logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
-              webPageUuid,
-              evalId,
-            });
+        // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
+        // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
+        // (set by indirect-web-pwn strategy during applyRuntimeTransforms)
+        const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+        if (webPageUuid) {
+          // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
+          const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+          const evalId =
+            context?.evaluationId ??
+            (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+          logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
+            webPageUuid,
+            evalId,
+            source: 'lastTransformResult.metadata',
+          });
+
+          try {
             const exfilData = await checkExfilTracking(webPageUuid, evalId);
             if (exfilData) {
               gradingContext = {
@@ -509,7 +499,28 @@ export async function runMetaAgentRedteam({
                 exfilRecords: exfilData.exfilRecords,
               };
             }
+          } catch (error) {
+            logger.warn('[IterativeMeta] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
           }
+        }
+
+        // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
+        if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+          logger.debug(
+            '[IterativeMeta] Using exfil data from provider response metadata (fallback)',
+          );
+          gradingContext = {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
+            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
+            // Note: Full exfilRecords with all fields come from server API, not provider metadata
+            exfilRecords: [],
+          };
         }
 
         // Fallback to just tracing context if no exfil data found

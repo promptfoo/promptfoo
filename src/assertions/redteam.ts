@@ -1,9 +1,9 @@
 import logger from '../logger';
 import { getGraderById } from '../redteam/graders';
-import type { RedteamGradingContext } from '../redteam/plugins/base';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 
+import type { RedteamGradingContext } from '../redteam/plugins/base';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
