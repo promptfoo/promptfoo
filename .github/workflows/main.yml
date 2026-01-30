@@ -174,7 +174,7 @@ jobs:
   style-check:
     name: Style Check
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -221,7 +221,7 @@ jobs:
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - uses: actions/checkout@v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
@@ -233,7 +233,7 @@ jobs:
   assets:
     name: Generate Assets
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -267,7 +267,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     strategy:
       matrix:
         python-version: [3.9, 3.14]
@@ -297,7 +297,7 @@ jobs:
   docs:
     name: Build Docs
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -327,7 +327,7 @@ jobs:
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -361,7 +361,7 @@ jobs:
   site-tests:
     name: Site tests
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -616,7 +616,7 @@ jobs:
 
   actionlint:
     name: GitHub Actions Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -632,7 +632,7 @@ jobs:
   ruby:
     name: Check Ruby
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     strategy:
       matrix:
         ruby-version: ['3.0', '3.4']
@@ -679,7 +679,7 @@ jobs:
 
   golang:
     name: Go Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     timeout-minutes: 5
     steps:
       - name: Checkout repo
