@@ -273,7 +273,9 @@ export const shutdownGracefully = async (): Promise<void> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<undefined>((resolve) => {
       timeoutId = setTimeout(() => {
-        logger.warn(`${name} timed out during shutdown`);
+        // Use console.warn since logger might be closed or the thing that's hanging
+        // eslint-disable-next-line no-console
+        console.warn(`${name} timed out during shutdown`);
         resolve(undefined);
       }, CLEANUP_OP_TIMEOUT_MS);
       timeoutId.unref();
@@ -338,6 +340,8 @@ if (isMain) {
     await main();
   } catch (error) {
     mainError = error;
+    // Set exit code immediately so watchdog timeouts preserve the error state
+    process.exitCode = 1;
   } finally {
     try {
       await shutdownGracefully();

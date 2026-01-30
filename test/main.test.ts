@@ -17,6 +17,8 @@ const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefin
 const mockGetGlobalDispatcher = vi.hoisted(() =>
   vi.fn().mockReturnValue({ destroy: mockDispatcherDestroy }),
 );
+// Import actual undici to preserve other exports (Agent, ProxyAgent, setGlobalDispatcher, etc.)
+const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('undici'));
 
 // Mock the dependencies
 vi.mock('../src/util', () => ({
@@ -39,7 +41,8 @@ vi.mock('../src/database/index', () => ({
   closeDbIfOpen: mockCloseDbIfOpen,
 }));
 
-vi.mock('undici', () => ({
+vi.mock('undici', async () => ({
+  ...(await actualUndici),
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
