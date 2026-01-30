@@ -561,14 +561,14 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
 | `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
 | `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                              |
-| `context.logger`                  | `Logger`                   | Logger instance for debugging (JavaScript only).                                           |
+| `context.logger`                  | `Logger`                   | Logger instance for debugging.                                                             |
 
 #### beforeEach
 
-| Property         | Type                     | Description                                      |
-| ---------------- | ------------------------ | ------------------------------------------------ |
-| `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated.                   |
-| `context.logger` | `Logger`                 | Logger instance for debugging (JavaScript only). |
+| Property         | Type                     | Description                    |
+| ---------------- | ------------------------ | ------------------------------ |
+| `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated. |
+| `context.logger` | `Logger`                 | Logger instance for debugging. |
 
 ## Provider-related types
 
