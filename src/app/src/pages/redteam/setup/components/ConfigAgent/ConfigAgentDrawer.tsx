@@ -1,8 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-import { Box, Button, Drawer, IconButton, TextField, Typography, useTheme } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Drawer,
+  IconButton,
+  TextField,
+  Tooltip,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import { type DiscoveredConfig, useConfigAgent } from '../../hooks/useConfigAgent';
 import ConfigAgentChat from './ConfigAgentChat';
 
@@ -71,6 +83,12 @@ export default function ConfigAgentDrawer({
     onClose();
   }, [cancelSession, reset, onClose]);
 
+  const handleStartOver = useCallback(() => {
+    cancelSession();
+    reset();
+    setStarted(false);
+  }, [cancelSession, reset]);
+
   const handleApplyConfig = useCallback(() => {
     if (finalConfig && onConfigDiscovered) {
       onConfigDiscovered(finalConfig);
@@ -109,13 +127,36 @@ export default function ConfigAgentDrawer({
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SmartToyIcon color="primary" />
-          <Typography variant="h6">Config Assistant</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <SmartToyIcon color="primary" sx={{ flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" noWrap>
+              Config Assistant
+            </Typography>
+            {started && urlInput && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                noWrap
+                sx={{ display: 'block', maxWidth: 280 }}
+              >
+                {urlInput}
+              </Typography>
+            )}
+          </Box>
         </Box>
-        <IconButton onClick={handleClose} size="small">
-          <CloseIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {started && (
+            <Tooltip title="Start over">
+              <IconButton onClick={handleStartOver} size="small">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton onClick={handleClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {/* Content */}
@@ -165,22 +206,26 @@ export default function ConfigAgentDrawer({
               onKeyPress={handleKeyPress}
               sx={{ mb: 2 }}
               helperText="Enter the URL of your API endpoint"
+              error={!!error}
+              disabled={isLoading}
             />
 
             <Button
               variant="contained"
               fullWidth
               onClick={handleStart}
-              disabled={!urlInput.trim()}
-              startIcon={<SmartToyIcon />}
+              disabled={!urlInput.trim() || isLoading}
+              startIcon={
+                isLoading ? <CircularProgress size={20} color="inherit" /> : <SmartToyIcon />
+              }
             >
-              Auto-Configure
+              {isLoading ? 'Starting...' : 'Auto-Configure'}
             </Button>
 
             {error && (
-              <Typography color="error" variant="body2" sx={{ mt: 2 }}>
+              <Alert severity="error" sx={{ mt: 2 }}>
                 {error}
-              </Typography>
+              </Alert>
             )}
           </Box>
         )}
