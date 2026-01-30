@@ -295,10 +295,43 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  const getDefaultColumnState = React.useCallback(() => {
+    const showVars =
+      typeof config?.defaultTest === 'object' ? config.defaultTest.options?.showVars : undefined;
+
+    // No filtering if showVars is not defined, not an array, or is an empty array
+    if (!showVars || !Array.isArray(showVars) || showVars.length === 0) {
+      return {
+        selectedColumns: allColumns,
+        columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
+      };
+    }
+
+    const columnVisibility: Record<string, boolean> = {};
+    const selectedColumns: string[] = [];
+
+    allColumns.forEach((col) => {
+      if (col.startsWith('Variable ')) {
+        const varIndex = parseInt(col.split(' ')[1]) - 1;
+        if (varIndex >= 0 && varIndex < head.vars.length) {
+          const varName = head.vars[varIndex];
+          const isVisible = showVars.includes(varName);
+          columnVisibility[col] = isVisible;
+          if (isVisible) {
+            selectedColumns.push(col);
+          }
+        } else {
+          columnVisibility[col] = false;
+        }
+      } else {
+        columnVisibility[col] = true;
+        selectedColumns.push(col);
+      }
+    });
+    return { selectedColumns, columnVisibility };
+  }, [allColumns, config, head.vars]);
+
+  const currentColumnState = columnStates[currentEvalId] || getDefaultColumnState();
 
   const visiblePromptCount = React.useMemo(
     () =>
