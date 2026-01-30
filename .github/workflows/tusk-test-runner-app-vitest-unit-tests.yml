@@ -23,7 +23,7 @@ on:
 jobs:
   test-action:
     name: Tusk Test Runner
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     timeout-minutes: 8
 
     strategy:
