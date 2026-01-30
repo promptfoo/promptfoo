@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,14 @@ vi.mock('@app/utils/api', () => ({
     }),
   ),
 }));
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <EvalHistoryProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </EvalHistoryProvider>,
+  );
+};
 
 vi.mock('../../components/ErrorBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -54,11 +63,7 @@ describe('HistoryPage', () => {
   });
 
   it("should set the page title to 'History' and description to 'Evaluation history' when rendered", async () => {
-    render(
-      <MemoryRouter>
-        <HistoryPage />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<HistoryPage />);
 
     await waitFor(() => {
       expect(document.title).toBe('History | promptfoo');
@@ -70,11 +75,7 @@ describe('HistoryPage', () => {
   });
 
   it('should render its children within the ErrorBoundary without triggering an error state', async () => {
-    render(
-      <MemoryRouter>
-        <HistoryPage />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<HistoryPage />);
 
     await waitFor(() => {
       expect(screen.getByTestId('history-component-mock')).toBeInTheDocument();

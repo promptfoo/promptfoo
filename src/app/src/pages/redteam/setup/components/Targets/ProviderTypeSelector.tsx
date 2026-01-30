@@ -549,7 +549,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
           config: {},
           label: currentLabel,
         },
