@@ -551,24 +551,24 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 #### beforeAll
 
-| Property                          | Type                       | Description                                                                                |
-| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                               |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                               |
-| `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                            |
-| `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                            |
-| `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                                     |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
-| `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                              |
-| `context.logger`                  | `Logger`                   | Logger instance for debugging.                                                             |
+| Property                          | Type                       | Description                                                                                                  |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                                                 |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                                                 |
+| `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                                              |
+| `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                                              |
+| `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                                                       |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                                            |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics).                   |
+| `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                                                |
+| `context.logger`                  | `Logger`                   | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
 
 #### beforeEach
 
-| Property         | Type                     | Description                    |
-| ---------------- | ------------------------ | ------------------------------ |
-| `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated. |
-| `context.logger` | `Logger`                 | Logger instance for debugging. |
+| Property         | Type                     | Description                                                                                                  |
+| ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated.                                                                               |
+| `context.logger` | `Logger`                 | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
 
 ## Provider-related types
 
