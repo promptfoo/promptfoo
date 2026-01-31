@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Alert } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -9,43 +9,6 @@ import { Check, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copied, setCopied] = useState(false);
-  const bannerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const element = bannerRef.current;
-
-    if (!element) {
-      return () => {
-        document.documentElement.style.removeProperty('--update-banner-height');
-      };
-    }
-
-    const updateHeight = () => {
-      const height = element.offsetHeight;
-      document.documentElement.style.setProperty('--update-banner-height', `${height}px`);
-    };
-
-    updateHeight();
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        updateHeight();
-      });
-      observer.observe(element);
-
-      return () => {
-        observer.disconnect();
-        document.documentElement.style.removeProperty('--update-banner-height');
-      };
-    }
-
-    window.addEventListener('resize', updateHeight);
-
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      document.documentElement.style.removeProperty('--update-banner-height');
-    };
-  }, []);
 
   useEffect(() => {
     if (copied) {
@@ -95,73 +58,82 @@ export default function UpdateBanner() {
   }
 
   return (
-    <Alert
-      ref={bannerRef}
-      variant="info"
+    <div
       className={cn(
-        'rounded-none py-2 px-4 relative z-(--z-banner)',
-        'flex items-center justify-between gap-4',
-        // Use solid background to prevent content showing through the banner
-        'dark:bg-blue-950',
+        'fixed top-16 right-4 z-(--z-banner)',
+        'animate-in slide-in-from-top-2 fade-in duration-300',
       )}
     >
-      <div className="flex items-center gap-3">
-        <RefreshCw className="size-4 shrink-0" />
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium">
-            Update available: v{versionInfo.latestVersion}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            (current: v{versionInfo.currentVersion})
-          </span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
-          <a
-            href="https://github.com/promptfoo/promptfoo/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Release Notes
-            <ExternalLink className="size-3" />
-          </a>
-        </Button>
-        {versionInfo?.updateCommands?.primary && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyCommand}
-            title={versionInfo.updateCommands.primary}
-            className="gap-1.5 text-xs"
-          >
-            {copied ? (
-              <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Copy className="size-3" />
-            )}
-            {versionInfo.commandType === 'docker'
-              ? 'Copy Docker Command'
-              : versionInfo.commandType === 'npx'
-                ? 'Copy npx Command'
-                : 'Copy Update Command'}
-          </Button>
+      <Alert
+        variant="info"
+        className={cn(
+          'py-3 px-4 shadow-lg',
+          'flex flex-col gap-3',
+          'max-w-sm',
+          'bg-white dark:bg-blue-950',
+          'border border-blue-200 dark:border-blue-800',
         )}
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss update notification"
-          title="Don't remind me for this version"
-          className={cn(
-            'inline-flex size-6 items-center justify-center rounded-md',
-            'text-current opacity-70 hover:opacity-100',
-            'hover:bg-black/10 dark:hover:bg-white/10',
-            'transition-colors',
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="size-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                Update available: v{versionInfo.latestVersion}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                current: v{versionInfo.currentVersion}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss update notification"
+            title="Don't remind me for this version"
+            className={cn(
+              'inline-flex size-6 items-center justify-center rounded-md shrink-0',
+              'text-current opacity-70 hover:opacity-100',
+              'hover:bg-black/10 dark:hover:bg-white/10',
+              'transition-colors',
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
+            <a
+              href="https://github.com/promptfoo/promptfoo/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Release Notes
+              <ExternalLink className="size-3" />
+            </a>
+          </Button>
+          {versionInfo?.updateCommands?.primary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyCommand}
+              title={versionInfo.updateCommands.primary}
+              className="gap-1.5 text-xs"
+            >
+              {copied ? (
+                <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Copy className="size-3" />
+              )}
+              {versionInfo.commandType === 'docker'
+                ? 'Copy Docker Command'
+                : versionInfo.commandType === 'npx'
+                  ? 'Copy npx Command'
+                  : 'Copy Update Command'}
+            </Button>
           )}
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-    </Alert>
+        </div>
+      </Alert>
+    </div>
   );
 }
