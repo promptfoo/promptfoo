@@ -348,6 +348,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests if an AI agent can be manipulated to exfiltrate sensitive data via indirect prompt injection in web content',
+    label: 'technical',
+    link: '/docs/red-team/plugins/data-exfil/',
+    name: 'Data Exfiltration',
+    pluginId: 'data-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
     link: '/docs/red-team/plugins/debug-access/',
