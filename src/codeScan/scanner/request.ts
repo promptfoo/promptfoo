@@ -6,8 +6,6 @@
 
 import type ora from 'ora';
 
-import type { AgentClient } from './socket';
-
 import type {
   FileRecord,
   GitMetadata,
@@ -16,6 +14,7 @@ import type {
   ScanResponse,
 } from '../../types/codeScan';
 import type { Config } from '../config/schema';
+import type { AgentClient } from './socket';
 
 /**
  * Options for scan execution

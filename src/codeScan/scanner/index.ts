@@ -23,9 +23,9 @@ import { setupMcpBridge } from '../mcp/index';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
-import { createAgentClient, type AgentClient } from './socket';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequest } from './request';
+import { type AgentClient, createAgentClient } from './socket';
 
 import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';

@@ -11,11 +11,10 @@
 import crypto from 'crypto';
 
 import { io, type Socket } from 'socket.io-client';
-
 import logger from '../../logger';
+import { resolveBaseAuthCredentials } from './agentAuth';
 
 import type { SocketAuthCredentials } from '../../types/codeScan';
-import { resolveBaseAuthCredentials } from './agentAuth';
 
 // Import cloud config for default host resolution
 let cloudConfig: { getApiHost(): string } | undefined;
@@ -81,9 +80,7 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
 
   const host = opts.host ?? cloudConfig?.getApiHost();
   if (!host) {
-    throw new Error(
-      'No API host available. Set PROMPTFOO_CLOUD_API_URL or pass host explicitly.',
-    );
+    throw new Error('No API host available. Set PROMPTFOO_CLOUD_API_URL or pass host explicitly.');
   }
 
   const auth = opts.auth ?? resolveBaseAuthCredentials();

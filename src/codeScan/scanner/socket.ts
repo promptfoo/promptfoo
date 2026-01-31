@@ -5,4 +5,8 @@
  * New code should import from '../../util/agent/agentClient' directly.
  */
 
-export { createAgentClient, type AgentClient, type CreateAgentClientOptions } from '../../util/agent/agentClient';
+export {
+  type AgentClient,
+  type CreateAgentClientOptions,
+  createAgentClient,
+} from '../../util/agent/agentClient';
