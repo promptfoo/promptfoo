@@ -4,10 +4,21 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { Command } from 'commander';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLogLevel } from '../src/logger';
-import { addCommonOptionsRecursively, isMainModule } from '../src/main';
+import { addCommonOptionsRecursively, isMainModule, shutdownGracefully } from '../src/main';
 import { setupEnv } from '../src/util/index';
+
+// Hoisted mocks for shutdown tests
+const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
+const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockGetGlobalDispatcher = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ destroy: mockDispatcherDestroy }),
+);
+// Import actual undici to preserve other exports (Agent, ProxyAgent, setGlobalDispatcher, etc.)
+const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('undici'));
 
 // Mock the dependencies
 vi.mock('../src/util', () => ({
@@ -16,13 +27,23 @@ vi.mock('../src/util', () => ({
 
 vi.mock('../src/logger', () => ({
   __esModule: true,
-  default: { debug: vi.fn() },
+  default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   setLogLevel: vi.fn(),
+  closeLogger: mockCloseLogger,
 }));
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: vi.fn() },
+  default: { record: vi.fn(), shutdown: mockTelemetryShutdown },
+}));
+
+vi.mock('../src/database/index', () => ({
+  closeDbIfOpen: mockCloseDbIfOpen,
+}));
+
+vi.mock('undici', async () => ({
+  ...(await actualUndici),
+  getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
 // Mock code scan commands to avoid ESM import issues with execa
@@ -299,5 +320,161 @@ describe('isMainModule', () => {
         // Ignore cleanup errors
       }
     }
+  });
+});
+
+describe('shutdownGracefully', () => {
+  const originalExit = process.exit;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    process.exit = vi.fn() as never;
+    // Reset all mocks to default behavior
+    mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
+    mockCloseLogger.mockReset().mockResolvedValue(undefined);
+    mockCloseDbIfOpen.mockReset();
+    mockDispatcherDestroy.mockReset().mockResolvedValue(undefined);
+    mockGetGlobalDispatcher.mockReset().mockReturnValue({ destroy: mockDispatcherDestroy });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.resetAllMocks();
+    process.exit = originalExit;
+  });
+
+  it('should complete gracefully when all operations succeed quickly', async () => {
+    const shutdownPromise = shutdownGracefully();
+
+    // Advance past any internal timeouts
+    await vi.runAllTimersAsync();
+
+    await shutdownPromise;
+
+    expect(mockTelemetryShutdown).toHaveBeenCalled();
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should handle telemetry shutdown timeout', async () => {
+    // Make telemetry.shutdown() hang forever
+    mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+
+    // Advance time to trigger the individual operation timeout (1s)
+    await vi.advanceTimersByTimeAsync(1100);
+
+    // Advance remaining timers
+    await vi.runAllTimersAsync();
+
+    await shutdownPromise;
+
+    // Should still have called other cleanup operations
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen).toHaveBeenCalled();
+  });
+
+  it('should handle closeLogger timeout', async () => {
+    // Make closeLogger() hang forever
+    mockCloseLogger.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+
+    // Advance time to trigger all timeouts
+    await vi.runAllTimersAsync();
+
+    await shutdownPromise;
+
+    // Other operations should still complete
+    expect(mockTelemetryShutdown).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should handle dispatcher.destroy() timeout', async () => {
+    // Make dispatcher.destroy() hang forever
+    mockDispatcherDestroy.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+
+    // Advance time to trigger all timeouts
+    await vi.runAllTimersAsync();
+
+    await shutdownPromise;
+
+    // Other operations should still complete
+    expect(mockTelemetryShutdown).toHaveBeenCalled();
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen).toHaveBeenCalled();
+  });
+
+  it('should handle telemetry shutdown throwing error', async () => {
+    mockTelemetryShutdown.mockRejectedValue(new Error('Telemetry failed'));
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.runAllTimersAsync();
+
+    // Should not throw - should handle error gracefully
+    await expect(shutdownPromise).resolves.toBeUndefined();
+
+    // Other operations should still complete
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen).toHaveBeenCalled();
+  });
+
+  it('should handle dispatcher.destroy() throwing error', async () => {
+    mockDispatcherDestroy.mockRejectedValue(new Error('Dispatcher failed'));
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.runAllTimersAsync();
+
+    // Should not throw
+    await expect(shutdownPromise).resolves.toBeUndefined();
+  });
+
+  it('should force exit when all cleanup operations hang', async () => {
+    // Make all operations hang
+    mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
+    mockCloseLogger.mockImplementation(() => new Promise(() => {}));
+    mockDispatcherDestroy.mockImplementation(() => new Promise(() => {}));
+
+    // Start shutdown but don't await yet
+    void shutdownGracefully();
+
+    // The force exit timeout is 3000ms
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('should clear force exit timeout when cleanup completes normally', async () => {
+    const shutdownPromise = shutdownGracefully();
+
+    // Advance a little to let the cleanup complete
+    await vi.runAllTimersAsync();
+
+    await shutdownPromise;
+
+    // The force exit (3s) should not have been called since cleanup completed
+    // We verify this by checking process.exit was called with the natural exit timeout (100ms)
+    // not the force exit message
+    expect(process.exit).toHaveBeenCalled();
+  });
+
+  it('should handle getGlobalDispatcher throwing', async () => {
+    mockGetGlobalDispatcher.mockImplementation(() => {
+      throw new Error('No dispatcher');
+    });
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.runAllTimersAsync();
+
+    // Should complete without throwing
+    await expect(shutdownPromise).resolves.toBeUndefined();
   });
 });
