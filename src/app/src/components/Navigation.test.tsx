@@ -5,6 +5,17 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
 
+// Mock useVersionCheck to prevent UpdateBanner from making API calls
+vi.mock('@app/hooks/useVersionCheck', () => ({
+  useVersionCheck: () => ({
+    versionInfo: null,
+    loading: false,
+    error: null,
+    dismissed: true,
+    dismiss: vi.fn(),
+  }),
+}));
+
 // Mock ResizeObserver for Radix NavigationMenu
 global.ResizeObserver = class ResizeObserver {
   observe() {}

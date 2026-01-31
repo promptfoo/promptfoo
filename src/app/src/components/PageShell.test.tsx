@@ -28,15 +28,6 @@ vi.mock('./PostHogPageViewTracker', () => ({
   PostHogPageViewTracker: () => <div data-testid="posthog-tracker-mock" />,
 }));
 
-vi.mock('@app/components/UpdateBanner', () => {
-  const MockUpdateBanner = () => {
-    return <div data-testid="update-banner-mock">UpdateBanner</div>;
-  };
-  return {
-    default: MockUpdateBanner,
-  };
-});
-
 const ThemeDisplay = () => {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   return <div data-testid="theme-mode">{isDark ? 'dark' : 'light'}</div>;
@@ -93,13 +84,6 @@ describe('PageShell', () => {
     renderPageShell();
     await waitFor(() => {
       expect(screen.getByTestId('navigation-mock')).toBeInTheDocument();
-    });
-  });
-
-  it('should render update banner', async () => {
-    renderPageShell();
-    await waitFor(() => {
-      expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
     });
   });
 

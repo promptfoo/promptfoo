@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
-import UpdateBanner from '@app/components/UpdateBanner';
 import { Outlet } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
@@ -49,7 +48,6 @@ export default function PageShell() {
     <PostHogProvider>
       <Layout>
         <Navigation onToggleDarkMode={toggleDarkMode} />
-        <UpdateBanner />
         <Outlet />
         <PostHogPageViewTracker />
       </Layout>
