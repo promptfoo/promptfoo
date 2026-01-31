@@ -8,26 +8,40 @@
  * - Passes through domain-specific events via on()/emit()
  */
 
+import crypto from 'crypto';
+
 import { io, type Socket } from 'socket.io-client';
 
 import logger from '../../logger';
 
 import type { SocketAuthCredentials } from '../../types/codeScan';
+import { resolveBaseAuthCredentials } from './agentAuth';
+
+// Import cloud config for default host resolution
+let cloudConfig: { getApiHost(): string } | undefined;
+try {
+  const cloudModule = await import('../../globalConfig/cloud');
+  cloudConfig = cloudModule.cloudConfig;
+} catch {
+  // Cloud config not available — host must be provided explicitly
+}
 
 export interface CreateAgentClientOptions {
-  /** API host URL to connect to */
-  host: string;
-  /** Authentication credentials */
-  auth: SocketAuthCredentials;
   /** Agent name — must match the agent name used on the server */
   agent: string;
-  /** Session ID for room-based routing */
-  sessionId: string;
+  /** API host URL override (default: resolved from cloud config) */
+  host?: string;
+  /** Auth credentials override (default: resolved from API key waterfall) */
+  auth?: SocketAuthCredentials;
+  /** Session ID override (default: generated UUID) */
+  sessionId?: string;
   /** Connection timeout in ms (default: 5000) */
   timeoutMs?: number;
 }
 
 export interface AgentClient {
+  /** The session ID for this connection */
+  readonly sessionId: string;
   /** Emit agent:start with the given payload */
   start(payload: unknown): void;
   /** Emit agent:cancel */
@@ -51,11 +65,24 @@ export interface AgentClient {
 /**
  * Create an agent client that connects to the shared Socket.IO server.
  *
+ * Only `agent` is required. Host, auth, and sessionId are resolved automatically
+ * but can be overridden for agents with custom needs.
+ *
  * @returns Promise that resolves to an AgentClient once connected and joined to a room.
  * @throws Error if connection fails or times out.
  */
 export async function createAgentClient(opts: CreateAgentClientOptions): Promise<AgentClient> {
-  const { host, auth, agent, sessionId, timeoutMs = 5000 } = opts;
+  const { agent, timeoutMs = 5000 } = opts;
+
+  const host = opts.host ?? cloudConfig?.getApiHost();
+  if (!host) {
+    throw new Error(
+      'No API host available. Set PROMPTFOO_CLOUD_API_URL or pass host explicitly.',
+    );
+  }
+
+  const auth = opts.auth ?? resolveBaseAuthCredentials();
+  const sessionId = opts.sessionId ?? crypto.randomUUID();
 
   return new Promise<AgentClient>((resolve, reject) => {
     let settled = false;
@@ -89,6 +116,8 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
       socket.emit('agent:join', { sessionId });
 
       const client: AgentClient = {
+        sessionId,
+
         start(payload: unknown): void {
           socket.emit('agent:start', payload);
         },

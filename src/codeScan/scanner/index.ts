@@ -4,7 +4,6 @@
  * Main entry point for scanner module - orchestrates the complete scan process.
  */
 
-import crypto from 'crypto';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
 
@@ -144,30 +143,19 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       parsedPR = parsed;
     }
 
-    // Resolve auth credentials for socket.io
-    // Pass PR context for fork PR authentication fallback
-    const auth = resolveAuthCredentials(options.apiKey, parsedPR);
-
-    // Determine API host URL
-    const apiHost = resolveApiHost(options, config);
-
-    logger.debug(`Promptfoo API host URL: ${apiHost}`);
-
     // Create agent client connection (uses shared Socket.IO layer)
+    // Host and base auth are resolved automatically; code scanning overrides
+    // with custom auth (OIDC + fork PR) and config-driven host.
     if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
 
-    // Generate session ID for all scans (used for cancellation and MCP)
-    sessionId = crypto.randomUUID();
-    logger.debug(`Session ID: ${sessionId}`);
-
     client = await createAgentClient({
-      host: apiHost,
-      auth,
       agent: 'code-scan',
-      sessionId,
+      host: resolveApiHost(options, config),
+      auth: resolveAuthCredentials(options.apiKey, parsedPR),
     });
+    sessionId = client.sessionId;
     cleanupRefs.socket = client.socket; // Update ref for signal handlers
 
     // Optionally start MCP filesystem server + bridge
