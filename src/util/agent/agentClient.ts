@@ -104,16 +104,16 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
     });
 
     socket.on('connect', () => {
+      logger.debug(`Agent client connected (agent: ${agent}, id: ${socket.id})`);
+
+      // Always re-join the session room on (re)connect
+      socket.emit('agent:join', { sessionId });
+
       if (settled) {
-        return;
+        return; // Already resolved — don't resolve the promise twice
       }
       settled = true;
       clearTimeout(timeoutId);
-
-      logger.debug(`Agent client connected (agent: ${agent}, id: ${socket.id})`);
-
-      // Join the agent session room
-      socket.emit('agent:join', { sessionId });
 
       const client: AgentClient = {
         sessionId,
