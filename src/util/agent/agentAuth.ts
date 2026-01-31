@@ -14,8 +14,13 @@ let cloudConfig: { getApiKey(): string | undefined } | undefined;
 try {
   const cloudModule = await import('../../globalConfig/cloud');
   cloudConfig = cloudModule.cloudConfig;
-} catch {
-  // Promptfoo auth not available - that's OK, will fall back to other methods
+} catch (error: unknown) {
+  // Only swallow MODULE_NOT_FOUND — other errors indicate real problems
+  if (error instanceof Error && 'code' in error && (error as any).code === 'MODULE_NOT_FOUND') {
+    // Promptfoo auth not available - that's OK, will fall back to other methods
+  } else {
+    logger.debug(`Unexpected error loading cloud config: ${error}`);
+  }
 }
 
 /**

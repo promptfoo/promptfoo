@@ -23,15 +23,26 @@ vi.mock('../../../src/logger', () => ({
 
 function createFakeSocket() {
   const emitter = new EventEmitter();
+  const ioEmitter = new EventEmitter();
   const emittedToServer: Array<{ event: string; args: unknown[] }> = [];
 
   const socket = {
     id: 'fake-socket-id',
     connected: false,
-    io: { reconnection: vi.fn() },
+    io: {
+      reconnection: vi.fn(),
+      on(event: string, handler: (...args: unknown[]) => void) {
+        ioEmitter.on(event, handler);
+        return socket.io;
+      },
+    },
 
     on(event: string, handler: (...args: unknown[]) => void) {
       emitter.on(event, handler);
+      return socket;
+    },
+    once(event: string, handler: (...args: unknown[]) => void) {
+      emitter.once(event, handler);
       return socket;
     },
     emit(event: string, ...args: unknown[]) {
@@ -54,6 +65,12 @@ function createFakeSocket() {
     _simulateDisconnect(reason = 'transport close') {
       socket.connected = false;
       emitter.emit('disconnect', reason);
+    },
+    _simulateConnectError(message = 'Connection refused') {
+      emitter.emit('connect_error', new Error(message));
+    },
+    _simulateReconnectFailed() {
+      ioEmitter.emit('reconnect_failed');
     },
   };
   return socket;
@@ -144,5 +161,64 @@ describe('createAgentClient', () => {
 
     await new Promise((r) => setTimeout(r, 50));
     expect(resolveCount).toBe(1);
+  });
+
+  it('rejects with connect_error before initial connection', async () => {
+    const { createAgentClient } = await import('../../../src/util/agent/agentClient');
+
+    const promise = createAgentClient({
+      agent: 'test-agent',
+      host: 'http://localhost:3000',
+      auth: { apiKey: 'k' },
+      sessionId: 'sess-err',
+      timeoutMs: 1000,
+    });
+
+    fakeSocket._simulateConnectError('Auth failed');
+
+    await expect(promise).rejects.toThrow('Failed to connect to server: Auth failed');
+  });
+
+  it('ignores connect_error after successful connection', async () => {
+    const { createAgentClient } = await import('../../../src/util/agent/agentClient');
+
+    const promise = createAgentClient({
+      agent: 'test-agent',
+      host: 'http://localhost:3000',
+      auth: { apiKey: 'k' },
+      sessionId: 'sess-after-err',
+      timeoutMs: 1000,
+    });
+
+    // Connect first
+    fakeSocket._simulateConnect();
+    const client = await promise;
+
+    // connect_error after settlement should not cause problems
+    fakeSocket._simulateConnectError('Late error');
+
+    // Client should still be usable
+    expect(client.sessionId).toBe('sess-after-err');
+  });
+
+  it('rejects on timeout when no connection', async () => {
+    vi.useFakeTimers();
+
+    const { createAgentClient } = await import('../../../src/util/agent/agentClient');
+
+    const promise = createAgentClient({
+      agent: 'test-agent',
+      host: 'http://localhost:3000',
+      auth: { apiKey: 'k' },
+      sessionId: 'sess-timeout',
+      timeoutMs: 500,
+    });
+
+    // Advance past timeout
+    vi.advanceTimersByTime(600);
+
+    await expect(promise).rejects.toThrow('Connection timeout after 500ms');
+
+    vi.useRealTimers();
   });
 });

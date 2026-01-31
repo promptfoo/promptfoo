@@ -22,8 +22,13 @@ let cloudConfig: { getApiHost(): string } | undefined;
 try {
   const cloudModule = await import('../../globalConfig/cloud');
   cloudConfig = cloudModule.cloudConfig;
-} catch {
-  // Cloud config not available — host must be provided explicitly
+} catch (error: unknown) {
+  // Only swallow MODULE_NOT_FOUND — other errors indicate real problems
+  if (error instanceof Error && 'code' in error && (error as any).code === 'MODULE_NOT_FOUND') {
+    // Cloud config not available — host must be provided explicitly
+  } else {
+    logger.debug(`Unexpected error loading cloud config: ${error}`);
+  }
 }
 
 export interface CreateAgentClientOptions {
@@ -127,11 +132,11 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
         },
 
         onComplete(cb: (data: unknown) => void): void {
-          socket.on('agent:complete', cb);
+          socket.once('agent:complete', cb);
         },
 
         onError(cb: (error: { error: string; message: string }) => void): void {
-          socket.on('agent:error', cb);
+          socket.once('agent:error', cb);
         },
 
         on(event: string, handler: (...args: any[]) => void): void {
@@ -168,6 +173,10 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
 
     socket.on('error', (error) => {
       logger.debug(`Agent client error: ${String(error)}`);
+    });
+
+    socket.io.on('reconnect_failed', () => {
+      logger.error(`Agent client reconnection failed after all attempts (agent: ${agent})`);
     });
 
     const timeoutId = setTimeout(() => {
