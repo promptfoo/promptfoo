@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as fetch from '../../../src/util/fetch';
 import * as videoUtils from '../../../src/providers/video/utils';
 import {
+  calculateVideoCost,
   createXAIVideoProvider,
-  XAIVideoProvider,
   validateAspectRatio,
   validateDuration,
   validateResolution,
-  calculateVideoCost,
+  XAIVideoProvider,
 } from '../../../src/providers/xai/video';
+import * as fetch from '../../../src/util/fetch';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/util/fetch');

@@ -18,11 +18,11 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `duration` | number | 8 | Video length in seconds (1-15) |
-| `aspect_ratio` | string | 16:9 | Aspect ratio (16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3) |
-| `resolution` | string | 720p | Output resolution (720p, 480p) |
+| Option         | Type   | Default | Description                                        |
+| -------------- | ------ | ------- | -------------------------------------------------- |
+| `duration`     | number | 8       | Video length in seconds (1-15)                     |
+| `aspect_ratio` | string | 16:9    | Aspect ratio (16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3) |
+| `resolution`   | string | 720p    | Output resolution (720p, 480p)                     |
 
 ## Advanced Features
 

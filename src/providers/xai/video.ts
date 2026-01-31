@@ -478,9 +478,7 @@ export class XAIVideoProvider implements ApiProvider {
     const startTime = Date.now();
 
     // Step 1: Create video job
-    logger.info(
-      `[${PROVIDER_NAME}] Creating ${isEdit ? 'video edit' : 'video generation'} job...`,
-    );
+    logger.info(`[${PROVIDER_NAME}] Creating ${isEdit ? 'video edit' : 'video generation'} job...`);
     const { requestId, error: createError } = await this.createVideoJob(prompt, {
       ...config,
       duration,
@@ -498,11 +496,11 @@ export class XAIVideoProvider implements ApiProvider {
     const pollIntervalMs = config.poll_interval_ms || DEFAULT_POLL_INTERVAL_MS;
     const maxPollTimeMs = config.max_poll_time_ms || DEFAULT_MAX_POLL_TIME_MS;
 
-    const { videoUrl: completedVideoUrl, videoDuration, error: pollError } = await this.pollVideoStatus(
-      requestId,
-      pollIntervalMs,
-      maxPollTimeMs,
-    );
+    const {
+      videoUrl: completedVideoUrl,
+      videoDuration,
+      error: pollError,
+    } = await this.pollVideoStatus(requestId, pollIntervalMs, maxPollTimeMs);
 
     if (pollError) {
       return { error: pollError };
