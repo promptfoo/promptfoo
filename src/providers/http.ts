@@ -2042,6 +2042,8 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      tools: context?.prompt?.config?.tools,
+      tool_choice: context?.prompt?.config?.tool_choice,
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
