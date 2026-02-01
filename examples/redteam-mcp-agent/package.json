@@ -12,7 +12,7 @@
   "description": "",
   "dependencies": {
     "@faker-js/faker": "^10.2.0",
-    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "dotenv": "^17.2.3",
     "openai": "^6.16.0"
   }
