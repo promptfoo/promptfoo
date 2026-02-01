@@ -30,7 +30,21 @@ try {
   }
 }
 
-export interface CreateAgentClientOptions {
+/**
+ * Minimal structural type for Zod schemas — used for type inference only, no runtime use.
+ * Avoids importing Zod as a dependency in the client.
+ */
+interface ZodLikeSchema {
+  _zod: { output: unknown };
+}
+
+/** Infer the output type from a ZodLikeSchema, or fall back to `unknown`. */
+type InferSchema<T> = T extends { _zod: { output: infer O } } ? O : unknown;
+
+export interface CreateAgentClientOptions<
+  TStartSchema extends ZodLikeSchema = ZodLikeSchema,
+  TCompleteSchema extends ZodLikeSchema = ZodLikeSchema,
+> {
   /** Agent name — must match the agent name used on the server */
   agent: string;
   /** API host URL override (default: resolved from cloud config) */
@@ -41,17 +55,24 @@ export interface CreateAgentClientOptions {
   sessionId?: string;
   /** Connection timeout in ms (default: 5000) */
   timeoutMs?: number;
+  /** Schema for start payload — used for type inference only (no runtime validation) */
+  startMessageSchema?: TStartSchema;
+  /** Schema for complete payload — used for type inference only (no runtime validation) */
+  completeMessageSchema?: TCompleteSchema;
 }
 
-export interface AgentClient {
+export interface AgentClient<
+  TStartSchema extends ZodLikeSchema = ZodLikeSchema,
+  TCompleteSchema extends ZodLikeSchema = ZodLikeSchema,
+> {
   /** The session ID for this connection */
   readonly sessionId: string;
   /** Emit agent:start with the given payload */
-  start(payload: unknown): void;
+  start(payload: InferSchema<TStartSchema>): void;
   /** Emit agent:cancel */
   cancel(): void;
   /** Listen for agent:complete */
-  onComplete(cb: (data: unknown) => void): void;
+  onComplete(cb: (data: InferSchema<TCompleteSchema>) => void): void;
   /** Listen for agent:error */
   onError(cb: (error: { error: string; message: string }) => void): void;
 
@@ -75,7 +96,12 @@ export interface AgentClient {
  * @returns Promise that resolves to an AgentClient once connected and joined to a room.
  * @throws Error if connection fails or times out.
  */
-export async function createAgentClient(opts: CreateAgentClientOptions): Promise<AgentClient> {
+export async function createAgentClient<
+  TStartSchema extends ZodLikeSchema = ZodLikeSchema,
+  TCompleteSchema extends ZodLikeSchema = ZodLikeSchema,
+>(
+  opts: CreateAgentClientOptions<TStartSchema, TCompleteSchema>,
+): Promise<AgentClient<TStartSchema, TCompleteSchema>> {
   const { agent, timeoutMs = 5000 } = opts;
 
   const host = opts.host ?? cloudConfig?.getApiHost();
@@ -86,7 +112,7 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
   const auth = opts.auth ?? resolveBaseAuthCredentials();
   const sessionId = opts.sessionId ?? crypto.randomUUID();
 
-  return new Promise<AgentClient>((resolve, reject) => {
+  return new Promise<AgentClient<TStartSchema, TCompleteSchema>>((resolve, reject) => {
     let settled = false;
 
     const cleanup = () => {
@@ -117,10 +143,10 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
       settled = true;
       clearTimeout(timeoutId);
 
-      const client: AgentClient = {
+      const client: AgentClient<TStartSchema, TCompleteSchema> = {
         sessionId,
 
-        start(payload: unknown): void {
+        start(payload: InferSchema<TStartSchema>): void {
           socket.emit('agent:start', payload);
         },
 
@@ -128,7 +154,7 @@ export async function createAgentClient(opts: CreateAgentClientOptions): Promise
           socket.emit('agent:cancel');
         },
 
-        onComplete(cb: (data: unknown) => void): void {
+        onComplete(cb: (data: InferSchema<TCompleteSchema>) => void): void {
           socket.once('agent:complete', cb);
         },
 
