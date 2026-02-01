@@ -18,7 +18,7 @@ import TabItem from '@theme/TabItem';
 
 ## For Command-Line Usage
 
-Install promptfoo using [npm](https://nodejs.org/en/download) or [npx](https://nodejs.org/en/download):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
