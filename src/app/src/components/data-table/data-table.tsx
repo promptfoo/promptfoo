@@ -343,7 +343,7 @@ export function DataTable<TData, TValue = unknown>({
 
         <div
           ref={scrollContainerRef}
-          className="overflow-auto flex-1 min-h-0"
+          className="overflow-auto flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
           style={maxHeight ? { maxHeight } : undefined}
         >
           <table className="w-full print:text-black" style={{ tableLayout: 'fixed' }}>
