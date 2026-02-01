@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "openai": "^4.104.0",
+    "openai": "^6.16.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
