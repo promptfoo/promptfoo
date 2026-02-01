@@ -30,9 +30,9 @@ npx check-dependency-version-consistency
 
 1. **PeerDependencies must match devDependencies** - Prevents "package not found" errors for users
 
-2. **Update examples/** - 12+ package.json files are user-facing; keep them current
+2. **Update examples/** - 20+ package.json files are user-facing; keep them current
 
-3. **No package-lock.json** - Project intentionally omits lockfile; `npm audit` won't work
+3. **Run `npm audit`** - Use `npm audit` or `npm run audit:fix` to check for security vulnerabilities
 
 4. **If updates fail** - Revert problematic package and keep current version
 
@@ -47,10 +47,8 @@ npx npm-check-updates --target latest
 
 ## Workspaces
 
-The project has three npm workspaces:
+The project uses npm workspaces. Updates must be checked in all three locations:
 
 - Root (`/`)
-- Site (`/site`)
-- App (`/src/app`)
-
-Updates must be checked and applied to all three.
+- Site (`/site`) - workspace
+- App (`/src/app`) - workspace
