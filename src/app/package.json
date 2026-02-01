@@ -47,7 +47,7 @@
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
     "jsdom": "^26.1.0",
-    "lucide-react": "^0.562.0",
+    "lucide-react": "^0.563.0",
     "postcss": "^8.5.6",
     "posthog-js": "^1.336.4",
     "prismjs": "^1.30.0",
