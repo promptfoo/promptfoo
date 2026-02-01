@@ -601,10 +601,13 @@ export async function doGenerateRedteam(
     finalInjectVar = result.injectVar;
   }
 
-  // Provider cleanup helper. This should always be called before returning,
-  // since the providers are re-initialized when running the red team,
-  // hence it's safe and necessary to clean up, particularly for MCP servers.
-  const cleanupProvider = async () => {
+  /**
+   * Cleans up the provider after redteam generation completes.
+   * This should always be called before returning, since providers are
+   * re-initialized when running the red team. Cleanup is particularly
+   * important for MCP servers to release resources and prevent memory leaks.
+   */
+  const cleanupProvider = async (): Promise<void> => {
     try {
       logger.debug('Cleaning up provider');
       const provider = testSuite.providers[0] as ApiProvider;
