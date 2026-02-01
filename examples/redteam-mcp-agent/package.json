@@ -10,9 +10,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@faker-js/faker": "^9.9.0",
+    "@faker-js/faker": "^10.2.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "dotenv": "^17.2.3",
-    "openai": "^5.23.2"
+    "openai": "^6.16.0"
   }
 }

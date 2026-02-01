@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "uuid": "^9.0.1",
-    "openai": "^4.104.0"
+    "uuid": "^13.0.0",
+    "openai": "^6.16.0"
   }
 }

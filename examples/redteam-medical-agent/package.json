@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "openai": "^5.23.2",
+    "openai": "^6.16.0",
     "dotenv": "^17.2.3",
     "cors": "^2.8.5"
   }
