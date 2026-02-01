@@ -885,6 +885,30 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
+  it('should cleanup provider even when no test cases are generated', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [], // No test cases generated
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
   it('should warn but not throw when plugins fail to generate tests (default behavior)', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [

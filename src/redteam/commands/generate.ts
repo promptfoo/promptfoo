@@ -601,8 +601,27 @@ export async function doGenerateRedteam(
     finalInjectVar = result.injectVar;
   }
 
+  // Provider cleanup helper. This should always be called before returning,
+  // since the providers are re-initialized when running the red team,
+  // hence it's safe and necessary to clean up, particularly for MCP servers.
+  const cleanupProvider = async () => {
+    try {
+      logger.debug('Cleaning up provider');
+      const provider = testSuite.providers[0] as ApiProvider;
+      if (provider && typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+  };
+
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
+    await cleanupProvider();
     return null;
   }
 
@@ -632,6 +651,7 @@ export async function doGenerateRedteam(
     logger.info(
       chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
     );
+    await cleanupProvider();
     // No need to return anything, Burp outputs are only invoked via command line.
     return {};
   } else if (options.output) {
@@ -679,21 +699,7 @@ export async function doGenerateRedteam(
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
 
-    // Provider cleanup step. Note that this should always be run,
-    // since the providers are re-initialized when running the red team,
-    // hence it's safe and necessary to clean-up, particularly for MCP servers
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
+    await cleanupProvider();
 
     if (!options.inRedteamRun) {
       logger.info(
@@ -755,6 +761,7 @@ export async function doGenerateRedteam(
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
+    await cleanupProvider();
     const command = configPath.endsWith('promptfooconfig.yaml')
       ? promptfooCommand('eval')
       : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
@@ -781,6 +788,7 @@ export async function doGenerateRedteam(
       'redteam.yaml',
       headerComments,
     );
+    await cleanupProvider();
   }
 
   telemetry.record('command_used', {
