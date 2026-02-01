@@ -175,6 +175,16 @@ site: update guides                 # Should be docs(site):
 feat(webui): minor styling update   # Minor = chore, not feat
 ```
 
+## Draft Mode Preferred
+
+**Prefer opening PRs in draft mode** using the `--draft` flag:
+
+```bash
+gh pr create --draft --title "feat(scope): description"
+```
+
+This allows maintainers to review and provide feedback before the PR is marked ready for merge.
+
 ## GitHub Interaction Rules
 
 - **NEVER comment on GitHub issues** - Only create PRs to address issues
@@ -188,3 +198,4 @@ feat(webui): minor styling update   # Minor = chore, not feat
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
+6. Consider opening the PR in draft mode (`--draft`)
