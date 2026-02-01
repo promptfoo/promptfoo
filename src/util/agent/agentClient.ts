@@ -74,7 +74,9 @@ export interface AgentClient<
   /** Listen for agent:complete */
   onComplete(cb: (data: InferSchema<TCompleteSchema>) => void): void;
   /** Listen for agent:error */
-  onError(cb: (error: { error: string; message: string }) => void): void;
+  onError(cb: (error: { type: string; message: string }) => void): void;
+  /** Listen for agent:cancelled */
+  onCancelled(cb: (data: { clientType: string }) => void): void;
 
   /** Domain-specific event passthrough — listen */
   on(event: string, handler: (...args: any[]) => void): void;
@@ -158,8 +160,12 @@ export async function createAgentClient<
           socket.once('agent:complete', cb);
         },
 
-        onError(cb: (error: { error: string; message: string }) => void): void {
+        onError(cb: (error: { type: string; message: string }) => void): void {
           socket.once('agent:error', cb);
+        },
+
+        onCancelled(cb: (data: { clientType: string }) => void): void {
+          socket.once('agent:cancelled', cb);
         },
 
         on(event: string, handler: (...args: any[]) => void): void {

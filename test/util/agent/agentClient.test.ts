@@ -58,6 +58,9 @@ function createFakeSocket() {
 
     // Test helpers
     _emittedToServer: emittedToServer,
+    _simulateEvent(event: string, ...args: unknown[]) {
+      emitter.emit(event, ...args);
+    },
     _simulateConnect() {
       socket.connected = true;
       socket.id = `socket-${Math.random().toString(36).slice(2, 8)}`;
@@ -200,6 +203,28 @@ describe('createAgentClient', () => {
 
     // Client should still be usable
     expect(client.sessionId).toBe('sess-after-err');
+  });
+
+  it('onCancelled receives agent:cancelled event', async () => {
+    const { createAgentClient } = await import('../../../src/util/agent/agentClient');
+
+    const promise = createAgentClient({
+      agent: 'test-agent',
+      host: 'http://localhost:3000',
+      auth: { apiKey: 'k' },
+      sessionId: 'sess-cancel',
+      timeoutMs: 1000,
+    });
+
+    fakeSocket._simulateConnect();
+    const client = await promise;
+
+    const cb = vi.fn();
+    client.onCancelled(cb);
+
+    fakeSocket._simulateEvent('agent:cancelled', { clientType: 'web' });
+
+    expect(cb).toHaveBeenCalledWith({ clientType: 'web' });
   });
 
   it('rejects on timeout when no connection', async () => {

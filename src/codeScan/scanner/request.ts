@@ -125,11 +125,11 @@ export async function executeScanRequest(
       resolve(response as ScanResponse);
     });
 
-    client.onError((error: { error: string; message: string }) => {
+    client.onError((error: { type: string; message: string }) => {
       cleanupTimers();
       abortController.signal.removeEventListener('abort', onAbort);
       client.socket.off('reconnect_failed', onReconnectFailed);
-      reject(new Error(error.message || error.error));
+      reject(new Error(error.message || error.type));
     });
 
     const onReconnectFailed = () => {
