@@ -2,7 +2,7 @@
   "name": "dynamic-conversation-ids",
   "version": "0.0.0",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "server": "node server.js"
   },
