@@ -509,6 +509,7 @@ export async function doGenerateRedteam(
   let purpose: string = enhancedPurpose;
   let entities: string[] = [];
   let finalInjectVar: string = '';
+  let failedPlugins: { pluginId: string; requested: number }[] = [];
 
   if (contexts && contexts.length > 0) {
     // Multi-context mode: generate tests for each context
@@ -568,8 +569,8 @@ export async function doGenerateRedteam(
       }
     }
 
-    // Check for failed plugins across all contexts
-    handleFailedPlugins(allFailedPlugins, options.strict ?? false);
+    // Store failed plugins for handling after the try block starts
+    failedPlugins = allFailedPlugins;
 
     // Use first context's purpose for backward compatibility in output
     purpose = contexts[0].purpose;
@@ -592,13 +593,11 @@ export async function doGenerateRedteam(
       testGenerationInstructions: augmentedTestGenerationInstructions,
     } as SynthesizeOptions);
 
-    // Check for failed plugins - warn by default, throw with --strict
-    handleFailedPlugins(result.failedPlugins, options.strict ?? false);
-
     redteamTests = result.testCases;
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
+    failedPlugins = result.failedPlugins;
   }
 
   /**
@@ -625,6 +624,9 @@ export async function doGenerateRedteam(
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
   try {
+    // Check for failed plugins - warn by default, throw with --strict
+    handleFailedPlugins(failedPlugins, options.strict ?? false);
+
     if (redteamTests.length === 0) {
       logger.warn('No test cases generated. Please check for errors and try again.');
       return null;
