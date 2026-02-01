@@ -1,6 +1,8 @@
-const MCPClient = require('./mcp-client');
-const ReactAgent = require('./react-agent');
-require('dotenv').config({ quiet: true });
+import dotenv from 'dotenv';
+import MCPClient from './mcp-client.js';
+import ReactAgent from './react-agent.js';
+
+dotenv.config({ quiet: true });
 
 class OpenAIAgentProvider {
   constructor(options = {}) {
@@ -189,4 +191,4 @@ class OpenAIAgentProvider {
   }
 }
 
-module.exports = OpenAIAgentProvider;
+export default OpenAIAgentProvider;
