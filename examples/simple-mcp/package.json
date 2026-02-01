@@ -9,8 +9,8 @@
     "test": "promptfoo eval"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
-    "zod": "^4.3.5"
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "promptfoo": "*"

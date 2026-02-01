@@ -1,6 +1,7 @@
 {
   "name": "agent_custom_provider",
   "version": "1.0.0",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,9 +11,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@faker-js/faker": "^9.9.0",
-    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@faker-js/faker": "^10.2.0",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "dotenv": "^17.2.3",
-    "openai": "^5.23.2"
+    "openai": "^6.16.0"
   }
 }
