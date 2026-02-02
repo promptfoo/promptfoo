@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Extensive testing of form data + streaming HTTP provider
+
+description: Extensive Form Data + Streaming Tests
+
+providers:
+  # Form data with streaming
+  - id: https
+    label: form-streaming
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Form data without streaming (JSON response)
+  - id: https
+    label: form-json
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}'
+      transformResponse: 'json.choices[0].message.content'
+
+  # JSON body with streaming
+  - id: https
+    label: json-streaming
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        prompt: '{{prompt}}'
+        model: '{{model}}'
+        stream: true
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # JSON body without streaming
+  - id: https
+    label: json-non-streaming
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        prompt: '{{prompt}}'
+        model: '{{model}}'
+      transformResponse: 'json.choices[0].message.content'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  # Basic test
+  - vars:
+      question: 'Hello world'
+      model: 'test-model'
+    assert:
+      - type: contains
+        value: 'Hello world'
+
+  # Special characters
+  - vars:
+      question: 'Test with special chars: <>&"quotes"'
+      model: 'gpt-4'
+    assert:
+      - type: contains
+        value: 'special chars'
+
+  # Longer prompt
+  - vars:
+      question: 'This is a longer prompt to test how the streaming handles multiple words and sentences. It should stream back each word individually.'
+      model: 'claude-3'
+    assert:
+      - type: contains
+        value: 'longer prompt'
+
+  # Unicode characters
+  - vars:
+      question: 'Test unicode: 你好世界 🎉 émojis'
+      model: 'unicode-test'
+    assert:
+      - type: contains
+        value: 'unicode'
+
+  # Empty-ish prompt
+  - vars:
+      question: 'x'
+      model: 'minimal'
+    assert:
+      - type: icontains
+        value: 'x'

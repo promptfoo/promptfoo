@@ -1,0 +1,6 @@
+POST / HTTP/1.1
+Host: localhost:3456
+Content-Type: application/x-www-form-urlencoded
+Accept: text/event-stream
+
+prompt={{prompt}}&model={{model}}&stream=true

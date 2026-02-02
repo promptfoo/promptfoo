@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: HTTP Provider with Streaming Response (SSE format)
+#
+# This demonstrates how to handle Server-Sent Events (SSE) streaming responses
+# like those from OpenAI's API.
+#
+# Required: OPENAI_API_KEY environment variable
+
+description: HTTP Streaming Provider Example
+
+providers:
+  - id: https
+    label: openai-streaming
+    config:
+      url: 'https://api.openai.com/v1/chat/completions'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-4o-mini'
+        stream: true
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+      # Parse SSE streaming response - accumulate content from delta chunks
+      transformResponse: |
+        (json, text) => {
+          // If already parsed as complete JSON, return content directly
+          if (json && json.choices && json.choices[0]?.message?.content) {
+            return json.choices[0].message.content;
+          }
+
+          // Parse SSE stream format: "data: {...}\n\ndata: {...}\n\n..."
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            if (trimmed === 'data: [DONE]') continue;
+
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              // OpenAI streaming format: choices[0].delta.content
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') {
+                output += delta;
+              }
+            } catch {}
+          }
+          return output.trim();
+        }
+
+prompts:
+  - 'Answer in exactly 5 words: {{question}}'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'What color is the sky?'
+    assert:
+      - type: contains
+        value: 'blue'

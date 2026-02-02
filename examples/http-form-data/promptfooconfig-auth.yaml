@@ -1,0 +1,161 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: HTTP Provider with Authentication
+#
+# Tests various authentication methods with form data + streaming.
+# Start the test server first: node test-server.cjs
+
+description: HTTP Auth Methods - Form Data + Streaming
+
+providers:
+  # Bearer token authentication (standard config)
+  - id: http
+    label: bearer-token
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+        'Authorization': 'Bearer test-api-key-12345'
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Bearer token using auth config
+  - id: http
+    label: bearer-auth-config
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      auth:
+        type: bearer
+        token: 'test-api-key-12345'
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # API Key in header
+  - id: http
+    label: api-key-header
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      auth:
+        type: api_key
+        keyName: 'X-API-Key'
+        value: 'test-api-key-12345'
+        placement: header
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Basic authentication
+  - id: http
+    label: basic-auth
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      auth:
+        type: basic
+        username: 'testuser'
+        password: 'test-api-key-12345'
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Raw HTTP request with Authorization header
+  - id: http
+    label: raw-with-auth
+    config:
+      request: |
+        POST / HTTP/1.1
+        Host: localhost:3456
+        Content-Type: application/x-www-form-urlencoded
+        Authorization: Bearer test-api-key-12345
+
+        prompt={{prompt}}&model={{model}}&stream=true
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'Test with authentication'
+      model: 'auth-test'
+    assert:
+      - type: contains
+        value: 'authentication'
+
+  - vars:
+      question: 'Verify bearer token works'
+      model: 'bearer-test'
+    assert:
+      - type: contains
+        value: 'bearer token'

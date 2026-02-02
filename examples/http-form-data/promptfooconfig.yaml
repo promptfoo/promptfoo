@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: HTTP Provider with Form Data (application/x-www-form-urlencoded)
+#
+# This example demonstrates how to send form-encoded data to an HTTP endpoint.
+# It uses httpbin.org as a test endpoint that echoes back the request.
+
+description: HTTP Form Data Provider Example
+
+providers:
+  - id: https
+    label: form-data-provider
+    config:
+      url: 'https://httpbin.org/post'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      # Form data as URL-encoded string with template variables
+      body: 'prompt={{prompt}}&model={{model}}&max_tokens={{max_tokens}}'
+      # Extract the echoed form data from httpbin response
+      transformResponse: 'json.form'
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+      model: 'test-model'
+      max_tokens: '100'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: 'output.prompt && output.prompt.includes("artificial intelligence")'
+
+  - vars:
+      topic: 'machine learning'
+      model: 'gpt-4'
+      max_tokens: '200'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: 'output.model === "gpt-4"'

@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: Raw HTTP Request with Form Data + Streaming
+#
+# This demonstrates using the raw `request` format instead of url/body/headers.
+# Useful when you need full control over the HTTP request format.
+#
+# First start the test server:
+#   node test-server.cjs
+
+description: Raw HTTP Request - Form Data + Streaming
+
+providers:
+  # Raw HTTP request with form data and streaming
+  - id: http
+    label: raw-form-streaming
+    config:
+      request: |
+        POST / HTTP/1.1
+        Host: localhost:3456
+        Content-Type: application/x-www-form-urlencoded
+        Accept: text/event-stream
+
+        prompt={{prompt}}&model={{model}}&stream=true
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Raw HTTP request with form data, no streaming
+  - id: http
+    label: raw-form-json
+    config:
+      request: |
+        POST / HTTP/1.1
+        Host: localhost:3456
+        Content-Type: application/x-www-form-urlencoded
+        Accept: application/json
+
+        prompt={{prompt}}&model={{model}}
+      transformResponse: 'json.choices[0].message.content'
+
+  # Raw HTTP request from external file
+  - id: http
+    label: raw-from-file
+    config:
+      request: file://raw-request.txt
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'Hello from raw request'
+      model: 'raw-test'
+    assert:
+      - type: contains
+        value: 'Hello from raw request'
+
+  - vars:
+      question: 'Testing form data encoding'
+      model: 'test-model'
+    assert:
+      - type: contains
+        value: 'form data'

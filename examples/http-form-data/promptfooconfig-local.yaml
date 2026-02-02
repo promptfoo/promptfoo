@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: Form Data with Streaming using Local Test Server
+#
+# First start the test server:
+#   node test-server.cjs
+#
+# Then run this eval:
+#   npx promptfoo eval -c promptfooconfig-local.yaml
+
+description: Form Data + Streaming (Local Test Server)
+
+providers:
+  - id: https
+    label: form-data-streaming
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      # Form data as URL-encoded string - includes stream=true
+      body: 'prompt={{prompt}}&model={{model}}&stream=true'
+      # Parse SSE streaming response
+      transformResponse: |
+        (json, text) => {
+          // Parse SSE stream format
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Also test non-streaming for comparison
+  - id: https
+    label: form-data-json
+    config:
+      url: 'http://localhost:3456'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'prompt={{prompt}}&model={{model}}'
+      transformResponse: 'json.choices[0].message.content'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'What is TypeScript?'
+      model: 'gpt-test'
+    assert:
+      - type: contains
+        value: 'TypeScript'
+
+  - vars:
+      question: 'Hello world'
+      model: 'test-model'
+    assert:
+      - type: contains
+        value: 'Hello'

@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: HTTP Provider with multipart/form-data
+#
+# This demonstrates sending multipart/form-data content type.
+# Start the test server first: node test-server.cjs
+
+description: Multipart Form Data + Streaming
+
+providers:
+  # Multipart form-data with streaming (raw HTTP request)
+  - id: http
+    label: multipart-streaming
+    config:
+      request: |
+        POST / HTTP/1.1
+        Host: localhost:3456
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        Authorization: Bearer test-api-key-12345
+
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="prompt"
+
+        {{prompt}}
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="model"
+
+        {{model}}
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="stream"
+
+        true
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+      transformResponse: |
+        (json, text) => {
+          let output = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const chunk = JSON.parse(trimmed.slice(6));
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') output += delta;
+            } catch {}
+          }
+          return output.trim();
+        }
+
+  # Multipart form-data without streaming
+  - id: http
+    label: multipart-json
+    config:
+      request: |
+        POST / HTTP/1.1
+        Host: localhost:3456
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        Authorization: Bearer test-api-key-12345
+
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="prompt"
+
+        {{prompt}}
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="model"
+
+        {{model}}
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+      transformResponse: 'json.choices[0].message.content'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'Test multipart form data'
+      model: 'multipart-test'
+    assert:
+      - type: contains
+        value: 'multipart'
+
+  - vars:
+      question: 'Streaming with multipart encoding'
+      model: 'stream-test'
+    assert:
+      - type: contains
+        value: 'multipart'
