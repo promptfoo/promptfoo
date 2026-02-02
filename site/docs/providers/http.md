@@ -554,6 +554,66 @@ tests:
         contextTransform: 'output.sources.join(" ")'
 ```
 
+## Tool Calling
+
+The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. This allows you to send tool definitions to APIs that support function/tool calling.
+
+### Basic Configuration
+
+```yaml
+providers:
+  - id: https://api.example.com/v1/chat/completions
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.API_KEY}}'
+      transformToolsFormat: openai
+      tools:
+        - normalized: true
+          name: get_weather
+          description: Get weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+            required:
+              - location
+      tool_choice:
+        mode: auto
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools | dump}}'
+        tool_choice: '{{tool_choice | dump}}'
+      transformResponse: 'json.choices[0].message.tool_calls'
+```
+
+### transformToolsFormat
+
+The `transformToolsFormat` option converts [normalized tool format](/docs/configuration/tools#normalized-tool-format) to provider-specific formats:
+
+| Value       | Target Format      |
+| ----------- | ------------------ |
+| `openai`    | OpenAI             |
+| `anthropic` | Anthropic          |
+| `bedrock`   | AWS Bedrock        |
+| `google`    | Google (Gemini)    |
+
+When omitted, tools pass through unchanged.
+
+### Template Variables
+
+Use these variables in your request body:
+
+- `{{tools}}` - The transformed tools array (use `{{tools | dump}}` for JSON)
+- `{{tool_choice}}` - The transformed tool choice (use `{{tool_choice | dump}}` for JSON)
+
+For complete documentation on tool formats and configuration, see [Tool Calling Configuration](/docs/configuration/tools).
+
 ## Token Estimation
 
 By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.
