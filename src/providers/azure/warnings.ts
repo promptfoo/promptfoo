@@ -2,7 +2,36 @@ import chalk from 'chalk';
 import { MODEL_GRADED_ASSERTION_TYPES } from '../../assertions/index';
 import logger from '../../logger';
 
-import type { TestCase, TestSuite } from '../../types/index';
+import type {
+  Assertion,
+  AssertionSet,
+  CombinatorAssertion,
+  TestCase,
+  TestSuite,
+} from '../../types/index';
+
+/**
+ * Recursively collect all leaf assertions from an assertion tree.
+ * This traverses combinators (and/or) and assert-sets to find model-graded assertions.
+ */
+function collectLeafAssertions(
+  assertion: Assertion | AssertionSet | CombinatorAssertion,
+): Assertion[] {
+  // Combinator assertions (and/or) - recurse into sub-assertions
+  if (assertion.type === 'and' || assertion.type === 'or') {
+    const combinator = assertion as CombinatorAssertion;
+    return (combinator.assert || []).flatMap(collectLeafAssertions);
+  }
+
+  // Assert-set - recurse into sub-assertions
+  if (assertion.type === 'assert-set') {
+    const assertSet = assertion as AssertionSet;
+    return (assertSet.assert || []).flatMap(collectLeafAssertions);
+  }
+
+  // Leaf assertion
+  return [assertion as Assertion];
+}
 
 /**
  * Emits a warning if Azure providers are used with model-graded assertions without
@@ -26,18 +55,16 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
     !hasOpenAi &&
     !(typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.options?.provider)
   ) {
+    // Recursively collect all leaf assertions from combinators and assert-sets
     const modelGradedAsserts = tests.flatMap((t) =>
-      (t.assert || []).filter(
-        (a) =>
-          // Exclude assert-sets and combinator assertions (and/or)
-          a.type !== 'assert-set' &&
-          a.type !== 'and' &&
-          a.type !== 'or' &&
-          MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
-          !('assert' in a) && // Exclude combinators which have assert property but no provider
-          !(a as { provider?: unknown }).provider &&
-          !t.options?.provider,
-      ),
+      (t.assert || [])
+        .flatMap(collectLeafAssertions)
+        .filter(
+          (a) =>
+            MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
+            !(a as { provider?: unknown }).provider &&
+            !t.options?.provider,
+        ),
     );
     if (modelGradedAsserts.length > 0) {
       const assertTypes = Array.from(new Set(modelGradedAsserts.map((a) => a.type))).join(', ');
