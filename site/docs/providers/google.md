@@ -815,7 +815,7 @@ tests:
         value: The answer is 4
 ```
 
-### Function Calling
+### Tool Calling
 
 Enable your model to interact with external systems through defined functions.
 

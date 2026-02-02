@@ -1,21 +1,80 @@
-# Tools Configuration
+---
+sidebar_position: 7
+title: Tool Calling
+description: Configure portable tool definitions that work across OpenAI, Anthropic, AWS Bedrock, Google, and other LLM providers
+---
 
-Tools (also known as function calling) allow LLMs to interact with external systems by calling functions you define. This guide covers how to configure tools in a provider-agnostic way that works across all supported providers.
+# Tool Calling
+
+Tool calling (also known as function calling) lets LLMs request to execute functions you define instead of just generating text.
 
 ## Overview
 
-Different providers use different formats for tool definitions:
+### How It Works
 
-- **OpenAI/Azure/Groq/Ollama**: `{ type: 'function', function: { name, parameters } }`
-- **Anthropic**: `{ name, input_schema }`
-- **AWS Bedrock**: `{ toolSpec: { name, inputSchema: { json } } }`
-- **Google**: `[{ functionDeclarations: [{ name, parameters }] }]`
+1. **You define tools** - Tell the model what functions are available by providing their names, descriptions, and parameter schemas
+2. **Model requests a tool call** - The model outputs a function name and arguments. This name is an identifier that maps to a function in your code—the model doesn't execute anything itself
+3. **Your code executes the function** - Your application matches the function name to real code and runs it with the provided arguments
+4. **Results go back to the model** - You send the function's output back to the model, which uses it to generate its final response
 
-Promptfoo provides **NormalizedTool** and **NormalizedToolChoice** formats that automatically transform to each provider's native format, allowing you to write portable configurations.
+```
+User: "What's the weather in San Francisco?"
+    ↓
+Model outputs: { tool: "get_weather", args: { location: "San Francisco" } }
+    ↓
+Your code runs: getWeather("San Francisco") → "72°F, sunny"
+    ↓
+You send result back to model
+    ↓
+Model responds: "It's currently 72°F and sunny in San Francisco."
+```
 
-## NormalizedTool Format
+### Configuration
 
-The NormalizedTool format is a provider-agnostic way to define tools:
+There are two parts to configuring tool calling:
+
+1. **Tool definitions** - Describe the functions available to the model: their names, descriptions, and parameter schemas. The model uses these to decide which tool to call and what arguments to pass.
+
+2. **Tool choice** - Control _when_ the model uses tools: let it decide automatically, force it to use a specific tool, or disable tools entirely.
+
+### Why Use Promptfoo's Format?
+
+Each provider has its own format for tools:
+
+| Provider | Tool Format |
+|----------|-------------|
+| OpenAI/Azure/Groq/Ollama | `{ type: 'function', function: { name, parameters } }` |
+| Anthropic | `{ name, input_schema }` |
+| AWS Bedrock | `{ toolSpec: { name, inputSchema: { json } } }` |
+| Google | `{ functionDeclarations: [{ name, parameters }] }` |
+
+Promptfoo's portable format automatically transforms to each provider's native format. Define your tools once and test across all providers:
+
+```yaml
+providers:
+  - id: openai:gpt-4o
+    config:
+      tools: &tools  # Define once with YAML anchor
+        - name: get_weather
+          description: Get current weather for a location
+          parameters:
+            type: object
+            properties:
+              location: { type: string }
+            required: [location]
+
+  - id: anthropic:claude-sonnet-4-20250514
+    config:
+      tools: *tools  # Reuse the same tools
+
+  - id: google:gemini-2.0-flash
+    config:
+      tools: *tools  # Works here too
+```
+
+## Defining Tools
+
+Define tools in a provider-agnostic format that works across all providers:
 
 ```yaml
 providers:
@@ -102,9 +161,9 @@ tools:
 - **Anthropic**: Enables structured outputs beta feature
 - **Bedrock/Google**: Ignored (not supported)
 
-## NormalizedToolChoice Format
+## Tool Choice
 
-Control how the model uses tools with a provider-agnostic format:
+Control how the model uses tools:
 
 ```yaml
 providers:
@@ -149,18 +208,18 @@ tool_choice:
 
 ## Provider Transformations
 
-### NormalizedTool Mappings
+### Tool Definition Mappings
 
-When you use NormalizedTool format, it's automatically transformed:
+Tool definitions are automatically transformed to each provider's format:
 
-| NormalizedTool | OpenAI | Anthropic | Bedrock | Google |
-|----------------|--------|-----------|---------|--------|
+| Field | OpenAI | Anthropic | Bedrock | Google |
+|-------|--------|-----------|---------|--------|
 | `name` | `function.name` | `name` | `toolSpec.name` | `functionDeclarations[].name` |
 | `description` | `function.description` | `description` | `toolSpec.description` | `functionDeclarations[].description` |
 | `parameters` | `function.parameters` | `input_schema` | `toolSpec.inputSchema.json` | `functionDeclarations[].parameters` |
 | `strict` | `function.strict` | `strict` | _(ignored)_ | _(ignored)_ |
 
-### NormalizedToolChoice Mappings
+### Tool Choice Mappings
 
 | Mode | OpenAI | Anthropic | Bedrock | Google |
 |------|--------|-----------|---------|--------|
@@ -169,12 +228,12 @@ When you use NormalizedTool format, it's automatically transformed:
 | `required` | `'required'` | `{ type: 'any' }` | `{ any: {} }` | `{ functionCallingConfig: { mode: 'ANY' } }` |
 | `tool` | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
 
-## Using Native Formats
+## Legacy Formats
 
-You can still use provider-native formats - they pass through unchanged:
+Provider-native formats still work but we recommend using Promptfoo's portable format for new configurations:
 
 ```yaml
-# OpenAI native format (still works)
+# OpenAI native format (deprecated)
 providers:
   - id: openai:gpt-4
     config:
@@ -188,7 +247,7 @@ providers:
                 location: { type: string }
 ```
 
-Promptfoo auto-detects the format and only transforms NormalizedTool arrays.
+Promptfoo auto-detects the format and passes native formats through unchanged.
 
 ## Loading Tools from Files
 

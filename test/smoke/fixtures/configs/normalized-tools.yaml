@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - normalized tool format with cross-provider reuse'
+
+providers:
+  # Test normalized tools with first provider using YAML anchor
+  - id: echo
+    label: 'Provider with normalized tools'
+    config:
+      tools: &tools
+        - name: get_weather
+          description: Get current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: City name
+              unit:
+                type: string
+                enum: [celsius, fahrenheit]
+            required:
+              - location
+        - name: search_web
+          description: Search the web for information
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+            required:
+              - query
+      tool_choice:
+        mode: auto
+
+  # Test tool reuse with YAML alias
+  - id: echo
+    label: 'Provider reusing tools'
+    config:
+      tools: *tools
+      tool_choice:
+        mode: required
+
+  # Test specific tool choice mode
+  - id: echo
+    label: 'Provider with specific tool'
+    config:
+      tools: *tools
+      tool_choice:
+        mode: tool
+        toolName: get_weather
+
+prompts:
+  - 'What is the weather in {{location}}?'
+
+tests:
+  - vars:
+      location: San Francisco
+    assert:
+      - type: contains
+        value: San Francisco

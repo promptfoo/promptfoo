@@ -99,6 +99,35 @@ describe('Provider Smoke Tests', () => {
     });
   });
 
+  describe('3.3 Normalized Tool Format', () => {
+    it('3.3.1 - parses normalized tool definitions with YAML anchors', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
+
+      const { exitCode, stderr } = runCli([
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+      ]);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      // Should have results for all 3 providers
+      expect(parsed.results.results.length).toBe(3);
+
+      // All results should be successful
+      parsed.results.results.forEach((result: { success: boolean }) => {
+        expect(result.success).toBe(true);
+      });
+    });
+  });
+
   describe('3.4 Python Providers', () => {
     it('3.4.1 - Python provider with default call_api function', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/python-provider.yaml');
