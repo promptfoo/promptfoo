@@ -611,6 +611,37 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+/**
+ * Combinator assertions allow logical composition of assertions.
+ * - 'or': passes if ANY sub-assertion passes (short-circuits on first pass)
+ * - 'and': passes if ALL sub-assertions pass (short-circuits on first fail)
+ */
+export interface CombinatorAssertion {
+  // Type of combinator: 'and' or 'or'
+  type: 'and' | 'or';
+
+  // Sub-assertions to combine with the logical operator
+  assert: Array<Assertion | AssertionSet | CombinatorAssertion>;
+
+  // Whether to stop on first conclusive result (default: true)
+  // For 'or': stops on first pass; for 'and': stops on first fail
+  shortCircuit?: boolean;
+
+  // The weight of this combinator compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
+  // Tag this assertion result as a named metric
+  metric?: string;
+
+  // Score threshold for combinator to pass
+  // For 'or': best score must be >= threshold
+  // For 'and': weighted average must be >= threshold
+  threshold?: number;
+
+  // Configuration passed to all sub-assertions
+  config?: Record<string, unknown>;
+}
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
@@ -648,10 +679,31 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /**
- * Schema for validating individual assertions (regular or assert-set).
+ * Zod schema for CombinatorAssertion.
+ * Defined after AssertionSchema to enable lazy reference.
+ * Note: The explicit `z.ZodType<CombinatorAssertion>` is required due to the
+ * circular reference with AssertionOrSetSchema. The JSON schema generation
+ * script manually adds combinator types since this annotation hides the structure.
+ */
+export const CombinatorAssertionSchema: z.ZodType<CombinatorAssertion> = z.object({
+  type: z.enum(['and', 'or']),
+  assert: z.array(z.lazy(() => AssertionOrSetSchema)),
+  shortCircuit: z.boolean().optional(),
+  weight: z.number().optional(),
+  metric: z.string().optional(),
+  threshold: z.number().optional(),
+  config: z.record(z.string(), z.any()).optional(),
+});
+
+/**
+ * Schema for validating individual assertions (regular, assert-set, or combinator).
  * Used for runtime validation of user-provided config.
  */
-export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export const AssertionOrSetSchema = z.union([
+  AssertionSetSchema,
+  CombinatorAssertionSchema,
+  AssertionSchema,
+]);
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
@@ -780,7 +832,8 @@ export const TestCaseSchema = z.object({
   providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
-  assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+  // Uses AssertionOrSetSchema to support regular assertions, assertion sets, and combinators (and/or)
+  assert: z.array(AssertionOrSetSchema).optional(),
 
   // Optional scoring function to run on the LLM output
   assertScoringFunction: z

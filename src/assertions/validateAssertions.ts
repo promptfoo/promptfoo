@@ -3,6 +3,7 @@ import {
   type Assertion,
   AssertionOrSetSchema,
   type AssertionSet,
+  type CombinatorAssertion,
   type TestCase,
 } from '../types/index';
 
@@ -18,7 +19,10 @@ export class AssertValidationError extends Error {
  * Returns the validated assertion with proper type narrowing.
  * Throws AssertValidationError with helpful message on failure.
  */
-function parseAssertion(assertion: unknown, context: string): Assertion | AssertionSet {
+function parseAssertion(
+  assertion: unknown,
+  context: string,
+): Assertion | AssertionSet | CombinatorAssertion {
   // First, check for the most common error: missing 'type' property
   // This provides a more helpful error message than the generic Zod error
   if (typeof assertion !== 'object' || assertion === null) {
@@ -65,6 +69,39 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     }
     for (let i = 0; i < assertSet.assert.length; i++) {
       parseAssertion(assertSet.assert[i], `${context}.assert[${i}]`);
+    }
+  }
+
+  // For combinator assertions (and/or), validate nested assertions recursively
+  if (result.data.type === 'and' || result.data.type === 'or') {
+    const combinator = result.data as CombinatorAssertion;
+    if (!combinator.assert || !Array.isArray(combinator.assert)) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          `${result.data.type} combinator must have an 'assert' property that is an array\n\n` +
+          `Received: ${JSON.stringify(assertion, null, 2)}`,
+      );
+    }
+    if (combinator.assert.length === 0) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          `${result.data.type} combinator must have at least one assertion\n\n` +
+          `Received: ${JSON.stringify(assertion, null, 2)}`,
+      );
+    }
+    // Validate that select-best and max-score are not used inside combinators
+    for (let i = 0; i < combinator.assert.length; i++) {
+      const subAssertion = combinator.assert[i];
+      if (
+        'type' in subAssertion &&
+        (subAssertion.type === 'select-best' || subAssertion.type === 'max-score')
+      ) {
+        throw new AssertValidationError(
+          `Invalid assertion at ${context}.assert[${i}]:\n` +
+            `${subAssertion.type} cannot be used inside ${result.data.type} combinator`,
+        );
+      }
+      parseAssertion(subAssertion, `${context}.assert[${i}]`);
     }
   }
 
