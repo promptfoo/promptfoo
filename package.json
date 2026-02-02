@@ -108,7 +108,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.22",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
@@ -169,7 +169,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.22",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
