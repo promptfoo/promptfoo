@@ -146,6 +146,12 @@ export function DataTable<TData, TValue = unknown>({
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
 
+  // Memoize rows to avoid unnecessary recalculations
+  const rows = React.useMemo(
+    () => (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows),
+    [isPrinting, table],
+  );
+
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -425,45 +431,43 @@ export function DataTable<TData, TValue = unknown>({
             <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
               {hasData ? (
                 // When printing, show all rows instead of just the current page
-                (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows).map(
-                  (row) => (
-                    <tr
-                      key={row.id}
-                      onClick={() => onRowClick?.(row.original)}
-                      className={cn(
-                        'border-b border-border transition-colors print:border-gray-300',
-                        onRowClick && 'cursor-pointer hover:bg-muted/50',
-                      )}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
-                        return (
-                          <td
-                            key={cell.id}
-                            className={cn(
-                              'py-3 text-sm',
-                              cell.column.id === 'select'
-                                ? 'px-3 cursor-pointer'
-                                : 'px-4 overflow-hidden text-ellipsis',
-                              cellAlign === 'right' && 'text-right',
-                            )}
-                            style={{ width: cell.column.getSize() }}
-                            onClick={
-                              cell.column.id === 'select'
-                                ? (e) => {
-                                    e.stopPropagation();
-                                    row.toggleSelected();
-                                  }
-                                : undefined
-                            }
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ),
-                )
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={cn(
+                      'border-b border-border transition-colors print:border-gray-300',
+                      onRowClick && 'cursor-pointer hover:bg-muted/50',
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+                      return (
+                        <td
+                          key={cell.id}
+                          className={cn(
+                            'py-3 text-sm',
+                            cell.column.id === 'select'
+                              ? 'px-3 cursor-pointer'
+                              : 'px-4 overflow-hidden text-ellipsis',
+                            cellAlign === 'right' && 'text-right',
+                          )}
+                          style={{ width: cell.column.getSize() }}
+                          onClick={
+                            cell.column.id === 'select'
+                              ? (e) => {
+                                  e.stopPropagation();
+                                  row.toggleSelected();
+                                }
+                              : undefined
+                          }
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan={allColumns.length} className="h-[200px] text-center">
