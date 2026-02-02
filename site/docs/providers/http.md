@@ -594,7 +594,7 @@ providers:
 
 ### transformToolsFormat
 
-The `transformToolsFormat` option converts [normalized tool format](/docs/configuration/tools#normalized-tool-format) to provider-specific formats:
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [normalized format](/docs/configuration/tools#normalized-tool-format) to provider-specific formats:
 
 | Value       | Target Format      |
 | ----------- | ------------------ |
@@ -603,7 +603,15 @@ The `transformToolsFormat` option converts [normalized tool format](/docs/config
 | `bedrock`   | AWS Bedrock        |
 | `google`    | Google (Gemini)    |
 
-When omitted, tools pass through unchanged.
+When omitted, tools and tool_choice pass through unchanged.
+
+**Why tool_choice needs transformation:** Each provider uses a different format for tool choice:
+
+| Normalized | OpenAI | Anthropic | Bedrock | Google |
+|------------|--------|-----------|---------|--------|
+| `mode: auto` | `"auto"` | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `mode: required` | `"required"` | `{ type: "any" }` | `{ any: {} }` | `{ functionCallingConfig: { mode: "ANY" } }` |
+| `mode: none` | `"none"` | — | — | `{ functionCallingConfig: { mode: "NONE" } }` |
 
 ### Template Variables
 
