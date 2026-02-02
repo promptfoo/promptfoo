@@ -805,6 +805,22 @@ For more details on using search-rubric assertions, see the [Search-Rubric docum
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
 
+:::tip Portable Tool Definitions
+
+For configs that work across multiple providers, use the [NormalizedTool format](/docs/configuration/tools):
+
+```yaml
+tools:
+  - name: get_weather
+    description: Get weather for a location
+    parameters:
+      type: object
+      properties:
+        location: { type: string }
+```
+
+:::
+
 ### Using tools
 
 To set `tools` on an OpenAI provider, use the provider's `config` key. The model may return tool calls in two formats:

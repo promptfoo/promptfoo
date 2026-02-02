@@ -817,7 +817,24 @@ tests:
 
 ### Function Calling
 
-Enable your model to interact with external systems through defined functions:
+Enable your model to interact with external systems through defined functions.
+
+:::tip Portable Tool Definitions
+
+For configs that work across multiple providers, use the [NormalizedTool format](/docs/configuration/tools):
+
+```yaml
+tools:
+  - name: get_weather
+    parameters:
+      type: object
+      properties:
+        location: { type: string }
+```
+
+This is automatically converted to Google's `functionDeclarations` format.
+
+:::
 
 ```yaml
 providers:

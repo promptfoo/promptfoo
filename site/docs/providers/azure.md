@@ -915,7 +915,24 @@ Replace the assistant ID and deployment name with your actual values.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
+Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them.
+
+:::tip Portable Tool Definitions
+
+For configs that work across multiple providers, use the [NormalizedTool format](/docs/configuration/tools):
+
+```yaml
+tools:
+  - name: get_weather
+    parameters:
+      type: object
+      properties:
+        location: { type: string }
+```
+
+This is automatically converted to Azure's OpenAI-compatible format.
+
+:::
 
 ```yaml
 providers:

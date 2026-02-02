@@ -1002,7 +1002,24 @@ This allows you to access the model's reasoning process during generation while 
 
 #### Tool Calling Support
 
-Qwen models support tool calling with OpenAI-compatible function definitions:
+Qwen models support tool calling with OpenAI-compatible function definitions.
+
+:::tip Portable Tool Definitions
+
+For configs that work across multiple providers, use the [NormalizedTool format](/docs/configuration/tools):
+
+```yaml
+tools:
+  - name: calculate
+    parameters:
+      type: object
+      properties:
+        expression: { type: string }
+```
+
+This is automatically converted to Bedrock's native `toolSpec` format.
+
+:::
 
 ```yaml
 config:
