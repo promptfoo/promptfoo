@@ -241,7 +241,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Populates the table store with the most recent eval result by fetching the data by eval ID
        */
       const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
         if (!data) {
