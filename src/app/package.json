@@ -36,7 +36,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.18",
     "ansi-to-html": "^0.7.2",
-    "autoprefixer": "^10.4.23",
+    "autoprefixer": "^10.4.24",
     "babel-plugin-react-compiler": "^1.0.0",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",

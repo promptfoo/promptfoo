@@ -95,7 +95,7 @@ providers:
 | [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing                             | `sequence` with config.inputs array                                             |
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                              | `promptfoo:simulated-user`                                                      |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                                | `watsonx:ibm/granite-3-3-8b-instruct`                                           |
-| [X.AI](./xai.md)                                    | X.AI's models                                                | `xai:grok-3-beta`                                                               |
+| [X.AI](./xai.md)                                    | X.AI's models (text, image, video, voice)                    | `xai:grok-3-beta`, `xai:video:grok-imagine-video`                               |
 
 ## Provider Syntax
 
