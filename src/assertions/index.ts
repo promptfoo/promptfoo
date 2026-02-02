@@ -32,6 +32,7 @@ import {
   type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
+  type CombinatorAssertion,
   type GradingResult,
   type VarValue,
 } from '../types/index';
@@ -43,6 +44,7 @@ import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
+import { handleCombinator, setRunAssertionFn } from './combinator';
 import {
   handleContains,
   handleContainsAll,
@@ -261,7 +263,7 @@ export async function runAssertion({
 }: {
   prompt?: string;
   provider?: ApiProvider;
-  assertion: Assertion;
+  assertion: Assertion | CombinatorAssertion;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
@@ -277,8 +279,24 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  if (assertion.transform) {
-    output = await transform(assertion.transform, output, {
+  // Handle combinator assertions (and/or) by delegating to combinator handler
+  if (assertion.type === 'and' || assertion.type === 'or') {
+    return handleCombinator(assertion as CombinatorAssertion, {
+      prompt,
+      provider,
+      providerResponse,
+      test,
+      vars: resolvedVars,
+      latencyMs,
+      traceId,
+    });
+  }
+
+  // At this point, assertion is definitely a regular Assertion (not a combinator)
+  const regularAssertion = assertion as Assertion;
+
+  if (regularAssertion.transform) {
+    output = await transform(regularAssertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
@@ -292,7 +310,7 @@ export async function runAssertion({
     logProbs,
     provider,
     providerResponse,
-    ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+    ...(regularAssertion.config ? { config: structuredClone(regularAssertion.config) } : {}),
   };
 
   // Add trace data if traceId is available
@@ -316,7 +334,7 @@ export async function runAssertion({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = regularAssertion.value;
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
@@ -350,7 +368,7 @@ export async function runAssertion({
             pass: false,
             score: 0,
             reason: (error as Error).message,
-            assertion,
+            assertion: regularAssertion,
           };
         }
       } else if (filePath.endsWith('.rb')) {
@@ -368,7 +386,7 @@ export async function runAssertion({
             pass: false,
             score: 0,
             reason: (error as Error).message,
-            assertion,
+            assertion: regularAssertion,
           };
         }
       } else {
@@ -405,13 +423,13 @@ export async function runAssertion({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
+  const baseType = getAssertionBaseType(regularAssertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {
       throw new Error(
-        `Script for "${assertion.type}" assertion returned a function. ` +
+        `Script for "${regularAssertion.type}" assertion returned a function. ` +
           `Only javascript/python/ruby assertion types can return functions. ` +
           `For other assertion types, return the expected value (string, number, array, or object).`,
       );
@@ -421,7 +439,7 @@ export async function runAssertion({
     // These are only valid for javascript/python/ruby assertion types
     if (typeof valueFromScript === 'boolean') {
       throw new Error(
-        `Script for "${assertion.type}" assertion returned a boolean. ` +
+        `Script for "${regularAssertion.type}" assertion returned a boolean. ` +
           `Only javascript/python/ruby assertion types can return boolean values. ` +
           `For other assertion types, return the expected value (string, number, array, or object).`,
       );
@@ -435,7 +453,7 @@ export async function runAssertion({
       'pass' in valueFromScript
     ) {
       throw new Error(
-        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+        `Script for "${regularAssertion.type}" assertion returned a GradingResult. ` +
           `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
           `For other assertion types, return the expected value (string, number, array, or object).`,
       );
@@ -459,12 +477,12 @@ export async function runAssertion({
     : undefined;
 
   const assertionParams: AssertionParams = {
-    assertion,
-    baseType: getAssertionBaseType(assertion),
+    assertion: regularAssertion,
+    baseType: getAssertionBaseType(regularAssertion),
     providerCallContext,
     assertionValueContext: context,
     cost,
-    inverse: isAssertionInverse(assertion),
+    inverse: isAssertionInverse(regularAssertion),
     latencyMs,
     logProbs,
     output,
@@ -473,7 +491,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     renderedValue,
-    test: getFinalTest(test, assertion),
+    test: getFinalTest(test, regularAssertion),
     valueFromScript,
   };
 
@@ -490,7 +508,7 @@ export async function runAssertion({
     // This allows the UI to display substituted variable values instead of raw templates
     if (
       renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
+      renderedValue !== regularAssertion.value &&
       typeof renderedValue === 'string'
     ) {
       result.metadata = result.metadata || {};
@@ -498,7 +516,7 @@ export async function runAssertion({
     }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
+    if (regularAssertion.weight === 0) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -508,7 +526,7 @@ export async function runAssertion({
     return result;
   }
 
-  throw new Error(`Unknown assertion type: ${assertion.type}`);
+  throw new Error(`Unknown assertion type: ${regularAssertion.type}`);
 }
 
 export async function runAssertions({
@@ -539,7 +557,7 @@ export async function runAssertions({
   });
   const subAssertResults: AssertionsResult[] = [];
   const asserts: {
-    assertion: Assertion;
+    assertion: Assertion | CombinatorAssertion;
     assertResult: AssertionsResult;
     index: number;
   }[] = test.assert
@@ -649,8 +667,12 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
   }
 }
 
+// Initialize combinator module with runAssertion reference to avoid circular dependency
+setRunAssertionFn(runAssertion);
+
 // These exports are used by the node.js package (index.ts)
 export default {
+  handleCombinator,
   runAssertion,
   runAssertions,
   matchesSimilarity,
