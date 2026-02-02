@@ -13,7 +13,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
-import { transformToolChoice } from '../shared';
+import { transformToolChoice, transformTools } from '../shared';
 import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
@@ -167,7 +167,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const configTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    // Transform tools from NormalizedTool format if needed
+    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
       processAnthropicTools(configTools);
 

@@ -2,15 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool } from '../../src/envars';
 import {
   calculateCost,
+  isNormalizedToolArray,
   isNormalizedToolChoice,
   isPromptfooSampleTarget,
   normalizedToolChoiceToAnthropic,
   normalizedToolChoiceToBedrock,
   normalizedToolChoiceToGoogle,
   normalizedToolChoiceToOpenAI,
+  normalizedToolsToAnthropic,
+  normalizedToolsToBedrock,
+  normalizedToolsToGoogle,
+  normalizedToolsToOpenAI,
   parseChatPrompt,
   toTitleCase,
   transformToolChoice,
+  transformTools,
 } from '../../src/providers/shared';
 
 vi.mock('../../src/envars');
@@ -385,6 +391,248 @@ describe('Shared Provider Functions', () => {
       it('should pass through for unknown format', () => {
         const choice = { mode: 'auto' } as const;
         expect(transformToolChoice(choice, 'unknown' as any)).toEqual(choice);
+      });
+    });
+  });
+
+  describe('NormalizedTool', () => {
+    const sampleTools = [
+      {
+        name: 'get_weather',
+        description: 'Get the current weather',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            location: { type: 'string', description: 'City name' },
+            unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+          },
+          required: ['location'],
+        },
+      },
+      {
+        name: 'search',
+        description: 'Search the web',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            query: { type: 'string' },
+          },
+        },
+      },
+    ];
+
+    describe('isNormalizedToolArray', () => {
+      it('should return true for valid NormalizedTool arrays', () => {
+        expect(isNormalizedToolArray(sampleTools)).toBe(true);
+        expect(isNormalizedToolArray([{ name: 'simple_tool' }])).toBe(true);
+      });
+
+      it('should return false for empty arrays', () => {
+        expect(isNormalizedToolArray([])).toBe(false);
+      });
+
+      it('should return false for non-arrays', () => {
+        expect(isNormalizedToolArray(null)).toBe(false);
+        expect(isNormalizedToolArray(undefined)).toBe(false);
+        expect(isNormalizedToolArray('string')).toBe(false);
+        expect(isNormalizedToolArray({ name: 'tool' })).toBe(false);
+      });
+
+      it('should return false for OpenAI format tools', () => {
+        const openaiTools = [{ type: 'function', function: { name: 'test' } }];
+        expect(isNormalizedToolArray(openaiTools)).toBe(false);
+      });
+
+      it('should return false for Anthropic format tools', () => {
+        const anthropicTools = [{ name: 'test', input_schema: { type: 'object' } }];
+        expect(isNormalizedToolArray(anthropicTools)).toBe(false);
+      });
+
+      it('should return false for Bedrock format tools', () => {
+        const bedrockTools = [{ toolSpec: { name: 'test' } }];
+        expect(isNormalizedToolArray(bedrockTools)).toBe(false);
+      });
+
+      it('should return false for Google format tools', () => {
+        const googleTools = [{ functionDeclarations: [{ name: 'test' }] }];
+        expect(isNormalizedToolArray(googleTools)).toBe(false);
+      });
+    });
+
+    describe('normalizedToolsToOpenAI', () => {
+      it('should convert to OpenAI format', () => {
+        const result = normalizedToolsToOpenAI(sampleTools);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get the current weather',
+            parameters: sampleTools[0].parameters,
+          },
+        });
+        expect(result[1]).toEqual({
+          type: 'function',
+          function: {
+            name: 'search',
+            description: 'Search the web',
+            parameters: sampleTools[1].parameters,
+          },
+        });
+      });
+
+      it('should handle tools without description or parameters', () => {
+        const result = normalizedToolsToOpenAI([{ name: 'minimal' }]);
+
+        expect(result[0]).toEqual({
+          type: 'function',
+          function: { name: 'minimal' },
+        });
+      });
+
+      it('should include strict property when specified', () => {
+        const result = normalizedToolsToOpenAI([{ name: 'strict_tool', strict: true }]);
+
+        expect(result[0]).toEqual({
+          type: 'function',
+          function: { name: 'strict_tool', strict: true },
+        });
+      });
+    });
+
+    describe('normalizedToolsToAnthropic', () => {
+      it('should convert to Anthropic format', () => {
+        const result = normalizedToolsToAnthropic(sampleTools);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          name: 'get_weather',
+          description: 'Get the current weather',
+          input_schema: sampleTools[0].parameters,
+        });
+      });
+
+      it('should provide default input_schema when no parameters', () => {
+        const result = normalizedToolsToAnthropic([{ name: 'minimal' }]);
+
+        expect(result[0]).toEqual({
+          name: 'minimal',
+          input_schema: { type: 'object', properties: {} },
+        });
+      });
+
+      it('should include strict property when specified', () => {
+        const result = normalizedToolsToAnthropic([{ name: 'strict_tool', strict: true }]);
+
+        expect(result[0]).toEqual({
+          name: 'strict_tool',
+          input_schema: { type: 'object', properties: {} },
+          strict: true,
+        });
+      });
+    });
+
+    describe('normalizedToolsToBedrock', () => {
+      it('should convert to Bedrock Converse format', () => {
+        const result = normalizedToolsToBedrock(sampleTools);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          toolSpec: {
+            name: 'get_weather',
+            description: 'Get the current weather',
+            inputSchema: {
+              json: sampleTools[0].parameters,
+            },
+          },
+        });
+      });
+
+      it('should provide default inputSchema when no parameters', () => {
+        const result = normalizedToolsToBedrock([{ name: 'minimal' }]);
+
+        expect(result[0]).toEqual({
+          toolSpec: {
+            name: 'minimal',
+            inputSchema: {
+              json: { type: 'object', properties: {} },
+            },
+          },
+        });
+      });
+    });
+
+    describe('normalizedToolsToGoogle', () => {
+      it('should convert to Google format with functionDeclarations array', () => {
+        const result = normalizedToolsToGoogle(sampleTools);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].functionDeclarations).toHaveLength(2);
+        expect(result[0].functionDeclarations[0].name).toBe('get_weather');
+        expect(result[0].functionDeclarations[1].name).toBe('search');
+      });
+
+      it('should convert types to uppercase', () => {
+        const result = normalizedToolsToGoogle(sampleTools);
+
+        const params = result[0].functionDeclarations[0].parameters as Record<string, unknown>;
+        expect(params.type).toBe('OBJECT');
+        const props = params.properties as Record<string, Record<string, unknown>>;
+        expect(props.location.type).toBe('STRING');
+      });
+
+      it('should remove additionalProperties from schema', () => {
+        const toolsWithAdditionalProps = [
+          {
+            name: 'test',
+            parameters: {
+              type: 'object' as const,
+              properties: { foo: { type: 'string' } },
+              additionalProperties: false,
+            },
+          },
+        ];
+        const result = normalizedToolsToGoogle(toolsWithAdditionalProps);
+
+        const params = result[0].functionDeclarations[0].parameters as Record<string, unknown>;
+        expect(params).not.toHaveProperty('additionalProperties');
+      });
+    });
+
+    describe('transformTools', () => {
+      it('should pass through non-NormalizedTool arrays', () => {
+        const openaiTools = [{ type: 'function', function: { name: 'test' } }];
+        expect(transformTools(openaiTools, 'openai')).toEqual(openaiTools);
+
+        const anthropicTools = [{ name: 'test', input_schema: { type: 'object' } }];
+        expect(transformTools(anthropicTools, 'anthropic')).toEqual(anthropicTools);
+      });
+
+      it('should transform NormalizedTool for OpenAI', () => {
+        const result = transformTools(sampleTools, 'openai') as any[];
+        expect(result[0].type).toBe('function');
+        expect(result[0].function.name).toBe('get_weather');
+      });
+
+      it('should transform NormalizedTool for Anthropic', () => {
+        const result = transformTools(sampleTools, 'anthropic') as any[];
+        expect(result[0].name).toBe('get_weather');
+        expect(result[0].input_schema).toBeDefined();
+      });
+
+      it('should transform NormalizedTool for Bedrock', () => {
+        const result = transformTools(sampleTools, 'bedrock') as any[];
+        expect(result[0].toolSpec.name).toBe('get_weather');
+      });
+
+      it('should transform NormalizedTool for Google', () => {
+        const result = transformTools(sampleTools, 'google') as any[];
+        expect(result[0].functionDeclarations[0].name).toBe('get_weather');
+      });
+
+      it('should pass through for unknown format', () => {
+        expect(transformTools(sampleTools, 'unknown' as any)).toEqual(sampleTools);
       });
     });
   });

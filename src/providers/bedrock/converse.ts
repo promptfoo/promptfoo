@@ -26,7 +26,12 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isNormalizedToolChoice, normalizedToolChoiceToBedrock } from '../shared';
+import {
+  isNormalizedToolArray,
+  isNormalizedToolChoice,
+  normalizedToolChoiceToBedrock,
+  normalizedToolsToBedrock,
+} from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import type {
   ContentBlock,
@@ -223,9 +228,15 @@ function calculateBedrockConverseCost(
 }
 
 /**
- * Convert various tool formats to Converse API format
+ * Convert various tool formats to Converse API format.
+ * Supports NormalizedTool, OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
+  // Check if entire array is NormalizedTool format
+  if (isNormalizedToolArray(tools)) {
+    return normalizedToolsToBedrock(tools) as Tool[];
+  }
+
   return tools.map((tool): Tool => {
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
@@ -245,7 +256,20 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
       } as Tool;
     }
 
-    // Anthropic format
+    // NormalizedTool format (has 'name' and 'parameters' but no 'input_schema')
+    if (tool.name && 'parameters' in tool && !('input_schema' in tool)) {
+      return {
+        toolSpec: {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: {
+            json: (tool.parameters || { type: 'object', properties: {} }) as DocumentType,
+          },
+        },
+      } as Tool;
+    }
+
+    // Anthropic format (has 'name' and 'input_schema')
     if (tool.name) {
       return {
         toolSpec: {

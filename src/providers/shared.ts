@@ -301,3 +301,238 @@ export function transformToolChoice(
       return toolChoice;
   }
 }
+
+// ==================
+// Normalized Tools
+// ==================
+
+/**
+ * Provider-agnostic tool format.
+ * Providers transform this to their native format.
+ *
+ * The parameters field supports full JSON Schema, including nested objects,
+ * arrays, enums, $defs, and other schema features.
+ */
+export interface NormalizedTool {
+  name: string;
+  description?: string;
+  /**
+   * JSON Schema for the tool's parameters.
+   * Supports full JSON Schema draft-07 features.
+   */
+  parameters?: {
+    type: 'object';
+    properties?: Record<string, unknown>;
+    required?: string[];
+    additionalProperties?: boolean | Record<string, unknown>;
+    /** JSON Schema definitions for reuse */
+    $defs?: Record<string, unknown>;
+    /** Other JSON Schema properties */
+    [key: string]: unknown;
+  };
+  /**
+   * When true, enables strict schema validation (OpenAI/Anthropic).
+   * Provider support:
+   * - OpenAI: Guarantees output matches schema exactly
+   * - Anthropic: Enables structured outputs beta feature
+   * - Bedrock/Google: Ignored (not supported)
+   */
+  strict?: boolean;
+}
+
+/**
+ * Checks if an array contains NormalizedTool objects.
+ * Returns true if the first tool in the array matches the NormalizedTool structure.
+ */
+export function isNormalizedToolArray(tools: unknown): tools is NormalizedTool[] {
+  if (!Array.isArray(tools) || tools.length === 0) {
+    return false;
+  }
+  const first = tools[0];
+  if (typeof first !== 'object' || first === null) {
+    return false;
+  }
+  // NormalizedTool has 'name' at top level but NOT 'type' (which would be OpenAI format)
+  // and NOT 'input_schema' (which would be Anthropic format)
+  // and NOT 'toolSpec' (which would be Bedrock format)
+  // and NOT 'functionDeclarations' (which would be Google format)
+  return (
+    'name' in first &&
+    typeof (first as Record<string, unknown>).name === 'string' &&
+    !('type' in first) &&
+    !('input_schema' in first) &&
+    !('toolSpec' in first) &&
+    !('functionDeclarations' in first)
+  );
+}
+
+/**
+ * OpenAI tool format
+ */
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+    /** Enables strict schema validation */
+    strict?: boolean;
+  };
+}
+
+/**
+ * Anthropic tool format
+ */
+export interface AnthropicTool {
+  name: string;
+  description?: string;
+  input_schema: Record<string, unknown>;
+  /** Enables structured outputs beta feature */
+  strict?: boolean;
+}
+
+/**
+ * Bedrock Converse tool format
+ */
+export interface BedrockTool {
+  toolSpec: {
+    name: string;
+    description?: string;
+    inputSchema: {
+      json: Record<string, unknown>;
+    };
+  };
+}
+
+/**
+ * Google tool format (array of function declarations)
+ */
+export interface GoogleTool {
+  functionDeclarations: Array<{
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  }>;
+}
+
+/**
+ * Transforms NormalizedTool array to OpenAI format.
+ */
+export function normalizedToolsToOpenAI(tools: NormalizedTool[]): OpenAITool[] {
+  return tools.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      ...(tool.parameters ? { parameters: tool.parameters } : {}),
+      ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+    },
+  }));
+}
+
+/**
+ * Transforms NormalizedTool array to Anthropic format.
+ */
+export function normalizedToolsToAnthropic(tools: NormalizedTool[]): AnthropicTool[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    ...(tool.description ? { description: tool.description } : {}),
+    input_schema: tool.parameters || { type: 'object', properties: {} },
+    ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+  }));
+}
+
+/**
+ * Transforms NormalizedTool array to Bedrock Converse format.
+ */
+export function normalizedToolsToBedrock(tools: NormalizedTool[]): BedrockTool[] {
+  return tools.map((tool) => ({
+    toolSpec: {
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      inputSchema: {
+        json: tool.parameters || { type: 'object', properties: {} },
+      },
+    },
+  }));
+}
+
+/**
+ * Sanitizes a schema for Google/Gemini compatibility.
+ * - Converts type strings to uppercase (string → STRING)
+ * - Removes unsupported properties (additionalProperties, $schema, default)
+ * - Recursively processes nested schemas
+ */
+function sanitizeSchemaForGoogle(schema: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Skip unsupported properties
+    if (['additionalProperties', '$schema', 'default', '$id', '$ref'].includes(key)) {
+      continue;
+    }
+
+    if (key === 'type' && typeof value === 'string') {
+      // Convert type to uppercase
+      result[key] = value.toUpperCase();
+    } else if (key === 'properties' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize properties
+      const sanitizedProps: Record<string, unknown> = {};
+      for (const [propKey, propValue] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof propValue === 'object' && propValue !== null) {
+          sanitizedProps[propKey] = sanitizeSchemaForGoogle(propValue as Record<string, unknown>);
+        } else {
+          sanitizedProps[propKey] = propValue;
+        }
+      }
+      result[key] = sanitizedProps;
+    } else if (key === 'items' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize array items
+      result[key] = sanitizeSchemaForGoogle(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Transforms NormalizedTool array to Google/Gemini format.
+ */
+export function normalizedToolsToGoogle(tools: NormalizedTool[]): GoogleTool[] {
+  const functionDeclarations = tools.map((tool) => ({
+    name: tool.name,
+    ...(tool.description ? { description: tool.description } : {}),
+    ...(tool.parameters
+      ? { parameters: sanitizeSchemaForGoogle(tool.parameters as Record<string, unknown>) }
+      : {}),
+  }));
+  return [{ functionDeclarations }];
+}
+
+export type ToolFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
+
+/**
+ * Transforms tools to the specified provider format.
+ * If the input is already in a native format (not NormalizedTool), it's returned as-is.
+ */
+export function transformTools(tools: unknown, format: ToolFormat): unknown {
+  // If not a normalized format, pass through as-is (backward compatibility)
+  if (!isNormalizedToolArray(tools)) {
+    return tools;
+  }
+
+  switch (format) {
+    case 'openai':
+      return normalizedToolsToOpenAI(tools);
+    case 'anthropic':
+      return normalizedToolsToAnthropic(tools);
+    case 'bedrock':
+      return normalizedToolsToBedrock(tools);
+    case 'google':
+      return normalizedToolsToGoogle(tools);
+    default:
+      return tools;
+  }
+}
