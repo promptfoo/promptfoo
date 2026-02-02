@@ -196,7 +196,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           ? config.temperature
           : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
-      ...(config.tool_choice ? { tool_choice: transformToolChoice(config.tool_choice, 'anthropic') as Anthropic.Messages.ToolChoice } : {}),
+      ...(config.tool_choice
+        ? {
+            tool_choice: transformToolChoice(
+              config.tool_choice,
+              'anthropic',
+            ) as Anthropic.Messages.ToolChoice,
+          }
+        : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
       ...(processedOutputFormat ? { output_format: processedOutputFormat as any } : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),

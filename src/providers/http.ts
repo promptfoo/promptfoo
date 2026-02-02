@@ -28,7 +28,7 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -828,6 +828,11 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
+  /**
+   * Transform normalized tools/tool_choice to provider-specific format.
+   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
+   */
+  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
   useHttps: z
     .boolean()
     .optional()
@@ -2039,11 +2044,16 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Transform tools and tool_choice if transformToolsFormat is specified
+    const rawTools = context?.prompt?.config?.tools;
+    const rawToolChoice = context?.prompt?.config?.tool_choice;
+    const format = this.config.transformToolsFormat as ToolFormat | undefined;
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
-      tools: context?.prompt?.config?.tools,
-      tool_choice: context?.prompt?.config?.tool_choice,
+      tools: format ? transformTools(rawTools, format) : rawTools,
+      tool_choice: format ? transformToolChoice(rawToolChoice, format) : rawToolChoice,
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
