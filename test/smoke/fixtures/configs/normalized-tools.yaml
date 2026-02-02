@@ -2,9 +2,9 @@
 description: 'Smoke test - normalized tool format with cross-provider reuse'
 
 providers:
-  # Test normalized tools with first provider using YAML anchor
-  - id: echo
-    label: 'Provider with normalized tools'
+  # Test normalized tools with auto mode
+  - id: 'exec:node ../scripts/echo-config.js'
+    label: 'Auto tool choice'
     config:
       tools: &tools
         - normalized: true
@@ -34,17 +34,17 @@ providers:
       tool_choice:
         mode: auto
 
-  # Test tool reuse with YAML alias
-  - id: echo
-    label: 'Provider reusing tools'
+  # Test tool reuse with YAML alias and required mode
+  - id: 'exec:node ../scripts/echo-config.js'
+    label: 'Required tool choice'
     config:
       tools: *tools
       tool_choice:
         mode: required
 
   # Test specific tool choice mode
-  - id: echo
-    label: 'Provider with specific tool'
+  - id: 'exec:node ../scripts/echo-config.js'
+    label: 'Specific tool choice'
     config:
       tools: *tools
       tool_choice:
@@ -58,5 +58,4 @@ tests:
   - vars:
       location: San Francisco
     assert:
-      - type: contains
-        value: San Francisco
+      - type: is-json
