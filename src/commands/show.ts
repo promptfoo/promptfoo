@@ -7,6 +7,31 @@ import { printBorder, setupEnv } from '../util/index';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';
 
+type CountMetrics = {
+  testPassCount?: number;
+  testFailCount?: number;
+  testErrorCount?: number;
+};
+
+function formatPassCount(metrics?: CountMetrics) {
+  if (!metrics) {
+    return '-';
+  }
+  return String(metrics.testPassCount ?? 0);
+}
+
+function formatFailCount(metrics?: CountMetrics) {
+  if (!metrics) {
+    return '-';
+  }
+  const failCount = metrics.testFailCount ?? 0;
+  const errorCount = metrics.testErrorCount ?? 0;
+  if (errorCount > 0) {
+    return `${failCount} (+${errorCount} errors)`;
+  }
+  return String(failCount);
+}
+
 export async function handlePrompt(id: string) {
   const prompt = await getPromptFromHash(id);
   if (!prompt) {
@@ -39,13 +64,8 @@ export async function handlePrompt(id: string) {
                 100
             ).toFixed(2)}%`
           : '-',
-      'Pass count': evl.metrics?.testPassCount || '-',
-      'Fail count':
-        evl.metrics?.testFailCount ||
-        '-' +
-          (evl.metrics?.testErrorCount && evl.metrics.testErrorCount > 0
-            ? `+ ${evl.metrics.testErrorCount} errors`
-            : ''),
+      'Pass count': formatPassCount(evl.metrics),
+      'Fail count': formatFailCount(evl.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
@@ -122,13 +142,8 @@ export async function handleDataset(id: string) {
                 100
             ).toFixed(2)}%`
           : '-',
-      'Pass count': prompt.prompt.metrics?.testPassCount || '-',
-      'Fail count':
-        prompt.prompt.metrics?.testFailCount ||
-        '-' +
-          (prompt.prompt.metrics?.testErrorCount && prompt.prompt.metrics.testErrorCount > 0
-            ? `+ ${prompt.prompt.metrics.testErrorCount} errors`
-            : ''),
+      'Pass count': formatPassCount(prompt.prompt.metrics),
+      'Fail count': formatFailCount(prompt.prompt.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
