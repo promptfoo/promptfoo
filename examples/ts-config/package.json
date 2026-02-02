@@ -1,6 +1,8 @@
 {
   "name": "ts-config-example",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "TypeScript configuration example for promptfoo with dynamic schema generation",
   "scripts": {
     "eval": "NODE_OPTIONS=\"--import tsx\" promptfoo eval -c promptfooconfig.ts",
