@@ -234,9 +234,8 @@ See `test/AGENTS.md` for testing patterns.
 
 ## Project Conventions
 
-- **CommonJS modules** (type: "commonjs" in package.json)
-- **Node.js >=20.0.0** - Use `nvm use` to align with `.nvmrc`
-- **npm version** constrained via `engines.npm` in package.json; `.npmrc` sets `engine-strict=true`
+- **ESM modules** (type: "module" in package.json)
+- **Node.js ^20.20.0 || >=22.22.0** - Use `nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
