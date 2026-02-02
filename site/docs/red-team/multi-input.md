@@ -67,6 +67,10 @@ Create a file named `finbot-redteam.yaml`:
 targets:
   - id: https
     label: finbot-invoice-processor
+    # Define inputs on the target for multi-input mode
+    inputs:
+      vendor_id: 'The vendor account ID submitting the invoice (integer)'
+      description: 'Service description for the invoice that is processed by the AI'
     config:
       url: 'https://owasp-finbot-ctf-demo.onrender.com/api/vendors/{{vendor_id}}/invoices'
       method: 'POST'
@@ -89,10 +93,6 @@ redteam:
     - Flag suspicious invoices for manual review
     - Never approve fraudulent or manipulated invoices
     - Maintain strict security checks regardless of invoice content
-
-  inputs:
-    vendor_id: 'The vendor account ID submitting the invoice (integer)'
-    description: 'Service description for the invoice that is processed by the AI'
 
   plugins:
     - id: 'hijacking'
@@ -156,13 +156,17 @@ The key difference from single-input testing: both fields contain adversarial co
 
 ### Basic Setup
 
-Add the `inputs` field to your redteam configuration to enable multi-input mode:
+Add the `inputs` field to your target configuration to enable multi-input mode:
 
 ```yaml
-redteam:
-  inputs:
-    user_id: 'The user making the request'
-    message: 'The user message to process'
+targets:
+  - id: https
+    inputs:
+      user_id: 'The user making the request'
+      message: 'The user message to process'
+    config:
+      url: 'https://api.example.com/chat'
+      # ... rest of config
 ```
 
 Each key becomes a variable that plugins will generate adversarial content for. The value is a description that guides test case generation.
@@ -176,16 +180,18 @@ Variable names must:
 - Match the template variables in your target configuration
 
 ```yaml
-# Valid variable names
-inputs:
-  user_id: 'User identifier'
-  message_content: 'Message body'
-  _context: 'System context'
+targets:
+  - id: https
+    # Valid variable names
+    inputs:
+      user_id: 'User identifier'
+      message_content: 'Message body'
+      _context: 'System context'
 
-# Invalid - will cause errors
-inputs:
-  123invalid: 'Starts with number'
-  my-var: 'Contains hyphen'
+    # Invalid - will cause errors
+    # inputs:
+    #   123invalid: 'Starts with number'
+    #   my-var: 'Contains hyphen'
 ```
 
 ### Using with HTTP Targets
@@ -195,6 +201,11 @@ Reference your input variables in the HTTP provider URL and body:
 ```yaml
 targets:
   - id: https
+    # Define inputs on the target
+    inputs:
+      user_id: 'Target user ID for the request'
+      message: 'Primary user message'
+      context: 'Additional context provided to the AI'
     config:
       # Variables can be used in the URL path
       url: 'https://api.example.com/users/{{user_id}}/chat'
@@ -203,12 +214,6 @@ targets:
         message: '{{message}}'
         context: '{{context}}'
       transformResponse: 'json.response'
-
-redteam:
-  inputs:
-    user_id: 'Target user ID for the request'
-    message: 'Primary user message'
-    context: 'Additional context provided to the AI'
 ```
 
 ### Using with Custom Providers
@@ -237,11 +242,15 @@ def call_api(prompt, options, context):
 Override inputs for specific plugins:
 
 ```yaml
-redteam:
-  inputs:
-    user_id: 'The requesting user'
-    query: 'The search query'
+targets:
+  - id: https
+    inputs:
+      user_id: 'The requesting user'
+      query: 'The search query'
+    config:
+      # ... target config
 
+redteam:
   plugins:
     - id: 'bola'
       config:
@@ -293,11 +302,15 @@ When these plugins are in your configuration with multi-input mode enabled, they
 4. **Test across user contexts** — Use the `contexts` feature to test different user roles
 
 ```yaml
-redteam:
-  inputs:
-    user_id: 'The user identifier'
-    action: 'The requested action'
+targets:
+  - id: https
+    inputs:
+      user_id: 'The user identifier'
+      action: 'The requested action'
+    config:
+      # ... target config
 
+redteam:
   contexts:
     - id: regular_user
       purpose: 'Testing as a regular customer'

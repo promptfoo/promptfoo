@@ -171,9 +171,6 @@ export interface RedteamContext {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  // Multi-variable inputs - when specified, generates test cases with multiple variables
-  // The first key becomes the primary injectVar for strategies
-  inputs?: Inputs;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
