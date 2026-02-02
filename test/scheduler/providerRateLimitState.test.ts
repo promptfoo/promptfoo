@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
 
 // Fast retry policy for tests - minimal delays
@@ -13,6 +13,7 @@ describe('ProviderRateLimitState', () => {
   let state: ProviderRateLimitState;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     state = new ProviderRateLimitState({
       rateLimitKey: 'test-provider',
       maxConcurrency: 5,
@@ -23,6 +24,7 @@ describe('ProviderRateLimitState', () => {
 
   afterEach(() => {
     state.dispose();
+    vi.useRealTimers();
   });
 
   describe('Constructor', () => {
@@ -184,13 +186,36 @@ describe('ProviderRateLimitState', () => {
 
       expect(events.length).toBeGreaterThan(0);
     });
+
+    it('should handle error with undefined message gracefully', async () => {
+      // Test that isRateLimitError doesn't crash when error.message is undefined
+      const error = new Error('placeholder');
+      (error as { message: string | undefined }).message = undefined;
+
+      // Should not throw - just not detect it as a rate limit
+      await expect(
+        noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw error;
+          },
+          {},
+        ),
+      ).rejects.toBeDefined();
+
+      // The error should be counted as failed, not as a rate limit
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.failedRequests).toBe(1);
+      expect(metrics.rateLimitHits).toBe(0);
+    });
   });
 
   describe('executeWithRetry - retry behavior', () => {
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
-      const result = await state.executeWithRetry(
+      // Start the request - it will retry after rate limit
+      const promise = state.executeWithRetry(
         'req-1',
         async () => {
           attempt++;
@@ -200,10 +225,16 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          // Provide fast retry-after to avoid 60-second default
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
+
+      // Run all timers to completion (handles retry delays and rate limit resets)
+      await vi.runAllTimersAsync();
+
+      const result = await promise;
 
       expect(attempt).toBe(2);
       expect(result).toBe('success');
@@ -214,7 +245,7 @@ describe('ProviderRateLimitState', () => {
       state.on('request:retrying', (data) => events.push(data));
 
       let attempt = 0;
-      await state.executeWithRetry(
+      const promise = state.executeWithRetry(
         'req-1',
         async () => {
           attempt++;
@@ -224,9 +255,16 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
+
+      // Run all timers to completion
+      await vi.runAllTimersAsync();
+
+      await promise;
 
       expect(events.length).toBe(1);
       expect(events[0].attempt).toBe(1);
@@ -235,7 +273,7 @@ describe('ProviderRateLimitState', () => {
 
     it('should increment retriedRequests', async () => {
       let attempt = 0;
-      await state.executeWithRetry(
+      const promise = state.executeWithRetry(
         'req-1',
         async () => {
           attempt++;
@@ -245,9 +283,16 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
+
+      // Run all timers to completion
+      await vi.runAllTimersAsync();
+
+      await promise;
 
       const metrics = state.getMetrics();
       expect(metrics.retriedRequests).toBe(2);
@@ -311,7 +356,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1, // Fast retry to avoid 60s default
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
@@ -339,10 +385,14 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1,
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
+
+      // Advance past the rate limit reset time to allow subsequent requests
+      vi.advanceTimersByTime(10);
 
       const events: any[] = [];
       testState.on('concurrency:increased', (data) => events.push(data));

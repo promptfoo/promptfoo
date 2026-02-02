@@ -78,6 +78,8 @@ export interface Config {
   defaultTest?: TestCase;
   extensions?: string[];
   language?: string | string[]; // Global language configuration
+  // Provider used for generating adversarial inputs (redteam provider)
+  provider?: string | CoreProviderOptions;
 }
 
 export interface ProviderOptions {

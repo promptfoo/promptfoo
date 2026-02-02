@@ -168,7 +168,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),

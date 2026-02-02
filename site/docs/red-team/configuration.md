@@ -707,9 +707,7 @@ Testing in "low-resource" languages (languages with less training data) often re
 
 ## Providers
 
-The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
-
-Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
+The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. This is separate from the "target" model(s) set in top-level `targets`/`providers` — configuring your target does **not** affect attack generation.
 
 A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
 
@@ -755,6 +753,17 @@ A local model via [ollama](/docs/providers/ollama/) would look similar:
 ```yaml
 redteam:
   provider: ollama:chat:llama3.3
+```
+
+For an OpenAI-compatible API (e.g., local models with vLLM, LM Studio, or other OpenAI-compatible servers):
+
+```yaml
+redteam:
+  provider:
+    id: openai:chat:my-model-name
+    config:
+      apiBaseUrl: http://localhost:8000/v1
+      apiKey: '{{ env.LOCAL_API_KEY }}'
 ```
 
 :::warning

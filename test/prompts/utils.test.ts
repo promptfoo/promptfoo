@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { hashPrompt, maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { sha256 } from '../../src/util/createHash';
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
@@ -169,5 +170,60 @@ describe('normalizeInput', () => {
         raw: 'prompts2.txt',
       },
     ]);
+  });
+});
+
+describe('hashPrompt', () => {
+  describe('priority order', () => {
+    it('uses label when provided (highest priority)', () => {
+      expect(
+        hashPrompt({
+          id: 'prompt-id',
+          label: 'Prompt Label',
+          raw: 'Prompt Raw',
+        }),
+      ).toBe(sha256('Prompt Label'));
+    });
+
+    it('falls back to id when label is empty string', () => {
+      expect(
+        hashPrompt({
+          id: 'prompt-id',
+          label: '',
+          raw: 'Prompt Raw',
+        }),
+      ).toBe(sha256('prompt-id'));
+    });
+
+    it('falls back to raw when both label and id are empty', () => {
+      expect(
+        hashPrompt({
+          id: '',
+          label: '',
+          raw: 'Prompt Raw Content',
+        }),
+      ).toBe(sha256('Prompt Raw Content'));
+    });
+
+    it('falls back to raw when label and id are not provided', () => {
+      expect(
+        hashPrompt({
+          label: '',
+          raw: 'Only raw content',
+        }),
+      ).toBe(sha256('Only raw content'));
+    });
+  });
+
+  describe('consistency with generateIdFromPrompt', () => {
+    it('produces same result as generateIdFromPrompt', () => {
+      const prompt = {
+        id: 'test-id',
+        label: 'Test Label',
+        raw: 'Test Raw',
+      };
+      // Both functions should produce identical results
+      expect(hashPrompt(prompt)).toBe(sha256('Test Label'));
+    });
   });
 });

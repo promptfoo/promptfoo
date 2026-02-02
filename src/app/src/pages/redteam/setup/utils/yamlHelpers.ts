@@ -9,6 +9,7 @@ const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unkno
   const orderedRedTeam: Record<string, unknown> = {};
   const redTeamOrder = [
     'purpose',
+    'provider',
     'entities',
     'plugins',
     'testGenerationInstructions',

@@ -688,4 +688,200 @@ describe('Combobox', () => {
       expect(input.value).toBe('');
     });
   });
+
+  describe('chevron button interaction', () => {
+    it('toggles dropdown when chevron is clicked', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const chevron = screen.getByTestId('combobox-chevron');
+
+      // Click to open
+      await user.click(chevron);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Click to close
+      await user.click(chevron);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
+    });
+
+    it('focuses input when chevron is clicked', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const chevron = screen.getByTestId('combobox-chevron');
+      const input = screen.getByRole('combobox');
+
+      await user.click(chevron);
+
+      expect(input).toHaveFocus();
+    });
+
+    it('does not toggle dropdown when chevron is clicked and disabled', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} disabled />);
+
+      const chevron = screen.getByTestId('combobox-chevron');
+
+      await user.click(chevron);
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('has proper aria-label on chevron button', () => {
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+      const chevron = screen.getByTestId('combobox-chevron');
+      expect(chevron).toHaveAttribute('aria-label', 'Open dropdown');
+    });
+
+    it('updates aria-label when dropdown is open', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      const chevron = screen.getByTestId('combobox-chevron');
+      expect(chevron).toHaveAttribute('aria-label', 'Close dropdown');
+    });
+
+    it('prevents default behavior on chevron mousedown', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const chevron = screen.getByTestId('combobox-chevron');
+      const input = screen.getByRole('combobox');
+
+      // Focus the input first
+      input.focus();
+
+      // MouseDown on chevron should not blur the input
+      await user.pointer({ keys: '[MouseLeft>]', target: chevron });
+
+      expect(input).toHaveFocus();
+    });
+
+    it('does not close dropdown when clicking chevron while input is blurred', async () => {
+      const user = userEvent.setup();
+      render(
+        <div>
+          <Combobox options={mockOptions} onChange={vi.fn()} />
+          <button>Other element</button>
+        </div>,
+      );
+
+      const input = screen.getByRole('combobox');
+      const chevron = screen.getByTestId('combobox-chevron');
+
+      // Open dropdown via input
+      await user.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Click other element to blur input
+      await user.click(screen.getByText('Other element'));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
+
+      // Now clicking chevron should reopen
+      await user.click(chevron);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('input blur with chevron interaction', () => {
+    it('does not close dropdown when focus moves to chevron', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const input = screen.getByRole('combobox');
+
+      // Open dropdown
+      await user.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Tab to chevron (simulating blur to chevron)
+      await user.tab();
+
+      // Dropdown should remain open
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('interact outside with chevron', () => {
+    it('does not close dropdown when clicking chevron from outside', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const input = screen.getByRole('combobox');
+      const chevron = screen.getByTestId('combobox-chevron');
+
+      // Open dropdown
+      await user.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Click chevron (this is technically an "outside" interaction from popover's perspective)
+      await user.click(chevron);
+
+      // Should toggle closed
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
+    });
+
+    it('prevents closing when chevron is clicked during interact outside', async () => {
+      const user = userEvent.setup();
+      render(<Combobox options={mockOptions} onChange={vi.fn()} />);
+
+      const input = screen.getByRole('combobox');
+      const chevron = screen.getByTestId('combobox-chevron');
+
+      // Open dropdown
+      await user.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Clicking chevron should toggle it closed via handleChevronClick, not via onInteractOutside
+      // This tests that onInteractOutside properly prevents its default behavior
+      await user.click(chevron);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
+
+      // Click chevron again to reopen
+      await user.click(chevron);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+    });
+  });
 });

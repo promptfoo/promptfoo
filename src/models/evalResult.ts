@@ -3,6 +3,7 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extrac
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
+import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import {
@@ -61,6 +62,39 @@ export function sanitizeProvider(
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
+/**
+ * Sanitize an object for database storage by removing circular references
+ * and non-serializable values (functions, Timeout objects, etc.).
+ * Uses safeJsonStringify which handles circular references gracefully.
+ *
+ * This prevents "Converting circular structure to JSON" errors that can occur
+ * when Node.js Timeout objects or other non-serializable data leaks into results.
+ * See: https://github.com/promptfoo/promptfoo/issues/7266
+ */
+function sanitizeForDb<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  try {
+    const serialized = safeJsonStringify(obj);
+    if (serialized === undefined) {
+      // safeJsonStringify returns undefined for non-serializable objects (e.g., BigInt)
+      // This is a rare edge case - log for debugging and return type-appropriate fallback
+      logger.debug('sanitizeForDb: Failed to serialize object, using fallback', {
+        valueType: typeof obj,
+        isArray: Array.isArray(obj),
+      });
+      // Preserve JSON shape: arrays return [], objects/primitives return null
+      return (Array.isArray(obj) ? [] : null) as T;
+    }
+    return JSON.parse(serialized);
+  } catch (error) {
+    // If parsing fails, return type-appropriate fallback
+    logger.debug('sanitizeForDb: Parse error, using fallback', { error });
+    return (Array.isArray(obj) ? [] : null) as T;
+  }
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -97,24 +131,27 @@ export default class EvalResult {
       promptIdx: result.promptIdx,
     });
 
+    // Sanitize all JSON fields to remove circular references and non-serializable values
+    // This prevents "Converting circular structure to JSON" errors from Timeout objects
+    // or other non-serializable data that may leak into results (e.g., from Python providers)
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: preSanitizeTestCase,
+      testCase: sanitizeForDb(preSanitizeTestCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt,
+      prompt: sanitizeForDb(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: processedResponse || null,
-      gradingResult: gradingResult || null,
-      namedScores,
+      response: sanitizeForDb(processedResponse || null),
+      gradingResult: sanitizeForDb(gradingResult || null),
+      namedScores: sanitizeForDb(namedScores),
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata,
+      metadata: sanitizeForDb(metadata),
       failureReason,
     };
     if (persist) {
@@ -143,9 +180,20 @@ export default class EvalResult {
 
     db.transaction(() => {
       for (const result of processedResults) {
+        // Sanitize JSON fields to prevent circular reference errors
+        const sanitizedResult = {
+          ...result,
+          testCase: sanitizeForDb(result.testCase),
+          prompt: sanitizeForDb(result.prompt),
+          response: sanitizeForDb(result.response),
+          gradingResult: sanitizeForDb(result.gradingResult),
+          namedScores: sanitizeForDb(result.namedScores),
+          metadata: sanitizeForDb(result.metadata),
+          provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
+        };
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: crypto.randomUUID() })
+          .values({ ...sanitizedResult, evalId, id: crypto.randomUUID() })
           .returning()
           .get();
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));

@@ -56,6 +56,7 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.provider && { provider: config.provider }),
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
       ...(config.language && { language: config.language }),
       ...(config.frameworks &&

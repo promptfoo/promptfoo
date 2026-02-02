@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -14,6 +14,10 @@ import {
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   const mockProvider: ProviderOptions = {
@@ -188,6 +192,75 @@ describe('EvalResult', () => {
           },
         },
       });
+    });
+
+    it('should handle results with Timeout objects (regression test for #7266)', async () => {
+      const evalId = 'test-eval-timeout';
+
+      // Create a result with a Node.js Timeout object in metadata
+      // This simulates the issue reported in GitHub #7266 where Python providers
+      // could leak Timeout objects into results, causing "Converting circular structure to JSON" errors
+      const timeoutHandle = setTimeout(() => {}, 10000);
+
+      try {
+        const resultWithTimeout: EvaluateResult = {
+          ...mockEvaluateResult,
+          metadata: {
+            someData: 'value',
+            // Simulate a leaked timer - this has circular _idlePrev/_idleNext references
+            leakedTimer: timeoutHandle as unknown as string,
+          },
+        };
+
+        // This should NOT throw "Converting circular structure to JSON"
+        const result = await EvalResult.createFromEvaluateResult(evalId, resultWithTimeout, {
+          persist: true,
+        });
+
+        // The result should be saved successfully
+        expect(result).toBeInstanceOf(EvalResult);
+        expect(result.persisted).toBe(true);
+
+        // Verify it can be retrieved from the database
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved).not.toBeNull();
+
+        // The metadata should be sanitized (timer stripped or converted to empty object)
+        // Either approach is acceptable - the key is that it doesn't throw
+        expect(retrieved?.metadata).toBeDefined();
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+    });
+
+    it('should handle results with functions in response (non-serializable)', async () => {
+      const evalId = 'test-eval-function';
+
+      // Create a response with non-serializable data (functions)
+      // This simulates data that might leak from providers
+      const responseWithFunction = {
+        output: 'test output',
+        someCallback: () => {},
+      };
+
+      const resultWithFunctions: EvaluateResult = {
+        ...mockEvaluateResult,
+        // Cast to bypass type checking - simulating runtime contamination
+        response: responseWithFunction as unknown as typeof mockEvaluateResult.response,
+      };
+
+      // This should NOT throw
+      const result = await EvalResult.createFromEvaluateResult(evalId, resultWithFunctions, {
+        persist: true,
+      });
+
+      expect(result).toBeInstanceOf(EvalResult);
+      expect(result.persisted).toBe(true);
+
+      // Verify the output was preserved
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.response?.output).toBe('test output');
     });
 
     it('should preserve non-circular provider properties', async () => {

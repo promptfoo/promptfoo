@@ -35,10 +35,20 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  /** When true, the badge will shrink to fit its container and truncate text with ellipsis */
+  truncate?: boolean;
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+function Badge({ className, variant, truncate, children, ...props }: BadgeProps) {
+  return (
+    <div
+      className={cn(badgeVariants({ variant }), truncate && 'max-w-full min-w-0', className)}
+      {...props}
+    >
+      {truncate ? <span className="truncate">{children}</span> : children}
+    </div>
+  );
 }
 
 export { Badge, badgeVariants };

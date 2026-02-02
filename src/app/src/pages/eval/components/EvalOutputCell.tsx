@@ -771,12 +771,12 @@ function EvalOutputCell({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleRowShareLink}
                 onMouseDown={(e) => e.preventDefault()}
-                aria-label="Share output"
+                aria-label="Copy link to output"
               >
                 {linked ? <Check className="size-4" /> : <Link className="size-4" />}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Share output</TooltipContent>
+            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
         </>
       )}

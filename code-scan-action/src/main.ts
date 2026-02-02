@@ -12,6 +12,7 @@ import * as github from '@actions/github';
 import { prepareComments } from '../../src/codeScan/util/github';
 import {
   CodeScanSeverity,
+  type Comment,
   FileChangeStatus,
   formatSeverity,
   type ScanResponse,
@@ -325,7 +326,7 @@ async function run(): Promise<void> {
 
     if (process.env.ACT === 'true' && comments.length > 0) {
       core.info('🧪 Running in act - showing comment preview:');
-      comments.forEach((comment, index) => {
+      comments.forEach((comment: Comment, index: number) => {
         core.info(`  ${index + 1}. ${comment.file}:${comment.line}`);
         const preview = comment.fix
           ? `${comment.finding.substring(0, 80)}... [+ suggested fix]`

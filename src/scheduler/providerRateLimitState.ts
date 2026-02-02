@@ -343,7 +343,7 @@ export class ProviderRateLimitState extends EventEmitter {
    * Check if error is a rate limit error.
    */
   private isRateLimitError(error: Error): boolean {
-    const message = error.message.toLowerCase();
+    const message = (error.message ?? '').toLowerCase();
     return (
       message.includes('429') ||
       message.includes('rate limit') ||
