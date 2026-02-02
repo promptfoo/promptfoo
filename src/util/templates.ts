@@ -4,25 +4,20 @@ import { getEnvBool } from '../envars';
 
 import type { NunjucksFilterMap } from '../types/index';
 
-/**
- * Get a Nunjucks engine instance with optional filters and configuration.
- * @param filters - Optional map of custom Nunjucks filters.
- * @param throwOnUndefined - Whether to throw an error on undefined variables.
- * @param isGrader - Whether this engine is being used in a grader context.
- * Nunjucks is always enabled in grader mode.
- * @returns A configured Nunjucks environment.
- */
-export function getNunjucksEngine(
-  filters?: NunjucksFilterMap,
-  throwOnUndefined: boolean = false,
-  isGrader: boolean = false,
-): nunjucks.Environment {
-  if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-    return {
-      renderString: (template: string) => template,
-    } as unknown as nunjucks.Environment;
-  }
+// Cache for Nunjucks engines without custom filters
+// Key format: `${throwOnUndefined}-${isGrader}`
+const engineCache = new Map<string, nunjucks.Environment>();
 
+// Track the config reference to invalidate cache when config changes
+let cachedConfigRef: object | undefined;
+
+/**
+ * Creates a fresh Nunjucks environment with the given configuration.
+ */
+function createNunjucksEngine(
+  throwOnUndefined: boolean,
+  filters?: NunjucksFilterMap,
+): nunjucks.Environment {
   const env = nunjucks.configure({
     autoescape: false,
     throwOnUndefined,
@@ -52,6 +47,57 @@ export function getNunjucksEngine(
     }
   }
   return env;
+}
+
+/**
+ * Get a Nunjucks engine instance with optional filters and configuration.
+ * Engines without custom filters are cached for performance.
+ * @param filters - Optional map of custom Nunjucks filters.
+ * @param throwOnUndefined - Whether to throw an error on undefined variables.
+ * @param isGrader - Whether this engine is being used in a grader context.
+ * Nunjucks is always enabled in grader mode.
+ * @returns A configured Nunjucks environment.
+ */
+export function getNunjucksEngine(
+  filters?: NunjucksFilterMap,
+  throwOnUndefined: boolean = false,
+  isGrader: boolean = false,
+): nunjucks.Environment {
+  if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return {
+      renderString: (template: string) => template,
+    } as unknown as nunjucks.Environment;
+  }
+
+  // Skip caching when custom filters are provided (they may differ between calls)
+  if (filters && Object.keys(filters).length > 0) {
+    return createNunjucksEngine(throwOnUndefined, filters);
+  }
+
+  // Invalidate cache if config reference has changed
+  const currentConfigRef = cliState.config;
+  if (currentConfigRef !== cachedConfigRef) {
+    engineCache.clear();
+    cachedConfigRef = currentConfigRef;
+  }
+
+  const cacheKey = `${throwOnUndefined}-${isGrader}`;
+  let engine = engineCache.get(cacheKey);
+
+  if (!engine) {
+    engine = createNunjucksEngine(throwOnUndefined);
+    engineCache.set(cacheKey, engine);
+  }
+
+  return engine;
+}
+
+/**
+ * Clear the Nunjucks engine cache. Useful for testing or when config changes.
+ */
+export function clearNunjucksEngineCache(): void {
+  engineCache.clear();
+  cachedConfigRef = undefined;
 }
 
 /**
