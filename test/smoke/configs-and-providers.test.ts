@@ -104,14 +104,7 @@ describe('Provider Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
 
-      const { exitCode, stderr } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 

@@ -355,7 +355,9 @@ describe('Shared Provider Functions', () => {
     describe('transformToolChoice', () => {
       it('should pass through non-NormalizedToolChoice values', () => {
         expect(transformToolChoice('auto', 'openai')).toBe('auto');
-        expect(transformToolChoice({ type: 'function', function: { name: 'foo' } }, 'openai')).toEqual({
+        expect(
+          transformToolChoice({ type: 'function', function: { name: 'foo' } }, 'openai'),
+        ).toEqual({
           type: 'function',
           function: { name: 'foo' },
         });
@@ -398,6 +400,7 @@ describe('Shared Provider Functions', () => {
   describe('NormalizedTool', () => {
     const sampleTools = [
       {
+        normalized: true as const,
         name: 'get_weather',
         description: 'Get the current weather',
         parameters: {
@@ -410,6 +413,7 @@ describe('Shared Provider Functions', () => {
         },
       },
       {
+        normalized: true as const,
         name: 'search',
         description: 'Search the web',
         parameters: {
@@ -422,9 +426,14 @@ describe('Shared Provider Functions', () => {
     ];
 
     describe('isNormalizedToolArray', () => {
-      it('should return true for valid NormalizedTool arrays', () => {
+      it('should return true for tools with normalized: true', () => {
         expect(isNormalizedToolArray(sampleTools)).toBe(true);
-        expect(isNormalizedToolArray([{ name: 'simple_tool' }])).toBe(true);
+        expect(isNormalizedToolArray([{ normalized: true, name: 'simple_tool' }])).toBe(true);
+      });
+
+      it('should return false for tools without normalized: true', () => {
+        expect(isNormalizedToolArray([{ name: 'simple_tool' }])).toBe(false);
+        expect(isNormalizedToolArray([{ normalized: false, name: 'tool' }])).toBe(false);
       });
 
       it('should return false for empty arrays', () => {
@@ -435,25 +444,23 @@ describe('Shared Provider Functions', () => {
         expect(isNormalizedToolArray(null)).toBe(false);
         expect(isNormalizedToolArray(undefined)).toBe(false);
         expect(isNormalizedToolArray('string')).toBe(false);
-        expect(isNormalizedToolArray({ name: 'tool' })).toBe(false);
+        expect(isNormalizedToolArray({ normalized: true, name: 'tool' })).toBe(false);
       });
 
-      it('should return false for OpenAI format tools', () => {
+      it('should return false for native provider formats (pass-through)', () => {
+        // OpenAI format
         const openaiTools = [{ type: 'function', function: { name: 'test' } }];
         expect(isNormalizedToolArray(openaiTools)).toBe(false);
-      });
 
-      it('should return false for Anthropic format tools', () => {
+        // Anthropic format
         const anthropicTools = [{ name: 'test', input_schema: { type: 'object' } }];
         expect(isNormalizedToolArray(anthropicTools)).toBe(false);
-      });
 
-      it('should return false for Bedrock format tools', () => {
+        // Bedrock format
         const bedrockTools = [{ toolSpec: { name: 'test' } }];
         expect(isNormalizedToolArray(bedrockTools)).toBe(false);
-      });
 
-      it('should return false for Google format tools', () => {
+        // Google format
         const googleTools = [{ functionDeclarations: [{ name: 'test' }] }];
         expect(isNormalizedToolArray(googleTools)).toBe(false);
       });
@@ -483,7 +490,7 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should handle tools without description or parameters', () => {
-        const result = normalizedToolsToOpenAI([{ name: 'minimal' }]);
+        const result = normalizedToolsToOpenAI([{ normalized: true, name: 'minimal' }]);
 
         expect(result[0]).toEqual({
           type: 'function',
@@ -492,7 +499,9 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should include strict property when specified', () => {
-        const result = normalizedToolsToOpenAI([{ name: 'strict_tool', strict: true }]);
+        const result = normalizedToolsToOpenAI([
+          { normalized: true, name: 'strict_tool', strict: true },
+        ]);
 
         expect(result[0]).toEqual({
           type: 'function',
@@ -514,7 +523,7 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should provide default input_schema when no parameters', () => {
-        const result = normalizedToolsToAnthropic([{ name: 'minimal' }]);
+        const result = normalizedToolsToAnthropic([{ normalized: true, name: 'minimal' }]);
 
         expect(result[0]).toEqual({
           name: 'minimal',
@@ -523,7 +532,9 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should include strict property when specified', () => {
-        const result = normalizedToolsToAnthropic([{ name: 'strict_tool', strict: true }]);
+        const result = normalizedToolsToAnthropic([
+          { normalized: true, name: 'strict_tool', strict: true },
+        ]);
 
         expect(result[0]).toEqual({
           name: 'strict_tool',
@@ -550,7 +561,7 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should provide default inputSchema when no parameters', () => {
-        const result = normalizedToolsToBedrock([{ name: 'minimal' }]);
+        const result = normalizedToolsToBedrock([{ normalized: true, name: 'minimal' }]);
 
         expect(result[0]).toEqual({
           toolSpec: {
@@ -585,6 +596,7 @@ describe('Shared Provider Functions', () => {
       it('should remove additionalProperties from schema', () => {
         const toolsWithAdditionalProps = [
           {
+            normalized: true as const,
             name: 'test',
             parameters: {
               type: 'object' as const,

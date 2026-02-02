@@ -211,9 +211,10 @@ export function normalizedToolChoiceToOpenAI(
 /**
  * Transforms a NormalizedToolChoice to Anthropic format.
  */
-export function normalizedToolChoiceToAnthropic(
-  choice: NormalizedToolChoice,
-): { type: string; name?: string } {
+export function normalizedToolChoiceToAnthropic(choice: NormalizedToolChoice): {
+  type: string;
+  name?: string;
+} {
   switch (choice.mode) {
     case 'auto':
       return { type: 'auto' };
@@ -279,10 +280,7 @@ export function normalizedToolChoiceToGoogle(
  * Transforms a NormalizedToolChoice to the specified provider format.
  * If the input is already in a native format (not NormalizedToolChoice), it's returned as-is.
  */
-export function transformToolChoice(
-  toolChoice: unknown,
-  format: ToolChoiceFormat,
-): unknown {
+export function transformToolChoice(toolChoice: unknown, format: ToolChoiceFormat): unknown {
   // If not a normalized format, pass through as-is (backward compatibility)
   if (!isNormalizedToolChoice(toolChoice)) {
     return toolChoice;
@@ -314,6 +312,12 @@ export function transformToolChoice(
  * arrays, enums, $defs, and other schema features.
  */
 export interface NormalizedTool {
+  /**
+   * Marker indicating this is a normalized tool that should be transformed.
+   * When true, the tool will be converted to the provider's native format.
+   * When omitted, the tool passes through unchanged.
+   */
+  normalized: true;
   name: string;
   description?: string;
   /**
@@ -342,7 +346,7 @@ export interface NormalizedTool {
 
 /**
  * Checks if an array contains NormalizedTool objects.
- * Returns true if the first tool in the array matches the NormalizedTool structure.
+ * Returns true if the first tool has `normalized: true`.
  */
 export function isNormalizedToolArray(tools: unknown): tools is NormalizedTool[] {
   if (!Array.isArray(tools) || tools.length === 0) {
@@ -352,18 +356,7 @@ export function isNormalizedToolArray(tools: unknown): tools is NormalizedTool[]
   if (typeof first !== 'object' || first === null) {
     return false;
   }
-  // NormalizedTool has 'name' at top level but NOT 'type' (which would be OpenAI format)
-  // and NOT 'input_schema' (which would be Anthropic format)
-  // and NOT 'toolSpec' (which would be Bedrock format)
-  // and NOT 'functionDeclarations' (which would be Google format)
-  return (
-    'name' in first &&
-    typeof (first as Record<string, unknown>).name === 'string' &&
-    !('type' in first) &&
-    !('input_schema' in first) &&
-    !('toolSpec' in first) &&
-    !('functionDeclarations' in first)
-  );
+  return (first as Record<string, unknown>).normalized === true;
 }
 
 /**

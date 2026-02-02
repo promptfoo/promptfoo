@@ -41,12 +41,12 @@ There are two parts to configuring tool calling:
 
 Each provider has its own format for tools:
 
-| Provider | Tool Format |
-|----------|-------------|
+| Provider                 | Tool Format                                            |
+| ------------------------ | ------------------------------------------------------ |
 | OpenAI/Azure/Groq/Ollama | `{ type: 'function', function: { name, parameters } }` |
-| Anthropic | `{ name, input_schema }` |
-| AWS Bedrock | `{ toolSpec: { name, inputSchema: { json } } }` |
-| Google | `{ functionDeclarations: [{ name, parameters }] }` |
+| Anthropic                | `{ name, input_schema }`                               |
+| AWS Bedrock              | `{ toolSpec: { name, inputSchema: { json } } }`        |
+| Google                   | `{ functionDeclarations: [{ name, parameters }] }`     |
 
 Promptfoo's portable format automatically transforms to each provider's native format. Define your tools once and test across all providers:
 
@@ -54,8 +54,9 @@ Promptfoo's portable format automatically transforms to each provider's native f
 providers:
   - id: openai:gpt-4o
     config:
-      tools: &tools  # Define once with YAML anchor
-        - name: get_weather
+      tools: &tools # Define once with YAML anchor
+        - normalized: true
+          name: get_weather
           description: Get current weather for a location
           parameters:
             type: object
@@ -65,11 +66,11 @@ providers:
 
   - id: anthropic:claude-sonnet-4-20250514
     config:
-      tools: *tools  # Reuse the same tools
+      tools: *tools # Reuse the same tools
 
   - id: google:gemini-2.0-flash
     config:
-      tools: *tools  # Works here too
+      tools: *tools # Works here too
 ```
 
 ## Defining Tools
@@ -81,7 +82,8 @@ providers:
   - id: openai:gpt-4
     config:
       tools:
-        - name: get_weather
+        - normalized: true
+          name: get_weather
           description: Get the current weather for a location
           parameters:
             type: object
@@ -99,12 +101,13 @@ providers:
 
 ### Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | The function name (used by the model to call it) |
-| `description` | string | No | Description of what the function does |
-| `parameters` | object | No | JSON Schema defining the function's parameters |
-| `strict` | boolean | No | Enable strict schema validation (OpenAI/Anthropic only) |
+| Field         | Type    | Required | Description                                             |
+| ------------- | ------- | -------- | ------------------------------------------------------- |
+| `normalized`  | boolean | Yes      | Must be `true` to enable cross-provider transformation  |
+| `name`        | string  | Yes      | The function name (used by the model to call it)        |
+| `description` | string  | No       | Description of what the function does                   |
+| `parameters`  | object  | No       | JSON Schema defining the function's parameters          |
+| `strict`      | boolean | No       | Enable strict schema validation (OpenAI/Anthropic only) |
 
 ### Full JSON Schema Support
 
@@ -112,7 +115,8 @@ The `parameters` field supports full JSON Schema draft-07, including:
 
 ```yaml
 tools:
-  - name: complex_function
+  - normalized: true
+    name: complex_function
     parameters:
       type: object
       properties:
@@ -145,18 +149,20 @@ Enable strict schema validation for providers that support it:
 
 ```yaml
 tools:
-  - name: get_weather
-    strict: true  # Guarantees output matches schema exactly
+  - normalized: true
+    name: get_weather
+    strict: true # Guarantees output matches schema exactly
     parameters:
       type: object
       properties:
         location:
           type: string
       required: [location]
-      additionalProperties: false  # Required for strict mode
+      additionalProperties: false # Required for strict mode
 ```
 
 **Provider support:**
+
 - **OpenAI**: Full support - guarantees output matches schema
 - **Anthropic**: Enables structured outputs beta feature
 - **Bedrock/Google**: Ignored (not supported)
@@ -170,20 +176,21 @@ providers:
   - id: openai:gpt-4
     config:
       tools:
-        - name: get_weather
+        - normalized: true
+          name: get_weather
           parameters: { ... }
       tool_choice:
-        mode: required  # Model must call a tool
+        mode: required # Model must call a tool
 ```
 
 ### Modes
 
-| Mode | Description |
-|------|-------------|
-| `auto` | Model decides whether to call a tool (default) |
-| `none` | Model cannot call any tools |
-| `required` | Model must call at least one tool |
-| `tool` | Model must call a specific tool (requires `toolName`) |
+| Mode       | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| `auto`     | Model decides whether to call a tool (default)        |
+| `none`     | Model cannot call any tools                           |
+| `required` | Model must call at least one tool                     |
+| `tool`     | Model must call a specific tool (requires `toolName`) |
 
 ### Examples
 
@@ -212,21 +219,21 @@ tool_choice:
 
 Tool definitions are automatically transformed to each provider's format:
 
-| Field | OpenAI | Anthropic | Bedrock | Google |
-|-------|--------|-----------|---------|--------|
-| `name` | `function.name` | `name` | `toolSpec.name` | `functionDeclarations[].name` |
-| `description` | `function.description` | `description` | `toolSpec.description` | `functionDeclarations[].description` |
-| `parameters` | `function.parameters` | `input_schema` | `toolSpec.inputSchema.json` | `functionDeclarations[].parameters` |
-| `strict` | `function.strict` | `strict` | _(ignored)_ | _(ignored)_ |
+| Field         | OpenAI                 | Anthropic      | Bedrock                     | Google                               |
+| ------------- | ---------------------- | -------------- | --------------------------- | ------------------------------------ |
+| `name`        | `function.name`        | `name`         | `toolSpec.name`             | `functionDeclarations[].name`        |
+| `description` | `function.description` | `description`  | `toolSpec.description`      | `functionDeclarations[].description` |
+| `parameters`  | `function.parameters`  | `input_schema` | `toolSpec.inputSchema.json` | `functionDeclarations[].parameters`  |
+| `strict`      | `function.strict`      | `strict`       | _(ignored)_                 | _(ignored)_                          |
 
 ### Tool Choice Mappings
 
-| Mode | OpenAI | Anthropic | Bedrock | Google |
-|------|--------|-----------|---------|--------|
-| `auto` | `'auto'` | `{ type: 'auto' }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: 'AUTO' } }` |
-| `none` | `'none'` | `{ type: 'auto' }` | _(omitted)_ | `{ functionCallingConfig: { mode: 'NONE' } }` |
-| `required` | `'required'` | `{ type: 'any' }` | `{ any: {} }` | `{ functionCallingConfig: { mode: 'ANY' } }` |
-| `tool` | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
+| Mode       | OpenAI                                     | Anthropic                | Bedrock              | Google                                                                    |
+| ---------- | ------------------------------------------ | ------------------------ | -------------------- | ------------------------------------------------------------------------- |
+| `auto`     | `'auto'`                                   | `{ type: 'auto' }`       | `{ auto: {} }`       | `{ functionCallingConfig: { mode: 'AUTO' } }`                             |
+| `none`     | `'none'`                                   | `{ type: 'auto' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
+| `required` | `'required'`                               | `{ type: 'any' }`        | `{ any: {} }`        | `{ functionCallingConfig: { mode: 'ANY' } }`                              |
+| `tool`     | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
 
 ## Legacy Formats
 
@@ -261,9 +268,11 @@ providers:
 ```
 
 **tools/my-tools.json:**
+
 ```json
 [
   {
+    "normalized": true,
     "name": "get_weather",
     "description": "Get current weather",
     "parameters": {
@@ -278,7 +287,9 @@ providers:
 
 ## HTTP Provider with Tools
 
-For custom HTTP endpoints, use template variables to include tools:
+For custom HTTP endpoints, use the `transformToolsFormat` option to automatically convert normalized tools to the format your endpoint expects.
+
+### OpenAI-Compatible Endpoints
 
 ```yaml
 providers:
@@ -287,13 +298,16 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
+      transformToolsFormat: openai # Transforms to OpenAI format
       body:
         model: gpt-4
         messages: '{{ prompt }}'
         tools: '{{ tools | dump }}'
         tool_choice: '{{ tool_choice | dump }}'
       tools:
-        - name: get_weather
+        - normalized: true
+          name: get_weather
+          description: Get weather for a location
           parameters:
             type: object
             properties:
@@ -302,7 +316,72 @@ providers:
         mode: required
 ```
 
-The `{{ tools | dump }}` template renders the tools as JSON in the request body.
+### Anthropic-Compatible Endpoints
+
+```yaml
+providers:
+  - id: http://localhost:8080/v1/messages
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        x-api-key: '{{ env.ANTHROPIC_API_KEY }}'
+        anthropic-version: '2023-06-01'
+      transformToolsFormat: anthropic # Transforms to Anthropic format
+      body:
+        model: claude-sonnet-4-20250514
+        max_tokens: 1024
+        messages: '{{ prompt }}'
+        tools: '{{ tools | dump }}'
+        tool_choice: '{{ tool_choice | dump }}'
+      tools:
+        - normalized: true
+          name: get_weather
+          description: Get weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: City name
+            required:
+              - location
+      tool_choice:
+        mode: required
+```
+
+The `transformToolsFormat` option accepts: `openai`, `anthropic`, `bedrock`, or `google`. The `{{ tools | dump }}` template renders the transformed tools as JSON.
+
+### Native Format Pass-Through
+
+If your endpoint requires a specific format, you can define tools in that format directly and omit `transformToolsFormat`. Tools pass through unchanged:
+
+```yaml
+providers:
+  - id: http://localhost:8080/v1/messages
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+      # No transformToolsFormat - tools pass through as-is
+      body:
+        model: claude-sonnet-4-20250514
+        messages: '{{ prompt }}'
+        tools: '{{ tools | dump }}'
+      tools:
+        # Native Anthropic format with input_schema
+        - name: get_weather
+          description: Get weather for a location
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+            required:
+              - location
+```
+
+This is useful when your endpoint expects a custom or non-standard tool format.
 
 ## Cross-Provider Example
 
@@ -315,8 +394,9 @@ prompts:
 providers:
   - id: openai:gpt-4
     config:
-      tools: &tools  # YAML anchor for reuse
-        - name: get_weather
+      tools: &tools # YAML anchor for reuse
+        - normalized: true
+          name: get_weather
           description: Get current weather for a city
           parameters:
             type: object
@@ -330,13 +410,13 @@ providers:
 
   - id: anthropic:claude-3-5-sonnet-latest
     config:
-      tools: *tools  # Reuse same tools
+      tools: *tools # Reuse same tools
       tool_choice: *tool_choice
 
   - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       tools: *tools
-      toolChoice: auto  # Bedrock uses camelCase
+      toolChoice: auto # Bedrock uses camelCase
 
 tests:
   - vars:
@@ -365,7 +445,8 @@ tools:
 
 # After (NormalizedTool)
 tools:
-  - name: get_weather
+  - normalized: true
+    name: get_weather
     description: Get weather
     parameters:
       type: object
@@ -387,7 +468,8 @@ tools:
 
 # After (NormalizedTool)
 tools:
-  - name: get_weather
+  - normalized: true
+    name: get_weather
     description: Get weather
     parameters:  # input_schema -> parameters
       type: object
@@ -411,7 +493,8 @@ tools:
 
 # After (NormalizedTool)
 tools:
-  - name: get_weather
+  - normalized: true
+    name: get_weather
     description: Get weather
     parameters:
       type: object

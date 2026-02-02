@@ -7,7 +7,8 @@ providers:
     label: 'Provider with normalized tools'
     config:
       tools: &tools
-        - name: get_weather
+        - normalized: true
+          name: get_weather
           description: Get current weather for a location
           parameters:
             type: object
@@ -20,7 +21,8 @@ providers:
                 enum: [celsius, fahrenheit]
             required:
               - location
-        - name: search_web
+        - normalized: true
+          name: search_web
           description: Search the web for information
           parameters:
             type: object
