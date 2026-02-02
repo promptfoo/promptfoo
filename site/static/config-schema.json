@@ -23,52 +23,99 @@
           "$ref": "#/definitions/__schema9"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema24"
-        },
-        "defaultTest": {
           "$ref": "#/definitions/__schema25"
         },
-        "outputPath": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema26"
         },
-        "sharing": {
+        "outputPath": {
           "$ref": "#/definitions/__schema27"
         },
-        "nunjucksFilters": {
+        "sharing": {
           "$ref": "#/definitions/__schema28"
         },
-        "env": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema29"
         },
-        "derivedMetrics": {
+        "env": {
           "$ref": "#/definitions/__schema30"
         },
-        "extensions": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema31"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema32"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema33"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema34"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema35"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema36"
         },
-        "commandLineOptions": {
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema37"
         },
-        "targets": {
+        "commandLineOptions": {
           "$ref": "#/definitions/__schema38"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema39"
         }
       },
       "required": ["prompts"],
+      "additionalProperties": false
+    },
+    "CombinatorAssertion": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["and", "or"],
+          "description": "Combinator type: 'and' requires all sub-assertions to pass, 'or' requires any to pass"
+        },
+        "assert": {
+          "type": "array",
+          "description": "Array of sub-assertions to evaluate",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CombinatorAssertion"
+              },
+              {
+                "$ref": "#/definitions/__schema18"
+              }
+            ]
+          }
+        },
+        "shortCircuit": {
+          "type": "boolean",
+          "description": "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Weight of this combinator relative to other assertions. Defaults to 1."
+        },
+        "metric": {
+          "type": "string",
+          "description": "Tag this assertion result as a named metric"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Minimum score threshold for the combinator to pass"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Configuration passed to all sub-assertions"
+        }
+      },
+      "required": ["type", "assert"],
       "additionalProperties": false
     },
     "__schema0": {
@@ -599,13 +646,13 @@
                 "$ref": "#/definitions/__schema10"
               },
               {
-                "$ref": "#/definitions/__schema23"
+                "$ref": "#/definitions/__schema24"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema23"
+          "$ref": "#/definitions/__schema24"
         }
       ]
     },
@@ -634,16 +681,16 @@
           "$ref": "#/definitions/__schema17"
         },
         "assertScoringFunction": {
-          "$ref": "#/definitions/__schema19"
-        },
-        "options": {
           "$ref": "#/definitions/__schema20"
         },
-        "threshold": {
+        "options": {
           "$ref": "#/definitions/__schema21"
         },
-        "metadata": {
+        "threshold": {
           "$ref": "#/definitions/__schema22"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema23"
         }
       },
       "additionalProperties": false
@@ -717,51 +764,97 @@
     "__schema17": {
       "type": "array",
       "items": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "assert-set"
-              },
-              "assert": {
-                "type": "array",
-                "items": {
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/__schema18"
-                    }
-                  ]
-                }
-              },
-              "weight": {
-                "type": "number"
-              },
-              "metric": {
-                "type": "string"
-              },
-              "threshold": {
-                "type": "number"
-              },
-              "config": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
-              }
-            },
-            "required": ["type", "assert"],
-            "additionalProperties": false
-          },
-          {
-            "$ref": "#/definitions/__schema18"
-          }
-        ]
+        "$ref": "#/definitions/__schema18"
       }
     },
     "__schema18": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CombinatorAssertion"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "assert-set"
+            },
+            "assert": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema19"
+                  }
+                ]
+              }
+            },
+            "weight": {
+              "type": "number"
+            },
+            "metric": {
+              "type": "string"
+            },
+            "threshold": {
+              "type": "number"
+            },
+            "config": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["type", "assert"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["and", "or"]
+            },
+            "assert": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema18"
+                  }
+                ]
+              }
+            },
+            "shortCircuit": {
+              "type": "boolean"
+            },
+            "weight": {
+              "type": "number"
+            },
+            "metric": {
+              "type": "string"
+            },
+            "threshold": {
+              "type": "number"
+            },
+            "config": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["type", "assert"],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/definitions/__schema19"
+        }
+      ]
+    },
+    "__schema19": {
       "type": "object",
       "properties": {
         "type": {
@@ -930,7 +1023,7 @@
       "required": ["type"],
       "additionalProperties": false
     },
-    "__schema19": {
+    "__schema20": {
       "anyOf": [
         {
           "type": "string",
@@ -939,7 +1032,7 @@
         {}
       ]
     },
-    "__schema20": {
+    "__schema21": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1044,10 +1137,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema21": {
+    "__schema22": {
       "type": "number"
     },
-    "__schema22": {
+    "__schema23": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1055,7 +1148,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema23": {
+    "__schema24": {
       "type": "object",
       "properties": {
         "path": {
@@ -1108,7 +1201,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema24": {
+    "__schema25": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1178,28 +1271,28 @@
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema19"
+                          "$ref": "#/definitions/__schema20"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema20"
+                          "$ref": "#/definitions/__schema21"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema21"
+                          "$ref": "#/definitions/__schema22"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema22"
+                          "$ref": "#/definitions/__schema23"
                         }
                       ]
                     }
@@ -1220,7 +1313,7 @@
         ]
       }
     },
-    "__schema25": {
+    "__schema26": {
       "anyOf": [
         {
           "type": "string"
@@ -1247,23 +1340,23 @@
               "$ref": "#/definitions/__schema17"
             },
             "assertScoringFunction": {
-              "$ref": "#/definitions/__schema19"
-            },
-            "options": {
               "$ref": "#/definitions/__schema20"
             },
-            "threshold": {
+            "options": {
               "$ref": "#/definitions/__schema21"
             },
-            "metadata": {
+            "threshold": {
               "$ref": "#/definitions/__schema22"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema23"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema26": {
+    "__schema27": {
       "anyOf": [
         {
           "type": "string"
@@ -1276,7 +1369,7 @@
         }
       ]
     },
-    "__schema27": {
+    "__schema28": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1295,7 +1388,7 @@
         }
       ]
     },
-    "__schema28": {
+    "__schema29": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1304,7 +1397,7 @@
         "type": "string"
       }
     },
-    "__schema29": {
+    "__schema30": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema6"
@@ -1330,7 +1423,7 @@
         }
       ]
     },
-    "__schema30": {
+    "__schema31": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1351,7 +1444,7 @@
         "additionalProperties": false
       }
     },
-    "__schema31": {
+    "__schema32": {
       "anyOf": [
         {
           "type": "array",
@@ -1364,14 +1457,14 @@
         }
       ]
     },
-    "__schema32": {
+    "__schema33": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema33": {
+    "__schema34": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -2625,10 +2718,10 @@
         }
       }
     },
-    "__schema34": {
+    "__schema35": {
       "type": "boolean"
     },
-    "__schema35": {
+    "__schema36": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2716,7 +2809,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema36": {
+    "__schema37": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2759,7 +2852,7 @@
       },
       "additionalProperties": false
     },
-    "__schema37": {
+    "__schema38": {
       "type": "object",
       "properties": {
         "description": {
@@ -2932,7 +3025,7 @@
       },
       "additionalProperties": false
     },
-    "__schema38": {
+    "__schema39": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

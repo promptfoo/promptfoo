@@ -89,6 +89,55 @@ const {
   ...mainSchema
 } = schemaContent as Record<string, unknown>;
 
+// CombinatorAssertion definition for 'and'/'or' assertion types
+// This is added manually because the recursive z.ZodType<T> annotation
+// prevents Zod's JSON schema generator from seeing the structure.
+const CombinatorAssertionDefinition = {
+  type: 'object',
+  properties: {
+    type: {
+      type: 'string',
+      enum: ['and', 'or'],
+      description:
+        "Combinator type: 'and' requires all sub-assertions to pass, 'or' requires any to pass",
+    },
+    assert: {
+      type: 'array',
+      description: 'Array of sub-assertions to evaluate',
+      items: {
+        anyOf: [
+          { $ref: '#/definitions/CombinatorAssertion' },
+          { $ref: '#/definitions/__schema18' },
+        ],
+      },
+    },
+    shortCircuit: {
+      type: 'boolean',
+      description:
+        "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true.",
+    },
+    weight: {
+      type: 'number',
+      description: 'Weight of this combinator relative to other assertions. Defaults to 1.',
+    },
+    metric: {
+      type: 'string',
+      description: 'Tag this assertion result as a named metric',
+    },
+    threshold: {
+      type: 'number',
+      description: 'Minimum score threshold for the combinator to pass',
+    },
+    config: {
+      type: 'object',
+      additionalProperties: true,
+      description: 'Configuration passed to all sub-assertions',
+    },
+  },
+  required: ['type', 'assert'],
+  additionalProperties: false,
+};
+
 // Build final schema with proper structure and metadata
 const jsonSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
@@ -97,8 +146,41 @@ const jsonSchema = {
   $ref: '#/definitions/PromptfooConfigSchema',
   definitions: {
     PromptfooConfigSchema: mainSchema,
+    CombinatorAssertion: CombinatorAssertionDefinition,
     ...(zodDefinitions as Record<string, unknown>),
   },
 };
+
+// Post-process: Update assertion union schemas to include CombinatorAssertion
+// AssertionOrSetSchema becomes __schema18 which is an anyOf union of assertion types
+const definitions = jsonSchema.definitions as Record<string, unknown>;
+
+// Find the assertion union schema (__schema18 has anyOf with assert-set type)
+// This is AssertionOrSetSchema which should include CombinatorAssertion
+for (const [_key, def] of Object.entries(definitions)) {
+  const defObj = def as Record<string, unknown>;
+
+  // Look for anyOf schemas that look like assertion unions
+  if (defObj?.anyOf && Array.isArray(defObj.anyOf)) {
+    const anyOfArray = defObj.anyOf as Record<string, unknown>[];
+
+    // Check if this is the assertion union by looking for assert-set type
+    const hasAssertSet = anyOfArray.some((item) => {
+      const props = item?.properties as Record<string, unknown>;
+      const typeField = props?.type as Record<string, unknown>;
+      return typeField?.const === 'assert-set';
+    });
+
+    if (hasAssertSet) {
+      // This is the assertion union schema, add CombinatorAssertion reference
+      const hasCombinatorRef = anyOfArray.some(
+        (item) => item?.$ref === '#/definitions/CombinatorAssertion',
+      );
+      if (!hasCombinatorRef) {
+        anyOfArray.unshift({ $ref: '#/definitions/CombinatorAssertion' });
+      }
+    }
+  }
+}
 
 console.log(JSON.stringify(jsonSchema, null, 2));
