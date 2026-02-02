@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Normalized tools example - cross-provider tool calling'
+
+providers:
+  - id: openai:gpt-4o-mini
+    label: 'OpenAI GPT-4o-mini'
+    config:
+      tools: &tools
+        - normalized: true
+          name: get_weather
+          description: Get the current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum: [celsius, fahrenheit]
+                description: The temperature unit
+            required:
+              - location
+      tool_choice: &tool_choice
+        mode: required
+
+  - id: anthropic:claude-3-5-haiku-latest
+    label: 'Anthropic Claude Haiku'
+    config:
+      tools: *tools
+      tool_choice: *tool_choice
+
+prompts:
+  - 'What is the weather like in {{location}}?'
+
+tests:
+  - vars:
+      location: San Francisco
+    assert:
+      # Verify get_weather tool was called
+      - type: tool-call-f1
+        value: ['get_weather']
+
+  - vars:
+      location: Tokyo, Japan
+    assert:
+      - type: tool-call-f1
+        value: ['get_weather']
+
+  - vars:
+      location: London, UK
+    assert:
+      - type: tool-call-f1
+        value: ['get_weather']
