@@ -788,23 +788,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   /**
    * Build the tool configuration from options
+   * Merges prompt.config with provider config, with prompt.config taking precedence
    */
   private async buildToolConfig(
     vars?: Record<string, VarValue>,
+    promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
-    if (!this.config.tools || this.config.tools.length === 0) {
+    // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
+    const configTools = promptConfig?.tools ?? this.config.tools;
+    if (!configTools || configTools.length === 0) {
       return undefined;
     }
 
     // Load tools from external file with variable rendering if needed
-    const tools = await maybeLoadToolsFromExternalFile(this.config.tools, vars);
+    const tools = await maybeLoadToolsFromExternalFile(configTools, vars);
     if (!tools || tools.length === 0) {
       return undefined;
     }
 
     const converseTools = convertToolsToConverseFormat(tools);
-    const toolChoice = this.config.toolChoice
-      ? convertToolChoiceToConverseFormat(this.config.toolChoice)
+    // Merge toolChoice from prompt.config or fall back to this.config
+    const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
+    const toolChoice = configToolChoice
+      ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
 
     return {
@@ -943,7 +949,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1195,7 +1204,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
