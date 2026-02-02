@@ -98,8 +98,22 @@ export async function handleEval(id: string) {
   printBorder();
   logger.info(chalk.cyan(`Eval ${id}`));
   printBorder();
-  // TODO(ian): List prompt ids
   logger.info(`${prompts.length} prompts`);
+  const promptIds = prompts
+    .map((prompt) => prompt.id)
+    .filter((promptId): promptId is string => Boolean(promptId));
+  if (promptIds.length > 0) {
+    const uniquePromptIds = [...new Set(promptIds)];
+    const previewCount = 5;
+    const previewIds = uniquePromptIds.slice(0, previewCount);
+    logger.info(
+      `Prompt IDs: ${previewIds.join(', ')}${
+        uniquePromptIds.length > previewCount
+          ? ` (and ${uniquePromptIds.length - previewCount} more...)`
+          : ''
+      }`,
+    );
+  }
   logger.info(
     `${vars.length} variables: ${vars.slice(0, 5).join(', ')}${
       vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''
