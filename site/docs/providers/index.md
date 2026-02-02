@@ -70,7 +70,6 @@ providers:
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
-| [QuiverAI](./quiverai.md)                           | Chat completions optimized for SVG vector graphics           | `quiverai:arrow-0.5` or `quiverai:chat:arrow-0.5`                               |
 | [Replicate](./replicate.md)                         | Various hosted models                                        | `replicate:stability-ai/sdxl`                                                   |
 | [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                        | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                              |
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
