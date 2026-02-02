@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - nested combinators'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello Paris World France'
+
+tests:
+  # Nested: AND with OR inside
+  - assert:
+      - type: and
+        assert:
+          - type: contains
+            value: 'Hello'
+          - type: or
+            assert:
+              - type: contains
+                value: 'Paris'
+              - type: contains
+                value: 'London'
+
+  # Nested: OR with AND inside
+  - assert:
+      - type: or
+        assert:
+          - type: and
+            assert:
+              - type: contains
+                value: 'Hello'
+              - type: contains
+                value: 'Paris'
+          - type: contains
+            value: 'NonExistent'
+
+  # Deeply nested
+  - assert:
+      - type: and
+        assert:
+          - type: or
+            assert:
+              - type: and
+                assert:
+                  - type: contains
+                    value: 'Paris'
+                  - type: contains
+                    value: 'France'
+              - type: contains
+                value: 'London'
+          - type: contains
+            value: 'World'

@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Combinator Assertions Example
+#
+# This example demonstrates the and/or logical combinators for assertions.
+# Combinators allow you to create complex validation logic:
+# - 'or': passes if ANY sub-assertion passes (short-circuits on first pass)
+# - 'and': passes if ALL sub-assertions pass (short-circuits on first fail)
+
+description: 'Combinator assertions - and/or logical operators'
+
+prompts:
+  - 'Answer the following question: {{question}}'
+
+providers:
+  - echo
+
+tests:
+  # Basic OR combinator - passes if any check succeeds
+  - vars:
+      question: 'What is the capital of France? Answer: Paris'
+    assert:
+      - type: or
+        assert:
+          - type: contains
+            value: 'Paris'
+          - type: contains
+            value: 'paris'
+          - type: icontains
+            value: 'PARIS'
+
+  # Basic AND combinator - all checks must pass
+  - vars:
+      question: 'Tell me about Paris, France'
+    assert:
+      - type: and
+        assert:
+          - type: contains
+            value: 'Paris'
+          - type: contains
+            value: 'France'
+
+  # Cost optimization: cheap check first, expensive check as fallback
+  - vars:
+      question: 'What is 2+2? Answer: 4'
+    assert:
+      - type: or
+        assert:
+          # Fast regex check first
+          - type: regex
+            value: '\\b4\\b'
+          # If regex fails, this could be an LLM-based check
+          # (using contains for demo purposes)
+          - type: contains
+            value: 'four'
+
+  # Nested combinators for complex logic
+  - vars:
+      question: 'Describe a red apple'
+    assert:
+      - type: and
+        assert:
+          # Must mention the fruit
+          - type: or
+            assert:
+              - type: contains
+                value: 'apple'
+              - type: contains
+                value: 'fruit'
+          # Must mention the color
+          - type: or
+            assert:
+              - type: contains
+                value: 'red'
+              - type: contains
+                value: 'crimson'
+
+  # Mixed combinators with regular assertions
+  - vars:
+      question: 'Return valid JSON: {"status": "ok"}'
+    assert:
+      # Regular assertion
+      - type: is-json
+      # Combinator assertion
+      - type: or
+        assert:
+          - type: contains
+            value: '"status"'
+          - type: contains
+            value: "'status'"
+
+  # Threshold-based AND combinator
+  - vars:
+      question: 'Tell me about test output in Paris'
+    assert:
+      - type: and
+        threshold: 0.6 # Pass if weighted average score >= 60%
+        assert:
+          - type: contains
+            value: 'test'
+            weight: 2
+          - type: contains
+            value: 'output'
+            weight: 1
+          - type: contains
+            value: 'Paris'
+            weight: 1
+
+  # Disable short-circuit to run all checks (useful for metrics)
+  - vars:
+      question: 'The capital of France is Paris, located in Europe'
+    assert:
+      - type: or
+        shortCircuit: false # Run all checks even after first pass
+        metric: coverage
+        assert:
+          - type: contains
+            value: 'Paris'
+          - type: contains
+            value: 'France'
+          - type: contains
+            value: 'Europe'

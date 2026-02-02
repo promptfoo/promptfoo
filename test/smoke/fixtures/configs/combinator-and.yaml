@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - AND combinator'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello Paris World'
+
+tests:
+  # AND passes when all assertions pass
+  - assert:
+      - type: and
+        assert:
+          - type: contains
+            value: 'Hello'
+          - type: contains
+            value: 'World'
+
+  # AND fails when any assertion fails
+  - assert:
+      - type: and
+        assert:
+          - type: contains
+            value: 'Hello'
+          - type: contains
+            value: 'London'
+    threshold: 0 # Allow failure for testing

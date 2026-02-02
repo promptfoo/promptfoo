@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - OR combinator'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello Paris World'
+
+tests:
+  # OR passes when first assertion passes
+  - assert:
+      - type: or
+        assert:
+          - type: contains
+            value: 'Paris'
+          - type: contains
+            value: 'London'
+
+  # OR passes when second assertion passes
+  - assert:
+      - type: or
+        assert:
+          - type: contains
+            value: 'London'
+          - type: contains
+            value: 'World'
+
+  # OR fails when all assertions fail
+  - assert:
+      - type: or
+        assert:
+          - type: contains
+            value: 'London'
+          - type: contains
+            value: 'Berlin'
+    threshold: 0 # Allow failure for testing
