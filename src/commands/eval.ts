@@ -34,6 +34,7 @@ import { promptfooCommand } from '../util/promptfooCommand';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { filterPrompts } from './eval/filterPrompts';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { generateEvalSummary } from './eval/summary';
@@ -401,6 +402,7 @@ export async function doEval(
         testSuite.providers,
         cmdObj.filterProviders || cmdObj.filterTargets,
       );
+      testSuite.prompts = filterPrompts(testSuite.prompts, cmdObj.filterPrompts);
     }
 
     await checkCloudPermissions(config as UnifiedConfig);
@@ -962,6 +964,10 @@ export function evalCommand(
     .option(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run prompts matching this regex pattern (matches label or id)',
     )
     .option(
       '--filter-providers, --filter-targets <providers>',

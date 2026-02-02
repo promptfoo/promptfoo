@@ -5,6 +5,7 @@ import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
+import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -72,8 +73,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Filter to specific prompts by label or index.
-            Examples: "my-prompt", ["prompt1", "prompt2"]
+            Filter to specific prompts by label or id (case-insensitive regex match).
+            Examples: "my-prompt", ["prompt1", "prompt2"], "gpt.*assistant"
           `,
         ),
       providerFilter: z
@@ -214,7 +215,6 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           // Filter prompts if specified
           if (promptFilter !== undefined) {
-            const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
             const prompts = filteredTestSuite.prompts || [];
 
             if (prompts.length === 0) {
@@ -226,17 +226,17 @@ export function registerRunEvaluationTool(server: McpServer) {
               );
             }
 
-            const filteredPrompts = prompts.filter((prompt, index) => {
-              const label = prompt.label || prompt.raw;
-              return filters.includes(label) || filters.includes(index.toString());
-            });
+            // Build escaped regex pattern and use shared filterPrompts (case-insensitive)
+            const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
+            const pattern = filters.map(escapeRegExp).join('|');
+            const filteredPrompts = filterPrompts(prompts, pattern, 'i');
 
             if (filteredPrompts.length === 0) {
               return createToolResponse(
                 'run_evaluation',
                 false,
                 undefined,
-                `No prompts matched filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
+                `No prompts matched filter: ${filters.join(', ')}. Available prompts: ${prompts.map((p) => p.label || p.id || p.raw.slice(0, 30)).join(', ')}`,
               );
             }
 

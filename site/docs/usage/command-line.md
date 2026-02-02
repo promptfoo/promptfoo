@@ -92,6 +92,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-sample <number>`          | Only run a random sample of N tests                                                                      |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                                               |
+| `--filter-prompts <pattern>`        | Only run prompts matching this regex pattern (matches prompt `label` or `id`)                            |
 | `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`)                            |
 | `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)                                         |
 | `--grader <provider>`               | Model that will grade outputs                                                                            |
