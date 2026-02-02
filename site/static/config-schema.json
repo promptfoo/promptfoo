@@ -95,7 +95,7 @@
         },
         "shortCircuit": {
           "type": "boolean",
-          "description": "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true."
+          "description": "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true. Note: Automatically disabled when threshold is set."
         },
         "weight": {
           "type": "number",
@@ -112,7 +112,7 @@
         "config": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Configuration passed to all sub-assertions"
+          "description": "Configuration passed to all sub-assertions. Child assertion config takes precedence."
         }
       },
       "required": ["type", "assert"],

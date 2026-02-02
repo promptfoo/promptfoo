@@ -25,6 +25,8 @@ import { readTests } from './util/testCaseReader';
 
 import type {
   Assertion,
+  AssertionSet,
+  CombinatorAssertion,
   EvaluateOptions,
   EvaluateTestSuite,
   Scenario,
@@ -43,6 +45,49 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+
+/**
+ * Recursively resolves provider strings to ApiProvider instances within assertions,
+ * including nested assertions inside combinators (and/or) and assert-sets.
+ */
+async function resolveAssertionProviders(
+  assertions: Array<Assertion | AssertionSet | CombinatorAssertion>,
+  providerMap: Record<string, ApiProvider>,
+  context: { env?: Record<string, string>; basePath?: string },
+): Promise<void> {
+  for (const assertion of assertions) {
+    // Handle combinator assertions (and/or)
+    if (assertion.type === 'and' || assertion.type === 'or') {
+      const combinator = assertion as CombinatorAssertion;
+      if (combinator.assert) {
+        await resolveAssertionProviders(combinator.assert, providerMap, context);
+      }
+      continue;
+    }
+
+    // Handle assert-sets
+    if (assertion.type === 'assert-set') {
+      const assertSet = assertion as AssertionSet;
+      if (assertSet.assert) {
+        await resolveAssertionProviders(assertSet.assert, providerMap, context);
+      }
+      continue;
+    }
+
+    // Handle regular assertions
+    const regularAssertion = assertion as Assertion;
+    if (typeof regularAssertion.provider === 'function') {
+      continue;
+    }
+
+    if (regularAssertion.provider && !isApiProvider(regularAssertion.provider)) {
+      regularAssertion.provider = await resolveProvider(regularAssertion.provider, providerMap, {
+        env: context.env,
+        basePath: context.basePath,
+      });
+    }
+  }
+}
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -103,6 +148,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         { env: testSuite.env, basePath: cliState.basePath },
       );
     }
+    // Resolve providers in defaultTest.assert (including nested combinators/assert-sets)
+    if (constructedTestSuite.defaultTest?.assert) {
+      await resolveAssertionProviders(constructedTestSuite.defaultTest.assert, providerMap, {
+        env: testSuite.env,
+        basePath: cliState.basePath,
+      });
+    }
   }
 
   for (const test of constructedTestSuite.tests || []) {
@@ -113,32 +165,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       });
     }
     if (test.assert) {
-      for (const assertion of test.assert) {
-        // Skip assert-sets and combinators (and/or) which don't have a provider property
-        if (
-          assertion.type === 'assert-set' ||
-          assertion.type === 'and' ||
-          assertion.type === 'or'
-        ) {
-          continue;
-        }
-        // After excluding assert-sets and combinators, we know this is a regular Assertion
-        const regularAssertion = assertion as Assertion;
-        if (typeof regularAssertion.provider === 'function') {
-          continue;
-        }
-
-        if (regularAssertion.provider && !isApiProvider(regularAssertion.provider)) {
-          regularAssertion.provider = await resolveProvider(
-            regularAssertion.provider,
-            providerMap,
-            {
-              env: testSuite.env,
-              basePath: cliState.basePath,
-            },
-          );
-        }
-      }
+      // Recursively resolve providers in all assertions, including nested ones
+      await resolveAssertionProviders(test.assert, providerMap, {
+        env: testSuite.env,
+        basePath: cliState.basePath,
+      });
     }
   }
 

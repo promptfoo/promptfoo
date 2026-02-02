@@ -465,9 +465,9 @@ export interface GradingResult {
 
   // The assertion that was evaluated (can be regular, combinator, or assert-set)
   // TODO(Will): Can we move to this being required?
-  // Note: Using Assertion as base type, but combinators and assert-sets are also valid
-  // biome-ignore lint/suspicious/noExplicitAny: Union types cause TS complexity issues
-  assertion?: Assertion | any;
+  // Note: Uses `any` because proper union (Assertion | AssertionSet | CombinatorAssertion)
+  // causes cascading TS errors in assertion result handling across the codebase
+  assertion?: Assertion | any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // User comment
   comment?: string;
@@ -597,7 +597,9 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
-  // Sub assertions to be run for this assertion set
+  // Sub assertions to be run for this assertion set.
+  // Note: Only regular assertions are allowed here (not combinators or nested assert-sets)
+  // to avoid circular schema dependencies. Use combinators at the top level for complex logic.
   assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
@@ -627,6 +629,7 @@ export interface CombinatorAssertion {
 
   // Whether to stop on first conclusive result (default: true)
   // For 'or': stops on first pass; for 'and': stops on first fail
+  // Note: Automatically disabled when threshold is set to ensure accurate score computation
   shortCircuit?: boolean;
 
   // The weight of this combinator compared to other assertions in the test case. Defaults to 1.

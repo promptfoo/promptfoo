@@ -41,6 +41,7 @@
 
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { renderMetricName } from './metricUtils';
 
 import type {
   ApiProvider,
@@ -88,6 +89,8 @@ export function setRunAssertionFn(fn: NonNullable<typeof runAssertionFn>): void 
 
 /**
  * Accumulate token usage from a result into a running total.
+ * Includes all fields: total, prompt, completion, cached, numRequests,
+ * assertions (for model-graded), and completionDetails.
  */
 function accumulateTokens(total: TokenUsage, result: GradingResult): void {
   if (result.tokensUsed) {
@@ -96,6 +99,80 @@ function accumulateTokens(total: TokenUsage, result: GradingResult): void {
     total.completion = (total.completion ?? 0) + (result.tokensUsed.completion ?? 0);
     total.cached = (total.cached ?? 0) + (result.tokensUsed.cached ?? 0);
     total.numRequests = (total.numRequests ?? 0) + (result.tokensUsed.numRequests ?? 0);
+
+    // Accumulate assertion-specific token usage (model-graded assertions)
+    if (result.tokensUsed.assertions) {
+      if (!total.assertions) {
+        total.assertions = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
+      }
+      const src = result.tokensUsed.assertions;
+      total.assertions.total = (total.assertions.total ?? 0) + (src.total ?? 0);
+      total.assertions.prompt = (total.assertions.prompt ?? 0) + (src.prompt ?? 0);
+      total.assertions.completion = (total.assertions.completion ?? 0) + (src.completion ?? 0);
+      total.assertions.cached = (total.assertions.cached ?? 0) + (src.cached ?? 0);
+      total.assertions.numRequests = (total.assertions.numRequests ?? 0) + (src.numRequests ?? 0);
+    }
+
+    // Merge completionDetails if present
+    if (result.tokensUsed.completionDetails) {
+      if (!total.completionDetails) {
+        total.completionDetails = {};
+      }
+      const srcDetails = result.tokensUsed.completionDetails;
+      const dstDetails = total.completionDetails;
+      if (srcDetails.reasoning !== undefined) {
+        dstDetails.reasoning = (dstDetails.reasoning ?? 0) + srcDetails.reasoning;
+      }
+      if (srcDetails.acceptedPrediction !== undefined) {
+        dstDetails.acceptedPrediction =
+          (dstDetails.acceptedPrediction ?? 0) + srcDetails.acceptedPrediction;
+      }
+      if (srcDetails.rejectedPrediction !== undefined) {
+        dstDetails.rejectedPrediction =
+          (dstDetails.rejectedPrediction ?? 0) + srcDetails.rejectedPrediction;
+      }
+    }
+  }
+}
+
+/**
+ * Merge namedScores from a result into an accumulator, with optional prefix for namespacing.
+ * Also handles the metric field from assertions by adding it to namedScores.
+ *
+ * DESIGN DECISION: Nested Metric Preservation
+ * - namedScores from nested assertions are collected with path-based namespacing
+ * - If a nested assertion has a metric field, it's added as a namedScore
+ * - Metric templates (e.g., {{category}}_score) are rendered using test variables
+ * - Collisions are avoided by prefixing with the assertion index path
+ */
+function mergeNamedScores(
+  target: Record<string, number>,
+  result: GradingResult,
+  vars: Record<string, unknown>,
+  prefix?: string,
+): void {
+  // Merge namedScores with optional prefix
+  if (result.namedScores) {
+    for (const [key, value] of Object.entries(result.namedScores)) {
+      const prefixedKey = prefix ? `${prefix}.${key}` : key;
+      // If key already exists without prefix, use prefixed version to avoid clobbering
+      if (key in target && !prefix) {
+        target[`nested.${key}`] = value;
+      } else {
+        target[prefixedKey] = value;
+      }
+    }
+  }
+
+  // If the assertion has a metric field, render template and add the score to namedScores
+  // Skip if key already exists (e.g., from namedScores) to avoid overwriting custom values
+  if (result.assertion && 'metric' in result.assertion && result.assertion.metric) {
+    const rawMetric = result.assertion.metric as string;
+    const renderedMetric = renderMetricName(rawMetric, vars) ?? rawMetric;
+    const metricKey = prefix ? `${prefix}.${renderedMetric}` : renderedMetric;
+    if (!(metricKey in target)) {
+      target[metricKey] = result.score;
+    }
   }
 }
 
@@ -113,9 +190,20 @@ async function executeSubAssertion(
   context: CombinatorContext,
   parentConfig?: Record<string, unknown>,
 ): Promise<GradingResult> {
-  // Handle nested combinator assertions
+  // Handle nested combinator assertions - propagate parent config
   if (subAssertion.type === 'and' || subAssertion.type === 'or') {
-    return handleCombinator(subAssertion as CombinatorAssertion, context);
+    const nestedCombinator = subAssertion as CombinatorAssertion;
+    // Merge parent config with nested combinator's own config (nested config wins)
+    const mergedConfig = parentConfig
+      ? { ...parentConfig, ...nestedCombinator.config }
+      : nestedCombinator.config;
+
+    // Create a new combinator with merged config
+    const combinatorWithConfig: CombinatorAssertion = mergedConfig
+      ? { ...nestedCombinator, config: mergedConfig }
+      : nestedCombinator;
+
+    return handleCombinator(combinatorWithConfig, context);
   }
 
   // Handle assert-set by recursively processing as a mini-combinator (AND logic)
@@ -130,17 +218,18 @@ async function executeSubAssertion(
       numRequests: 0,
     };
     const namedScores: Record<string, number> = {};
+    const vars = context.vars || context.test.vars || {};
 
     // Merge parent config with assert-set config (assert-set config wins)
     const mergedConfig = { ...parentConfig, ...assertSet.config };
 
-    for (const innerAssertion of assertSet.assert) {
+    for (let i = 0; i < assertSet.assert.length; i++) {
+      const innerAssertion = assertSet.assert[i];
       const result = await executeSubAssertion(innerAssertion, context, mergedConfig);
       results.push(result);
       accumulateTokens(tokensUsed, result);
-      if (result.namedScores) {
-        Object.assign(namedScores, result.namedScores);
-      }
+      // Merge namedScores with index prefix to avoid collisions
+      mergeNamedScores(namedScores, result, vars, `assert-set[${i}]`);
     }
 
     // Assert-set uses AND logic with optional threshold
@@ -157,12 +246,20 @@ async function executeSubAssertion(
       pass = avgScore >= assertSet.threshold;
     }
 
+    // Add assert-set's own metric to namedScores if specified
+    if (assertSet.metric) {
+      const renderedMetric = renderMetricName(assertSet.metric, vars) ?? assertSet.metric;
+      namedScores[renderedMetric] = avgScore;
+    }
+
     return {
       pass,
       score: avgScore,
       reason: pass
         ? `Assert-set passed: ${results.filter((r) => r.pass).length}/${results.length} assertions passed`
         : `Assert-set failed: ${results.filter((r) => !r.pass).length} assertion(s) failed`,
+      // biome-ignore lint/suspicious/noExplicitAny: GradingResult.assertion uses any to avoid TS complexity
+      assertion: assertSet as any,
       componentResults: results,
       tokensUsed,
       namedScores: Object.keys(namedScores).length > 0 ? namedScores : undefined,
@@ -229,6 +326,7 @@ export async function handleCombinator(
   const skippedIndices: number[] = [];
   const tokensUsed: TokenUsage = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
   const namedScores: Record<string, number> = {};
+  const vars = context.vars || context.test.vars || {};
 
   for (let i = 0; i < assertions.length; i++) {
     const subAssertion = assertions[i];
@@ -238,10 +336,8 @@ export async function handleCombinator(
     results.push(result);
     accumulateTokens(tokensUsed, result);
 
-    // Propagate namedScores from nested assertions
-    if (result.namedScores) {
-      Object.assign(namedScores, result.namedScores);
-    }
+    // Propagate namedScores from nested assertions with index prefix
+    mergeNamedScores(namedScores, result, vars, `${type}[${i}]`);
 
     // Short-circuit evaluation (only when no threshold is set)
     if (effectiveShortCircuit) {
@@ -283,6 +379,7 @@ export async function handleCombinator(
     combinator,
     tokensUsed,
     namedScores,
+    vars,
   );
 }
 
@@ -296,8 +393,9 @@ function computeCombinatorResult(
   combinator: CombinatorAssertion,
   tokensUsed: TokenUsage,
   namedScores: Record<string, number>,
+  vars: Record<string, unknown>,
 ): GradingResult {
-  const { threshold } = combinator;
+  const { threshold, metric } = combinator;
 
   if (type === 'or') {
     // OR: pass if any passed, score = max score
@@ -327,6 +425,12 @@ function computeCombinatorResult(
       if (failReasons.length > 0) {
         reason += ` (${failReasons.join('; ')})`;
       }
+    }
+
+    // Add combinator's own metric to namedScores if specified (render template)
+    if (metric) {
+      const renderedMetric = renderMetricName(metric, vars) ?? metric;
+      namedScores[renderedMetric] = maxScore;
     }
 
     return {
@@ -380,6 +484,12 @@ function computeCombinatorResult(
     if (failedResults.length > 0) {
       reason += `: ${failedResults[0].reason}`;
     }
+  }
+
+  // Add combinator's own metric to namedScores if specified (render template)
+  if (metric) {
+    const renderedMetric = renderMetricName(metric, vars) ?? metric;
+    namedScores[renderedMetric] = avgScore;
   }
 
   return {

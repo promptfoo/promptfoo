@@ -45,6 +45,9 @@ import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import { handleCombinator, setRunAssertionFn } from './combinator';
+
+export { renderMetricName } from './metricUtils';
+
 import {
   handleContains,
   handleContainsAll,
@@ -203,32 +206,8 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
-/**
- * Renders a metric name template with test variables.
- * @param metric - The metric name, possibly containing Nunjucks template syntax
- * @param vars - The test variables to use for rendering
- * @returns The rendered metric name, or the original if rendering fails
- */
-export function renderMetricName(
-  metric: string | undefined,
-  vars: Record<string, unknown>,
-): string | undefined {
-  if (!metric) {
-    return metric;
-  }
-  try {
-    const rendered = nunjucks.renderString(metric, vars);
-    if (rendered === '' && metric !== '') {
-      logger.debug(`Metric template "${metric}" rendered to empty string`);
-    }
-    return rendered;
-  } catch (error) {
-    logger.warn(
-      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
-    );
-    return metric;
-  }
-}
+// Import for local use (re-exported above for external consumers)
+import { renderMetricName } from './metricUtils';
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"

@@ -26,9 +26,10 @@ tests:
           - type: contains
             value: 'World'
 
-  # OR fails when all assertions fail (this test is expected to fail)
-  - vars:
-      _expect_fail: true
+  # OR fails when all assertions fail
+  # NOTE: This test INTENTIONALLY FAILS to verify combinator behavior.
+  # The smoke test expects this to fail and checks for exit code 100.
+  - description: 'Intentional failure - OR with no matching values'
     assert:
       - type: or
         assert:

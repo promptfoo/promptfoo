@@ -17,9 +17,10 @@ tests:
           - type: contains
             value: 'World'
 
-  # AND fails when any assertion fails (this test is expected to fail)
-  - vars:
-      _expect_fail: true
+  # AND fails when any assertion fails
+  # NOTE: This test INTENTIONALLY FAILS to verify combinator behavior.
+  # The smoke test expects this to fail and checks for exit code 100.
+  - description: 'Intentional failure - AND with non-matching value'
     assert:
       - type: and
         assert:

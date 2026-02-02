@@ -172,8 +172,13 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
         `defaultTest.assert has ${defaultTest.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
       );
     }
-    // Check nested depth and total count
-    countNestedAssertions(defaultTest.assert);
+    // Check nested depth and total count (including nested assertions in combinators)
+    const totalCount = countNestedAssertions(defaultTest.assert);
+    if (totalCount > MAX_ASSERTIONS_PER_TEST) {
+      throw new AssertValidationError(
+        `defaultTest.assert has ${totalCount} total assertions (including nested), exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+      );
+    }
     for (let i = 0; i < defaultTest.assert.length; i++) {
       parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`);
     }
@@ -196,8 +201,13 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
           `tests[${testIdx}].assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
         );
       }
-      // Check nested depth and total count
-      countNestedAssertions(test.assert);
+      // Check nested depth and total count (including nested assertions in combinators)
+      const totalCount = countNestedAssertions(test.assert);
+      if (totalCount > MAX_ASSERTIONS_PER_TEST) {
+        throw new AssertValidationError(
+          `tests[${testIdx}].assert has ${totalCount} total assertions (including nested), exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+        );
+      }
       for (let i = 0; i < test.assert.length; i++) {
         parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`);
       }
