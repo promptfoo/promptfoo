@@ -26,6 +26,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { isNormalizedToolChoice, normalizedToolChoiceToBedrock } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import type {
   ContentBlock,
@@ -262,19 +263,27 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
 }
 
 /**
- * Convert tool choice to Converse API format
+ * Convert tool choice to Converse API format.
+ * Supports both native Bedrock format and NormalizedToolChoice format.
  */
 function convertToolChoiceToConverseFormat(
-  toolChoice: 'auto' | 'any' | { tool: { name: string } },
-): ToolChoice {
+  toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
+): ToolChoice | undefined {
+  // Handle NormalizedToolChoice format
+  if (isNormalizedToolChoice(toolChoice)) {
+    return normalizedToolChoiceToBedrock(toolChoice);
+  }
+
+  // Handle native Bedrock format
   if (toolChoice === 'auto') {
     return { auto: {} };
   }
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice.tool) {
-    return { tool: { name: toolChoice.tool.name } };
+  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
+    const tc = toolChoice as { tool: { name: string } };
+    return { tool: { name: tc.tool.name } };
   }
   return { auto: {} };
 }

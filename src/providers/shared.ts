@@ -150,3 +150,154 @@ export function isPromptfooSampleTarget(provider: ApiProvider) {
   const url = provider.config?.url;
   return url?.includes('promptfoo.app') || url?.includes('promptfoo.dev');
 }
+
+// ==================
+// Normalized Tool Choice
+// ==================
+
+/**
+ * Provider-agnostic tool choice format.
+ * Providers transform this to their native format.
+ */
+export interface NormalizedToolChoice {
+  /**
+   * - 'auto': Model decides whether to call a tool
+   * - 'none': Model cannot call any tools
+   * - 'required': Model must call at least one tool
+   * - 'tool': Model must call the specific tool named in toolName
+   */
+  mode: 'auto' | 'none' | 'required' | 'tool';
+  /** Required when mode is 'tool' */
+  toolName?: string;
+}
+
+export type ToolChoiceFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
+
+/**
+ * Checks if the given object is a NormalizedToolChoice.
+ */
+export function isNormalizedToolChoice(obj: unknown): obj is NormalizedToolChoice {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  const candidate = obj as Record<string, unknown>;
+  return (
+    typeof candidate.mode === 'string' &&
+    ['auto', 'none', 'required', 'tool'].includes(candidate.mode)
+  );
+}
+
+/**
+ * Transforms a NormalizedToolChoice to OpenAI format.
+ */
+export function normalizedToolChoiceToOpenAI(
+  choice: NormalizedToolChoice,
+): string | { type: string; function?: { name: string } } {
+  switch (choice.mode) {
+    case 'auto':
+      return 'auto';
+    case 'none':
+      return 'none';
+    case 'required':
+      return 'required';
+    case 'tool':
+      if (!choice.toolName) {
+        throw new Error('toolName is required when mode is "tool"');
+      }
+      return { type: 'function', function: { name: choice.toolName } };
+  }
+}
+
+/**
+ * Transforms a NormalizedToolChoice to Anthropic format.
+ */
+export function normalizedToolChoiceToAnthropic(
+  choice: NormalizedToolChoice,
+): { type: string; name?: string } {
+  switch (choice.mode) {
+    case 'auto':
+      return { type: 'auto' };
+    case 'none':
+      // Anthropic doesn't have 'none', closest is not sending tool_choice
+      return { type: 'auto' };
+    case 'required':
+      return { type: 'any' };
+    case 'tool':
+      if (!choice.toolName) {
+        throw new Error('toolName is required when mode is "tool"');
+      }
+      return { type: 'tool', name: choice.toolName };
+  }
+}
+
+/**
+ * Transforms a NormalizedToolChoice to Bedrock Converse format.
+ */
+export function normalizedToolChoiceToBedrock(
+  choice: NormalizedToolChoice,
+): { auto: object } | { any: object } | { tool: { name: string } } | undefined {
+  switch (choice.mode) {
+    case 'auto':
+      return { auto: {} };
+    case 'none':
+      // Bedrock doesn't have 'none', return undefined to omit toolChoice
+      return undefined;
+    case 'required':
+      return { any: {} };
+    case 'tool':
+      if (!choice.toolName) {
+        throw new Error('toolName is required when mode is "tool"');
+      }
+      return { tool: { name: choice.toolName } };
+  }
+}
+
+/**
+ * Transforms a NormalizedToolChoice to Google (Gemini) format.
+ */
+export function normalizedToolChoiceToGoogle(
+  choice: NormalizedToolChoice,
+): { functionCallingConfig: { mode: string; allowedFunctionNames?: string[] } } | undefined {
+  switch (choice.mode) {
+    case 'auto':
+      return { functionCallingConfig: { mode: 'AUTO' } };
+    case 'none':
+      return { functionCallingConfig: { mode: 'NONE' } };
+    case 'required':
+      return { functionCallingConfig: { mode: 'ANY' } };
+    case 'tool':
+      if (!choice.toolName) {
+        throw new Error('toolName is required when mode is "tool"');
+      }
+      return {
+        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [choice.toolName] },
+      };
+  }
+}
+
+/**
+ * Transforms a NormalizedToolChoice to the specified provider format.
+ * If the input is already in a native format (not NormalizedToolChoice), it's returned as-is.
+ */
+export function transformToolChoice(
+  toolChoice: unknown,
+  format: ToolChoiceFormat,
+): unknown {
+  // If not a normalized format, pass through as-is (backward compatibility)
+  if (!isNormalizedToolChoice(toolChoice)) {
+    return toolChoice;
+  }
+
+  switch (format) {
+    case 'openai':
+      return normalizedToolChoiceToOpenAI(toolChoice);
+    case 'anthropic':
+      return normalizedToolChoiceToAnthropic(toolChoice);
+    case 'bedrock':
+      return normalizedToolChoiceToBedrock(toolChoice);
+    case 'google':
+      return normalizedToolChoiceToGoogle(toolChoice);
+    default:
+      return toolChoice;
+  }
+}
