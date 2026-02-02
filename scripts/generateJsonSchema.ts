@@ -89,54 +89,87 @@ const {
   ...mainSchema
 } = schemaContent as Record<string, unknown>;
 
+// Find the assertion union schema key dynamically
+// This is AssertionOrSetSchema which has assert-set in its anyOf
+function findAssertionUnionKey(defs: Record<string, unknown>): string | null {
+  for (const [key, def] of Object.entries(defs)) {
+    const defObj = def as Record<string, unknown>;
+    if (defObj?.anyOf && Array.isArray(defObj.anyOf)) {
+      const anyOfArray = defObj.anyOf as Record<string, unknown>[];
+      const hasAssertSet = anyOfArray.some((item) => {
+        const props = item?.properties as Record<string, unknown>;
+        const typeField = props?.type as Record<string, unknown>;
+        return typeField?.const === 'assert-set';
+      });
+      if (hasAssertSet) {
+        return key;
+      }
+    }
+  }
+  return null;
+}
+
 // CombinatorAssertion definition for 'and'/'or' assertion types
 // This is added manually because the recursive z.ZodType<T> annotation
 // prevents Zod's JSON schema generator from seeing the structure.
-const CombinatorAssertionDefinition = {
-  type: 'object',
-  properties: {
-    type: {
-      type: 'string',
-      enum: ['and', 'or'],
-      description:
-        "Combinator type: 'and' requires all sub-assertions to pass, 'or' requires any to pass",
-    },
-    assert: {
-      type: 'array',
-      description: 'Array of sub-assertions to evaluate',
-      items: {
-        anyOf: [
-          { $ref: '#/definitions/CombinatorAssertion' },
-          { $ref: '#/definitions/__schema18' },
-        ],
+// Note: assertionUnionRef is set after we find the actual schema key
+function createCombinatorAssertionDefinition(assertionUnionRef: string) {
+  return {
+    type: 'object',
+    properties: {
+      type: {
+        type: 'string',
+        enum: ['and', 'or'],
+        description:
+          "Combinator type: 'and' requires all sub-assertions to pass, 'or' requires any to pass",
+      },
+      assert: {
+        type: 'array',
+        description: 'Array of sub-assertions to evaluate',
+        items: {
+          anyOf: [{ $ref: '#/definitions/CombinatorAssertion' }, { $ref: assertionUnionRef }],
+        },
+      },
+      shortCircuit: {
+        type: 'boolean',
+        description:
+          "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true. Note: Automatically disabled when threshold is set.",
+      },
+      weight: {
+        type: 'number',
+        description: 'Weight of this combinator relative to other assertions. Defaults to 1.',
+      },
+      metric: {
+        type: 'string',
+        description: 'Tag this assertion result as a named metric',
+      },
+      threshold: {
+        type: 'number',
+        description: 'Minimum score threshold for the combinator to pass',
+      },
+      config: {
+        type: 'object',
+        additionalProperties: true,
+        description:
+          'Configuration passed to all sub-assertions. Child assertion config takes precedence.',
       },
     },
-    shortCircuit: {
-      type: 'boolean',
-      description:
-        "Stop evaluation early when result is determined. For 'or': stop on first pass. For 'and': stop on first fail. Defaults to true.",
-    },
-    weight: {
-      type: 'number',
-      description: 'Weight of this combinator relative to other assertions. Defaults to 1.',
-    },
-    metric: {
-      type: 'string',
-      description: 'Tag this assertion result as a named metric',
-    },
-    threshold: {
-      type: 'number',
-      description: 'Minimum score threshold for the combinator to pass',
-    },
-    config: {
-      type: 'object',
-      additionalProperties: true,
-      description: 'Configuration passed to all sub-assertions',
-    },
-  },
-  required: ['type', 'assert'],
-  additionalProperties: false,
-};
+    required: ['type', 'assert'],
+    additionalProperties: false,
+  };
+}
+
+// Find the assertion union key dynamically from Zod output
+const assertionUnionKey = findAssertionUnionKey(zodDefinitions as Record<string, unknown>);
+const assertionUnionRef = assertionUnionKey
+  ? `#/definitions/${assertionUnionKey}`
+  : '#/definitions/__schema18'; // Fallback, but warn
+if (!assertionUnionKey) {
+  console.warn(
+    'Warning: Could not find assertion union schema dynamically. Using fallback __schema18.',
+  );
+}
+const CombinatorAssertionDefinition = createCombinatorAssertionDefinition(assertionUnionRef);
 
 // Build final schema with proper structure and metadata
 const jsonSchema = {
